@@ -1,0 +1,13 @@
+{
+  "id": "10-04-midnight-aurora-layout-beautification",
+  "title": "Midnight Aurora 整体布局美化",
+  "status": "planning",
+  "created": "2026-10-03",
+  "scope": "桌面端工作区、项目侧栏、全局/终端 Tab 栏、终端 well、分屏、辅助面板与空状态",
+  "constraints": [
+    "保留 PTY/IPC、快捷键、拖拽、分屏尺寸和面板开关行为",
+    "Midnight Aurora 为主要视觉目标，Terminal Acrylic 和浅色主题不回归",
+    "所有用户可见文案变更同步中英文",
+    "不覆盖当前工作区已有未提交改动"
+  ]
+}

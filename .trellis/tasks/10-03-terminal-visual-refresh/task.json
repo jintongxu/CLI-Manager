@@ -1,0 +1,30 @@
+{
+  "id": "terminal-visual-refresh",
+  "name": "terminal-visual-refresh",
+  "title": "内嵌终端界面视觉美化",
+  "description": "参考现代 Windows Terminal 的克制层次感，统一 CLI-Manager 内嵌终端标签、分屏、操作区与浮层控件视觉。",
+  "status": "completed",
+  "dev_type": "feature",
+  "scope": "frontend",
+  "package": null,
+  "priority": "P2",
+  "creator": "CLI-Manager",
+  "assignee": "CLI-Manager",
+  "createdAt": "2026-10-03",
+  "completedAt": "2026-10-03",
+  "branch": "wt/task-1003-0949",
+  "base_branch": "master",
+  "worktree_path": "D:/ai/cli-manager-worktrees/task-1003-0949",
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "src/styles/components/workspace-chrome.css",
+    "src/styles/components/terminal-actions-panes.css",
+    "src/styles/components/terminal-background.css"
+  ],
+  "notes": "不读取或导入 Windows Terminal 配置，不改变用户主题默认值与终端行为。已通过 31 项定向测试、TypeScript、严格架构检查和生产构建；独立审查发现的滚动条对比度问题已修正并重验。",
+  "meta": {}
+}

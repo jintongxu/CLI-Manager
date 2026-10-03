@@ -1,3 +1,53 @@
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-terminal-action-sidebar {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #66d9ef 10%, transparent), transparent 28%),
+    #0f1929;
+  box-shadow: inset 1px 0 0 color-mix(in srgb, #2b4260 80%, transparent);
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-terminal-side-panel-frame {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #66d9ef 7%, transparent), transparent 26%),
+    #111c2d;
+  border-color: color-mix(in srgb, #2b4260 82%, transparent) !important;
+  box-shadow:
+    inset 1px 0 0 color-mix(in srgb, #66d9ef 18%, transparent),
+    -10px 0 24px color-mix(in srgb, #07101e 42%, transparent);
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-terminal-side-panel-frame[data-dock-side="left"] {
+  box-shadow:
+    inset -1px 0 0 color-mix(in srgb, #66d9ef 18%, transparent),
+    10px 0 24px color-mix(in srgb, #07101e 42%, transparent);
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-terminal-side-panel-frame [data-terminal-side-panel-content] {
+  background: #0f1929;
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-terminal-pane-chrome,
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-terminal-panel-header {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #66d9ef 8%, transparent), transparent),
+    #111c2d;
+  border-color: color-mix(in srgb, #2b4260 82%, transparent) !important;
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-terminal-pane-chrome .ui-tab-trigger[data-selected="true"] {
+  background-color: color-mix(in srgb, #16263a 92%, #111c2d 8%);
+  border-color: color-mix(in srgb, #38617a 72%, transparent);
+  box-shadow:
+    inset 0 -1px 0 #66d9ef,
+    inset 0 0 0 1px color-mix(in srgb, #38617a 34%, transparent);
+}
+
+[data-theme="dark"][data-dark-palette="terminal-acrylic"] .ui-terminal-action-sidebar {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #61afef 8%, transparent), transparent 26%),
+    color-mix(in srgb, #243139 92%, #10181e 8%);
+  box-shadow: inset 1px 0 0 color-mix(in srgb, #dcdfe4 8%, transparent);
+}
+
 .ui-terminal-action-sidebar {
   position: relative;
   z-index: 1;
@@ -5,9 +55,11 @@
   width: 38px;
   padding: 6px 4px;
   border-left: 0;
-  background-color: var(--term-panel-bg, color-mix(in srgb, var(--terminal-theme-background, #0c0e10) 96%, var(--terminal-theme-foreground, #f8fafc) 4%));
+  background-color: color-mix(in srgb, var(--term-panel-bg, var(--terminal-theme-background, #0c0e10)) 94%, var(--term-panel-fg, var(--terminal-theme-foreground, #f8fafc)) 6%);
   color: var(--term-panel-fg, var(--terminal-theme-foreground, #f8fafc));
-  box-shadow: inset -1px 0 0 color-mix(in srgb, var(--term-panel-border, var(--terminal-theme-foreground, #f8fafc)) 52%, transparent);
+  box-shadow:
+    inset -1px 0 0 color-mix(in srgb, var(--term-panel-border, var(--terminal-theme-foreground, #f8fafc)) 42%, transparent),
+    inset 1px 0 0 color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 3%, transparent);
   transition:
     width var(--animate-duration-normal) var(--ease-standard),
     background-color var(--animate-duration-fast) var(--ease-standard),
@@ -15,7 +67,9 @@
 }
 
 .ui-terminal-action-sidebar[data-dock-side="left"] {
-  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--term-panel-border, var(--terminal-theme-foreground, #f8fafc)) 52%, transparent);
+  box-shadow:
+    inset 1px 0 0 color-mix(in srgb, var(--term-panel-border, var(--terminal-theme-foreground, #f8fafc)) 42%, transparent),
+    inset -1px 0 0 color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 3%, transparent);
 }
 
 .ui-terminal-action-sidebar::before {
@@ -150,7 +204,7 @@
 .ui-terminal-action-sidebar .ui-icon-action {
   width: 30px;
   height: 30px;
-  border-radius: 9px;
+  border-radius: 7px;
 }
 
 .ui-terminal-action-sidebar .ui-icon-action:disabled {
@@ -165,10 +219,10 @@
 .ui-terminal-action-drag-overlay .ui-toolbar-button:hover:not(:disabled),
 .ui-terminal-action-drag-overlay .ui-icon-action:hover:not(:disabled) {
   transform: none;
-  border-color: color-mix(in srgb, var(--terminal-action-color, currentColor) 16%, transparent);
-  background-color: color-mix(in srgb, var(--terminal-action-color, currentColor) 10%, var(--term-panel-card, transparent) 90%);
+  border-color: color-mix(in srgb, var(--terminal-action-color, currentColor) 18%, transparent);
+  background-color: color-mix(in srgb, var(--terminal-action-color, currentColor) 12%, var(--term-panel-card, transparent) 88%);
   color: color-mix(in srgb, var(--terminal-action-color, currentColor) 88%, var(--term-panel-fg, var(--terminal-theme-foreground, #f8fafc)) 12%);
-  box-shadow: none;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--terminal-action-color, currentColor) 7%, transparent);
 }
 
 .ui-terminal-pane-chrome .ui-terminal-action-sidebar .ui-primary-action,
@@ -257,6 +311,46 @@
 
 .ui-action-font-size-reset {
   --terminal-action-color: var(--term-panel-dim, #9ca0a6);
+}
+
+[data-theme="light"][data-light-palette="clear-focus"] .ui-terminal-side-panel-frame {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #9eafe6 4%, transparent), transparent 24%),
+    color-mix(in srgb, #e3ebf0 96%, #edf2f5 4%);
+  border-color: color-mix(in srgb, #9eafbd 20%, transparent) !important;
+  box-shadow:
+    inset 1px 0 0 color-mix(in srgb, #ffffff 82%, transparent),
+    -10px 0 24px color-mix(in srgb, #8aa0b0 7%, transparent);
+}
+
+[data-theme="light"][data-light-palette="clear-focus"] .ui-terminal-side-panel-frame[data-dock-side="left"] {
+  box-shadow:
+    inset -1px 0 0 color-mix(in srgb, #ffffff 82%, transparent),
+    10px 0 24px color-mix(in srgb, #8aa0b0 7%, transparent);
+}
+
+[data-theme="light"][data-light-palette="clear-focus"] .ui-terminal-side-panel-frame [data-terminal-side-panel-content] {
+  background: color-mix(in srgb, #e3ebf0 94%, #d5e1e8 6%);
+}
+
+[data-theme="dark"][data-dark-palette="terminal-acrylic"] .ui-terminal-side-panel-frame {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #61afef 6%, transparent), transparent 24%),
+    color-mix(in srgb, #243139 94%, #10181e 6%);
+  border-color: color-mix(in srgb, #9fb4c0 22%, transparent) !important;
+  box-shadow:
+    inset 1px 0 0 color-mix(in srgb, #dcdfe4 7%, transparent),
+    -12px 0 28px color-mix(in srgb, #10181e 18%, transparent);
+}
+
+[data-theme="dark"][data-dark-palette="terminal-acrylic"] .ui-terminal-side-panel-frame[data-dock-side="left"] {
+  box-shadow:
+    inset -1px 0 0 color-mix(in srgb, #dcdfe4 7%, transparent),
+    12px 0 28px color-mix(in srgb, #10181e 18%, transparent);
+}
+
+[data-theme="dark"][data-dark-palette="terminal-acrylic"] .ui-terminal-side-panel-frame [data-terminal-side-panel-content] {
+  background: color-mix(in srgb, #243139 90%, #10181e 10%);
 }
 
 .ui-terminal-side-panel-frame {
@@ -634,13 +728,41 @@
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--terminal-theme-accent, #60a5fa) 35%, transparent);
 }
 
+[data-theme="light"][data-light-palette="clear-focus"] .ui-terminal-pane-chrome,
+[data-theme="light"][data-light-palette="clear-focus"] .ui-terminal-panel-header {
+  background: linear-gradient(180deg, #edf2f5, #dfe8ee);
+  border-color: color-mix(in srgb, #9eafbd 20%, transparent) !important;
+}
+
+[data-theme="light"][data-light-palette="clear-focus"] .ui-terminal-pane-chrome .ui-tab-trigger[data-selected="true"] {
+  background-color: color-mix(in srgb, #b9c9ee 24%, #edf2f5 76%);
+  box-shadow:
+    inset 0 -2px 0 #9daff0,
+    inset 0 0 0 1px color-mix(in srgb, #9eafbd 18%, transparent);
+}
+
+[data-theme="dark"][data-dark-palette="terminal-acrylic"] .ui-terminal-pane-chrome,
+[data-theme="dark"][data-dark-palette="terminal-acrylic"] .ui-terminal-panel-header {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #dcdfe4 7%, transparent), transparent 100%),
+    color-mix(in srgb, #243139 94%, #10181e 6%);
+  border-color: color-mix(in srgb, #9fb4c0 22%, transparent) !important;
+}
+
+[data-theme="dark"][data-dark-palette="terminal-acrylic"] .ui-terminal-pane-chrome .ui-tab-trigger[data-selected="true"] {
+  background-color: color-mix(in srgb, #61afef 16%, transparent);
+  box-shadow:
+    inset 0 -2px 0 #61afef,
+    inset 0 0 0 1px color-mix(in srgb, #dcdfe4 18%, transparent);
+}
+
 .ui-terminal-pane-chrome[data-terminal-split-pane="true"] {
   height: 34px;
   min-height: 34px;
-  border-bottom: 1px solid color-mix(in srgb, var(--terminal-tab-border) 28%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--terminal-tab-border) 58%, transparent);
   background: color-mix(in srgb, var(--terminal-theme-background, #0c0e10) 94%, var(--terminal-theme-foreground, #f8fafc) 6%);
   outline: 0;
-  box-shadow: none;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 4%, transparent);
 }
 
 .ui-terminal-pane-chrome[data-terminal-split-pane="true"] .ui-tab-trigger {
@@ -663,9 +785,11 @@
 
 .ui-terminal-pane-chrome[data-terminal-split-pane="true"] .ui-tab-trigger[data-selected="true"] {
   color: var(--terminal-theme-foreground, #f8fafc);
-  border-color: transparent;
-  background-color: color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 9%, transparent);
-  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--terminal-tab-accent) 72%, transparent);
+  border-color: color-mix(in srgb, var(--terminal-tab-border) 34%, transparent);
+  background-color: color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 10%, transparent);
+  box-shadow:
+    inset 0 -2px 0 color-mix(in srgb, var(--terminal-tab-accent) 84%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--terminal-tab-border) 16%, transparent);
   transform: none;
 }
 
@@ -708,13 +832,45 @@
   color: var(--terminal-theme-foreground, #f8fafc);
 }
 
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-terminal-well > .ui-terminal-side-panel-frame {
+  border-color: color-mix(in srgb, #2b4260 74%, transparent) !important;
+  box-shadow:
+    inset 1px 0 0 color-mix(in srgb, #66d9ef 12%, transparent),
+    0 12px 28px color-mix(in srgb, #020714 24%, transparent);
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-terminal-well > .ui-terminal-side-panel-frame[data-dock-side="left"] {
+  box-shadow:
+    inset -1px 0 0 color-mix(in srgb, #66d9ef 12%, transparent),
+    0 12px 28px color-mix(in srgb, #020714 24%, transparent);
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-terminal-well > .ui-terminal-action-sidebar {
+  width: 42px;
+  padding: 8px 5px;
+  background: #0f1929;
+  border-left: 1px solid color-mix(in srgb, #2b4260 68%, transparent);
+  box-shadow: inset 1px 0 0 color-mix(in srgb, #66d9ef 10%, transparent);
+}
+
+/* Pi Agent reserves a Windows Terminal-like bottom breathing room so its composer/footer does not sit against the window edge. */
+.ui-terminal-pane-content--pi {
+  padding-bottom: 20px;
+}
+
+.ui-terminal-session--pi {
+  bottom: 20px;
+}
+
 .ui-terminal-well {
   background-color: var(--terminal-theme-background, #0c0e10);
   border-radius: 8px;
   margin: 6px;
   overflow: hidden;
   isolation: isolate;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 5%, transparent),
+    0 10px 28px color-mix(in srgb, black 14%, transparent);
 }
 
 .ui-terminal-well > .flex-1 {
@@ -738,10 +894,10 @@
 }
 
 .ui-terminal-well[data-terminal-mode="independent"] {
-  outline: 1px solid color-mix(in srgb, var(--terminal-bridge-color, #0c0e10) 42%, var(--border) 58%);
+  outline: 1px solid color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 10%, var(--terminal-bridge-color, #0c0e10) 90%);
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
-    0 -16px 28px color-mix(in srgb, var(--terminal-bridge-color, #0c0e10) 18%, transparent);
+    inset 0 0 0 1px color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 5%, transparent),
+    0 10px 30px color-mix(in srgb, var(--terminal-bridge-color, #0c0e10) 24%, transparent);
 }
 
 .ui-terminal-well[data-terminal-mode="independent"]::before {

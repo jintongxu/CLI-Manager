@@ -237,6 +237,24 @@
   color: var(--on-primary);
 }
 
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-primary-action {
+  background-image: none;
+  background-color: color-mix(in srgb, #16263a 88%, #111c2d 12%);
+  border: 1px solid #38617a;
+  color: #b9d7e6;
+  box-shadow: none;
+  letter-spacing: 0.005em;
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-primary-action:hover:not(:disabled),
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-primary-action:focus-visible {
+  background-color: color-mix(in srgb, #1d3850 78%, #111c2d 22%);
+  border-color: color-mix(in srgb, #66d9ef 68%, #38617a 32%);
+  color: #e7f0ff;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #66d9ef 18%, transparent);
+  filter: none;
+}
+
 [data-theme="dark"][data-dark-palette="investment-platform"] .ui-primary-action {
   letter-spacing: 0.005em;
 }

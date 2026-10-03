@@ -69,6 +69,7 @@ export {
 
 export type ThemeMode = "dark" | "light" | "system";
 export type LightThemePalette =
+  | "clear-focus"
   | "warm-paper"
   | "cream-green"
   | "ink-red"
@@ -79,6 +80,8 @@ export type LightThemePalette =
   | "apple-warm"
   | "apple-mono";
 export type DarkThemePalette =
+  | "midnight-aurora"
+  | "terminal-acrylic"
   | "night-indigo"
   | "forest-night"
   | "graphite-red"
@@ -150,7 +153,7 @@ export const UI_FONT_SIZE_MAX = 18;
 export const UI_FONT_SIZE_DEFAULT = 13;
 export const TERMINAL_FONT_SIZE_MIN = 8;
 export const TERMINAL_FONT_SIZE_MAX = 32;
-export const TERMINAL_FONT_SIZE_DEFAULT = 14;
+export const TERMINAL_FONT_SIZE_DEFAULT = 16;
 export const TERMINAL_SCROLLBACK_ROWS_MIN = 1000;
 export const TERMINAL_SCROLLBACK_ROWS_MAX = 50000;
 export const TERMINAL_SCROLLBACK_ROWS_DEFAULT = 9000;
@@ -544,13 +547,13 @@ interface SettingsStore extends Settings {
 const DEFAULTS: Settings = {
   webTerminalBatchKiB: 96,
   language: "auto",
-  theme: "light",
-  lightThemePalette: "apple-mono",
-  darkThemePalette: "terminal-green",
+  theme: "dark",
+  lightThemePalette: "clear-focus",
+  darkThemePalette: "midnight-aurora",
   fontSize: TERMINAL_FONT_SIZE_DEFAULT,
   terminalScrollbackCustomEnabled: false,
   terminalScrollbackRows: TERMINAL_SCROLLBACK_ROWS_DEFAULT,
-  fontFamily: "Cascadia Code, Consolas, monospace",
+  fontFamily: "\"JetBrainsMono Nerd Font\", \"JetBrains Mono\", \"Cascadia Code\", Consolas, monospace",
   terminalTextColor: "",
   terminalTuiUserColor: "",
   terminalTuiAssistantColor: "",
@@ -579,7 +582,7 @@ const DEFAULTS: Settings = {
   externalTerminalProgram: "windows-terminal",
   debugMode: false,
   terminalThemeMode: "independent",
-  terminalThemeName: "windowsTerminalCampbell",
+  terminalThemeName: "midnightAuroraTerminal",
   terminalPreviewThemeName: FOLLOW_TERMINAL_PREVIEW_THEME,
   sidebarDensity: "comfortable",
   sidebarProjectFilterVisible: false,
@@ -612,7 +615,7 @@ const DEFAULTS: Settings = {
   terminalToolbarOrder: ["new", "templates", "fullscreen", "sessionHistory", "replay", "files", "gitChanges", "stats", "providers", "systemResources", "backgroundTasks"],
   terminalSidePanelMerged: true,
   terminalSidePanelSingleOpen: true,
-  terminalSidePanelSkin: "classic-terminal",
+  terminalSidePanelSkin: "terminal",
   terminalPanelWidths: { ...TERMINAL_PANEL_WIDTH_DEFAULTS },
   workspaceLayout: { ...WORKSPACE_LAYOUT_DEFAULTS },
   terminalStatsCardVisibility: {

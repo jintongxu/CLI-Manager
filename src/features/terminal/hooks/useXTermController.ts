@@ -85,7 +85,7 @@ import {
 
 let terminalImageAddonFallbackLogged = false;
 
-export function useXTermController({ sessionId, isActive = true, isVisible = true, fontSize = 14, fontFamily = "Cascadia Code, Consolas, monospace", resolvedTheme = "dark", terminalThemeName = "auto", lightThemePalette = "warm-paper", darkThemePalette = "night-indigo", onNewTab, onCloseSession, onCloseOthers, onCloseToLeft, onCloseToRight, onSplitRight, onSplitDown }: Props) {
+export function useXTermController({ sessionId, isActive = true, isVisible = true, fontSize = 16, fontFamily = "\"JetBrainsMono Nerd Font\", \"JetBrains Mono\", \"Cascadia Code\", Consolas, monospace", resolvedTheme = "dark", terminalThemeName = "midnightAuroraTerminal", lightThemePalette = "clear-focus", darkThemePalette = "midnight-aurora", onNewTab, onCloseSession, onCloseOthers, onCloseToLeft, onCloseToRight, onSplitRight, onSplitDown }: Props) {
   const { t } = useI18n();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);

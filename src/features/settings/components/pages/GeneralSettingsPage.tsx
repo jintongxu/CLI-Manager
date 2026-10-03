@@ -55,6 +55,12 @@ const LIGHT_PALETTE_OPTIONS: {
   swatches: [string, string, string];
 }[] = [
   {
+    value: "clear-focus",
+    labelKey: "settings.palette.light.clearFocus.label",
+    descriptionKey: "settings.palette.light.clearFocus.description",
+    swatches: ["#D8E3E9", "#172A36", "#4D67AD"],
+  },
+  {
     value: "warm-paper",
     labelKey: "settings.palette.light.warmPaper.label",
     descriptionKey: "settings.palette.light.warmPaper.description",
@@ -116,6 +122,18 @@ const DARK_PALETTE_OPTIONS: {
   descriptionKey: TranslationKey;
   swatches: [string, string, string];
 }[] = [
+  {
+    value: "midnight-aurora",
+    labelKey: "settings.palette.dark.midnightAurora.label",
+    descriptionKey: "settings.palette.dark.midnightAurora.description",
+    swatches: ["#0B1220", "#E7F0FF", "#66D9EF"],
+  },
+  {
+    value: "terminal-acrylic",
+    labelKey: "settings.palette.dark.terminalAcrylic.label",
+    descriptionKey: "settings.palette.dark.terminalAcrylic.description",
+    swatches: ["#2A373F", "#DCDFE4", "#61AFEF"],
+  },
   {
     value: "night-indigo",
     labelKey: "settings.palette.dark.nightIndigo.label",
@@ -180,6 +198,7 @@ function clampUiFontSize(value: number) {
 }
 
 const LIGHT_TEXT_COLORS: Record<LightThemePalette, string> = {
+  "clear-focus": "#172A36",
   "warm-paper": "#2e3336",
   "cream-green": "#25302a",
   "ink-red": "#1f1f1c",
@@ -192,6 +211,8 @@ const LIGHT_TEXT_COLORS: Record<LightThemePalette, string> = {
 };
 
 const DARK_TEXT_COLORS: Record<DarkThemePalette, string> = {
+  "midnight-aurora": "#E7F0FF",
+  "terminal-acrylic": "#DCDFE4",
   "night-indigo": "#c0caf5",
   "forest-night": "#d8e5dc",
   "graphite-red": "#e6dfdb",
@@ -215,6 +236,7 @@ function getDefaultUiTextColor(
 // 用纯映射而非 getComputedStyle：data-theme/data-*-palette 由 App.tsx 的 effect 在
 // render 之后才更新，render 期间读 computed style 会在切换主题/配色时拿到旧背景色。
 const LIGHT_BG_COLORS: Record<LightThemePalette, string> = {
+  "clear-focus": "#D8E3E9",
   "warm-paper": "#f9f9fb",
   "cream-green": "#f7faf7",
   "ink-red": "#f7f6f4",
@@ -227,6 +249,8 @@ const LIGHT_BG_COLORS: Record<LightThemePalette, string> = {
 };
 
 const DARK_BG_COLORS: Record<DarkThemePalette, string> = {
+  "midnight-aurora": "#0B1220",
+  "terminal-acrylic": "#2A373F",
   "night-indigo": "#1a1b26",
   "forest-night": "#111714",
   "graphite-red": "#171616",
