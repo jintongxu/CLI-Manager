@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CLI-Manager · Frosted Daylight Preview</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --app-bg: #f1f5f8;
+      --app-bg-deep: #e9f0f4;
+      --surface: rgba(255, 255, 255, .78);
+      --surface-solid: #ffffff;
+      --surface-soft: #edf3f6;
+      --surface-hover: #e5eff7;
+      --surface-selected: #dbeaf8;
+      --terminal-bg: #f5f8fa;
+      --terminal-bg-deep: #edf3f6;
+      --terminal-ink: #26343d;
+      --terminal-muted: #6a7d88;
+      --text: #24323b;
+      --text-muted: #6b7d87;
+      --border: #cad8e0;
+      --border-soft: rgba(131, 159, 174, .24);
+      --blue: #4f8dff;
+      --blue-dark: #2f6fd5;
+      --purple: #8978e8;
+      --cyan: #2d9daf;
+      --green: #31875f;
+      --yellow: #b97721;
+      --red: #c84d5b;
+      --shadow: 0 18px 42px rgba(70, 102, 122, .13);
+      --shadow-soft: 0 8px 22px rgba(70, 102, 122, .10);
+      --mono: "JetBrainsMono Nerd Font", "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+      --sans: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      min-width: 1120px;
+      background:
+        radial-gradient(circle at 9% -8%, rgba(104, 166, 235, .22), transparent 34rem),
+        radial-gradient(circle at 104% 8%, rgba(157, 138, 239, .17), transparent 32rem),
+        linear-gradient(135deg, var(--app-bg), var(--app-bg-deep));
+      color: var(--text);
+      font-family: var(--sans);
+      letter-spacing: .01em;
+    }
+
+    button { font: inherit; color: inherit; }
+    .window { min-height: 100vh; display: flex; flex-direction: column; }
+    .titlebar {
+      height: 42px; display: flex; align-items: center; justify-content: space-between;
+      padding: 0 14px 0 16px; background: rgba(255,255,255,.76);
+      border-bottom: 1px solid var(--border-soft); backdrop-filter: blur(18px);
+    }
+    .brand { display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 700; }
+    .brand-mark { width: 18px; height: 18px; border-radius: 5px; display: grid; place-items: center; color: white; background: linear-gradient(135deg, var(--blue), var(--purple)); box-shadow: 0 4px 10px rgba(79,141,255,.28); font-family: var(--mono); font-size: 11px; }
+    .title-actions { display: flex; align-items: center; gap: 8px; color: var(--text-muted); }
+    .title-chip { padding: 4px 9px; border: 1px solid rgba(79,141,255,.24); border-radius: 999px; color: var(--blue-dark); background: rgba(219,234,248,.7); font-size: 11px; font-weight: 650; }
+    .window-button { width: 26px; height: 24px; border: 0; border-radius: 6px; background: transparent; color: var(--text-muted); cursor: pointer; }
+    .window-button:hover { background: var(--surface-hover); color: var(--text); }
+
+    .workspace { display: grid; grid-template-columns: 248px minmax(0,1fr); flex: 1; min-height: 0; padding: 10px; gap: 10px; }
+    .sidebar, .main-shell { min-height: 0; border: 1px solid var(--border-soft); box-shadow: var(--shadow); }
+    .sidebar { display: flex; flex-direction: column; overflow: hidden; border-radius: 16px; background: rgba(235,242,246,.86); backdrop-filter: blur(18px); }
+    .sidebar-head { height: 54px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px 0 16px; border-bottom: 1px solid var(--border-soft); }
+    .sidebar-title { font-size: 13px; font-weight: 750; }
+    .sidebar-actions { display: flex; gap: 5px; }
+    .icon-btn { width: 28px; height: 28px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--text-muted); cursor: pointer; }
+    .icon-btn:hover { background: var(--surface-solid); border-color: var(--border); color: var(--blue-dark); }
+    .search { margin: 12px; padding: 8px 10px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,.74); color: var(--text-muted); font-size: 12px; }
+    .search kbd { margin-left: auto; padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); background: var(--surface-soft); font: 10px var(--mono); }
+    .project-list { padding: 0 8px; display: grid; gap: 4px; }
+    .project { display: flex; align-items: center; gap: 9px; padding: 9px 9px; border: 1px solid transparent; border-radius: 10px; background: transparent; cursor: pointer; }
+    .project:hover { background: rgba(255,255,255,.68); border-color: var(--border-soft); }
+    .project.active { background: var(--surface-selected); border-color: rgba(79,141,255,.34); box-shadow: inset 3px 0 0 var(--blue); }
+    .project-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px rgba(49,135,95,.12); }
+    .project-dot.idle { background: var(--text-muted); box-shadow: none; }
+    .project-copy { min-width: 0; }
+    .project-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 650; }
+    .project-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; color: var(--text-muted); font: 10px var(--mono); }
+    .sidebar-footer { margin-top: auto; padding: 10px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border-soft); color: var(--text-muted); font-size: 11px; }
+    .status { display: flex; align-items: center; gap: 6px; }
+    .status i { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+
+    .main-shell { display: flex; flex-direction: column; overflow: hidden; border-radius: 16px; background: rgba(255,255,255,.34); }
+    .workbar { height: 48px; display: flex; align-items: center; gap: 5px; padding: 0 8px; background: rgba(255,255,255,.72); border-bottom: 1px solid var(--border-soft); backdrop-filter: blur(18px); }
+    .worktab { height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--text-muted); font-size: 12px; cursor: pointer; }
+    .worktab:hover { background: var(--surface-hover); color: var(--text); }
+    .worktab.active { color: var(--text); background: var(--surface-solid); border-color: var(--border); box-shadow: 0 3px 10px rgba(70,102,122,.08); }
+    .worktab .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); }
+    .workbar-spacer { flex: 1; }
+    .toolbar-btn { height: 30px; padding: 0 9px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--text-muted); font-size: 12px; cursor: pointer; }
+    .toolbar-btn:hover { background: var(--surface-hover); border-color: var(--border); color: var(--blue-dark); }
+    .toolbar-btn.primary { color: white; background: linear-gradient(135deg, var(--blue), var(--purple)); box-shadow: 0 4px 10px rgba(79,141,255,.22); }
+
+    .content { display: grid; grid-template-columns: minmax(0,1fr) 308px; flex: 1; min-height: 0; gap: 10px; padding: 10px; }
+    .terminal-card, .right-panel { min-height: 0; border: 1px solid var(--border); box-shadow: var(--shadow-soft); }
+    .terminal-card { display: flex; flex-direction: column; overflow: hidden; border-radius: 13px; background: var(--terminal-bg); }
+    .terminal-tabs { height: 42px; display: flex; align-items: center; gap: 4px; padding: 0 7px; background: linear-gradient(180deg, #eaf1f5, #e3edf2); border-bottom: 1px solid var(--border); }
+    .terminal-tab { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; border: 1px solid transparent; border-radius: 8px; color: var(--terminal-muted); font: 12px var(--mono); cursor: pointer; }
+    .terminal-tab.active { color: var(--terminal-ink); background: #fff; border-color: var(--border); box-shadow: inset 0 -2px 0 var(--blue); }
+    .terminal-tab .tab-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+    .terminal-tab-close { color: var(--terminal-muted); }
+    .terminal-tab-add { margin-left: auto; }
+    .terminal-body { position: relative; flex: 1; min-height: 0; padding: 26px 30px; overflow: hidden; background: radial-gradient(circle at 75% -20%, rgba(119,160,191,.13), transparent 44%), linear-gradient(135deg, #f8fafb, #edf3f6); color: var(--terminal-ink); font: 16px/1.55 var(--mono); }
+    .terminal-body::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(110deg, rgba(255,255,255,.42), transparent 28%, transparent 72%, rgba(132,173,201,.06)); mix-blend-mode: screen; }
+    .prompt { position: relative; z-index: 1; white-space: nowrap; }
+    .prompt .user { color: #8c66d8; font-weight: 700; }
+    .prompt .path { color: #3e7fc6; font-weight: 650; }
+    .prompt .arrow { color: #557382; }
+    .command { position: relative; z-index: 1; margin: 4px 0 10px; color: #a75c16; font-weight: 650; }
+    .output { position: relative; z-index: 1; margin: 0 0 15px; color: #3d4f59; }
+    .output .key { color: #2f7e88; }
+    .output .value { color: #8256a8; }
+    .cursor { display: inline-block; width: 9px; height: 19px; margin-left: 4px; vertical-align: -3px; background: var(--blue); opacity: .85; animation: blink 1.1s steps(2,end) infinite; }
+    @keyframes blink { 50% { opacity: .18; } }
+    .terminal-status { display: flex; align-items: center; justify-content: space-between; padding: 7px 12px; border-top: 1px solid var(--border); background: rgba(255,255,255,.68); color: var(--text-muted); font-size: 10px; }
+    .terminal-status span { display: inline-flex; align-items: center; gap: 5px; }
+    .terminal-status i { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+
+    .right-panel { display: flex; flex-direction: column; overflow: hidden; border-radius: 13px; background: rgba(255,255,255,.78); }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; height: 43px; padding: 0 13px; border-bottom: 1px solid var(--border); background: linear-gradient(180deg, #f6fafc, #edf4f7); }
+    .panel-title { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 750; }
+    .panel-title .mark { width: 7px; height: 7px; border-radius: 50%; background: var(--purple); box-shadow: 0 0 0 3px rgba(137,120,232,.14); }
+    .panel-head small { color: var(--text-muted); font: 10px var(--mono); }
+    .panel-tabs { display: flex; gap: 3px; padding: 8px 9px 0; background: #f4f8fa; }
+    .panel-tab { flex: 1; padding: 7px 4px; border: 0; border-radius: 7px 7px 0 0; background: transparent; color: var(--text-muted); font-size: 11px; cursor: pointer; }
+    .panel-tab.active { color: var(--blue-dark); background: #fff; box-shadow: 0 -1px 0 var(--border), 1px 0 0 var(--border), -1px 0 0 var(--border); font-weight: 700; }
+    .panel-scroll { min-height: 0; flex: 1; padding: 12px; overflow: auto; background: rgba(255,255,255,.72); }
+    .metric { padding: 10px; margin-bottom: 8px; border: 1px solid var(--border-soft); border-radius: 9px; background: rgba(249,252,253,.92); }
+    .metric-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .metric-label { color: var(--text-muted); font-size: 10px; }
+    .metric-value { color: var(--text); font: 700 15px var(--mono); }
+    .metric-value.blue { color: var(--blue-dark); }
+    .metric-value.purple { color: #765fd0; }
+    .bar { height: 5px; margin-top: 9px; overflow: hidden; border-radius: 99px; background: #e0e9ee; }
+    .bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--blue), var(--purple)); }
+    .change { display: flex; align-items: center; gap: 8px; padding: 8px 6px; border-bottom: 1px solid var(--border-soft); font-size: 11px; }
+    .change:last-child { border-bottom: 0; }
+    .change-icon { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 6px; color: var(--green); background: #e3f2e9; font-weight: 800; }
+    .change-copy { min-width: 0; }
+    .change-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-family: var(--mono); }
+    .change-meta { margin-top: 2px; color: var(--text-muted); font-size: 10px; }
+    .footer-note { padding: 9px 12px; border-top: 1px solid var(--border-soft); color: var(--text-muted); background: #f6fafb; font-size: 10px; }
+
+    @media (max-width: 1250px) {
+      .workspace { grid-template-columns: 220px minmax(0,1fr); }
+      .content { grid-template-columns: minmax(0,1fr) 270px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="window">
+    <header class="titlebar">
+      <div class="brand"><span class="brand-mark">&gt;_</span><span>CLI-Manager</span><span class="title-chip">Frosted Daylight · Preview</span></div>
+      <div class="title-actions"><span>PowerShell 7</span><button class="window-button">—</button><button class="window-button">□</button><button class="window-button">×</button></div>
+    </header>
+    <section class="workspace">
+      <aside class="sidebar">
+        <div class="sidebar-head"><span class="sidebar-title">项目</span><div class="sidebar-actions"><button class="icon-btn">‹</button><button class="icon-btn">＋</button></div></div>
+        <div class="search"><span>⌕</span><span>搜索项目</span><kbd>Ctrl K</kbd></div>
+        <div class="project-list">
+          <div class="project active"><i class="project-dot"></i><div class="project-copy"><div class="project-name">cli-manager</div><div class="project-path">D:\ai\cli-manager</div></div></div>
+          <div class="project"><i class="project-dot"></i><div class="project-copy"><div class="project-name">pi-workspace</div><div class="project-path">D:\ai\pi-workspace</div></div></div>
+          <div class="project"><i class="project-dot idle"></i><div class="project-copy"><div class="project-name">terminal-lab</div><div class="project-path">D:\dev\terminal-lab</div></div></div>
+        </div>
+        <div class="sidebar-footer"><span class="status"><i></i>本地已连接</span><button class="icon-btn">⚙</button></div>
+      </aside>
+      <section class="main-shell">
+        <nav class="workbar">
+          <button class="worktab active"><i class="dot"></i>Workspace · 2</button><button class="worktab"><i class="dot" style="background:#8978e8"></i>History</button><span class="workbar-spacer"></span><button class="toolbar-btn">⌕ 搜索</button><button class="toolbar-btn">◫ 分屏</button><button class="toolbar-btn primary">＋ 新终端</button>
+        </nav>
+        <div class="content">
+          <section class="terminal-card">
+            <div class="terminal-tabs"><button class="terminal-tab active"><i class="tab-dot"></i>PowerShell 7 <span class="terminal-tab-close">×</span></button><button class="terminal-tab"><i class="tab-dot" style="background:#8978e8"></i>Claude</button><button class="icon-btn terminal-tab-add">＋</button></div>
+            <div class="terminal-body">
+              <div class="prompt"><span class="user">╭─ xujin</span> <span class="path"> D:\ai\pi-workspace</span></div>
+              <div class="prompt"><span class="arrow">╰─❯</span> <span class="cursor"></span></div>
+              <div class="command">docker --version</div>
+              <p class="output"><span class="key">Docker version</span> <span class="value">29.7.2</span>, build a7dcaa6</p>
+              <div class="prompt"><span class="user">╭─ xujin</span> <span class="path"> D:\ai\pi-workspace</span></div>
+              <div class="prompt"><span class="arrow">╰─❯</span> <span class="cursor"></span></div>
+            </div>
+            <div class="terminal-status"><span><i></i>PowerShell 7 · 16px · JetBrainsMono Nerd Font</span><span>Ln 1, Col 1 · UTF-8</span></div>
+          </section>
+          <aside class="right-panel">
+            <div class="panel-head"><div class="panel-title"><i class="mark"></i>辅助面板</div><small>Terminal Acrylic</small></div>
+            <div class="panel-tabs"><button class="panel-tab active">统计</button><button class="panel-tab">Git</button><button class="panel-tab">Files</button><button class="panel-tab">Replay</button></div>
+            <div class="panel-scroll">
+              <div class="metric"><div class="metric-row"><span class="metric-label">今日会话</span><span class="metric-value blue">12</span></div><div class="bar"><i style="width:68%"></i></div></div>
+              <div class="metric"><div class="metric-row"><span class="metric-label">Tokens</span><span class="metric-value purple">48.2K</span></div><div class="bar"><i style="width:46%;background:linear-gradient(90deg,#8978e8,#b29cff)"></i></div></div>
+              <div class="metric"><div class="metric-row"><span class="metric-label">活跃模型</span><span class="metric-value">Claude</span></div><div class="bar"><i style="width:82%;background:linear-gradient(90deg,#2d9daf,#66c6d1)"></i></div></div>
+              <div class="change"><span class="change-icon">＋</span><div class="change-copy"><div class="change-name">src/styles/themes.css</div><div class="change-meta">Modified · 2 minutes ago</div></div></div>
+              <div class="change"><span class="change-icon">＋</span><div class="change-copy"><div class="change-name">TerminalSidePanel.tsx</div><div class="change-meta">Modified · 8 minutes ago</div></div></div>
+              <div class="change"><span class="change-icon" style="color:#b97721;background:#fff2d8">!</span><div class="change-copy"><div class="change-name">package-lock.json</div><div class="change-meta">Untracked · review needed</div></div></div>
+            </div>
+            <div class="footer-note">浅色壳层 · 低对比边界 · 蓝紫交互强调</div>
+          </aside>
+        </div>
+      </section>
+    </section>
+  </main>
+  <script>
+    document.querySelectorAll('.project').forEach((item) => item.addEventListener('click', () => {
+      document.querySelectorAll('.project').forEach((node) => node.classList.remove('active'));
+      item.classList.add('active');
+    }));
+    document.querySelectorAll('.panel-tab').forEach((item) => item.addEventListener('click', () => {
+      document.querySelectorAll('.panel-tab').forEach((node) => node.classList.remove('active'));
+      item.classList.add('active');
+    }));
+    document.querySelectorAll('.worktab').forEach((item) => item.addEventListener('click', () => {
+      document.querySelectorAll('.worktab').forEach((node) => node.classList.remove('active'));
+      item.classList.add('active');
+    }));
+  </script>
+</body>
+</html>

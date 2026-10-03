@@ -1,6 +1,59 @@
-/* Dark theme - Night Indigo (default) */
+/* Dark theme - Night Indigo (base) */
 :root,
-[data-theme="dark"],
+[data-theme="dark"] {
+  --font-ui-sans: "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-ui-mono: "JetBrains Mono", "Cascadia Mono", "Cascadia Code", "Consolas", "SFMono-Regular", "Courier New", monospace;
+  --bg-primary: #1a1b26;
+  --bg-secondary: #24283b;
+  --bg-tertiary: #1f2335;
+  --text-primary: #c0caf5;
+  --text-secondary: #bec8ef;
+  --text-muted: #7c89bd;
+  --accent: #7aa2f7;
+  --accent-hover: #89b4fa;
+  --border: #3b4261;
+  --danger: #f7768e;
+  --success: #9ece6a;
+  --warning: #e0af68;
+}
+
+/* Dark theme - Midnight Aurora */
+[data-theme="dark"][data-dark-palette="midnight-aurora"] {
+  --font-ui-mono: "JetBrainsMono Nerd Font", "JetBrains Mono", "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+  --bg-primary: #0B1220;
+  --bg-secondary: #111C2D;
+  --bg-tertiary: #17243A;
+  --text-primary: #E7F0FF;
+  --text-secondary: #B9C8DD;
+  --text-muted: #7F93AE;
+  --accent: #66D9EF;
+  --accent-hover: #9AF0FF;
+  --border: #2B4260;
+  --danger: #FF7A90;
+  --success: #73D6A2;
+  --warning: #F2C879;
+  --surface-container-lowest: #0F1929;
+}
+
+/* Dark theme - Terminal Acrylic */
+[data-theme="dark"][data-dark-palette="terminal-acrylic"] {
+  --font-ui-mono: "JetBrainsMono Nerd Font", "JetBrains Mono", "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+  --bg-primary: #2a373f;
+  --bg-secondary: #243139;
+  --bg-tertiary: #354852;
+  --text-primary: #dcdfe4;
+  --text-secondary: #c4cbd1;
+  --text-muted: #94a6b1;
+  --accent: #61afef;
+  --accent-hover: #82c7ff;
+  --border: #526874;
+  --danger: #e06c75;
+  --success: #98c379;
+  --warning: #e5c07b;
+  --surface-container-lowest: #26343c;
+}
+
+/* Dark theme - Night Indigo */
 [data-theme="dark"][data-dark-palette="night-indigo"] {
   --font-ui-sans: "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
   --font-ui-mono: "JetBrains Mono", "Cascadia Mono", "Cascadia Code", "Consolas", "SFMono-Regular", "Courier New", monospace;
@@ -148,8 +201,26 @@
   --warning: #08bdba;
 }
 
-/* Light theme - Warm Paper (default) */
+/* Light theme - Clear Focus (default) */
 [data-theme="light"],
+[data-theme="light"][data-light-palette="clear-focus"] {
+  --font-ui-mono: "JetBrainsMono Nerd Font", "JetBrains Mono", "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+  --bg-primary: #dfe8ee;
+  --bg-secondary: #d5e1e8;
+  --bg-tertiary: #c9d8e1;
+  --text-primary: #1f303b;
+  --text-secondary: #344b58;
+  --text-muted: #5d7481;
+  --accent: #5d78c2;
+  --accent-hover: #4d67ad;
+  --border: #b7c8d2;
+  --danger: #a84f5d;
+  --success: #397c5a;
+  --warning: #875b16;
+  --surface-container-lowest: #edf2f5;
+}
+
+/* Light theme - Warm Paper */
 [data-theme="light"][data-light-palette="warm-paper"] {
   --bg-primary: #f9f9fb;
   --bg-secondary: #f2f4f6;

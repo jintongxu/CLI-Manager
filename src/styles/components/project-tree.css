@@ -84,6 +84,24 @@
   background-color: color-mix(in srgb, var(--primary) 17%, transparent);
 }
 
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-tree-project:hover {
+  background-color: color-mix(in srgb, #66d9ef 8%, #111c2d 92%);
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-tree-project[data-selected="true"] {
+  background: color-mix(in srgb, #66d9ef 10%, #111c2d 90%);
+  border-color: color-mix(in srgb, #66d9ef 20%, transparent);
+  box-shadow: inset 3px 0 0 #66d9ef;
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-tree-project[data-selected="true"]:hover {
+  background-color: color-mix(in srgb, #66d9ef 14%, #111c2d 86%);
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-tree-node[data-selected="true"] {
+  color: #e7f0ff;
+}
+
 .ui-synced-history {
   flex: 0 0 auto;
   max-height: none;

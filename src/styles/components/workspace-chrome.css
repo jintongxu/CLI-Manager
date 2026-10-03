@@ -24,6 +24,151 @@
   background-color: var(--surface);
 }
 
+[data-theme="light"][data-light-palette="clear-focus"] .ui-workspace-shell {
+  background-image:
+    radial-gradient(circle at 10% -12%, color-mix(in srgb, #9eafe6 10%, transparent) 0%, transparent 42%),
+    radial-gradient(circle at 104% 16%, color-mix(in srgb, #c8b8e4 8%, transparent) 0%, transparent 38%),
+    linear-gradient(135deg, #dfe8ee, #d5e1e8);
+}
+
+[data-theme="light"][data-light-palette="clear-focus"] .ui-main-shell {
+  background-color: color-mix(in srgb, #edf2f5 94%, #d5e1e8 6%);
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-workspace-layout-shell {
+  padding: 10px;
+  gap: 10px;
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-workspace-shell {
+  background-image:
+    radial-gradient(circle at 12% -14%, color-mix(in srgb, #66d9ef 12%, transparent) 0%, transparent 42%),
+    radial-gradient(circle at 104% 28%, color-mix(in srgb, #a78bfa 11%, transparent) 0%, transparent 38%),
+    linear-gradient(145deg, #0b1220, #111c2d 58%, #17243a);
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-main-shell {
+  background-color: color-mix(in srgb, #111c2d 94%, #0b1220 6%);
+  border: 1px solid color-mix(in srgb, #2b4260 68%, transparent);
+  border-radius: 16px;
+  box-shadow:
+    0 18px 44px color-mix(in srgb, #020714 34%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #9af0ff 7%, transparent);
+  overflow: hidden;
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-workspace-main-layout {
+  gap: 10px;
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-workspace-layout-shell:has(.ui-terminal-tabs-shell[data-fullscreen="true"]) {
+  padding: 0;
+  gap: 0;
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-workspace-layout-shell:has(.ui-terminal-tabs-shell[data-fullscreen="true"]) .ui-main-shell {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-sidebar-shell {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #66d9ef 6%, transparent), transparent 24%),
+    #0f1929;
+  border: 1px solid color-mix(in srgb, #2b4260 68%, transparent);
+  border-radius: 16px;
+  box-shadow:
+    0 18px 40px color-mix(in srgb, #020714 28%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #9af0ff 6%, transparent);
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-sidebar-top,
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-sidebar-footer {
+  background-color: color-mix(in srgb, #111c2d 84%, #0b1220 16%);
+  border-color: color-mix(in srgb, #2b4260 74%, transparent);
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-sidebar-top {
+  min-height: 52px;
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-sidebar-footer {
+  min-height: 44px;
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-sidebar-search-shell {
+  background-color: #111c2d;
+  border-color: color-mix(in srgb, #66d9ef 28%, #2b4260 72%);
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-sidebar-search-shell:focus-within {
+  border-color: #66d9ef;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #66d9ef 24%, transparent);
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-terminal-global-chrome {
+  height: 44px;
+  min-height: 44px;
+  margin: 8px 8px 0;
+  border: 1px solid color-mix(in srgb, #2b4260 72%, transparent);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #17243a 92%, #66d9ef 8%), #111c2d);
+  outline: none;
+  box-shadow:
+    0 10px 26px color-mix(in srgb, #020714 24%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #9af0ff 8%, transparent);
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-terminal-global-chrome .ui-tab-trigger {
+  height: 30px;
+  border-radius: 8px;
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-terminal-pane-chrome {
+  height: 44px;
+  min-height: 44px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #17243a 90%, #66d9ef 10%), #111c2d);
+  outline-color: color-mix(in srgb, #2b4260 78%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #9af0ff 7%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, #2b4260 76%, transparent);
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-terminal-pane-chrome .ui-tab-trigger {
+  height: 30px;
+  border-radius: 8px;
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-terminal-well {
+  border: 1px solid color-mix(in srgb, #2b4260 62%, transparent);
+  border-radius: 14px;
+  background: #0b1220;
+  box-shadow:
+    0 16px 34px color-mix(in srgb, #020714 26%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #9af0ff 4%, transparent);
+  overflow: hidden;
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-terminal-tabs-shell[data-fullscreen="true"] .ui-terminal-well {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="terminal-acrylic"] .ui-workspace-shell {
+  background-image:
+    radial-gradient(circle at 12% -14%, color-mix(in srgb, #61afef 15%, transparent) 0%, transparent 42%),
+    radial-gradient(circle at 104% 28%, color-mix(in srgb, #c678dd 10%, transparent) 0%, transparent 38%),
+    linear-gradient(180deg, color-mix(in srgb, #2a373f 92%, #111a20 8%), #243139);
+}
+
+[data-theme="dark"][data-dark-palette="terminal-acrylic"] .ui-main-shell {
+  background-color: color-mix(in srgb, var(--surface) 92%, #111a20 8%);
+}
+
 .ui-sidebar-shell {
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--surface-container-high) 46%, transparent), transparent 18%),
@@ -36,9 +181,54 @@
   box-shadow: inset -1px 0 0 color-mix(in srgb, var(--border) 12%, transparent);
 }
 
+[data-theme="light"][data-light-palette="clear-focus"] .ui-sidebar-shell {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #9eafe6 5%, transparent), transparent 22%),
+    color-mix(in srgb, #d5e1e8 94%, #edf2f5 6%);
+}
+
+[data-theme="light"][data-light-palette="clear-focus"] .ui-sidebar-top,
+[data-theme="light"][data-light-palette="clear-focus"] .ui-sidebar-footer {
+  background-color: color-mix(in srgb, #d5e1e8 80%, #edf2f5 20%);
+  border-color: color-mix(in srgb, #9eafbd 18%, transparent);
+}
+
+[data-theme="light"][data-light-palette="clear-focus"] .ui-sidebar-search-shell {
+  background-color: #edf2f5;
+  border-color: color-mix(in srgb, #9eafbd 22%, transparent);
+}
+
+[data-theme="light"][data-light-palette="clear-focus"] .ui-sidebar-search-shell:focus-within {
+  border-color: #9daff0;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #9daff0 16%, transparent);
+}
+
 [data-theme="dark"][data-dark-palette="investment-platform"] .ui-sidebar-shell,
+[data-theme="dark"][data-dark-palette="terminal-acrylic"] .ui-sidebar-shell,
 [data-theme="light"][data-light-palette="saas-analytics-dashboard"] .ui-sidebar-shell {
   box-shadow: inset -1px 0 0 color-mix(in srgb, var(--border) 24%, transparent);
+}
+
+[data-theme="dark"][data-dark-palette="terminal-acrylic"] .ui-sidebar-shell {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #61afef 7%, transparent), transparent 22%),
+    color-mix(in srgb, var(--surface-container-low) 94%, #162129 6%);
+}
+
+[data-theme="dark"][data-dark-palette="terminal-acrylic"] .ui-sidebar-top,
+[data-theme="dark"][data-dark-palette="terminal-acrylic"] .ui-sidebar-footer {
+  background-color: color-mix(in srgb, var(--surface-container-low) 78%, #10181e 22%);
+  border-color: color-mix(in srgb, #9fb4c0 18%, transparent);
+}
+
+[data-theme="dark"][data-dark-palette="terminal-acrylic"] .ui-sidebar-search-shell {
+  background-color: color-mix(in srgb, #2a373f 88%, #111a20 12%);
+  border-color: color-mix(in srgb, #9fb4c0 28%, transparent);
+}
+
+[data-theme="dark"][data-dark-palette="terminal-acrylic"] .ui-sidebar-search-shell:focus-within {
+  border-color: color-mix(in srgb, #61afef 58%, #9fb4c0 42%);
+  box-shadow: 0 0 0 2px color-mix(in srgb, #61afef 24%, transparent);
 }
 
 .ui-sidebar-top,
@@ -361,11 +551,13 @@
 }
 
 .ui-terminal-pane-chrome {
-  --terminal-tab-accent: color-mix(in srgb, var(--terminal-theme-accent, #60a5fa) 64%, var(--terminal-theme-foreground, #f8fafc) 36%);
-  --terminal-tab-accent-muted: color-mix(in srgb, var(--terminal-tab-accent) 42%, var(--terminal-theme-muted, #64748b) 58%);
-  --terminal-tab-border: color-mix(in srgb, var(--terminal-theme-background, #0c0e10) 48%, var(--terminal-theme-foreground, #f8fafc) 52%);
-  --terminal-tab-hover-bg: color-mix(in srgb, var(--terminal-theme-background, #0c0e10) 72%, black 28%);
-  --terminal-tab-selected-bg: color-mix(in srgb, var(--terminal-theme-background, #0c0e10) 62%, black 38%);
+  --terminal-tab-accent: color-mix(in srgb, var(--terminal-theme-accent, #60a5fa) 72%, var(--terminal-theme-foreground, #f8fafc) 28%);
+  --terminal-tab-accent-muted: color-mix(in srgb, var(--terminal-tab-accent) 34%, var(--terminal-theme-muted, #64748b) 66%);
+  --terminal-tab-border: color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 18%, transparent);
+  --terminal-tab-hover-bg: color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 8%, transparent);
+  --terminal-tab-selected-bg: color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 12%, transparent);
+  --terminal-chrome-surface: color-mix(in srgb, var(--terminal-theme-background, #0c0e10) 92%, var(--terminal-theme-foreground, #f8fafc) 8%);
+  --terminal-chrome-surface-raised: color-mix(in srgb, var(--terminal-theme-background, #0c0e10) 86%, var(--terminal-theme-foreground, #f8fafc) 14%);
   height: 42px;
   min-height: 42px;
   margin: 0;
@@ -373,14 +565,14 @@
   background:
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--terminal-theme-background, #0c0e10) 72%, var(--terminal-theme-foreground, #f8fafc) 12%) 0%,
-      color-mix(in srgb, var(--terminal-theme-background, #0c0e10) 88%, black 12%) 100%
+      var(--terminal-chrome-surface-raised) 0%,
+      var(--terminal-chrome-surface) 100%
     );
   color: var(--terminal-theme-foreground, #f8fafc);
-  outline-color: color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 8%, transparent);
+  outline-color: color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 9%, transparent);
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 10%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, black 28%, transparent);
+    inset 0 1px 0 color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 7%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 11%, transparent);
 }
 
 .ui-terminal-panel-header {
@@ -500,29 +692,36 @@
 }
 
 .ui-terminal-pane-chrome .ui-tab-trigger {
-  color: color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 72%, var(--terminal-theme-muted, #64748b) 28%);
-  border-color: color-mix(in srgb, var(--terminal-tab-border) 34%, transparent);
-  background-color: color-mix(in srgb, var(--terminal-theme-background, #0c0e10) 68%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 5%, transparent);
+  color: color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 68%, var(--terminal-theme-muted, #64748b) 32%);
+  border-color: transparent;
+  background-color: transparent;
+  box-shadow: none;
 }
 
 .ui-terminal-pane-chrome .ui-tab-trigger:hover:not([data-selected="true"]) {
   background-color: var(--terminal-tab-hover-bg);
-  color: var(--terminal-theme-foreground, #f8fafc);
-  border-color: color-mix(in srgb, var(--terminal-tab-border) 76%, transparent);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--terminal-tab-border) 34%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 10%, transparent);
-  transform: translateY(-1px);
+  color: color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 92%, var(--terminal-tab-accent) 8%);
+  border-color: color-mix(in srgb, var(--terminal-tab-border) 48%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--terminal-tab-border) 24%, transparent);
+  transform: none;
 }
 
 .ui-terminal-pane-chrome .ui-tab-trigger[data-selected="true"] {
   color: var(--terminal-theme-foreground, #f8fafc);
   background-color: var(--terminal-tab-selected-bg);
-  border-color: color-mix(in srgb, var(--terminal-tab-border) 92%, transparent);
+  border-color: color-mix(in srgb, var(--terminal-tab-border) 62%, transparent);
   box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--terminal-tab-border) 42%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 16%, transparent);
+    inset 0 -2px 0 var(--terminal-tab-accent),
+    inset 0 0 0 1px color-mix(in srgb, var(--terminal-tab-border) 22%, transparent),
+    0 4px 12px color-mix(in srgb, black 12%, transparent);
+}
+
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-terminal-pane-chrome .ui-tab-trigger[data-selected="true"] {
+  background-color: color-mix(in srgb, #16263a 92%, #111c2d 8%);
+  border-color: color-mix(in srgb, #38617a 72%, transparent);
+  box-shadow:
+    inset 0 -1px 0 #66d9ef,
+    inset 0 0 0 1px color-mix(in srgb, #38617a 34%, transparent);
 }
 
 .ui-terminal-well[data-terminal-theme-tone="light"] .ui-terminal-chrome,
@@ -541,21 +740,18 @@
 
 .ui-terminal-well[data-terminal-theme-tone="light"] .ui-terminal-pane-chrome {
   --terminal-tab-accent: color-mix(in srgb, var(--terminal-theme-accent, #2563eb) 82%, #2563eb 18%);
-  --terminal-tab-border: color-mix(in srgb, var(--terminal-theme-foreground, #1e293b) 18%, var(--terminal-theme-background, #ffffff) 82%);
-  --terminal-tab-accent-muted: color-mix(in srgb, var(--terminal-tab-accent) 24%, var(--terminal-tab-border) 76%);
-  --terminal-tab-hover-bg: color-mix(in srgb, var(--terminal-theme-background, #ffffff) 86%, var(--terminal-theme-foreground, #1e293b) 14%);
-  --terminal-tab-selected-bg: var(--terminal-theme-background, #ffffff);
+  --terminal-tab-border: color-mix(in srgb, var(--terminal-theme-foreground, #1e293b) 18%, transparent);
+  --terminal-tab-accent-muted: color-mix(in srgb, var(--terminal-tab-accent) 24%, var(--terminal-theme-muted, #64748b) 76%);
+  --terminal-tab-hover-bg: color-mix(in srgb, var(--terminal-theme-foreground, #1e293b) 7%, transparent);
+  --terminal-tab-selected-bg: color-mix(in srgb, var(--terminal-theme-background, #ffffff) 88%, var(--terminal-theme-foreground, #1e293b) 12%);
+  --terminal-chrome-surface: color-mix(in srgb, var(--terminal-theme-background, #ffffff) 92%, var(--terminal-theme-foreground, #1e293b) 8%);
+  --terminal-chrome-surface-raised: color-mix(in srgb, var(--terminal-theme-background, #ffffff) 96%, var(--terminal-theme-foreground, #1e293b) 4%);
   color: var(--terminal-theme-foreground, #1e293b);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--terminal-theme-background, #ffffff) 96%, var(--terminal-theme-foreground, #1e293b) 4%) 0%,
-      color-mix(in srgb, var(--terminal-theme-background, #ffffff) 90%, var(--terminal-theme-foreground, #1e293b) 10%) 100%
-    );
-  outline-color: color-mix(in srgb, var(--terminal-theme-foreground, #1e293b) 14%, transparent);
+  background: linear-gradient(180deg, var(--terminal-chrome-surface-raised), var(--terminal-chrome-surface));
+  outline-color: color-mix(in srgb, var(--terminal-theme-foreground, #1e293b) 12%, transparent);
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, white 82%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, var(--terminal-theme-foreground, #1e293b) 14%, transparent);
+    inset 0 1px 0 color-mix(in srgb, white 74%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--terminal-theme-foreground, #1e293b) 11%, transparent);
 }
 
 .ui-terminal-well[data-terminal-theme-tone="light"] .ui-terminal-pane-chrome .ui-tab-trigger {
@@ -576,12 +772,12 @@
 
 .ui-terminal-well[data-terminal-theme-tone="light"] .ui-terminal-pane-chrome .ui-tab-trigger[data-selected="true"] {
   color: var(--terminal-theme-foreground, #1e293b);
-  border-color: color-mix(in srgb, var(--terminal-tab-accent) 42%, var(--terminal-tab-border) 58%);
+  border-color: color-mix(in srgb, var(--terminal-tab-accent) 28%, var(--terminal-tab-border) 72%);
   background-color: var(--terminal-tab-selected-bg);
   box-shadow:
-    0 1px 3px color-mix(in srgb, var(--terminal-tab-accent) 14%, transparent),
-    inset 0 0 0 1px color-mix(in srgb, var(--terminal-tab-accent) 18%, transparent),
-    inset 0 1px 0 color-mix(in srgb, white 86%, transparent);
+    inset 0 -2px 0 var(--terminal-tab-accent),
+    inset 0 0 0 1px color-mix(in srgb, var(--terminal-tab-border) 28%, transparent),
+    0 3px 10px color-mix(in srgb, var(--terminal-theme-foreground, #1e293b) 8%, transparent);
   transform: none;
 }
 
@@ -590,17 +786,17 @@
 }
 
 .ui-terminal-pane-chrome .ui-terminal-actions {
-  gap: 6px;
-  padding-inline: 8px;
-  border-left: 1px solid color-mix(in srgb, var(--terminal-tab-accent-muted) 24%, transparent);
+  gap: 4px;
+  padding-inline: 7px;
+  border-left: 1px solid color-mix(in srgb, var(--terminal-tab-border) 54%, transparent);
 }
 
 .ui-terminal-pane-chrome .ui-terminal-actions .ui-toolbar-button,
 .ui-terminal-pane-chrome .ui-terminal-actions .ui-icon-action {
   min-height: 28px;
-  border-color: color-mix(in srgb, var(--terminal-tab-accent-muted) 30%, transparent);
-  background-color: color-mix(in srgb, var(--terminal-theme-background, #0c0e10) 82%, var(--terminal-tab-accent-muted) 18%);
-  color: color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 88%, var(--terminal-tab-accent) 12%);
+  border-color: transparent;
+  background-color: transparent;
+  color: color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 82%, var(--terminal-tab-accent) 18%);
   box-shadow: none;
 }
 
@@ -619,12 +815,12 @@
 
 .ui-terminal-pane-chrome .ui-terminal-actions .ui-primary-action {
   background-image: none;
-  background-color: color-mix(in srgb, var(--terminal-theme-background, #0c0e10) 70%, var(--terminal-tab-accent) 30%);
+  background-color: color-mix(in srgb, var(--terminal-tab-accent) 14%, transparent);
   color: color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 92%, white 8%);
 }
 
 .ui-terminal-pane-chrome .ui-terminal-actions .ui-primary-action:hover:not(:disabled) {
-  background-color: color-mix(in srgb, var(--terminal-theme-background, #0c0e10) 58%, var(--terminal-tab-accent) 42%);
+  background-color: color-mix(in srgb, var(--terminal-tab-accent) 24%, transparent);
   color: var(--terminal-theme-foreground, #f8fafc);
-  box-shadow: none;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--terminal-tab-accent) 24%, transparent);
 }

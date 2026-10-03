@@ -79,6 +79,7 @@ function applyBackgroundImageForegroundContrast(theme: ITheme, isLight: boolean)
 }
 
 export type LightTerminalPalette =
+  | "clear-focus"
   | "warm-paper"
   | "cream-green"
   | "emerald-mist"
@@ -89,6 +90,8 @@ export type LightTerminalPalette =
   | "apple-warm"
   | "apple-mono";
 export type DarkTerminalPalette =
+  | "midnight-aurora"
+  | "terminal-acrylic"
   | "night-indigo"
   | "forest-night"
   | "graphite-red"
@@ -1292,6 +1295,60 @@ const windowsTerminalOneHalfDark: ITheme = {
   brightWhite: "#DCDFE4",
 };
 
+const midnightAuroraTerminal: ITheme = {
+  background: "#0B1220",
+  foreground: "#E7F0FF",
+  cursor: "#66D9EF",
+  selectionBackground: "#243B5A",
+  black: "#0B1220",
+  red: "#FF7A90",
+  green: "#73D6A2",
+  yellow: "#F2C879",
+  blue: "#66B8FF",
+  magenta: "#C49BFF",
+  cyan: "#66D9EF",
+  white: "#D9E6F5",
+  brightBlack: "#9CB0C8",
+  brightRed: "#FF9DAA",
+  brightGreen: "#9BE7BE",
+  brightYellow: "#FFE09A",
+  brightBlue: "#9BCBFF",
+  brightMagenta: "#D9BCFF",
+  brightCyan: "#9AF0FF",
+  brightWhite: "#FFFFFF",
+};
+
+const windowsTerminalOneHalfDarkAcrylic: ITheme = {
+  ...windowsTerminalOneHalfDark,
+  background: "#2A373F",
+  black: "#202A30",
+  brightBlack: "#647681",
+  selectionBackground: "#506574",
+};
+
+const windowsTerminalOneHalfLightClear: ITheme = {
+  background: "#D8E3E9",
+  foreground: "#172A36",
+  cursor: "#4D67AD",
+  selectionBackground: "#B9CCE2",
+  black: "#172A36",
+  red: "#963D4D",
+  green: "#2F6B4D",
+  yellow: "#714A0D",
+  blue: "#294F8F",
+  magenta: "#65418F",
+  cyan: "#216B78",
+  white: "#EEF3F6",
+  brightBlack: "#49616E",
+  brightRed: "#B65362",
+  brightGreen: "#478563",
+  brightYellow: "#986D1E",
+  brightBlue: "#4D67AD",
+  brightMagenta: "#805EAD",
+  brightCyan: "#3B8997",
+  brightWhite: "#FFFFFF",
+};
+
 const windowsTerminalOneHalfLight: ITheme = {
   background: "#FAFAFA",
   foreground: "#383A42",
@@ -1389,6 +1446,9 @@ export const TERMINAL_THEME_PRESETS: TerminalThemePreset[] = [
   { id: "windowsTerminalCampbellPowershell", name: "Windows Terminal Campbell PowerShell", theme: windowsTerminalCampbellPowershell, group: "cool", family: "windows-terminal", tone: "dark" },
   { id: "windowsTerminalVintage", name: "Windows Terminal Vintage", theme: windowsTerminalVintage, group: "high-contrast", family: "windows-terminal", tone: "dark" },
   { id: "windowsTerminalOneHalfDark", name: "Windows Terminal One Half Dark", theme: windowsTerminalOneHalfDark, group: "cool", family: "windows-terminal", tone: "dark" },
+  { id: "midnightAuroraTerminal", name: "Midnight Aurora Terminal", theme: midnightAuroraTerminal, group: "cool", family: "midnight-aurora", tone: "dark" },
+  { id: "windowsTerminalOneHalfDarkAcrylic", name: "Windows Terminal One Half Dark · Acrylic Inspired", theme: windowsTerminalOneHalfDarkAcrylic, group: "cool", family: "windows-terminal", tone: "dark" },
+  { id: "windowsTerminalOneHalfLightClear", name: "Clear Focus One Half Light", theme: windowsTerminalOneHalfLightClear, group: "light-office", family: "windows-terminal", tone: "light" },
   { id: "windowsTerminalOneHalfLight", name: "Windows Terminal One Half Light", theme: windowsTerminalOneHalfLight, group: "light-office", family: "windows-terminal", tone: "light" },
   { id: "windowsTerminalTangoDark", name: "Windows Terminal Tango Dark", theme: windowsTerminalTangoDark, group: "high-contrast", family: "windows-terminal", tone: "dark" },
   { id: "windowsTerminalTangoLight", name: "Windows Terminal Tango Light", theme: windowsTerminalTangoLight, group: "light-office", family: "windows-terminal", tone: "light" },
@@ -1448,6 +1508,7 @@ const themeMap = new Map(TERMINAL_THEME_PRESETS.map((p) => [p.id, p.theme]));
 const themePresetMap = new Map(TERMINAL_THEME_PRESETS.map((p) => [p.id, p]));
 
 function resolveAutoLightThemeId(lightPalette: LightTerminalPalette = "warm-paper"): string {
+  if (lightPalette === "clear-focus") return "windowsTerminalOneHalfLightClear";
   if (lightPalette === "cream-green") return "creamGreenLight";
   if (lightPalette === "emerald-mist") return "creamGreenLight";
   if (lightPalette === "ink-red") return "inkRedLight";
@@ -1460,6 +1521,8 @@ function resolveAutoLightThemeId(lightPalette: LightTerminalPalette = "warm-pape
 }
 
 function resolveAutoDarkThemeId(darkPalette: DarkTerminalPalette = "night-indigo"): string {
+  if (darkPalette === "midnight-aurora") return "midnightAuroraTerminal";
+  if (darkPalette === "terminal-acrylic") return "windowsTerminalOneHalfDarkAcrylic";
   if (darkPalette === "night-indigo") return "codexDark";
   if (darkPalette === "forest-night") return "forestNightDark";
   if (darkPalette === "graphite-red") return "graphiteRedDark";

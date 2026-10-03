@@ -8,6 +8,7 @@ import {
 import { normalizeFontFamilyStack } from "../platform/systemFonts";
 
 const LIGHT_PRIMARY_COLORS: Record<LightThemePalette, string> = {
+  "clear-focus": "#4d67ad",
   "warm-paper": "#c46a2d",
   "cream-green": "#3f7a4f",
   "ink-red": "#c43d2f",
@@ -20,6 +21,8 @@ const LIGHT_PRIMARY_COLORS: Record<LightThemePalette, string> = {
 };
 
 const DARK_PRIMARY_COLORS: Record<DarkThemePalette, string> = {
+  "midnight-aurora": "#66d9ef",
+  "terminal-acrylic": "#61afef",
   "night-indigo": "#7aa2f7",
   "forest-night": "#52a36e",
   "graphite-red": "#c95b4a",

@@ -10,6 +10,7 @@ import { FileEditorPane, SubagentTranscriptView } from "./lazyTerminalPanels";
 import { type SplitPickerAnchor, type PaneDropPreview } from "../lib/terminalTabsModel";
 import { PaneTabBar } from "./PaneTabBar";
 import { PaneContentDropZones } from "./PaneContentDropZones";
+import { createTerminalCliContext, isPiTerminalContext } from "../browser/TerminalCliContext";
 
 export interface PaneLeafViewProps {
   pane: TerminalPaneLeaf;
@@ -135,9 +136,18 @@ export function PaneLeafView({
     settings: paneMarkerSettings,
   });
   const paneMarkerStyle = paneMarkerSettings.style;
+  const isPiPane = paneSessions.some((session) => (
+    isPiTerminalContext(createTerminalCliContext(
+      session,
+      projects.find((project) => project.id === session.projectId),
+    ))
+  ));
 
   return (
-    <div className="ui-terminal-pane relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+    <div
+      className="ui-terminal-pane relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
+      data-terminal-cli={isPiPane ? "pi" : undefined}
+    >
       {!hideTabBar && (
         <PaneTabBar
           pane={pane}
@@ -181,7 +191,7 @@ export function PaneLeafView({
         />
       )}
       <div
-        className="ui-terminal-pane-content relative min-h-0 flex-1 overflow-hidden"
+        className={`ui-terminal-pane-content relative min-h-0 flex-1 overflow-hidden${isPiPane ? " ui-terminal-pane-content--pi" : ""}`}
         onPointerDownCapture={() => {
           if (effectivePaneActiveSessionId && effectivePaneActiveSessionId !== useTerminalStore.getState().activeSessionId) {
             onActivateSession(effectivePaneActiveSessionId);
@@ -196,7 +206,7 @@ export function PaneLeafView({
         {paneSessions.map((session) => (
           <div
             key={session.id}
-            className="absolute inset-0"
+            className={`absolute inset-0${isPiPane ? " ui-terminal-session--pi" : ""}`}
             style={{ display: session.id === effectivePaneActiveSessionId ? "block" : "none" }}
           >
             {session.kind === "file-editor" ? (

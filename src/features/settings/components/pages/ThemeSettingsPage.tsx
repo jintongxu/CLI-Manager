@@ -81,7 +81,8 @@ const PANE_MARKER_PREVIEW_COLOR_OPTIONS = [
 ] as const satisfies ReadonlyArray<readonly [PaneMarkerPreviewColorKey, string]>;
 
 const FONT_FAMILY_OPTIONS: { value: string; label: string; labelEn?: string }[] = [
-  { value: "Cascadia Code, Consolas, monospace", label: "Cascadia Code（推荐）", labelEn: "Cascadia Code (Recommended)" },
+  { value: "\"JetBrainsMono Nerd Font\", \"JetBrains Mono\", \"Cascadia Code\", Consolas, monospace", label: "JetBrainsMono Nerd Font（推荐）", labelEn: "JetBrainsMono Nerd Font (Recommended)" },
+  { value: "Cascadia Code, Consolas, monospace", label: "Cascadia Code", labelEn: "Cascadia Code" },
   { value: "\"JetBrains Mono\", \"Cascadia Code\", Consolas, monospace", label: "JetBrains Mono" },
   { value: "\"Fira Code\", \"Cascadia Code\", Consolas, monospace", label: "Fira Code" },
   { value: "\"Microsoft YaHei\", \"Cascadia Code\", Consolas, monospace", label: "微软雅黑" },

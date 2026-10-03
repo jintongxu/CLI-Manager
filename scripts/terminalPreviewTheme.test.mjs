@@ -32,7 +32,12 @@ const previewPath = transpile("../src/shared/lib/terminalPreviewTheme.ts", "term
   ['from "./terminalThemes"', 'from "./terminalThemes.mjs"'],
 ]);
 
-const { getTerminalTheme, isLightTerminalTheme } = await import(pathToFileURL(themesPath).href);
+const {
+  getTerminalTheme,
+  isKnownTerminalThemePreset,
+  isLightTerminalTheme,
+  resolveTerminalThemeId,
+} = await import(pathToFileURL(themesPath).href);
 const {
   FOLLOW_TERMINAL_PREVIEW_THEME,
   buildTerminalPreviewPanelStyle,
@@ -40,7 +45,7 @@ const {
   resolveTerminalPreviewTheme,
 } = await import(pathToFileURL(previewPath).href);
 
-const DARK_TERMINAL_THEME = "windowsTerminalCampbell";
+const DARK_TERMINAL_THEME = "midnightAuroraTerminal";
 const LIGHT_PREVIEW_THEME = "windowsTerminalOneHalfLight";
 
 function baseInput(overrides = {}) {
@@ -53,6 +58,18 @@ function baseInput(overrides = {}) {
     ...overrides,
   };
 }
+
+test("the Midnight Aurora default resolves to its registered dark palette", () => {
+  const themeName = "midnightAuroraTerminal";
+  const theme = getTerminalTheme(themeName, "dark", "warm-paper", "night-indigo");
+
+  assert.equal(isKnownTerminalThemePreset(themeName), true);
+  assert.equal(resolveTerminalThemeId(themeName, "dark", "warm-paper", "night-indigo"), themeName);
+  assert.equal(theme.background, "#0B1220");
+  assert.equal(theme.foreground, "#E7F0FF");
+  assert.equal(theme.blue, "#66B8FF");
+  assert.equal(theme.brightBlack, "#9CB0C8");
+});
 
 test("following the terminal resolves the terminal theme itself", () => {
   const resolution = resolveTerminalPreviewTheme(baseInput());
