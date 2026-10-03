@@ -21,7 +21,7 @@ try {
       platforms: {
         "windows-x86_64": {
           signature: "signed-updater-value",
-          url: "https://github.com/dark-hxx/CLI-Manager/releases/download/V1.3.1/app.msi.zip",
+          url: "https://github.com/jintongxu/CLI-Manager/releases/download/V1.3.1/app.msi.zip",
         },
       },
     }),
@@ -33,7 +33,7 @@ try {
       artifacts: [
         {
           target: "linux-x86_64",
-          url: "https://github.com/dark-hxx/CLI-Manager/releases/download/V1.3.1/agent-x64",
+          url: "https://github.com/jintongxu/CLI-Manager/releases/download/V1.3.1/agent-x64",
           size: 42,
           sha256: "a".repeat(64),
         },

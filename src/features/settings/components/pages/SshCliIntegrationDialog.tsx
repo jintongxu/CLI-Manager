@@ -49,7 +49,7 @@ const SOURCE_METADATA = {
   kimi: { label: "Kimi Code", icon: "kimi" },
   grok: { label: "Grok Build", icon: "grok" },
 } as const;
-const OFFICIAL_AGENT_MANIFEST_PATH = /^\/dark-hxx\/CLI-Manager\/releases\/(?:latest\/download|download\/[^/]+)\/ssh-agent-release-manifest\.json$/;
+const OFFICIAL_AGENT_MANIFEST_PATH = /^\/jintongxu\/CLI-Manager\/releases\/(?:latest\/download|download\/[^/]+)\/ssh-agent-release-manifest\.json$/;
 const R2_AGENT_MANIFEST_PATH = "/CLI-Manager/releases/ssh-agent/latest/ssh-agent-release-manifest.json";
 const DEFAULT_R2_PUBLIC_BASE_URL = "https://github.bwm.de5.net";
 const R2_PUBLIC_BASE_URL = (
@@ -164,7 +164,7 @@ const HOOK_FILE_ROLE_KEYS: Record<string, TranslationKey> = {
 };
 
 const R2_INSTALL_SCRIPT_URL = `${R2_PUBLIC_BASE_URL}/CLI-Manager/releases/ssh-agent/latest/install-ssh-agent.sh`;
-const GITHUB_INSTALL_SCRIPT_URL = "https://github.com/dark-hxx/CLI-Manager/releases/latest/download/install-ssh-agent.sh";
+const GITHUB_INSTALL_SCRIPT_URL = "https://github.com/jintongxu/CLI-Manager/releases/latest/download/install-ssh-agent.sh";
 
 export function SshCliIntegrationDialog({ open, host, hosts, onOpenChange }: Props) {
   const { t } = useI18n();

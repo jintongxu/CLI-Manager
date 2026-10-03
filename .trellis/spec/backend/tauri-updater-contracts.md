@@ -139,7 +139,7 @@ Rust plugin registration:
   "plugins": {
     "updater": {
       "pubkey": "<Tauri updater public key content>",
-      "endpoints": ["https://github.com/dark-hxx/CLI-Manager/releases/latest/download/latest.json"],
+      "endpoints": ["https://github.com/jintongxu/CLI-Manager/releases/latest/download/latest.json"],
       "windows": {
         "installMode": "passive"
       }
@@ -263,7 +263,7 @@ R2_PUBLIC_BASE_URL=https://downloads.example.com
 #### Wrong
 
 ```ts
-const response = await fetch("https://api.github.com/repos/dark-hxx/CLI-Manager/releases/latest");
+const response = await fetch("https://api.github.com/repos/jintongxu/CLI-Manager/releases/latest");
 const latestVersion = (await response.json()).tag_name;
 ```
 

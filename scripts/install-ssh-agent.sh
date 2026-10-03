@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-REPOSITORY="dark-hxx/CLI-Manager"
+REPOSITORY="jintongxu/CLI-Manager"
 R2_PUBLIC_BASE_URL="https://github.bwm.de5.net"
 PUBLIC_KEY="RWQ2q8PpYSJOegTuwYHCPZ5ArX7D8RnAyC2LCylqKghGnRGfzuioR+KL"
 manifest_url=""

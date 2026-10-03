@@ -3,7 +3,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 import { create } from "zustand";
 
-const RELEASES_URL = "https://github.com/dark-hxx/CLI-Manager/releases";
+const RELEASES_URL = "https://github.com/jintongxu/CLI-Manager/releases";
 const AUR_PACKAGE_URL = "https://aur.archlinux.org/packages/cli-manager-bin";
 const MAX_RELEASE_NOTES_LENGTH = 1200;
 export type AppDistribution = "standalone" | "portable" | "aur";

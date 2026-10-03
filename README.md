@@ -10,7 +10,7 @@
 [![React](https://img.shields.io/badge/React-19-blue?logo=react)](https://react.dev/)
 [![Rust](https://img.shields.io/badge/Rust-latest-orange?logo=rust)](https://www.rust-lang.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?logo=typescript)](https://typescriptlang.org/)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](https://github.com/dark-hxx/CLI-Manager)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](https://github.com/jintongxu/CLI-Manager)
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue)](LICENSE)
 
 覆盖本地终端、SSH 主机与手机协作的多项目 AI CLI 工作台
@@ -504,7 +504,7 @@ CLI-Manager 提供两条成熟的并行工作路径：在终端工作区内自�
 
 ### 方式一：下载可执行版本
 
-前往 [Releases](https://github.com/dark-hxx/CLI-Manager/releases) 页面获取最新版本。
+前往 [Releases](https://github.com/jintongxu/CLI-Manager/releases) 页面获取最新版本。
 
 > 目前主要提供 Windows 构建产物；macOS / Linux 用户建议从源码构建（见下方）。
 
@@ -519,7 +519,7 @@ Agent 安装并检测成功后，在同一页面的 Claude 或 Codex 卡片中�
 也可以在远端通过先下载、再审阅的 POSIX 脚本安装同一签名制品：
 
 ```sh
-curl -fL -o install-ssh-agent.sh https://github.com/dark-hxx/CLI-Manager/releases/latest/download/install-ssh-agent.sh
+curl -fL -o install-ssh-agent.sh https://github.com/jintongxu/CLI-Manager/releases/latest/download/install-ssh-agent.sh
 less install-ssh-agent.sh
 sh install-ssh-agent.sh
 ```
@@ -811,6 +811,6 @@ Copyright (c) 2026 Chenyme。详见 [NOTICE](NOTICE)。
 
 **⭐ 如果这个项目对你有帮助，欢迎 Star 支持！**
 
-[提交 Issue](https://github.com/dark-hxx/CLI-Manager/issues) • [贡献代码](https://github.com/dark-hxx/CLI-Manager/pulls) • [查看文档](docs/功能清单.md)
+[提交 Issue](https://github.com/jintongxu/CLI-Manager/issues) • [贡献代码](https://github.com/jintongxu/CLI-Manager/pulls) • [查看文档](docs/功能清单.md)
 
 </div>
