@@ -42,6 +42,7 @@ jobs:
           node .github/scripts/release-workflow.test.mjs
           node .github/scripts/r2-release-config.test.mjs
           node .github/scripts/prepare-r2-release.test.mjs
+          node .github/scripts/merge-updater-manifest.test.mjs
 
       - name: Extract SSH Agent version
         id: agent_version

@@ -37,6 +37,36 @@ assert.doesNotMatch(
 );
 assert.match(workflow, /node \.github\/scripts\/release-workflow\.test\.mjs/);
 
+// Windows-only repair runs must use the signed Tauri build too; a local build disables updater artifacts.
+const windowsWorkflow = readFileSync(new URL("../workflows/windows-release-upload.yml", import.meta.url), "utf8")
+  .replace(/\r\n/g, "\n");
+const windowsSteps = windowsWorkflow.split(/(?=^      - )/m).slice(1);
+function windowsStepIndex(pattern, description) {
+  const index = windowsSteps.findIndex((step) => pattern.test(step));
+  assert.notEqual(index, -1, description);
+  return index;
+}
+const r2 = windowsStepIndex(/name: Configure R2 release\b/, "Windows updater repair must configure the release origin");
+const signedWindowsBuild = windowsStepIndex(/uses: tauri-apps\/tauri-action@/, "Windows updater repair must use the signed Tauri action");
+const preserveManifest = windowsStepIndex(/name: Preserve existing updater manifest\b/, "Windows updater repair must preserve existing platforms");
+const mergeManifest = windowsStepIndex(/name: Merge updater manifest platforms\b/, "Windows updater repair must merge generated and existing platforms");
+const uploadManifest = windowsStepIndex(/name: Upload merged updater manifest\b/, "Windows updater repair must upload the merged updater manifest");
+const portable = windowsStepIndex(/name: Upload Windows portable asset to release\b/, "Windows updater repair must keep the portable upload");
+const r2Sync = windowsStepIndex(/name: Prepare R2 updater assets\b/, "Windows updater repair must synchronize the updater manifest");
+assert.ok(r2 < preserveManifest, "configure the updater origin before inspecting the release");
+assert.ok(preserveManifest < signedWindowsBuild, "preserve existing platforms before rebuilding Windows");
+assert.ok(signedWindowsBuild < mergeManifest, "merge after the signed updater manifest exists");
+assert.ok(mergeManifest < uploadManifest, "write the merged updater manifest before uploading it");
+assert.ok(uploadManifest < portable, "upload the merged manifest before the portable asset");
+assert.ok(portable < r2Sync, "synchronize R2 after every GitHub updater asset exists");
+assert.match(windowsSteps[mergeManifest], /merge-updater-manifest\.mjs/);
+assert.match(windowsSteps[signedWindowsBuild], /TAURI_SIGNING_PRIVATE_KEY:/);
+assert.match(windowsSteps[signedWindowsBuild], /TAURI_SIGNING_PRIVATE_KEY_PASSWORD:/);
+assert.match(windowsSteps[signedWindowsBuild], /includeUpdaterJson: true/);
+assert.match(windowsSteps[r2Sync], /test -f dist\/github-release\/latest\.json/);
+assert.match(windowsSteps[r2Sync], /latest\/latest\.json/);
+assert.doesNotMatch(windowsWorkflow, /tauri:build:local/, "Windows updater repair must not use the local config that disables updater artifacts");
+
 // Linux 构建矩阵：新增 runner 时依赖安装必须同样生效，且只能产出 deb（AppImage / rpm 已停止发布）。
 const linuxDeps = stepIndex(/name: Install Linux dependencies\b/, "Linux bundle dependencies must be installed");
 assert.match(steps[linuxDeps], /if: startsWith\(matrix\.platform, 'ubuntu'\)/);
