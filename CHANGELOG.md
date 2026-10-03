@@ -2,6 +2,11 @@
 
 ## [TEMP]
 
+### GitHub Release Windows 自用发布（2026-10-03）
+
+- Windows 发布流程简化为仅使用 GitHub Release：构建并上传 NSIS/MSI 安装包、便携 ZIP 与 Tauri `latest.json`，不再强制依赖 R2。
+- 桌面更新检查主地址切换为 GitHub Release 的 `latest.json`，保留 Tauri 签名校验与应用内下载、安装、重启流程。
+
 ### 内嵌终端界面视觉美化（2026-10-03）
 
 - 内嵌终端采用主题驱动的现代 chrome 层：标签栏、操作区、分屏标题与终端框架使用更克制的层级、边界和阴影，选中标签增加清晰的底部强调线；深色与浅色终端主题继续使用各自配色。

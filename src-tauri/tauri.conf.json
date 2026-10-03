@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "CLI-Manager",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "identifier": "com.cli-manager.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -87,9 +87,8 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDdBNEUyMjYxRTlDM0FCMzYKUldRMnE4UHBZU0pPZWdUdXdZSENQWjVBclg3RDhSbkF5QzJMQ3lscUtnaEduUkdmenVpb1IrS0wK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ5QTFCOUEzMTIyN0E4QUQKUldTdHFDY1NvN21oU2Z5Z3M2akJVMk83ek1NOXJXVHRFNHN0T2VJUDRFU0h5UFhaamVONVY0d3gK",
       "endpoints": [
-        "https://github.bwm.de5.net/CLI-Manager/releases/latest/latest.json",
         "https://github.com/jintongxu/CLI-Manager/releases/latest/download/latest.json"
       ],
       "windows": {
