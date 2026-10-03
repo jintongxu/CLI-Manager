@@ -209,10 +209,10 @@ function SortableTreeItem(props: ItemProps) {
           const worktreeContext = props.contexts.find((item) => item.worktreeId === worktree.id);
           return (
             <div className={`web-tree-worktree${props.selected?.worktreeId === worktree.id ? " active" : ""}`} style={{ paddingLeft: paddingLeft + 29 }} key={worktree.id} onContextMenu={(event) => props.onContextMenu(event, { kind: "worktree", id: worktree.id })}>
-              <button className="web-tree-worktree-main" type="button" disabled={!worktreeContext} onClick={() => worktreeContext && props.onSelect(worktreeContext.key)} title={worktree.name}>
-                <WorktreeIcon /><span><strong>{worktree.name}</strong><small>{worktree.branch}</small></span>
+              <button className="web-tree-worktree-main" type="button" disabled={!worktreeContext} onClick={() => worktreeContext && props.onSelect(worktreeContext.key)} title={worktree.description ? `${worktree.displayName ?? worktree.name}: ${worktree.description}` : worktree.displayName ?? worktree.name} aria-label={worktree.description ? `${worktree.displayName ?? worktree.name}. ${worktree.description}. ${worktree.branch}` : `${worktree.displayName ?? worktree.name}. ${worktree.branch}`}>
+                <WorktreeIcon /><span><strong>{worktree.displayName ?? worktree.name}</strong><small>{worktree.branch}</small></span>
               </button>
-              {props.managementEnabled && <button className="web-tree-quick-action" type="button" onClick={() => props.onQuickStart("worktree", worktree.id)} aria-label={`${props.t("quickStart")} ${worktree.name}`} title={props.t("quickStart")}><Play size={13} /></button>}
+              {props.managementEnabled && <button className="web-tree-quick-action" type="button" onClick={() => props.onQuickStart("worktree", worktree.id)} aria-label={`${props.t("quickStart")} ${worktree.displayName ?? worktree.name}`} title={props.t("quickStart")}><Play size={13} /></button>}
             </div>
           );
         })}</div>}

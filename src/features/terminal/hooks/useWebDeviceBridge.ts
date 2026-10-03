@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm as confirmNative } from "@tauri-apps/plugin-dialog";
 import { fetchLatestProjectSessionDetail, useHistoryStore } from "../../history/index";
 import { useProjectStore } from "../../projects/api/projectStore";
+import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import {
   getVisibleDesktopViewportSize,
@@ -615,6 +616,8 @@ async function publishWorkspace(workspaceOnly = false) {
         id: worktree.id,
         projectId: worktree.project_id,
         name: worktree.name,
+        displayName: getWorktreeDisplayName(worktree),
+        description: worktree.description ?? "",
         branch: worktree.branch,
         cwd: worktree.path,
         status: worktree.status,

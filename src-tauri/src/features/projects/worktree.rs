@@ -1364,6 +1364,7 @@ mod tests {
         );
         assert_eq!(validate_task_name("").unwrap_err(), "task_name_empty");
         assert_eq!(validate_task_name("-bad").unwrap_err(), "task_name_invalid");
+        assert_eq!(validate_task_name("修复登录流程").unwrap_err(), "task_name_invalid");
         assert_eq!(
             validate_task_name("bad/name").unwrap_err(),
             "task_name_invalid"

@@ -10,6 +10,7 @@ import { useTerminalStore, type TabNotificationState } from "../state";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { updateWorkspaceLayout } from "../../../shared/lib/workspaceLayout";
 import { useWorktreeStore } from "../../projects/api/worktreeStore";
+import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
 import { useProjectStore } from "../../projects/api/projectStore";
 import { useFileExplorerStore } from "../../files/api/fileExplorerStore";
 import { useI18n } from "../../../shared/i18n/index";
@@ -743,7 +744,7 @@ export function useTerminalTabsController({
       await createSession(
         options.projectId,
         scopedWorktree.path,
-        scopedWorktree.name,
+        getWorktreeDisplayName(scopedWorktree),
         options.startupCmd,
         options.envVars,
         options.shell,
@@ -774,7 +775,7 @@ export function useTerminalTabsController({
       void createSession(
         options.projectId,
         worktree.path,
-        t("worktree.deps.installTitle", { name: worktree.name }),
+        t("worktree.deps.installTitle", { name: getWorktreeDisplayName(worktree) }),
         deps.command,
         options.envVars,
         options.shell,
@@ -815,7 +816,7 @@ export function useTerminalTabsController({
     await createSession(
       options.projectId,
       worktree.path,
-      worktree.name,
+      getWorktreeDisplayName(worktree),
       options.startupCmd,
       options.envVars,
       options.shell,

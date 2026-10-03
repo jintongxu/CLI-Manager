@@ -9,6 +9,7 @@ import { useFileExplorerStore } from "../../files/api/fileExplorerStore";
 import { useHistoryStore } from "../../history/index";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { createDefaultWorktreeTaskName, isWorktreeCreateInProgressError, useWorktreeStore } from "../api/worktreeStore";
+import { getWorktreeDisplayName } from "../api/worktreeMetadata";
 import { useExternalSessionSyncStore } from "../../history/api/externalSessionSyncStore";
 import type { TerminalPaneSplitDirection } from "../../terminal/api/terminalPaneTree";
 import type { Project, TreeNode as TNode, Group, WorktreeRecord } from "../../../shared/types/index";
@@ -109,6 +110,7 @@ export function useSidebarController({
   const validateProjectGit = useWorktreeStore((s) => s.validateProjectGit);
   const checkWorktreeDeps = useWorktreeStore((s) => s.checkDeps);
   const dismissWorktreeDepsPrompt = useWorktreeStore((s) => s.dismissDepsPrompt);
+  const updateWorktreeMetadata = useWorktreeStore((s) => s.updateWorktreeMetadata);
   const removeWorktree = useWorktreeStore((s) => s.removeWorktree);
   const useExternalTerminal = useSettingsStore((s) => s.useExternalTerminal);
   const projectWorktreeConfigEnabled = useSettingsStore((s) => s.projectWorktreeConfigEnabled);
@@ -176,7 +178,8 @@ export function useSidebarController({
     project: Project;
     targetPaneId?: string;
     direction?: TerminalPaneSplitDirection;
-    taskName: string;
+    displayName: string;
+    description: string;
   } | null>(null);
   const [depsPrompt, setDepsPrompt] = useState<{
     project: Project;
@@ -789,7 +792,7 @@ export function useSidebarController({
     await createSession(
       options.projectId,
       worktree.path,
-      title ?? worktree.name,
+      title ?? getWorktreeDisplayName(worktree),
       startupCmd ?? options.startupCmd,
       options.envVars,
       options.shell,
@@ -831,7 +834,7 @@ export function useSidebarController({
         return createSession(
           options.projectId,
           worktree.path,
-          t("worktree.deps.installTitle", { name: worktree.name }),
+          t("worktree.deps.installTitle", { name: getWorktreeDisplayName(worktree) }),
           deps.command,
           options.envVars,
           options.shell,
@@ -842,9 +845,9 @@ export function useSidebarController({
       .catch((err) => toast.error(t("worktree.deps.checkFailed"), { description: String(err) }));
   };
 
-  const createAndOpenWorktree = async (project: Project, targetPaneId?: string, taskName?: string) => {
+  const createAndOpenWorktree = async (project: Project, targetPaneId?: string, displayName?: string, description = "") => {
     try {
-      const worktree = await createWorktreeForProject(project, taskName);
+      const worktree = await createWorktreeForProject(project, displayName ? { displayName, description } : undefined);
       await openWorktreeSession(project, worktree, targetPaneId);
       toast.success(t("worktree.toast.created"), { description: worktree.path });
       void maybePromptWorktreeDeps(project, worktree);
@@ -855,15 +858,15 @@ export function useSidebarController({
     }
   };
 
-  const createAndSplitWorktree = async (project: Project, direction: TerminalPaneSplitDirection, taskName?: string) => {
+  const createAndSplitWorktree = async (project: Project, direction: TerminalPaneSplitDirection, displayName?: string, description = "") => {
     if (!activeSessionId) return;
     try {
-      const worktree = await createWorktreeForProject(project, taskName);
+      const worktree = await createWorktreeForProject(project, displayName ? { displayName, description } : undefined);
       const options = buildProjectSplitOptions(project);
       await splitTerminal(activeSessionId, direction, {
         ...options,
         cwd: worktree.path,
-        title: worktree.name,
+        title: getWorktreeDisplayName(worktree),
         worktreeId: worktree.id,
       });
       closeHistory();
@@ -890,14 +893,14 @@ export function useSidebarController({
       await openProjectDirect(project, targetPaneId);
       return;
     }
-    if (decision === "auto") {
-      await createAndOpenWorktree(project, targetPaneId);
-      return;
-    }
+
+    // 项目树的“打开终端”在需要隔离时始终先询问任务名称/说明，
+    // 避免 auto/always 策略直接创建默认名称的 Worktree。
     setWorktreePrompt({
       project,
       targetPaneId,
-      taskName: createDefaultWorktreeTaskName(project.id),
+      displayName: createDefaultWorktreeTaskName(project.id),
+      description: "",
     });
   };
 
@@ -940,7 +943,7 @@ export function useSidebarController({
   const handleNewWorktreeTerminal = useCallback(
     async (project: Project, worktree: WorktreeRecord) => {
       if (rejectMissingWorktree(worktree)) return;
-      const title = worktree.name;
+      const title = getWorktreeDisplayName(worktree);
       if (compactMode || useExternalTerminal) {
         await openWindowsTerminal([{ title, cwd: worktree.path, shell: project.shell || useSettingsStore.getState().defaultShell }]);
       } else {
@@ -983,7 +986,8 @@ export function useSidebarController({
       setWorktreePrompt({
         project,
         direction,
-        taskName: createDefaultWorktreeTaskName(project.id),
+        displayName: createDefaultWorktreeTaskName(project.id),
+        description: "",
       });
     },
     [
@@ -1956,6 +1960,7 @@ export function useSidebarController({
     handleRequestDeleteGroup,
     worktreePrompt,
     setWorktreePrompt,
+    updateWorktreeMetadata,
     splitTerminal,
     closeHistory,
     openProjectDirect,

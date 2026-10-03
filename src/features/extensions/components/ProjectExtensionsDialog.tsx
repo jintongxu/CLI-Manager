@@ -7,6 +7,7 @@ import { Button } from "../../../shared/ui/button";
 import { Input } from "../../../shared/ui/input";
 import { getProviderSwitchAppType } from "../../providers/api/providerSwitching";
 import type { Project, WorktreeRecord } from "../../../shared/types/index";
+import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
 import type {
   CapabilityStatus,
   ExtensionCli,
@@ -325,7 +326,7 @@ export function ProjectExtensionsDialog({ project, worktree, open, onClose }: Pr
                 {t("extensions.project.description")}
               </DialogDescription>
               <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                <span className="max-w-full truncate font-medium text-text-primary" title={project?.name}>{project?.name || "—"}{worktree ? ` · ${worktree.name}` : ""}</span>
+                <span className="max-w-full truncate font-medium text-text-primary" title={project?.name}>{project?.name || "—"}{worktree ? ` · ${getWorktreeDisplayName(worktree)}` : ""}</span>
                 {activeCli && <span className="rounded-md bg-primary/10 px-2 py-0.5 text-text-secondary">{t("extensions.project.boundCli", { cli: t(CLI_LABEL_KEYS[activeCli]) })}</span>}
               </div>
               <div className="mt-1 truncate text-xs text-text-muted" title={path}>{path || "—"}</div>

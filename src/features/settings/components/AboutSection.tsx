@@ -18,7 +18,7 @@ import { useUpdateStore } from "../api/updateStore";
 import { MarkdownContent } from "../../../shared/ui/MarkdownContent";
 import { pickByLanguage, useI18n } from "../../../shared/i18n/index";
 
-const REPOSITORY_URL = "https://github.com/dark-hxx/CLI-Manager";
+const REPOSITORY_URL = "https://github.com/jintongxu/CLI-Manager";
 const MANUAL_URL = `${REPOSITORY_URL}/blob/master/docs/%E5%8A%9F%E8%83%BD%E6%B8%85%E5%8D%95.md`;
 const AUTHOR_URL = "https://github.com/dark-hxx";
 const AUR_PACKAGE_URL = "https://aur.archlinux.org/packages/cli-manager-bin";

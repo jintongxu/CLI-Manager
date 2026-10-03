@@ -1,0 +1,148 @@
+name: Windows Release Upload
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to update
+        required: true
+        default: V1.4.1
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  R2_PUBLIC_BASE_URL: ${{ vars.R2_PUBLIC_BASE_URL || secrets.R2_PUBLIC_BASE_URL }}
+
+jobs:
+  build-and-upload:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Configure R2 release
+        run: node .github/scripts/r2-release-config.mjs export-actions-env
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build bundled web assets
+        run: npm run web:build
+
+      - name: Preserve existing updater manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          rm -rf dist/previous-release
+          mkdir -p dist/previous-release
+          if gh release view "${{ inputs.tag }}" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fxq latest.json; then
+            gh release download "${{ inputs.tag }}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --pattern latest.json \
+              --dir dist/previous-release \
+              --clobber
+          fi
+
+      - name: Build and publish signed Windows updater artifacts
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          NODE_OPTIONS: --max-old-space-size=4096
+        with:
+          tagName: ${{ inputs.tag }}
+          releaseName: CLI-Manager ${{ inputs.tag }}
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          args: --bundles nsis,msi
+
+      - name: Merge updater manifest platforms
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          rm -rf dist/generated-release
+          mkdir -p dist/generated-release
+          gh release download "${{ inputs.tag }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern latest.json \
+            --dir dist/generated-release \
+            --clobber
+          node .github/scripts/merge-updater-manifest.mjs \
+            dist/previous-release/latest.json \
+            dist/generated-release/latest.json \
+            dist/latest.json
+
+      - name: Upload merged updater manifest
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          files: dist/latest.json
+          fail_on_unmatched_files: true
+          generate_release_notes: false
+
+      - name: Package Windows portable ZIP
+        shell: pwsh
+        run: .\scripts\package-portable.ps1 -Version "${{ inputs.tag }}" -SourceDir "src-tauri/target/release" -OutputDir "dist/portable"
+
+      - name: Upload Windows portable asset to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: CLI-Manager ${{ inputs.tag }}
+          files: dist/portable/*.zip
+          fail_on_unmatched_files: true
+          generate_release_notes: false
+
+      - name: Prepare R2 updater assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.R2_BUCKET || secrets.R2_BUCKET }}
+        shell: bash
+        run: |
+          test -n "$R2_ACCOUNT_ID"
+          test -n "$R2_BUCKET"
+          R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          rm -rf dist/github-release dist/r2-release
+          mkdir -p dist/github-release
+          gh release download "${{ inputs.tag }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir dist/github-release \
+            --clobber
+          test -f dist/github-release/latest.json
+          node .github/scripts/prepare-r2-release.mjs \
+            dist/github-release \
+            dist/r2-release \
+            "$R2_PUBLIC_BASE_URL" \
+            "${{ inputs.tag }}"
+          aws s3 cp dist/r2-release "s3://${R2_BUCKET}/CLI-Manager/releases/${{ inputs.tag }}/" \
+            --recursive \
+            --endpoint-url "$R2_ENDPOINT" \
+            --cache-control "public,max-age=31536000,immutable"
+          aws s3 cp dist/r2-release/latest.json \
+            "s3://${R2_BUCKET}/CLI-Manager/releases/latest/latest.json" \
+            --endpoint-url "$R2_ENDPOINT" \
+            --content-type "application/json" \
+            --cache-control "no-cache"

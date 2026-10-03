@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { Monitor } from "lucide-react";
 import type { Project, WorktreeRecord } from "../../../shared/types/index";
+import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
 import {
   getClaudeProviderOverride,
   getCodexProviderOverride,
@@ -233,7 +234,7 @@ export function ProviderSwitchModal({ project, worktree, onClose }: Props) {
   const targetProject = useMemo<Project>(
     () => ({
       ...project,
-      name: worktree ? `${project.name} · ${worktree.name}` : project.name,
+      name: worktree ? `${project.name} · ${getWorktreeDisplayName(worktree)}` : project.name,
       path: worktree?.path ?? project.path,
       provider_overrides: targetProviderOverrides,
     }),

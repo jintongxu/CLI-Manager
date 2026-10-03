@@ -34,6 +34,8 @@ pub(crate) use app::migrations::{
     MIGRATION_CREATE_EXTENSION_SKILLS_DESCRIPTION, MIGRATION_CREATE_EXTENSION_SKILLS_SQL,
     MIGRATION_CREATE_EXTENSION_SKILLS_VERSION, MIGRATION_CREATE_MESSAGE_STARS_DESCRIPTION,
     MIGRATION_CREATE_MESSAGE_STARS_SQL, MIGRATION_CREATE_MESSAGE_STARS_VERSION,
+    MIGRATION_ADD_WORKTREE_METADATA_DESCRIPTION, MIGRATION_ADD_WORKTREE_METADATA_SQL,
+    MIGRATION_ADD_WORKTREE_METADATA_VERSION,
     MIGRATION_MATERIALIZE_REQUEST_LOG_PROJECT_PATH_VERSION,
 };
 
@@ -1344,6 +1346,9 @@ mod provider_migration_tests {
         MIGRATION_CREATE_EXTENSION_SKILLS_VERSION,
         MIGRATION_CREATE_HISTORY_GENERATED_TITLES_VERSION,
         MIGRATION_CREATE_MESSAGE_STARS_VERSION,
+        MIGRATION_ADD_WORKTREE_METADATA_DESCRIPTION,
+        MIGRATION_ADD_WORKTREE_METADATA_SQL,
+        MIGRATION_ADD_WORKTREE_METADATA_VERSION,
         MIGRATION_MATERIALIZE_REQUEST_LOG_PROJECT_PATH_VERSION,
     };
 
@@ -1501,9 +1506,20 @@ mod provider_migration_tests {
             .find(|migration| migration.version == MIGRATION_CREATE_MESSAGE_STARS_VERSION)
             .expect("message star migration must be registered");
         assert!(scope_policy_migration.version < message_star_migration.version);
+        let worktree_metadata_migration = registry
+            .iter()
+            .find(|migration| migration.version == MIGRATION_ADD_WORKTREE_METADATA_VERSION)
+            .expect("worktree metadata migration must be registered");
+        assert_eq!(worktree_metadata_migration.version, 42);
+        assert_eq!(worktree_metadata_migration.description, MIGRATION_ADD_WORKTREE_METADATA_DESCRIPTION);
+        assert_eq!(worktree_metadata_migration.sql, MIGRATION_ADD_WORKTREE_METADATA_SQL);
+        assert!(worktree_metadata_migration.sql.contains("ADD COLUMN display_name"));
+        assert!(worktree_metadata_migration.sql.contains("ADD COLUMN description"));
+        assert!(worktree_metadata_migration.sql.contains("UPDATE worktrees SET display_name = name"));
+        assert!(message_star_migration.version < worktree_metadata_migration.version);
         assert!(registry
             .iter()
-            .all(|migration| migration.version <= message_star_migration.version));
+            .all(|migration| migration.version <= worktree_metadata_migration.version));
         assert!(registry.iter().any(|migration| migration.version == 29
             && migration.description == "optimize_unified_usage_record_queries"));
     }

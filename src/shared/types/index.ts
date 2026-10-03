@@ -295,7 +295,12 @@ export type WorktreeStatus = "active" | "missing";
 export interface WorktreeRecord {
   id: string;
   project_id: string;
+  /** Safe ASCII task slug used for the Worktree directory and Git branch. */
   name: string;
+  /** User-facing task name; falls back to name for legacy rows. */
+  display_name: string;
+  /** Optional user-facing task description. */
+  description: string;
   branch: string;
   path: string;
   base_branch: string;

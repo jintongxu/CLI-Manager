@@ -1,4 +1,5 @@
 import type { Project, TerminalSession, WorktreeRecord } from "../../../shared/types/index";
+import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
 
 export function normalizeProjectPath(path: string): string {
   return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
@@ -106,7 +107,7 @@ export function projectWithWorktreePath(project: Project, worktree: WorktreeReco
   if (normalizeProjectPath(project.path) === normalizeProjectPath(worktree.path)) return project;
   return {
     ...project,
-    name: `${project.name} · ${worktree.name}`,
+    name: `${project.name} · ${getWorktreeDisplayName(worktree)}`,
     path: worktree.path,
   };
 }

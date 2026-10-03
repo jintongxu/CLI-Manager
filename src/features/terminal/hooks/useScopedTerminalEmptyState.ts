@@ -2,6 +2,7 @@ import type { Group, TerminalScope } from "../../../shared/types/index";
 import { useMemo } from "react";
 import { useI18n } from "../../../shared/i18n/index";
 import type { Project, WorktreeRecord } from "../../../shared/types/index";
+import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
 
 interface ScopedTerminalEmptyStateContext {
   hasScopedTerminalFilter: boolean;
@@ -26,13 +27,13 @@ export function useScopedTerminalEmptyState({
     if (!hasScopedTerminalFilter) return null;
 
     if (terminalScopeValue.kind === "worktree") {
-      const name = scopedWorktree?.name ?? scopedProject?.name ?? "";
+      const name = scopedWorktree ? getWorktreeDisplayName(scopedWorktree) : scopedProject?.name ?? "";
       return {
         title: t("terminal.empty.worktreeTitle", { name }),
         description: t("terminal.empty.worktreeDescription", { name }),
         action:
           scopedProject && scopedWorktree
-            ? { label: t("terminal.empty.worktreeAction", { name: scopedWorktree.name }), onClick: handleOpenScopedTerminal }
+            ? { label: t("terminal.empty.worktreeAction", { name: getWorktreeDisplayName(scopedWorktree) }), onClick: handleOpenScopedTerminal }
             : undefined,
       };
     }
