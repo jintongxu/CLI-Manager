@@ -1,0 +1,58 @@
+name: Windows Release Upload
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to update
+        required: true
+        default: V1.4.1
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build bundled web assets
+        run: npm run web:build
+
+      - name: Build Windows installers
+        run: npm run tauri:build:local -- --bundles nsis,msi
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+
+      - name: Package Windows portable ZIP
+        shell: pwsh
+        run: .\scripts\package-portable.ps1 -Version "${{ inputs.tag }}" -SourceDir "src-tauri/target/local/release" -OutputDir "dist/portable"
+
+      - name: Upload Windows assets to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: CLI-Manager ${{ inputs.tag }}
+          files: |
+            src-tauri/target/local/release/bundle/nsis/*.exe
+            src-tauri/target/local/release/bundle/msi/*.msi
+            dist/portable/*.zip
+          fail_on_unmatched_files: true
+          generate_release_notes: false
