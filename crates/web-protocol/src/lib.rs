@@ -246,6 +246,12 @@ pub struct WorkspaceWorktreeSummary {
     pub id: String,
     pub project_id: String,
     pub name: String,
+    /// User-facing Unicode name; omitted by older desktop clients.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    /// User-facing description; omitted by older desktop clients.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     pub branch: String,
     /// Available only inside an authenticated, device-scoped workspace response.
     #[serde(default, skip_serializing_if = "Option::is_none")]

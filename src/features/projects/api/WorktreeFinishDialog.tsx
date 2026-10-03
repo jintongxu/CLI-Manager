@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import type { GitFileChange, Project, WorktreeRecord } from "../../../shared/types/index";
 import { useI18n, type TranslationKey } from "../../../shared/i18n/index";
 import { useWorktreeStore, type GitWorktreeMergeResult } from "./worktreeStore";
+import { getWorktreeDisplayName } from "./worktreeMetadata";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "../../../shared/ui/dialog";
 import { Button } from "../../../shared/ui/button";
 import { Textarea } from "../../../shared/ui/textarea";
@@ -176,7 +177,7 @@ export function WorktreeFinishDialog({ project, worktree, open, onClose }: Workt
   useEffect(() => {
     if (!open || !worktree) return;
     setStep("review");
-    setCommitMessage(worktree.name);
+    setCommitMessage(getWorktreeDisplayName(worktree));
     setOutput("");
     setError(null);
     setForceConfirmOpen(false);
@@ -294,7 +295,7 @@ export function WorktreeFinishDialog({ project, worktree, open, onClose }: Workt
     <>
       <Dialog open={open} onOpenChange={(next) => { if (!next && !forceConfirmOpen) onClose(); }}>
       <DialogContent className="max-w-[520px]" showCloseButton={false}>
-        <DialogTitle>{t("worktree.finish.title", { name: worktree.name })}</DialogTitle>
+        <DialogTitle>{t("worktree.finish.title", { name: getWorktreeDisplayName(worktree) })}</DialogTitle>
         <DialogDescription className="mt-2">
           {t("worktree.finish.description", { branch: worktree.branch })}
         </DialogDescription>

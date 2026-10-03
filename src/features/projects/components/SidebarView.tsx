@@ -1,6 +1,5 @@
 import { useState } from "react";
 import type { useSidebarController } from "../hooks/useSidebarController";
-import { sanitizeWorktreeTaskName, validateWorktreeTaskName } from "../api/worktreeStore";
 import { ConfigModal } from "./ConfigModal";
 import { ProjectExtensionsDialog } from "../../extensions";
 import { ConfirmDialog } from "../../../shared/ui/ConfirmDialog";
@@ -24,6 +23,7 @@ import { SidebarFooter } from "./SidebarFooter";
 import { FileExplorerSidebar } from "../../files/api/FileExplorerSidebar";
 import { ArrowLeftRight, Check, CircleStop, Copy, Crosshair, FileCode, FolderOpen, FolderPlus, ListClockIcon, Palette, Pencil, Pin, Play, Plus, Settings, SquareSplitHorizontal, SquareSplitVertical, Terminal, TerminalSquare, Trash2, X } from "../../../shared/ui/icons";
 import { buildProjectSplitOptions } from "../lib/sidebarModel";
+import { getWorktreeDisplayName } from "../api/worktreeMetadata";
 import type { Project, WorktreeRecord } from "../../../shared/types/index";
 
 export function SidebarView({
@@ -124,6 +124,7 @@ export function SidebarView({
   closeHistory,
   openProjectDirect,
   updateProject,
+  updateWorktreeMetadata,
   createAndSplitWorktree,
   createAndOpenWorktree,
   depsPrompt,
@@ -156,6 +157,35 @@ export function SidebarView({
     project: Project;
     worktree?: WorktreeRecord;
   } | null>(null);
+  const [renameTarget, setRenameTarget] = useState<WorktreeRecord | null>(null);
+  const [renameDisplayName, setRenameDisplayName] = useState("");
+  const [renameDescription, setRenameDescription] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [renameSaving, setRenameSaving] = useState(false);
+
+  const confirmRenameWorktree = async () => {
+    if (!renameTarget) return;
+    const displayName = renameDisplayName.trim();
+    const description = renameDescription.trim();
+    if (Array.from(displayName).length === 0 || Array.from(displayName).length > 64) {
+      setRenameError(t("worktree.rename.invalidName"));
+      return;
+    }
+    if (Array.from(description).length > 2000) {
+      setRenameError(t("worktree.rename.descriptionTooLong"));
+      return;
+    }
+    setRenameSaving(true);
+    setRenameError(null);
+    try {
+      await updateWorktreeMetadata(renameTarget.id, displayName, description);
+      setRenameTarget(null);
+    } catch (error) {
+      setRenameError(String(error));
+    } finally {
+      setRenameSaving(false);
+    }
+  };
 
   return (
     <aside
@@ -548,6 +578,20 @@ export function SidebarView({
                   className="context-menu-item"
                   role="menuitem"
                   onClick={() => {
+                    setRenameDisplayName(getWorktreeDisplayName(contextMenu.worktree));
+                    setRenameDescription(contextMenu.worktree.description ?? "");
+                    setRenameError(null);
+                    setRenameTarget(contextMenu.worktree);
+                    setContextMenu(null);
+                  }}
+                >
+                  <Pencil size={14} strokeWidth={1.5} />
+                  {t("worktree.menu.rename")}
+                </button>
+                <button
+                  className="context-menu-item"
+                  role="menuitem"
+                  onClick={() => {
                     handleOpenWorktree(contextMenu.project, contextMenu.worktree);
                     setContextMenu(null);
                   }}
@@ -836,6 +880,28 @@ export function SidebarView({
         </Portal>
       )}
 
+      <Dialog open={!!renameTarget} onOpenChange={(next) => { if (!next) setRenameTarget(null); }}>
+        <DialogContent className="max-w-[440px]" showCloseButton={false}>
+          <DialogTitle>{t("worktree.rename.title")}</DialogTitle>
+          <DialogDescription className="mt-2">{t("worktree.rename.description")}</DialogDescription>
+          <div className="mt-4 space-y-3">
+            <div>
+              <label className="mb-1 block text-xs text-text-muted">{t("worktree.prompt.taskName")}</label>
+              <Input value={renameDisplayName} onChange={(event) => setRenameDisplayName(event.currentTarget.value)} autoFocus />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-text-muted">{t("worktree.prompt.descriptionLabel")}</label>
+              <textarea value={renameDescription} onChange={(event) => setRenameDescription(event.currentTarget.value)} rows={4} className="min-h-20 w-full resize-y rounded-md border border-border bg-bg-primary px-2 py-1 text-sm" />
+            </div>
+            {renameError && <p className="text-[11px] text-danger">{renameError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameTarget(null)} disabled={renameSaving}>{t("common.cancel")}</Button>
+            <Button onClick={() => void confirmRenameWorktree()} disabled={renameSaving}>{renameSaving ? t("common.saving") : t("common.save")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!worktreePrompt} onOpenChange={(next) => { if (!next) setWorktreePrompt(null); }}>
         <DialogContent className="ui-worktree-prompt-dialog max-w-[440px]" showCloseButton={false}>
           <button
@@ -855,12 +921,17 @@ export function SidebarView({
           <div className="mt-4">
             <label className="mb-1 block text-xs text-text-muted">{t("worktree.prompt.taskName")}</label>
             <Input
-              value={worktreePrompt?.taskName ?? ""}
-              onChange={(event) => setWorktreePrompt((current) => current ? { ...current, taskName: sanitizeWorktreeTaskName(event.currentTarget.value) } : current)}
+              value={worktreePrompt?.displayName ?? ""}
+              onChange={(event) => setWorktreePrompt((current) => current ? { ...current, displayName: event.currentTarget.value } : current)}
               className="text-sm"
             />
-            {worktreePrompt && !validateWorktreeTaskName(worktreePrompt.taskName) && (
+            <label className="mb-1 mt-3 block text-xs text-text-muted">{t("worktree.prompt.descriptionLabel")}</label>
+            <textarea value={worktreePrompt?.description ?? ""} onChange={(event) => setWorktreePrompt((current) => current ? { ...current, description: event.currentTarget.value } : current)} className="min-h-20 w-full rounded-md border border-border bg-bg-primary px-2 py-1 text-sm" />
+            {worktreePrompt && (worktreePrompt.displayName.trim().length === 0 || Array.from(worktreePrompt.displayName.trim()).length > 64) && (
               <p className="mt-1 text-[11px] text-danger">{t("worktree.prompt.invalidName")}</p>
+            )}
+            {worktreePrompt && Array.from(worktreePrompt.description.trim()).length > 2000 && (
+              <p className="mt-1 text-[11px] text-danger">{t("worktree.prompt.descriptionTooLong")}</p>
             )}
           </div>
           <DialogFooter className="ui-worktree-prompt-footer">
@@ -886,9 +957,9 @@ export function SidebarView({
                 if (worktreePrompt) {
                   void updateProject(worktreePrompt.project.id, { worktree_strategy: "autoParallel" }).then(() => {
                     if (worktreePrompt.direction) {
-                      return createAndSplitWorktree(worktreePrompt.project, worktreePrompt.direction, worktreePrompt.taskName);
+                      return createAndSplitWorktree(worktreePrompt.project, worktreePrompt.direction, worktreePrompt.displayName, worktreePrompt.description);
                     }
-                    return createAndOpenWorktree(worktreePrompt.project, worktreePrompt.targetPaneId, worktreePrompt.taskName);
+                    return createAndOpenWorktree(worktreePrompt.project, worktreePrompt.targetPaneId, worktreePrompt.displayName, worktreePrompt.description);
                   }).catch((err) => {
                     logError("Failed to enable automatic worktree isolation", err);
                     toast.error(t("worktree.toast.createFailed"), { description: String(err) });
@@ -896,7 +967,7 @@ export function SidebarView({
                 }
                 setWorktreePrompt(null);
               }}
-              disabled={!worktreePrompt || !validateWorktreeTaskName(worktreePrompt.taskName)}
+              disabled={!worktreePrompt || !worktreePrompt.displayName.trim() || Array.from(worktreePrompt.displayName.trim()).length > 64 || Array.from(worktreePrompt.description).length > 2000}
             >
               {t("worktree.prompt.autoParallel")}
             </Button>
@@ -904,13 +975,13 @@ export function SidebarView({
               className="ui-worktree-prompt-action ui-worktree-prompt-action-primary"
               onClick={() => {
                 if (worktreePrompt?.direction) {
-                  void createAndSplitWorktree(worktreePrompt.project, worktreePrompt.direction, worktreePrompt.taskName);
+                  void createAndSplitWorktree(worktreePrompt.project, worktreePrompt.direction, worktreePrompt.displayName, worktreePrompt.description);
                 } else if (worktreePrompt) {
-                  void createAndOpenWorktree(worktreePrompt.project, worktreePrompt.targetPaneId, worktreePrompt.taskName);
+                  void createAndOpenWorktree(worktreePrompt.project, worktreePrompt.targetPaneId, worktreePrompt.displayName, worktreePrompt.description);
                 }
                 setWorktreePrompt(null);
               }}
-              disabled={!worktreePrompt || !validateWorktreeTaskName(worktreePrompt.taskName)}
+              disabled={!worktreePrompt || !worktreePrompt.displayName.trim() || Array.from(worktreePrompt.displayName.trim()).length > 64 || Array.from(worktreePrompt.description).length > 2000}
             >
               {t("worktree.prompt.isolate")}
             </Button>
@@ -932,7 +1003,7 @@ export function SidebarView({
         <DialogContent className="max-w-[420px]" showCloseButton={false}>
           <DialogTitle>{t("worktree.deps.title")}</DialogTitle>
           <DialogDescription className="mt-2">
-            {depsPrompt ? t("worktree.deps.description", { name: depsPrompt.worktree.name, command: depsPrompt.command }) : ""}
+            {depsPrompt ? t("worktree.deps.description", { name: getWorktreeDisplayName(depsPrompt.worktree), command: depsPrompt.command }) : ""}
           </DialogDescription>
           <DialogFooter>
             <Button
@@ -957,7 +1028,7 @@ export function SidebarView({
                     depsPrompt.worktree,
                     undefined,
                     depsPrompt.command,
-                    t("worktree.deps.installTitle", { name: depsPrompt.worktree.name }),
+                    t("worktree.deps.installTitle", { name: getWorktreeDisplayName(depsPrompt.worktree) }),
                   );
                 }
                 setDepsPrompt(null);
@@ -978,7 +1049,7 @@ export function SidebarView({
 
       <ConfirmDialog
         open={!!discardTarget}
-        title={t("worktree.discard.title", { name: discardTarget?.worktree.name ?? "" })}
+        title={t("worktree.discard.title", { name: discardTarget ? getWorktreeDisplayName(discardTarget.worktree) : "" })}
         message={t("worktree.discard.message", { branch: discardTarget?.worktree.branch ?? "" })}
         confirmText={t("worktree.discard.confirm")}
         cancelText={t("common.cancel")}

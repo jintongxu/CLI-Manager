@@ -1091,6 +1091,8 @@ fn validate_workspace_snapshot(
             || !is_opaque_id(&worktree.project_id)
             || worktree.name.is_empty()
             || worktree.name.len() > 512
+            || worktree.display_name.as_ref().is_some_and(|value| value.chars().count() > 64)
+            || worktree.description.as_ref().is_some_and(|value| value.chars().count() > 2000)
             || worktree.branch.len() > 512
             || worktree
                 .cwd

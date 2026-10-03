@@ -64,6 +64,8 @@ const FAVORITE_SNAPSHOT_COLUMNS: [&str; 11] = [
 ];
 
 const WORKTREE_PROJECT_COLUMNS: [&str; 2] = ["worktree_strategy", "worktree_root"];
+// Migration 42 adds display metadata after the legacy repair window; keep this
+// contract limited to the isolation schema that is checked before SQLx migrations run.
 const WORKTREE_COLUMNS: [&str; 10] = [
     "id",
     "project_id",
