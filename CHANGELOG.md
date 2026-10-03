@@ -2,6 +2,10 @@
 
 ## [TEMP]
 
+### 更新检查仓库切换
+
+- 更新检查、Release 回退链接、Tauri 签名更新备用端点及 SSH Agent 发布回退统一指向 `jintongxu/CLI-Manager`，保留 R2/CDN 主发布源与作者主页链接。
+
 ### Worktree 中文显示名与任务说明
 
 - Worktree 任务名支持中文及其他 Unicode 字符作为界面显示名，实际目录和 `wt/` Git 分支继续使用安全 ASCII 标识；新增独立任务说明并贯通桌面树、终端、Git 工作区、完成/丢弃提示与 Web 工作区。

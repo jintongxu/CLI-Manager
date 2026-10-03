@@ -10,7 +10,7 @@
 [![React](https://img.shields.io/badge/React-19-blue?logo=react)](https://react.dev/)
 [![Rust](https://img.shields.io/badge/Rust-latest-orange?logo=rust)](https://www.rust-lang.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?logo=typescript)](https://typescriptlang.org/)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](https://github.com/dark-hxx/CLI-Manager)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](https://github.com/jintongxu/CLI-Manager)
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue)](LICENSE)
 
 A multi-project AI CLI workspace for local terminals, SSH hosts, and mobile-assisted workflows
@@ -507,7 +507,7 @@ CLI-Manager provides two mature parallel-work paths: automatic sub-agent visuali
 
 ### Option 1: Download a Release
 
-Go to the [Releases](https://github.com/dark-hxx/CLI-Manager/releases) page and download the latest version.
+Go to the [Releases](https://github.com/jintongxu/CLI-Manager/releases) page and download the latest version.
 
 > Windows builds are the primary release artifact at the moment. macOS / Linux users are recommended to build from source.
 
@@ -522,7 +522,7 @@ The reusable bridge requires Agent protocol `1.1` or newer. An older healthy Age
 The same signed release artifacts can be installed from a reviewed POSIX script:
 
 ```sh
-curl -fL -o install-ssh-agent.sh https://github.com/dark-hxx/CLI-Manager/releases/latest/download/install-ssh-agent.sh
+curl -fL -o install-ssh-agent.sh https://github.com/jintongxu/CLI-Manager/releases/latest/download/install-ssh-agent.sh
 less install-ssh-agent.sh
 sh install-ssh-agent.sh
 ```
@@ -814,6 +814,6 @@ Ordinary use of the unmodified application does not require a commercial license
 
 **⭐ If this project helps you, a Star is appreciated.**
 
-[Submit Issue](https://github.com/dark-hxx/CLI-Manager/issues) • [Contribute](https://github.com/dark-hxx/CLI-Manager/pulls) • [View Docs](docs/功能清单.md)
+[Submit Issue](https://github.com/jintongxu/CLI-Manager/issues) • [Contribute](https://github.com/jintongxu/CLI-Manager/pulls) • [View Docs](docs/功能清单.md)
 
 </div>

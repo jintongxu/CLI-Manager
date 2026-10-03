@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const GITHUB_UPDATER_URL =
-  "https://github.com/dark-hxx/CLI-Manager/releases/latest/download/latest.json";
+  "https://github.com/jintongxu/CLI-Manager/releases/latest/download/latest.json";
 const INSTALLER_BASE_URL_PATTERN = /^R2_PUBLIC_BASE_URL="[^"]*"$/gm;
 
 // 仅接受无凭据、路径、查询或片段的 HTTPS 源，并规范化尾斜杠。

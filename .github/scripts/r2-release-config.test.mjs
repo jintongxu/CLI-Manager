@@ -36,7 +36,7 @@ try {
   );
   assert.deepEqual(JSON.parse(environment.TAURI_CONFIG).plugins.updater.endpoints, [
     "https://downloads.example.com/CLI-Manager/releases/latest/latest.json",
-    "https://github.com/dark-hxx/CLI-Manager/releases/latest/download/latest.json",
+    "https://github.com/jintongxu/CLI-Manager/releases/latest/download/latest.json",
   ]);
 
   const environmentFile = join(root, "github-env");

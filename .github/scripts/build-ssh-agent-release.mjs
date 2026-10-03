@@ -15,7 +15,7 @@ if (tag !== `ssh-agent-v${version}` && !desktopTag.test(tag)) {
 }
 
 await mkdir(outputDir, { recursive: true });
-const repository = process.env.GITHUB_REPOSITORY || "dark-hxx/CLI-Manager";
+const repository = process.env.GITHUB_REPOSITORY || "jintongxu/CLI-Manager";
 const releaseBase = `https://github.com/${repository}/releases/download/${tag}`;
 const [trustedKey, tauriConfigText, installerText] = await Promise.all([
   readFile("src-tauri/ssh-agent-public-key.txt", "utf8"),

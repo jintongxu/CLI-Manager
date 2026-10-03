@@ -95,13 +95,13 @@ grep -F "https://github.bwm.de5.net/CLI-Manager/releases/V1.3.0/ssh-agent-releas
 : > "$DOWNLOAD_LOG"
 FAIL_R2=1 MANIFEST_VERSION=1.2.3 sh "$root/scripts/install-ssh-agent.sh" --dry-run >/dev/null
 grep -F "https://github.bwm.de5.net/CLI-Manager/releases/ssh-agent/latest/ssh-agent-release-manifest.json" "$DOWNLOAD_LOG" >/dev/null
-grep -F "https://github.com/dark-hxx/CLI-Manager/releases/latest/download/ssh-agent-release-manifest.json" "$DOWNLOAD_LOG" >/dev/null
+grep -F "https://github.com/jintongxu/CLI-Manager/releases/latest/download/ssh-agent-release-manifest.json" "$DOWNLOAD_LOG" >/dev/null
 
 : > "$DOWNLOAD_LOG"
 FAIL_R2_ARTIFACT=1 USE_SOURCE_ARTIFACT_URLS=1 MANIFEST_VERSION=1.2.3 \
   sh "$root/scripts/install-ssh-agent.sh" --dry-run >/dev/null
 grep -F "https://github.bwm.de5.net/release/agent" "$DOWNLOAD_LOG" >/dev/null
-grep -F "https://github.com/dark-hxx/CLI-Manager/releases/latest/download/ssh-agent-release-manifest.json" "$DOWNLOAD_LOG" >/dev/null
+grep -F "https://github.com/jintongxu/CLI-Manager/releases/latest/download/ssh-agent-release-manifest.json" "$DOWNLOAD_LOG" >/dev/null
 grep -F "https://github.com/release/agent" "$DOWNLOAD_LOG" >/dev/null
 
 if sh "$root/scripts/install-ssh-agent.sh" --manifest-url http://mirror/manifest.json --dry-run >/dev/null 2>&1; then

@@ -15,7 +15,7 @@ pub const DEFAULT_MANIFEST_URL: &str =
         None => "https://github.bwm.de5.net/CLI-Manager/releases/ssh-agent/latest/ssh-agent-release-manifest.json",
     };
 pub const FALLBACK_MANIFEST_URL: &str =
-    "https://github.com/dark-hxx/CLI-Manager/releases/latest/download/ssh-agent-release-manifest.json";
+    "https://github.com/jintongxu/CLI-Manager/releases/latest/download/ssh-agent-release-manifest.json";
 const TRUSTED_PUBLIC_KEY: &str = include_str!("../../../ssh-agent-public-key.txt");
 const MANIFEST_MAX_BYTES: usize = 1024 * 1024;
 const SIGNATURE_MAX_BYTES: usize = 64 * 1024;
@@ -477,7 +477,7 @@ mod tests {
         );
         assert_eq!(
             FALLBACK_MANIFEST_URL,
-            "https://github.com/dark-hxx/CLI-Manager/releases/latest/download/ssh-agent-release-manifest.json"
+            "https://github.com/jintongxu/CLI-Manager/releases/latest/download/ssh-agent-release-manifest.json"
         );
     }
 
