@@ -1,6 +1,7 @@
 import type { TranslationKey } from "../../../../shared/i18n/index";
 import type { Project, WorktreeRecord } from "../../../../shared/types/index";
 import type { NativeProviderImportIssue } from "../../api/nativeProviderTypes";
+import { getWorktreeDisplayName } from "../../../projects/api/worktreeMetadata";
 
 type Translate = (key: TranslationKey, params?: Record<string, string | number>) => string;
 
@@ -23,7 +24,7 @@ export function issueScopeLabel(
       const project = projects.find((item) => item.id === worktree.project_id);
       return t("providerCatalog.import.worktreeScope", {
         project: project?.name ?? t("providerCatalog.import.unknownProject", { id: worktree.project_id }),
-        name: worktree.name,
+        name: getWorktreeDisplayName(worktree),
       });
     }
   }

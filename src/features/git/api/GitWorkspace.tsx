@@ -38,6 +38,7 @@ import { GitRefTree, type GitBranchAction } from "../components/workspace/GitRef
 import { GitCompareDialog } from "../components/workspace/GitCompareDialog";
 import { GitPowerToolsDialog } from "../components/workspace/GitPowerToolsDialog";
 import { useWorktreeStore } from "../../projects/api/worktreeStore";
+import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
 import { WorktreeFinishDialog } from "../../projects/api/WorktreeFinishDialog";
 import { Select } from "../../../shared/ui/select";
 
@@ -153,6 +154,7 @@ export function GitWorkspace({
   const [operationError, setOperationError] = useState<string | null>(null);
   const [worktreeCreateOpen, setWorktreeCreateOpen] = useState(false);
   const [worktreeName, setWorktreeName] = useState("");
+  const [worktreeDescription, setWorktreeDescription] = useState("");
   const [finishWorktree, setFinishWorktree] = useState<WorktreeRecord | null>(null);
   const [recentBranches, setRecentBranches] = useState<string[]>([]);
   const [favoriteBranches, setFavoriteBranches] = useState<string[]>([]);
@@ -168,7 +170,7 @@ export function GitWorkspace({
   const loadWorktrees = useWorktreeStore((state) => state.loadWorktrees);
   const createWorktreeForProject = useWorktreeStore((state) => state.createWorktreeForProject);
   const removeWorktree = useWorktreeStore((state) => state.removeWorktree);
-  const renameWorktree = useWorktreeStore((state) => state.renameWorktree);
+  const updateWorktreeMetadata = useWorktreeStore((state) => state.updateWorktreeMetadata);
   const resolvedProject = useMemo(
     () => effectiveProject(project, projectPath),
     [project, projectPath],
@@ -787,10 +789,12 @@ export function GitWorkspace({
         await removeWorktree(target, true);
       } else if (operation.operation === "rename-worktree") {
         if (!operation.target) throw new Error("worktree_not_found");
-        await renameWorktree(operation.target, input);
+        if (Array.from(input).length > 64) throw new Error("display_name_invalid");
+        if (Array.from(worktreeDescription.trim()).length > 2000) throw new Error("description_too_long");
+        await updateWorktreeMetadata(operation.target, input, worktreeDescription);
       } else if (operation.operation === "create-worktree") {
         if (!project) throw new Error("project_not_found");
-        await createWorktreeForProject(project, input || undefined);
+        await createWorktreeForProject(project, { displayName: input || undefined, description: worktreeDescription });
       } else if (operation.operation === "push-tag") {
         if (!transport || repositoryId === null || !operation.branch)
           throw new Error("git_operation_context_missing");
@@ -835,8 +839,9 @@ export function GitWorkspace({
     project,
     projectWorktrees,
     removeWorktree,
-    renameWorktree,
     repositoryId,
+    updateWorktreeMetadata,
+    worktreeDescription,
     t,
     transport,
   ]);
@@ -854,14 +859,23 @@ export function GitWorkspace({
 
   const requestCreateWorktree = useCallback(() => {
     setWorktreeName("");
+    setWorktreeDescription("");
     setWorktreeCreateOpen(true);
   }, []);
 
   const confirmCreateWorktree = useCallback(async () => {
     if (!project || !worktreeCreateOpen) return;
+    if (Array.from(worktreeName.trim()).length === 0 || Array.from(worktreeName.trim()).length > 64) {
+      setOperationError(t("git.operation.worktreeNameInvalid"));
+      return;
+    }
+    if (Array.from(worktreeDescription.trim()).length > 2000) {
+      setOperationError(t("git.operation.worktreeDescriptionTooLong"));
+      return;
+    }
     setOperationBusy(true);
     try {
-      await createWorktreeForProject(project, worktreeName.trim() || undefined);
+      await createWorktreeForProject(project, { displayName: worktreeName.trim() || undefined, description: worktreeDescription });
       setWorktreeCreateOpen(false);
       toast.success(t("git.workspace.worktreeCreated"));
     } catch (reason) {
@@ -876,7 +890,7 @@ export function GitWorkspace({
     } finally {
       setOperationBusy(false);
     }
-  }, [createWorktreeForProject, project, t, worktreeCreateOpen, worktreeName]);
+  }, [createWorktreeForProject, project, t, worktreeCreateOpen, worktreeDescription, worktreeName]);
 
   const beginResize = useCallback(
     (side: "left" | "right", event: ReactPointerEvent<HTMLDivElement>) => {
@@ -1298,28 +1312,29 @@ export function GitWorkspace({
                     : openWorktreeDirectory(worktree))
                 }
                 onFinishWorktree={(worktree) => setFinishWorktree(worktree)}
-                onRenameWorktree={(worktree) =>
+                onRenameWorktree={(worktree) => {
+                  setWorktreeDescription(worktree.description ?? "");
                   openOperation(
                     {
                       operation: "rename-worktree",
                       target: worktree.id,
                       title: t("git.workspace.renameWorktree"),
                       description: t("git.workspace.renameWorktreeDescription", {
-                        name: worktree.name,
+                        name: getWorktreeDisplayName(worktree),
                       }),
-                      inputLabel: t("git.operation.worktreeName"),
-                      placeholder: worktree.name,
+                      inputLabel: t("git.operation.worktreeDisplayName"),
+                      placeholder: getWorktreeDisplayName(worktree),
                     },
-                    worktree.name,
-                  )
-                }
+                    getWorktreeDisplayName(worktree),
+                  );
+                }}
                 onRemoveWorktree={(worktree) =>
                   openOperation({
                     operation: "delete-worktree",
                     target: worktree.id,
                     title: t("git.operation.removeWorktree"),
                     description: t("git.operation.removeWorktreeDescription", {
-                      name: worktree.name,
+                      name: getWorktreeDisplayName(worktree),
                     }),
                     dangerous: true,
                   })
@@ -1416,7 +1431,7 @@ export function GitWorkspace({
               {t("git.operation.createWorktreeDescription")}
             </p>
             <label className="mt-4 block text-[11px]" style={{ color: TERM.dim }}>
-              {t("git.operation.worktreeName")}
+              {t("git.operation.worktreeDisplayName")}
             </label>
             <input
               value={worktreeName}
@@ -1429,6 +1444,16 @@ export function GitWorkspace({
                 if (event.key === "Enter") void confirmCreateWorktree();
                 if (event.key === "Escape") setWorktreeCreateOpen(false);
               }}
+            />
+            <label className="mt-3 block text-[11px]" style={{ color: TERM.dim }}>
+              {t("git.operation.worktreeDescription")}
+            </label>
+            <textarea
+              value={worktreeDescription}
+              onChange={(event) => setWorktreeDescription(event.currentTarget.value)}
+              rows={3}
+              className="mt-1 w-full resize-y rounded border bg-transparent px-2 py-1.5 text-xs outline-none"
+              style={{ color: TERM.fg, borderColor: TERM.dim }}
             />
             {operationError && (
               <div className="mt-2 text-[11px]" style={{ color: TERM.red }}>
@@ -1450,7 +1475,7 @@ export function GitWorkspace({
                 className="ui-focus-ring rounded border px-3 py-1 text-[11px]"
                 style={{ color: TERM.green, borderColor: panelColorTint(TERM.green, 40) }}
                 onClick={() => void confirmCreateWorktree()}
-                disabled={operationBusy}
+                disabled={operationBusy || Array.from(worktreeName.trim()).length === 0 || Array.from(worktreeName.trim()).length > 64 || Array.from(worktreeDescription.trim()).length > 2000}
               >
                 {operationBusy ? t("common.processing") : t("git.operation.confirm")}
               </button>
@@ -1508,6 +1533,18 @@ export function GitWorkspace({
                 />
               </label>
             ) : null}
+            {pendingOperation.operation === "rename-worktree" && (
+              <label className="mt-3 block text-[11px]" style={{ color: TERM.dim }}>
+                {t("git.operation.worktreeDescription")}
+                <textarea
+                  value={worktreeDescription}
+                  onChange={(event) => setWorktreeDescription(event.currentTarget.value)}
+                  rows={3}
+                  className="mt-1 w-full resize-y rounded border bg-transparent px-2 py-1.5 text-xs outline-none"
+                  style={{ color: TERM.fg, borderColor: TERM.dim }}
+                />
+              </label>
+            )}
             {operationError && (
               <div className="mt-2 whitespace-pre-wrap text-[11px]" style={{ color: TERM.red }}>
                 {operationError}
@@ -1534,7 +1571,7 @@ export function GitWorkspace({
                   ),
                 }}
                 onClick={() => void executePendingOperation()}
-                disabled={operationBusy}
+                disabled={operationBusy || (pendingOperation.operation === "rename-worktree" && (Array.from(operationInput.trim()).length === 0 || Array.from(operationInput.trim()).length > 64 || Array.from(worktreeDescription.trim()).length > 2000))}
               >
                 {operationBusy ? t("common.processing") : t("git.operation.confirm")}
               </button>

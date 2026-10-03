@@ -5,6 +5,7 @@ import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { useSshHostStore } from "../../remote/api/sshHostStore";
 import { useTerminalStore } from "../state";
 import { useWorktreeStore } from "../../projects/api/worktreeStore";
+import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
 import type { CreateSshHostInput, Project, SshAuthMode, UpdateSshHostInput, WorktreeRecord } from "../../../shared/types/index";
 import { buildSshConnectionSpec } from "../../remote/api/ssh";
 import { projectWithWorktreeProviderOverrides } from "../api/terminalProject";
@@ -106,6 +107,37 @@ function optionalString(payload: Payload, key: string, maxLength = 4096): string
   if (payload[key] === undefined || payload[key] === null) return undefined;
   if (typeof payload[key] === "string" && !payload[key].trim()) return undefined;
   return requiredString(payload, key, maxLength);
+}
+
+function optionalWorktreeText(
+  payload: Payload,
+  key: string,
+  maxCharacters: number,
+  allowNewlines = false,
+): string | undefined {
+  const raw = payload[key];
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== "string") managementError("invalid_operation_payload", `${key} is invalid`);
+  const value = raw.trim();
+  if (!value) return undefined;
+  if (
+    Array.from(value).length > maxCharacters ||
+    value.includes("\0") ||
+    (!allowNewlines && /[\r\n]/.test(value))
+  ) {
+    managementError("invalid_operation_payload", `${key} is invalid`);
+  }
+  return value;
+}
+
+function worktreeCreateMetadata(payload: Payload): { displayName: string; description: string } {
+  const displayName = optionalWorktreeText(payload, "displayName", 64)
+    ?? optionalWorktreeText(payload, "taskName", 64);
+  if (!displayName) managementError("invalid_operation_payload", "displayName is invalid");
+  return {
+    displayName,
+    description: optionalWorktreeText(payload, "description", 2000, true) ?? "",
+  };
 }
 
 function booleanValue(payload: Payload, key: string, fallback = false): boolean {
@@ -631,6 +663,8 @@ function publicWorktree(worktree: WorktreeRecord) {
   return {
     id: worktree.id,
     name: worktree.name,
+    displayName: getWorktreeDisplayName(worktree),
+    description: worktree.description ?? "",
     branch: worktree.branch,
     baseBranch: worktree.base_branch,
     status: worktree.status,
@@ -676,7 +710,10 @@ async function executeWorktree(operation: WebDeviceOperation, payload: Payload):
   }
   const store = useWorktreeStore.getState();
   if (!store.loaded) await store.loadWorktrees();
-  if (operation.kind === "worktree.create") return publicWorktree(await store.createWorktreeForProject(project, requiredString(payload, "taskName", 64)));
+  if (operation.kind === "worktree.create") {
+    const metadata = worktreeCreateMetadata(payload);
+    return publicWorktree(await store.createWorktreeForProject(project, metadata));
+  }
   const worktree = requireWorktree(payload, project);
   if (operation.kind === "worktree.check_deps") return store.checkDeps(worktree);
   if (operation.kind === "worktree.merge") {
@@ -833,7 +870,7 @@ export async function validateWebManagementOperation(operation: WebDeviceOperati
     if (operation.kind === "worktree.list") return;
     const store = useWorktreeStore.getState();
     if (!store.loaded) await store.loadWorktrees();
-    if (operation.kind === "worktree.create") requiredString(payload, "taskName", 64);
+    if (operation.kind === "worktree.create") worktreeCreateMetadata(payload);
     else requireWorktree(payload, project);
     return;
   }

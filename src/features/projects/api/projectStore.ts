@@ -81,7 +81,7 @@ function buildTree(groups: Group[], projects: Project[], search: string, worktre
           p.cli_tool.toLowerCase().includes(lowerSearch) ||
           worktrees.some((worktree) =>
             worktree.project_id === p.id &&
-            (worktree.name.toLowerCase().includes(lowerSearch) || worktree.branch.toLowerCase().includes(lowerSearch))
+            ([worktree.display_name?.trim() || worktree.name, worktree.name, worktree.branch, worktree.description].some((value) => value.toLowerCase().includes(lowerSearch)))
           )
       )
     : projects;

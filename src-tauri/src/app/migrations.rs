@@ -842,6 +842,15 @@ pub(crate) const MIGRATION_CREATE_MESSAGE_STARS_SQL: &str = "
                 CREATE INDEX IF NOT EXISTS idx_message_stars_session ON message_stars(session_key);
                 CREATE INDEX IF NOT EXISTS idx_message_stars_created ON message_stars(created_at DESC);
               ";
+
+pub(crate) const MIGRATION_ADD_WORKTREE_METADATA_VERSION: i64 = 42;
+pub(crate) const MIGRATION_ADD_WORKTREE_METADATA_DESCRIPTION: &str =
+    "add_worktree_display_name_and_description";
+pub(crate) const MIGRATION_ADD_WORKTREE_METADATA_SQL: &str = "
+                ALTER TABLE worktrees ADD COLUMN display_name TEXT NOT NULL DEFAULT '';
+                ALTER TABLE worktrees ADD COLUMN description TEXT NOT NULL DEFAULT '';
+                UPDATE worktrees SET display_name = name WHERE trim(display_name) = '';
+              ";
 // 按既定版本顺序返回向上迁移注册表，由 SQL 插件在初始化时应用；此函数本身不执行 SQL。
 pub(crate) fn migrations() -> Vec<Migration> {
     vec![
@@ -1193,6 +1202,12 @@ pub(crate) fn migrations() -> Vec<Migration> {
             version: MIGRATION_CREATE_MESSAGE_STARS_VERSION,
             description: MIGRATION_CREATE_MESSAGE_STARS_DESCRIPTION,
             sql: MIGRATION_CREATE_MESSAGE_STARS_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: MIGRATION_ADD_WORKTREE_METADATA_VERSION,
+            description: MIGRATION_ADD_WORKTREE_METADATA_DESCRIPTION,
+            sql: MIGRATION_ADD_WORKTREE_METADATA_SQL,
             kind: MigrationKind::Up,
         },
     ]

@@ -64,6 +64,8 @@ export interface WebWorkspaceSnapshot {
     id: string;
     projectId: string;
     name: string;
+    displayName?: string;
+    description?: string;
     branch: string;
     cwd?: string | null;
     status: "active" | "missing";

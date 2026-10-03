@@ -16,6 +16,7 @@ import { useTreeActions, worktreeListCollapseId, type TreeActions } from "./Tree
 import { useI18n } from "../../../shared/i18n/index";
 import { toast } from "sonner";
 import { countProjectsInNode } from "../api/projectStore";
+import { getWorktreeDisplayName } from "../api/worktreeMetadata";
 import { resolveCliToolIconKey } from "../../../shared/lib/cliTools";
 import { DND_ACTIVATION_CONSTRAINT } from "../../workspace/api/dragInteraction";
 import { PinnedProjectSection } from "./PinnedProjectSection";
@@ -95,7 +96,7 @@ function filterTreeNodes(nodes: TNode[], query: string): TNode[] {
         continue;
       }
       const worktrees = (node.worktrees ?? []).filter((worktree) =>
-        worktree.name.toLowerCase().includes(normalizedQuery) || worktree.branch.toLowerCase().includes(normalizedQuery)
+        [getWorktreeDisplayName(worktree), worktree.name, worktree.branch, worktree.description].some((value) => value.toLowerCase().includes(normalizedQuery))
       );
       if (worktrees.length > 0) {
         result.push({ ...node, worktrees });
@@ -104,7 +105,7 @@ function filterTreeNodes(nodes: TNode[], query: string): TNode[] {
     }
 
     if (node.type === "worktree") {
-      if (node.worktree.name.toLowerCase().includes(normalizedQuery) || node.worktree.branch.toLowerCase().includes(normalizedQuery)) {
+      if ([getWorktreeDisplayName(node.worktree), node.worktree.name, node.worktree.branch, node.worktree.description].some((value) => value.toLowerCase().includes(normalizedQuery))) {
         result.push(node);
       }
       continue;
@@ -1067,7 +1068,7 @@ function renderFlyoutNodes(nodes: TNode[], depth: number, actions: TreeActions, 
           <span className="ui-tree-leading-icon ui-worktree-tree-icon flex shrink-0 items-center">
             <WorktreeIcon className="h-3.5 w-3.5" />
           </span>
-          <span className="flex-1 truncate">{child.worktree.name}</span>
+          <span className="flex-1 truncate">{getWorktreeDisplayName(child.worktree)}</span>
         </button>
       );
     }
@@ -1125,7 +1126,7 @@ function findNodeById(nodes: TNode[], id: string): TNode | null {
 function DragGhost({ activeId, tree }: { activeId: string; tree: TNode[] }) {
   const node = findNodeById(tree, activeId);
   if (!node) return null;
-  const label = node.type === "group" ? node.group.name : node.type === "worktree" ? node.worktree.name : node.project.name;
+  const label = node.type === "group" ? node.group.name : node.type === "worktree" ? getWorktreeDisplayName(node.worktree) : node.project.name;
   const icon = node.type === "group" ? <Folder size={14} strokeWidth={1.5} /> : node.type === "worktree" ? <WorktreeIcon className="h-3.5 w-3.5" /> : <Terminal size={14} strokeWidth={1.5} />;
   return (
     <div className="ui-tree-drag-ghost flex items-center gap-2 rounded-xl border border-border bg-surface-container-high px-3 py-1.5 text-[12px] font-medium shadow-lg">

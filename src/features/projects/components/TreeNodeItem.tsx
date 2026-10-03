@@ -4,6 +4,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import type { TreeNode as TNode } from "../../../shared/types/index";
 import { countProjectsInNode, type ProviderBadge } from "../api/projectStore";
+import { getWorktreeDisplayName } from "../api/worktreeMetadata";
 import { useTreeActions, worktreeListCollapseId } from "./TreeContext";
 import { ChevronRight, AlertTriangle, Link2, Pin, Play } from "../../../shared/ui/icons";
 import { VendorIcon, inferVendor } from "../../../shared/ui/VendorIcon";
@@ -166,8 +167,8 @@ function TreeNodeItemImpl({
           <span className="ui-tree-leading-icon ui-worktree-tree-icon" title={worktree.branch}>
             <WorktreeIcon className="h-4 w-4" />
           </span>
-          <span className="flex min-w-0 flex-1 items-center gap-1.5" title={`${worktree.branch}\n${worktree.path}`}>
-            <span className="block truncate font-medium">{worktree.name}</span>
+          <span className="flex min-w-0 flex-1 items-center gap-1.5" title={`${getWorktreeDisplayName(worktree)}\n${worktree.description}\n${worktree.branch}\n${worktree.path}`}>
+            <span className="block truncate font-medium">{getWorktreeDisplayName(worktree)}</span>
             <span
               className="ui-worktree-short-chip inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[10px] leading-none"
               title={worktree.branch}

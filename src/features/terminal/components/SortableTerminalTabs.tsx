@@ -21,6 +21,7 @@ import {
 } from "../lib/terminalTabsModel";
 import { useTerminalTabHoverCard } from "../hooks/useTerminalTabHoverCard";
 import { TerminalTabHoverCard } from "./TerminalTabHoverCard";
+import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
 
 export interface SortableTabProps {
   id: string;
@@ -182,7 +183,7 @@ export function SortableTab({
                 <button
                   type="button"
                   className="ui-worktree-tab-badge inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none"
-                  title={`${worktree.name}\n${worktree.branch}\n${worktree.path}`}
+                  title={`${getWorktreeDisplayName(worktree)}\n${worktree.description}\n${worktree.branch}\n${worktree.path}`}
                   onClick={(event) => {
                     event.stopPropagation();
                     hideHoverCard();

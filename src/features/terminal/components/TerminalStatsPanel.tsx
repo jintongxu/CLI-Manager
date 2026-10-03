@@ -17,6 +17,7 @@ import { useProjectStore } from "../../projects/api/projectStore";
 import { useTerminalStore } from "../state";
 import { useSettingsStore, type TerminalStatsCardKey } from "../../../shared/preferences/settingsStore";
 import { useWorktreeStore } from "../../projects/api/worktreeStore";
+import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
 import {
   TERM,
   StatCard,
@@ -348,9 +349,9 @@ function SessionInfoCard({ session, statsSession, projectName, projectPath, curr
         <Row
           icon={<GitBranch size={10} />}
           label={t("worktree.settings.title")}
-          value={worktree.name}
+          value={getWorktreeDisplayName(worktree)}
           color={TERM.magenta}
-          title={`${worktree.branch}\n${worktree.path}`}
+          title={`${worktree.description}\n${worktree.branch}\n${worktree.path}`}
         />
       )}
       <Row icon={<TerminalSquare size={10} strokeWidth={1.7} />} label={t("termStats.shell")} value={shell} color={TERM.cyan} title={shell} />

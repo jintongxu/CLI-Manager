@@ -21,6 +21,7 @@ import type { GitBranchInfo, GitBranchStatus, GitTagInfo } from "../../../../sha
 import type { WorktreeRecord } from "../../../../shared/types/index";
 import { useI18n } from "../../../../shared/i18n/index";
 import { TERM, panelColorTint } from "../../../stats/api/termStatsUi";
+import { getWorktreeDisplayName } from "../../../projects/api/worktreeMetadata";
 
 interface GitRefTreeProps {
   branches: GitBranchInfo[];
@@ -519,10 +520,10 @@ export function GitRefTree({
                 {t("git.workspace.noWorktrees")}
               </div>
             ) : worktrees.map((worktree) => (
-              <div key={worktree.id} className="group flex min-w-0 items-center gap-1.5 px-3 py-1.5 pl-8 text-[10px]" title={worktree.path}>
+              <div key={worktree.id} className="group flex min-w-0 items-center gap-1.5 px-3 py-1.5 pl-8 text-[10px]" title={`${getWorktreeDisplayName(worktree)}\n${worktree.description}\n${worktree.branch}\n${worktree.path}`}>
                 <GitBranch size={11} className="shrink-0" style={{ color: TERM.yellow }} />
                 <button type="button" className="ui-focus-ring min-w-0 flex-1 truncate text-left" style={{ color: TERM.fg }} onClick={() => onOpenWorktree?.(worktree)}>
-                  {worktree.name}
+                  {getWorktreeDisplayName(worktree)}
                 </button>
                 <button type="button" className="ui-focus-ring rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100" style={{ color: TERM.cyan }} onClick={() => onFinishWorktree?.(worktree)} title={t("git.workspace.finishWorktree")} aria-label={t("git.workspace.finishWorktree")}>
                   <GitMerge size={11} />

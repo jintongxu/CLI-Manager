@@ -9,6 +9,7 @@ import { resolveNodeAppearance } from "../../projects/api/nodeAppearance";
 import { NodeAppearanceIcon } from "../../projects/api/NodeAppearanceIcon";
 import { findWorktreeByPath } from "../../terminal/api/terminalProject";
 import { useWorktreeStore } from "../../projects/api/worktreeStore";
+import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
 import { CliToolIcon } from "../../../shared/ui/CliToolIcon";
 import { Portal } from "../../../shared/ui/Portal";
 import { buildHistorySessionChildMap, formatTime } from "../api/historyViewUtils";
@@ -1174,7 +1175,7 @@ export function HistoryListPane({
                             {sessionWorktree && (
                               <span
                                 className="shrink-0 rounded-full border border-primary/35 px-1.5 py-px text-[10px] font-semibold text-primary"
-                                title={t("history.worktreeBadgeTitle", { name: sessionWorktree.name })}
+                                title={t("history.worktreeBadgeTitle", { name: getWorktreeDisplayName(sessionWorktree) })}
                               >
                                 {t("history.worktreeBadge")}
                               </span>
@@ -1226,7 +1227,7 @@ export function HistoryListPane({
                             {sessionWorktree && (
                               <span
                                 className="shrink-0 rounded-full border border-primary/35 px-1.5 py-px text-[10px] font-semibold text-primary"
-                                title={t("history.worktreeBadgeTitle", { name: sessionWorktree.name })}
+                                title={t("history.worktreeBadgeTitle", { name: getWorktreeDisplayName(sessionWorktree) })}
                               >
                                 {t("history.worktreeBadge")}
                               </span>

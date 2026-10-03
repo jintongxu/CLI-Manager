@@ -85,6 +85,8 @@ export type WorkspaceWorktree = {
   id: string;
   projectId: string;
   name: string;
+  displayName?: string;
+  description?: string;
   branch: string;
   cwd: null;
   status: "active" | "missing";
@@ -114,6 +116,7 @@ export type ProjectContext = {
   source: string;
   projectKey: string;
   projectName: string;
+  description?: string;
   cwd: string | null;
   branch: string | null;
   title: string;

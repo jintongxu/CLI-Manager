@@ -15,6 +15,15 @@ export interface GitWorktreeCreateResult {
   baseBranch: string;
 }
 
+export interface WorktreeCreateInput {
+  /** User-facing task name. It may contain Unicode text. */
+  displayName?: string;
+  /** Optional user-facing task description. */
+  description?: string;
+  /** Optional precomputed ASCII slug for trusted callers. */
+  taskName?: string;
+}
+
 export interface GitWorktreeDepsCheckResult {
   needsInstall: boolean;
   command: string | null;
@@ -59,8 +68,9 @@ interface WorktreeStore {
   loaded: boolean;
   validatingProjects: Record<string, ProjectGitValidationCacheEntry>;
   loadWorktrees: () => Promise<void>;
-  createWorktreeForProject: (project: Project, name?: string) => Promise<WorktreeRecord>;
-  renameWorktree: (worktreeId: string, name: string) => Promise<void>;
+  createWorktreeForProject: (project: Project, input?: WorktreeCreateInput | string) => Promise<WorktreeRecord>;
+  renameWorktree: (worktreeId: string, displayName: string) => Promise<void>;
+  updateWorktreeMetadata: (worktreeId: string, displayName: string, description: string) => Promise<void>;
   shouldIsolateNewSession: (
     project: Project,
     sessions: TerminalSession[]
@@ -130,16 +140,66 @@ export function validateWorktreeTaskName(value: string): boolean {
   return /^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/.test(trimmed) && !RESERVED_WINDOWS_WORKTREE_NAMES.has(trimmed.toUpperCase());
 }
 
+const MAX_WORKTREE_DISPLAY_NAME_LENGTH = 64;
+const MAX_WORKTREE_DESCRIPTION_LENGTH = 2000;
+
+export function normalizeWorktreeDisplayName(value: string): string {
+  return value.trim();
+}
+
+export function validateWorktreeDisplayName(value: string): boolean {
+  const normalized = value.trim();
+  return normalized.length > 0 && Array.from(normalized).length <= MAX_WORKTREE_DISPLAY_NAME_LENGTH;
+}
+
+export function normalizeWorktreeDescription(value: string): string {
+  return value.trim();
+}
+
+export function validateWorktreeDescription(value: string): boolean {
+  return Array.from(value.trim()).length <= MAX_WORKTREE_DESCRIPTION_LENGTH;
+}
+
+function asciiTaskSlugFromDisplayName(displayName: string): string {
+  const ascii = displayName
+    .trim()
+    .replace(/[^A-Za-z0-9_-]+/g, "-");
+  return sanitizeWorktreeTaskName(ascii);
+}
+
+function uniqueWorktreeTaskName(base: string, existingNames: Set<string>): string {
+  const normalizedNames = new Set(Array.from(existingNames, (name) => name.toLowerCase()));
+  const isAvailable = (name: string) => !normalizedNames.has(name.toLowerCase());
+  const candidate = sanitizeWorktreeTaskName(base);
+  if (validateWorktreeTaskName(candidate) && isAvailable(candidate)) return candidate;
+  const fallback = candidate || createDefaultTaskName(existingNames);
+  if (isAvailable(fallback) && validateWorktreeTaskName(fallback)) return fallback;
+  for (let i = 2; i < 100; i += 1) {
+    const suffix = `-${i}`;
+    const prefix = fallback.slice(0, Math.max(1, 64 - suffix.length)).replace(/[-_]+$/, "");
+    const next = `${prefix}${suffix}`;
+    if (validateWorktreeTaskName(next) && isAvailable(next)) return next;
+  }
+  return `${fallback.slice(0, 56)}-${crypto.randomUUID().slice(0, 6)}`;
+}
+
 export function isWorktreeCreateInProgressError(error: unknown): boolean {
   return String(error).includes(WORKTREE_CREATE_IN_PROGRESS);
 }
 
-function mapCreateResultToRecord(projectId: string, result: GitWorktreeCreateResult): WorktreeRecord {
+function mapCreateResultToRecord(
+  projectId: string,
+  result: GitWorktreeCreateResult,
+  displayName: string,
+  description: string,
+): WorktreeRecord {
   const ts = Date.now().toString();
   return {
     id: crypto.randomUUID(),
     project_id: projectId,
     name: result.name,
+    display_name: displayName,
+    description,
     branch: result.branch,
     path: result.path,
     base_branch: result.baseBranch,
@@ -154,12 +214,14 @@ function mapCreateResultToRecord(projectId: string, result: GitWorktreeCreateRes
 async function saveWorktreeRecord(record: WorktreeRecord): Promise<void> {
   const db = await getDb();
   await db.execute(
-    `INSERT INTO worktrees (id, project_id, name, branch, path, base_branch, deps_prompt_dismissed, provider_overrides, status, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+    `INSERT INTO worktrees (id, project_id, name, display_name, description, branch, path, base_branch, deps_prompt_dismissed, provider_overrides, status, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
     [
       record.id,
       record.project_id,
       record.name,
+      record.display_name,
+      record.description,
       record.branch,
       record.path,
       record.base_branch,
@@ -209,7 +271,7 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
     await useProjectStore.getState().fetchAll("startup");
   },
 
-  createWorktreeForProject: async (project, name) => {
+  createWorktreeForProject: async (project, input) => {
     if (!projectSupportsCapability(project, "worktree")) {
       throw new Error("remote_project_capability_unsupported:worktree");
     }
@@ -218,7 +280,17 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
         .filter((worktree) => worktree.project_id === project.id)
         .map((worktree) => worktree.name)
     );
-    const taskName = sanitizeWorktreeTaskName(name ?? createDefaultTaskName(existingNames));
+    const requested = typeof input === "string" ? { displayName: input } : (input ?? {});
+    const fallbackDisplayName = createDefaultTaskName(existingNames);
+    const displayName = normalizeWorktreeDisplayName(requested.displayName?.trim() || requested.taskName || fallbackDisplayName);
+    if (!validateWorktreeDisplayName(displayName)) {
+      throw new Error("display_name_invalid");
+    }
+    const description = normalizeWorktreeDescription(requested.description ?? "");
+    if (!validateWorktreeDescription(description)) {
+      throw new Error("description_too_long");
+    }
+    const taskName = uniqueWorktreeTaskName(requested.taskName || asciiTaskSlugFromDisplayName(displayName) || fallbackDisplayName, existingNames);
     if (!validateWorktreeTaskName(taskName)) {
       throw new Error("task_name_invalid");
     }
@@ -235,7 +307,7 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
           worktreeRoot: project.worktree_root.trim() || null,
         },
       });
-      const record = mapCreateResultToRecord(project.id, result);
+      const record = mapCreateResultToRecord(project.id, result, displayName, description);
       await saveWorktreeRecord(record);
       set((state) => ({ worktrees: [record, ...state.worktrees] }));
       await useProjectStore.getState().fetchAll("interactive");
@@ -245,22 +317,31 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
     }
   },
 
-  renameWorktree: async (worktreeId, name) => {
+  renameWorktree: async (worktreeId, displayName) => {
     const current = get().worktrees.find((worktree) => worktree.id === worktreeId);
     if (!current) throw new Error("worktree_not_found");
-    const sanitized = sanitizeWorktreeTaskName(name);
-    if (!validateWorktreeTaskName(sanitized)) throw new Error("task_name_invalid");
-    if (get().worktrees.some((worktree) => worktree.project_id === current.project_id && worktree.id !== worktreeId && worktree.name.toLowerCase() === sanitized.toLowerCase())) {
-      throw new Error("worktree_name_exists");
-    }
+    await get().updateWorktreeMetadata(worktreeId, displayName, current.description);
+  },
+
+  updateWorktreeMetadata: async (worktreeId, displayName, description) => {
+    const current = get().worktrees.find((worktree) => worktree.id === worktreeId);
+    if (!current) throw new Error("worktree_not_found");
+    const normalizedDisplayName = normalizeWorktreeDisplayName(displayName);
+    if (!validateWorktreeDisplayName(normalizedDisplayName)) throw new Error("display_name_invalid");
+    const normalizedDescription = normalizeWorktreeDescription(description);
+    if (!validateWorktreeDescription(normalizedDescription)) throw new Error("description_too_long");
     const ts = Date.now().toString();
     const db = await getDb();
-    await db.execute("UPDATE worktrees SET name = $1, updated_at = $2 WHERE id = $3", [sanitized, ts, worktreeId]);
+    await db.execute(
+      "UPDATE worktrees SET display_name = $1, description = $2, updated_at = $3 WHERE id = $4",
+      [normalizedDisplayName, normalizedDescription, ts, worktreeId]
+    );
     set((state) => ({
       worktrees: state.worktrees.map((worktree) => worktree.id === worktreeId
-        ? { ...worktree, name: sanitized, updated_at: ts }
+        ? { ...worktree, display_name: normalizedDisplayName, description: normalizedDescription, updated_at: ts }
         : worktree),
     }));
+    await useProjectStore.getState().fetchAll("interactive");
   },
 
   shouldIsolateNewSession: (project, sessions) => {

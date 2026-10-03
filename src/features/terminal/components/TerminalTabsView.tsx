@@ -25,6 +25,7 @@ import { buildTerminalTabHoverInfo, terminalTabCollisionDetection } from "../lib
 import { SortableWorkspanTab } from "./SortableTerminalTabs";
 import { TerminalTabDragOverlay } from "./TerminalTabDragOverlay";
 import { SplitProjectPicker, TerminalCloseConfirmBubble } from "./TerminalTabDialogs";
+import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
 
 export function TerminalTabsView({
   fullscreen,
@@ -155,7 +156,7 @@ export function TerminalTabsView({
       />
       <ConfirmDialog
         open={!!discardTarget}
-        title={t("worktree.discard.title", { name: discardTarget?.worktree.name ?? "" })}
+        title={t("worktree.discard.title", { name: discardTarget ? getWorktreeDisplayName(discardTarget.worktree) : "" })}
         message={t("worktree.discard.message", { branch: discardTarget?.worktree.branch ?? "" })}
         confirmText={t("worktree.discard.confirm")}
         cancelText={t("common.cancel")}
