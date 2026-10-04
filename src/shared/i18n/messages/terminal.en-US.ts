@@ -115,6 +115,7 @@ export const en: Record<keyof typeof zh, string> = {
   "terminal.close.cancel": "Cancel terminal close",
   "terminal.close.confirm": "Confirm terminal close",
   "terminal.toolbar.newTerminal": "New Terminal",
+  "terminal.toolbar.newAnonymousPi": "New Anonymous Pi Agent Session",
   "terminal.toolbar.immersiveFullscreen": "Immersive Fullscreen",
   "terminal.toolbar.exitImmersiveFullscreen": "Exit Immersive Fullscreen",
   "terminal.toolbar.enterImmersiveFullscreen": "Enter Immersive Fullscreen",

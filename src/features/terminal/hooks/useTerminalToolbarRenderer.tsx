@@ -1,4 +1,4 @@
-import { useCallback, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useCallback, type CSSProperties, type ReactNode } from "react";
 import {
   DndContext, DragOverlay, closestCenter, useSensors, type DragEndEvent, type DragStartEvent,
 } from "@dnd-kit/core";
@@ -13,6 +13,7 @@ import {
 } from "../../../shared/ui/icons";
 import type { Project } from "../../../shared/types/index";
 import { SortableToolbarButton, CpuCatIndicator } from "../components/TerminalToolbarControls";
+import { CliToolIcon } from "../../../shared/ui/CliToolIcon";
 
 interface TerminalToolbarContext {
   t: ReturnType<typeof useI18n>["t"];
@@ -26,6 +27,7 @@ interface TerminalToolbarContext {
   providersPanelActive: boolean;
   systemResourcesPanelActive: boolean;
   handleNewTab: () => void;
+  handleNewAnonymousPi: () => void;
   terminalSidePanelSide: "left" | "right";
   terminalActionSidebarStyle: CSSProperties;
   onToggleFullscreen: (() => void) | undefined;
@@ -65,6 +67,7 @@ export function useTerminalToolbarRenderer({
   providersPanelActive,
   systemResourcesPanelActive,
   handleNewTab,
+  handleNewAnonymousPi,
   terminalSidePanelSide,
   terminalActionSidebarStyle,
   onToggleFullscreen,
@@ -94,6 +97,7 @@ export function useTerminalToolbarRenderer({
   return useCallback(() => {
     const toolbarTooltips: Record<string, string> = {
       new: t("terminal.toolbar.newTerminal"),
+      anonymousPi: t("terminal.toolbar.newAnonymousPi"),
       templates: t("commandTemplate.title"),
       fullscreen: fullscreen ? t("terminal.toolbar.exitImmersiveFullscreen") : t("terminal.toolbar.immersiveFullscreen"),
       sessionHistory: `${t("terminal.toolbar.sessionHistory")} (${sessionHistoryShortcutHint})`,
@@ -120,6 +124,17 @@ export function useTerminalToolbarRenderer({
           aria-label={t("terminal.toolbar.newTerminal")}
         >
           <Plus size={15} strokeWidth={2} />
+        </button>
+      ),
+      anonymousPi: (
+        <button
+          type="button"
+          onClick={handleNewAnonymousPi}
+          className="ui-focus-ring ui-icon-action ui-action-new-anonymous-pi"
+          aria-label={t("terminal.toolbar.newAnonymousPi")}
+          title={t("terminal.toolbar.newAnonymousPi")}
+        >
+          <CliToolIcon icon="pi" size={16} />
         </button>
       ),
       templates: (
@@ -253,6 +268,14 @@ export function useTerminalToolbarRenderer({
       .map((key) => ({ id: key, element: buttonMap[key] }))
       .filter((btn): btn is { id: string; element: ReactNode } => btn.element != null);
 
+    const anonymousPiButton = (
+      <div className="ui-terminal-action-fixed-slot">
+        <div className="ui-terminal-action-sort-item flex w-full justify-center" data-tooltip={toolbarTooltips.anonymousPi}>
+          {buttonMap.anonymousPi}
+        </div>
+      </div>
+    );
+
     return (
       <DndContext
         sensors={toolbarSensors}
@@ -270,14 +293,16 @@ export function useTerminalToolbarRenderer({
         >
           <SortableContext items={visibleButtons.map((b) => b.id)} strategy={verticalListSortingStrategy}>
             {visibleButtons.map((btn) => (
-              <SortableToolbarButton
-                key={btn.id}
-                id={btn.id}
-                isDragging={activeToolbarDragId === btn.id}
-                tooltip={toolbarTooltips[btn.id]}
-              >
-                {btn.element}
-              </SortableToolbarButton>
+              <Fragment key={btn.id}>
+                <SortableToolbarButton
+                  id={btn.id}
+                  isDragging={activeToolbarDragId === btn.id}
+                  tooltip={toolbarTooltips[btn.id]}
+                >
+                  {btn.element}
+                </SortableToolbarButton>
+                {btn.id === "new" && anonymousPiButton}
+              </Fragment>
             ))}
           </SortableContext>
           <div className="ui-terminal-action-cat-slot">
@@ -305,6 +330,7 @@ export function useTerminalToolbarRenderer({
     filePanelProject,
     filesPanelActive,
     gitPanelActive,
+    handleNewAnonymousPi,
     handleNewTab,
     handleOpenHistoryTab,
     handleToggleFilesPanel,

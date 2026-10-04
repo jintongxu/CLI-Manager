@@ -480,13 +480,14 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       }));
     },
 
-    createSession: async (projectId, cwd, title, startupCmd, envVars, shell, paneId, worktreeId, sshHostId, cliSessionId, remoteHistoryConsumerId, remoteHistorySourceInstanceId) => {
+    createSession: async (projectId, cwd, title, startupCmd, envVars, shell, paneId, worktreeId, sshHostId, cliSessionId, remoteHistoryConsumerId, remoteHistorySourceInstanceId, options) => {
+      const sessionKind = options?.sessionKind;
       const os = await getOsPlatform();
       const createdAtMs = Date.now();
       let launch: ResolvedPtyLaunch | null = null;
       let sessionId: string;
       try {
-        launch = await resolvePtyLaunch({ projectId, worktreeId, sshHostId, cwd, startupCmd, envVars, shell }, os);
+        launch = await resolvePtyLaunch({ projectId, worktreeId, sshHostId, cwd, startupCmd, envVars, shell, sessionKind }, os);
         recordCrashActivity("terminal.session_create", {
           projectId: projectId ?? null,
           worktreeId: worktreeId ?? null,
@@ -518,11 +519,13 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         projectId,
         worktreeId,
         title: title ?? "Terminal",
-        cwd,
+        cwd: sessionKind === "ephemeral-pi" ? undefined : cwd,
         shell: resolvedShell,
         envVars,
-        startupCmd: launch.startupHandledByLaunch ? launchStartupCmd : startupCmd,
-        ...getProjectAgentTerminalMetadata(projectId),
+        startupCmd: launch.startupHandledByLaunch || sessionKind === "ephemeral-pi" ? launchStartupCmd : startupCmd,
+        ...(sessionKind === "ephemeral-pi"
+          ? { kind: sessionKind, isAgentSession: true, cliTool: "pi" }
+          : getProjectAgentTerminalMetadata(projectId)),
         environmentType: launch.environmentType,
         sshHostId: launch.sshHostId,
         remotePath: launch.remotePath,
@@ -531,8 +534,8 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         extensionSnapshotId: launch.extensionSnapshotId ?? undefined,
         extensionPolicyRevision: launch.extensionPolicyRevision,
         extensionLaunchStatus: launch.extensionStatus,
-        cliSessionId: cliSessionId?.trim() || undefined,
-        remoteHistoryConsumerId: remoteHistoryConsumerId?.trim() || undefined,
+        cliSessionId: sessionKind === "ephemeral-pi" ? undefined : cliSessionId?.trim() || undefined,
+        remoteHistoryConsumerId: sessionKind === "ephemeral-pi" ? undefined : remoteHistoryConsumerId?.trim() || undefined,
         remoteHistorySourceInstanceId: remoteHistorySourceInstanceId?.trim() || undefined,
       };
 
@@ -593,10 +596,12 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         statusListeners: { ...state.statusListeners, [sessionId]: unlisten },
       });
 
-      // 持久化到 sessionStore
-      await useSessionStore.getState().saveSessions(newSessions);
-      await useSessionStore.getState().saveActiveSessionId(sessionId);
-      await useSessionStore.getState().saveWorkspans(workspans, activeWorkspanId, newSessions);
+      // 临时 Pi 会话只存在于当前运行，不写入会话恢复数据。
+      if (sessionKind !== "ephemeral-pi") {
+        await useSessionStore.getState().saveSessions(newSessions);
+        await useSessionStore.getState().saveActiveSessionId(sessionId);
+        await useSessionStore.getState().saveWorkspans(workspans, activeWorkspanId, newSessions);
+      }
 
       if (launch.extensionStatus === "error") {
         toast.warning(translateCurrent("extensions.project.startupFallbackWarning"));

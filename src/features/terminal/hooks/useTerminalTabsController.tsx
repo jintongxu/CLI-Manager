@@ -27,6 +27,7 @@ import {
   TERMINAL_SIDE_PANEL_TAB_ORDER, type TerminalSidePanelTab,
 } from "../components/TerminalSidePanel";
 import { openWindowsTerminal } from "../api/externalTerminal";
+import { createAnonymousPiSessionHandler } from "../api/anonymousPiSession";
 import { resolveProjectPath } from "../../projects/api/groupPath";
 import { normalizeDirectCodexStartupCommand } from "../../projects/api/projectStartupCommand";
 import {
@@ -733,8 +734,10 @@ export function useTerminalTabsController({
     closeHistory();
     setActiveWorkspaceTab("terminal");
   }, [activeSession, closeHistory, createSession, projectById, rejectMissingSessionWorktree, rejectUnsupportedCapability, useExternalTerminal]);
-
-  const handleOpenScopedTerminal = useCallback(async () => {
+  const handleNewAnonymousPi = useMemo(
+    () => createAnonymousPiSessionHandler(createSession, closeHistory, setActiveWorkspaceTab),
+    [closeHistory, createSession],
+  ); const handleOpenScopedTerminal = useCallback(async () => {
     if (!scopedProject || useExternalTerminal) return;
 
     if (terminalScopeValue.kind === "worktree") {
@@ -1719,6 +1722,7 @@ export function useTerminalTabsController({
     providersPanelActive,
     systemResourcesPanelActive,
     handleNewTab,
+    handleNewAnonymousPi,
     terminalSidePanelSide,
     terminalActionSidebarStyle,
     onToggleFullscreen,
