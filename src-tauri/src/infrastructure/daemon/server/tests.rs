@@ -1,7 +1,9 @@
 use super::client_transport::{
     websocket_attached_frames, ClientWireFrame, ClientWriterState, QueuedOutputFrame,
 };
-use super::pty_events::{emit_daemon_output, output_batch_would_overflow};
+use super::pty_events::{
+    emit_daemon_output, output_batch_would_overflow, output_passthrough_window,
+};
 use super::*;
 use crate::daemon::protocol::{decode_daemon_frame, ROUTING_ERROR_PROTOCOL_UNSUPPORTED};
 use crate::daemon::protocol::{
@@ -16,6 +18,28 @@ fn daemon_output_batch_stops_before_crossing_live_frame_budget() {
     assert!(!output_batch_would_overflow(0, 80 * 1024));
     assert!(!output_batch_would_overflow(32 * 1024, 32 * 1024));
     assert!(output_batch_would_overflow(40 * 1024, 40 * 1024));
+}
+
+#[test]
+// 验证聚合窗口选择：小首帧走 1ms 粘连直通，大首帧回落 5ms 合批。
+fn daemon_output_passthrough_window_selects_by_first_frame_size() {
+    assert_eq!(
+        output_passthrough_window(0),
+        super::OUTPUT_PASSTHROUGH_WINDOW
+    );
+    assert_eq!(
+        output_passthrough_window(super::OUTPUT_PASSTHROUGH_MAX_BYTES),
+        super::OUTPUT_PASSTHROUGH_WINDOW
+    );
+    assert_eq!(
+        output_passthrough_window(super::OUTPUT_PASSTHROUGH_MAX_BYTES + 1),
+        super::OUTPUT_BUFFERING_DURATION
+    );
+    assert_eq!(
+        output_passthrough_window(64 * 1024),
+        super::OUTPUT_BUFFERING_DURATION
+    );
+    assert!(super::OUTPUT_PASSTHROUGH_WINDOW < super::OUTPUT_BUFFERING_DURATION);
 }
 
 // 构造带指定回放缓冲和下一序号的共享会话夹具，不创建真实 PTY。

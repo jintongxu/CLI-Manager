@@ -566,7 +566,8 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     if (isCodexSession(undefined, terminal) && disposeWebglRenderer()) {
       scheduleViewportRefresh();
     }
-    tuiColorSync.normalize(terminal);
+    // TUI color normalization scans the visible buffer; keep it off the xterm
+    // write callback's critical path and let the controller's coalesced rAF run it.
     tuiColorSync.schedule(terminal);
   };
 

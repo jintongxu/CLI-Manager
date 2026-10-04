@@ -1,11 +1,14 @@
 use super::super::protocol::DaemonFrame;
-use super::{now_ms, DaemonHost, OUTPUT_BUFFERING_DURATION, OUTPUT_BUFFERING_MAX_BYTES};
+use super::{
+    now_ms, DaemonHost, OUTPUT_BUFFERING_DURATION, OUTPUT_BUFFERING_MAX_BYTES,
+    OUTPUT_PASSTHROUGH_MAX_BYTES, OUTPUT_PASSTHROUGH_WINDOW,
+};
 use crate::pty::manager::{PtyEventSink, PtyProcessStatus};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use std::sync::mpsc::{sync_channel, RecvTimeoutError, SyncSender};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// daemon 侧 [`PtyEventSink`]：输出进 ring buffer 并推送给订阅客户端。
 pub(super) struct DaemonPtyEventSink {
@@ -36,7 +39,10 @@ impl DaemonPtyEventSink {
                     }
                     DaemonPtyEvent::Output(data) => {
                         let mut pending = data;
-                        let deadline = Instant::now() + OUTPUT_BUFFERING_DURATION;
+                        // 小帧直通：首帧够小说明是命令回显/结果短突发，只给 1ms
+                        // 粘连窗口粘住同 read 的 prompt 尾巴，不等满 5ms 合批。
+                        let deadline =
+                            Instant::now() + output_passthrough_window(pending.len());
                         let mut final_status = None;
                         while pending.len() < OUTPUT_BUFFERING_MAX_BYTES {
                             let now = Instant::now();
@@ -75,6 +81,16 @@ impl DaemonPtyEventSink {
 // 仅当已有待发数据且合并会超预算时拒绝合并；首块即使超限也保持完整，不在此切片。
 pub(super) fn output_batch_would_overflow(pending_bytes: usize, next_bytes: usize) -> bool {
     pending_bytes > 0 && pending_bytes.saturating_add(next_bytes) > OUTPUT_BUFFERING_MAX_BYTES
+}
+
+// 按首帧长度选择聚合等待窗口：小帧走 1ms 粘连直通，大帧回落 5ms 合批。
+// 阈值为 0 表示关闭直通，全部回落合批（回滚开关）。
+pub(super) fn output_passthrough_window(first_bytes: usize) -> Duration {
+    if OUTPUT_PASSTHROUGH_MAX_BYTES > 0 && first_bytes <= OUTPUT_PASSTHROUGH_MAX_BYTES {
+        OUTPUT_PASSTHROUGH_WINDOW
+    } else {
+        OUTPUT_BUFFERING_DURATION
+    }
 }
 
 impl PtyEventSink for DaemonPtyEventSink {

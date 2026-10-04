@@ -13,6 +13,9 @@ const OUTPUT_BACKLOG_WARN_FRAMES = 1024;
 const OUTPUT_BACKLOG_RECOVERY_BYTES = OUTPUT_BACKLOG_WARN_BYTES / 2;
 const OUTPUT_BACKLOG_RECOVERY_FRAMES = OUTPUT_BACKLOG_WARN_FRAMES / 2;
 const DIAGNOSTIC_SESSION_LIMIT = 5;
+// 回车后首帧优先窗口：write("\r") 后该 session 的下一次可见写跳过 burst 计数。
+// 一次性消费，超时未用自动失效，避免饿死隐藏终端。
+const INTERACTIVE_PRIORITY_TTL_MS = 500;
 
 export interface TerminalClaudeProviderLaunchConfig {
   appType: "claude";
@@ -128,6 +131,7 @@ export interface TerminalProcessDiagnosticsSnapshot {
 export class TerminalProcessManager {
   private readonly outputStates = new Map<string, TerminalOutputState>();
   private readonly processTraits = new Map<string, TerminalProcessTraits>();
+  private readonly interactivePriorityAt = new Map<string, number>();
 
   create(request: TerminalCreateRequest): Promise<string> {
     return invoke<PreparedTerminalCreate>("pty_prepare_create", request).then(async (prepared) => {
@@ -154,7 +158,31 @@ export class TerminalProcessManager {
   }
 
   write(sessionId: string, data: string): Promise<void> {
+    // 回车提交 = 命令开始执行，标记该 session 的下一次可见写优先。
+    // 多行粘贴同样含回车，误标记成本仅一次优先，无需精确区分。
+    if (data.includes("\r")) {
+      this.interactivePriorityAt.set(sessionId, Date.now());
+    }
     return ptyHostSocket.write(sessionId, data);
+  }
+
+  // 调度器调用：回车后首个可见写优先一次，消费即清除；超时或隐藏终端不命中。
+  hasInteractivePriority(sessionId: string): boolean {
+    const markedAt = this.interactivePriorityAt.get(sessionId);
+    if (markedAt === undefined) return false;
+    // 过期标记惰性清理，避免 Map 无限增长。
+    if (Date.now() - markedAt > INTERACTIVE_PRIORITY_TTL_MS) {
+      this.interactivePriorityAt.delete(sessionId);
+      return false;
+    }
+    return true;
+  }
+
+  consumeInteractivePriority(sessionId: string): boolean {
+    const hit = this.hasInteractivePriority(sessionId);
+    // 无论命中与否都清除：优先权只生效一次。
+    this.interactivePriorityAt.delete(sessionId);
+    return hit;
   }
 
   writeBinary(sessionId: string, data: string): Promise<void> {
@@ -190,6 +218,7 @@ export class TerminalProcessManager {
     return ptyHostSocket.close(sessionId).finally(() => {
       this.clearOutputState(sessionId);
       this.processTraits.delete(sessionId);
+      this.interactivePriorityAt.delete(sessionId);
       forgetTerminalQuerySession(sessionId);
     });
   }
@@ -198,6 +227,7 @@ export class TerminalProcessManager {
     return ptyHostSocket.closeAll().finally(() => {
       [...this.outputStates.keys()].forEach((sessionId) => this.clearOutputState(sessionId));
       this.processTraits.clear();
+      this.interactivePriorityAt.clear();
       forgetTerminalQuerySession();
     });
   }

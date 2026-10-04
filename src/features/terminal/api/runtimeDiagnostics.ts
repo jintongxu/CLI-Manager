@@ -1,4 +1,5 @@
 import { useTerminalStore } from "../state";
+import { terminalLatencySnapshot } from "../lib/terminalLatencyDiagnostics";
 import { terminalProcessManager } from "./TerminalProcessManager";
 import { ptyHostSocket } from "../transport/PtyHostSocket";
 import { writeResourceDiagnostic } from "../../../shared/platform/resourceDiagnosticsLog";
@@ -55,6 +56,8 @@ function collectWebviewSnapshot(): Record<string, unknown> {
     },
     processManager: terminalProcessManager.diagnosticsSnapshot(),
     ptyHost: ptyHostSocket.diagnosticsSnapshot(),
+    // 回车→首帧渲染延迟：各 session 最近 50 次的 P50/P95/max（30s 快照 cadence，不逐次打日志）。
+    terminalLatency: terminalLatencySnapshot(),
   };
 }
 

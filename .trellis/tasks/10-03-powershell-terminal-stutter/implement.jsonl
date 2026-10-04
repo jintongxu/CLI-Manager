@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/terminal-output-scheduling-contracts.md", "reason": "输出调度契约：合批预算/公平调度/屏障，D1-D3 改动边界"}
+{"file": ".trellis/spec/backend/pty-daemon-contracts.md", "reason": "PTY daemon 传输/生命周期契约，D1 不得破坏的部分"}

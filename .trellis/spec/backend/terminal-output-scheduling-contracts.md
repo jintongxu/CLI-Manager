@@ -25,12 +25,15 @@ interface ScheduledTerminalWrite {
 
 - Daemon live output aggregation uses a 64 KiB budget and only combines complete chunks already emitted by `safe_emit_boundary`.
 - If adding the next safe chunk would exceed the budget, emit the current batch and carry the next chunk into the following batch.
+- Small-frame passthrough: when the first chunk of a batch is at most `OUTPUT_PASSTHROUGH_MAX_BYTES` (4 KiB), the aggregation window shrinks to `OUTPUT_PASSTHROUGH_WINDOW` (1 ms) so short command-echo/result bursts from local shells are emitted without waiting for the full 5 ms batching window. Larger first chunks keep the existing 5 ms / 64 KiB path. Setting the threshold to 0 disables passthrough entirely.
 - A single pre-existing safe chunk is never split in the daemon; an abnormal oversized control sequence may therefore exceed the target budget rather than corrupt ANSI/UTF-8 state.
 - All mounted terminals share one frontend scheduler. Each animation frame starts at most one xterm write batch.
 - Visible terminals have priority, limited to three consecutive batches while hidden work is pending; hidden terminals must then receive one turn.
 - When the document is hidden, pending terminal writes use a timer fallback instead of depending only on `requestAnimationFrame`; the visible path keeps rAF and a watchdog timer, and `visibilitychange` reschedules the pending entry. A fallback callback cancels the other scheduled handle before consuming work.
 - Per-terminal FIFO, Replay/Reset barriers, and frame ownership stay in `useTerminalDisplay`.
 - `TerminalOutputDelivery.commit()` and daemon ACK happen only after the matching xterm write callback.
+- Interactive-first scheduling: a visible terminal with a valid post-Enter priority mark is selected ahead of the burst counter, consuming the mark once; the visible-burst-then-yield fairness rule is otherwise unchanged.
+- Adaptive write cap: the per-write byte cap stays 64 KiB by default and may widen to 256 KiB (still on complete-frame boundaries) only after sustained queue backlog, falling back once the queue drains.
 - Desktop xterm is the sole renderer-side protocol responder, including hidden tabs/workspans. Web mirrors consume device/status queries without writing replies into the PTY; normal keyboard/paste forwarding stays independent.
 - A newly created PTY can emit its first handshake before renderer mount. A replay label alone does not prove prior processing: use creation identity and last parsed source sequence. Advance that sequence after the write callback, not on enqueue, so cancelled queued output does not consume the handshake.
 - Cold daemon historical replay cannot produce terminal replies. Existing Rust OSC 10/11 and host OSC 52 ownership still applies.
@@ -43,6 +46,8 @@ interface ScheduledTerminalWrite {
 |---|---|
 | 32 KiB pending + 32 KiB next | Combine into one live frame |
 | 40 KiB pending + 40 KiB next | Emit pending; carry next |
+| First chunk ≤ 4 KiB, no follower within 1 ms | Emit immediately without waiting the 5 ms window |
+| First chunk > 4 KiB | Fall back to the 5 ms / 64 KiB batching path |
 | One safe chunk exceeds 64 KiB | Preserve the chunk; do not split ANSI/UTF-8 state |
 | Two terminals become ready in one browser frame | Start only one xterm write |
 | Visible output remains continuous while hidden output waits | Run at most three visible batches before one hidden batch |
@@ -59,6 +64,7 @@ interface ScheduledTerminalWrite {
 ### 6. Tests Required
 
 - Rust: assert 32+32 KiB fits and 40+40 KiB overflows the aggregation budget.
+- Rust: assert the passthrough window selector returns the 1 ms window for first frames within the 4 KiB threshold and the 5 ms window above it.
 - Frontend: assert two displays start only one write per animation frame.
 - Frontend: assert continuous visible output yields to a hidden display after three batches.
 - Existing Replay, Reset, resize, visibility, TUI color sync, TypeScript, `cargo fmt`, and `cargo check` validations remain required.

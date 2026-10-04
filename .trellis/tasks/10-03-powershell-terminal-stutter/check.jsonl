@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/terminal-output-scheduling-contracts.md", "reason": "校验合批/公平/屏障/ACK 条款无回归"}
+{"file": ".trellis/spec/frontend/ai-architecture-contracts.md", "reason": "架构检查零超限与模块边界"}
