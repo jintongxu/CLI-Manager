@@ -63,6 +63,7 @@ const {
   createPiTerminalCompatibility,
   resolvePiImeCompositionAnchor,
   resolvePiImeTextareaAnchor,
+  isPiImeCompositionAnchorValid,
 } = await import(
   pathToFileURL(compatibilityPath).href
 );
@@ -154,14 +155,14 @@ test("Pi IME resolves the editor input row before its textarea bottom border", (
   assert.deepEqual(resolvePiImeTextareaAnchor(terminal, compositionAnchor), { x: 7, y: 4 });
 });
 
-test("Pi IME prefers the visible inverse cursor over a stale hardware cursor inside the editor", () => {
+test("Pi IME prefers the live cursor over a stale inverse cursor inside the editor", () => {
   const terminal = terminalWithLines(
     ["output", "────────", "  input", "", "────────", "status"],
     { x: 79, y: 2 },
     [{ x: 4, y: 2 }],
   );
 
-  assert.deepEqual(resolvePiImeCompositionAnchor(terminal, { x: 0, y: 0 }), { x: 4, y: 2 });
+  assert.deepEqual(resolvePiImeCompositionAnchor(terminal, { x: 0, y: 0 }), { x: 79, y: 2 });
 });
 
 test("Pi IME keeps the live cursor inside the editor when no software cursor is visible", () => {
@@ -171,6 +172,16 @@ test("Pi IME keeps the live cursor inside the editor when no software cursor is 
   );
 
   assert.deepEqual(resolvePiImeCompositionAnchor(terminal, { x: 0, y: 0 }), { x: 4, y: 3 });
+});
+
+test("Pi IME rejects a transient fallback outside the editor while composing", () => {
+  const terminal = terminalWithLines(
+    ["output", "────────", "  input", "", "────────", "status"],
+    { x: 79, y: 5 },
+  );
+
+  assert.equal(isPiImeCompositionAnchorValid(terminal, { x: 4, y: 2 }), true);
+  assert.equal(isPiImeCompositionAnchorValid(terminal, { x: 79, y: 5 }), false);
 });
 
 test("Pi IME ignores a resized status cursor and inverse cells outside paired rules", () => {
@@ -219,6 +230,7 @@ test("Pi IME preserves fallback anchors without a valid editor", () => {
   const editor = terminalWithLines(["────", " input", "────"], { x: 2, y: 1 });
   assert.deepEqual(nonPi.resolveImeCompositionAnchor(editor, anchor), anchor);
   assert.deepEqual(nonPi.resolveImeTextareaAnchor(editor, anchor), anchor);
+  assert.equal(nonPi.isImeCompositionAnchorValid(editor, anchor), true);
 });
 
 test("matches all built-in Pi RGB tool backgrounds only", () => {
@@ -321,8 +333,8 @@ test("Pi facade transforms active sessions and leaves non-Pi sessions byte-for-b
 test("live, replay, reset, and serialized snapshot use the shared transform", () => {
   const displaySource = readFileSync(new URL("../src/features/terminal/hooks/useTerminalDisplay.ts", import.meta.url), "utf8");
   const componentSource = readFileSync(new URL("../src/features/terminal/hooks/useXTermController.ts", import.meta.url), "utf8");
-  assert.match(displaySource, /const transformed = transformOutputRef\.current\(combined\);/);
-  assert.match(displaySource, /const transformed = transformOutputRef\.current\(text\);/);
+  assert.match(displaySource, /const transformed = colorQueries\.feed\(transformOutputRef\.current\(combined\), !answerQueries\);/);
+  assert.match(displaySource, /const transformed = colorQueries\.feed\(transformOutputRef\.current\(text\), !canAnswerTerminalQueryFrame\(/);
   assert.match(displaySource, /if \(first\.reset\) \{\s*outputDiagnosticsRef\?\.current\?\.reset\(\);/);
   assert.match(componentSource, /const restoredOutput = displayTransformOutputRef\.current\(initialTerminalOutput\);[\s\S]*?terminal\.write\(`\$\{restoredOutput\}/);
   assert.match(componentSource, /displayTransformOutputRef\.current = \(text\) => processCodexCursorVisibility\(/);

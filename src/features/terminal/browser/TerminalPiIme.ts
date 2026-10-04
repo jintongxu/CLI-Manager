@@ -53,6 +53,13 @@ function containsRow(region: PiEditorRegion, row: number): boolean {
   return row > region.top && row < region.bottom;
 }
 
+export function isPiImeCompositionAnchorValid(
+  terminal: Terminal,
+  anchor: TerminalImeAnchor,
+): boolean {
+  return findPiEditorRegions(terminal).some((region) => containsRow(region, anchor.y));
+}
+
 export function resolvePiImeCompositionAnchor(
   terminal: Terminal,
   fallbackAnchor: TerminalImeAnchor,
@@ -65,9 +72,9 @@ export function resolvePiImeCompositionAnchor(
   const regions = findPiEditorRegions(terminal);
   for (let index = regions.length - 1; index >= 0; index -= 1) {
     const region = regions[index];
+    if (containsRow(region, cursor.y)) return cursor;
     const inverseAnchor = findInverseAnchor(terminal, region);
     if (inverseAnchor) return inverseAnchor;
-    if (containsRow(region, cursor.y)) return cursor;
   }
   return fallbackAnchor;
 }
