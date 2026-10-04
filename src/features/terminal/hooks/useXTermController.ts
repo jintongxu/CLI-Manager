@@ -1610,6 +1610,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
           : piAnchor;
       },
       resolveTextareaAnchor: piTerminalCompatibilityRef.current?.resolveImeTextareaAnchor,
+      isCompositionAnchorValid: piTerminalCompatibilityRef.current?.isImeCompositionAnchorValid,
       shouldRefreshCompositionAnchor: piTerminalCompatibilityRef.current?.shouldRefreshImeCompositionAnchor,
       onCompositionCommitted: (textareaValue) => {
         if (!isCodexSession()) return;
