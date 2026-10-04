@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
-import { BarChart3, Handshake, Settings } from "../../../shared/ui/icons";
+import { BarChart3, Settings } from "../../../shared/ui/icons";
 import { SyncStatusIndicator } from "./SyncStatusIndicator";
 import type { SettingsTab } from "../../settings/api/SettingsModal";
 import { getErrorMessage, getKimiHookErrorMessage, getPiHookErrorMessage } from "../../settings/api/hookErrors";
@@ -256,24 +256,11 @@ export function SidebarFooter({ collapsed, onOpenSettings, onOpenStats, toolbarV
     </button>
   );
 
-  const tokenStationButton = (
-    <button
-      type="button"
-      onClick={() => onOpenSettings("sponsors")}
-      className="ui-focus-ring ui-icon-action ui-sidebar-action-token-station shrink-0"
-      title={t("sidebar.tokenStation")}
-      aria-label={t("sidebar.openTokenStation")}
-    >
-      <Handshake size={14} strokeWidth={1.7} aria-hidden="true" />
-    </button>
-  );
-
   if (collapsed) {
     return (
       <div className="px-2 py-2">
         <div className="flex flex-col items-center gap-1.5">
           <SyncStatusIndicator collapsed onOpenSettings={onOpenSettings} />
-          {tokenStationButton}
           {statsButton}
           <HookStatusLight onOpenSettings={onOpenSettings} />
           {settingsButton}
@@ -288,7 +275,6 @@ export function SidebarFooter({ collapsed, onOpenSettings, onOpenStats, toolbarV
         <div className="min-w-0 flex-1">
           <SyncStatusIndicator onOpenSettings={onOpenSettings} />
         </div>
-        {tokenStationButton}
         {statsButton}
         <HookStatusLight onOpenSettings={onOpenSettings} />
         {settingsButton}

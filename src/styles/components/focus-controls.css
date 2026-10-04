@@ -783,22 +783,6 @@
   color: var(--success);
 }
 
-.ui-icon-action.ui-sidebar-action-token-station {
-  background-color: transparent;
-  color: color-mix(in srgb, var(--primary) 78%, #ec4899 22%);
-  animation: token-station-glow 2.8s ease-in-out infinite;
-}
-
-.ui-icon-action.ui-sidebar-action-token-station:hover:not(:disabled) {
-  background-color: color-mix(in srgb, var(--primary) 14%, transparent);
-  box-shadow: none;
-  color: color-mix(in srgb, var(--primary) 68%, #ec4899 32%);
-}
-
-[data-theme="light"] .ui-icon-action.ui-sidebar-action-token-station {
-  color: color-mix(in srgb, var(--primary) 76%, #db2777 24%);
-}
-
 .sponsor-card {
   background: linear-gradient(
     180deg,

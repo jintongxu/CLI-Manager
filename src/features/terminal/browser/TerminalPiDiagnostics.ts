@@ -5,6 +5,7 @@ const PI_DIAGNOSTIC_MARKER = "PI177-";
 const DIAGNOSTIC_TAIL_LIMIT = 64;
 const DIAGNOSTIC_PREVIEW_RADIUS = 48;
 const DIAGNOSTIC_LINE_PREVIEW_LIMIT = 120;
+const DIAGNOSTIC_BUFFER_SCAN_LIMIT = 512;
 const ANSI_FOREGROUND_188_PATTERN = /\x1b\[38;5;188m/g;
 const ANSI_BACKGROUND_59_PATTERN = /\x1b\[48;5;59m/g;
 const SYNC_BEGIN_PATTERN = /\x1b\[\?2026h/g;
@@ -78,7 +79,8 @@ function summarizeBuffer(terminal: Terminal) {
   let markerLine = -1;
   let markerColumn = -1;
   let markerLineText = "";
-  for (let row = 0; row < buffer.length; row += 1) {
+  const scanStart = Math.max(0, buffer.length - DIAGNOSTIC_BUFFER_SCAN_LIMIT);
+  for (let row = scanStart; row < buffer.length; row += 1) {
     const line = buffer.getLine(row);
     if (!line) continue;
     const text = line.translateToString(true);

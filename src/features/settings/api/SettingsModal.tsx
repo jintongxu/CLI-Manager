@@ -5,7 +5,6 @@ import {
   Coins,
   Code2,
   History,
-  Handshake,
   Info,
   Keyboard,
   PanelLeft,
@@ -40,7 +39,6 @@ import { CommandSuggestionSettingsPage } from "../components/pages/CommandSugges
 import { NativeProviderSettingsPage } from "../components/pages/NativeProviderSettingsPage";
 import { ModelPricingSettingsPage } from "../components/pages/ModelPricingSettingsPage";
 import { AboutSettingsPage } from "../components/pages/AboutSettingsPage";
-import { SponsorsSettingsPage } from "../components/pages/SponsorsSettingsPage";
 import { DesktopPetSettingsPage } from "../components/pages/DesktopPetSettingsPage";
 import { CcConnectSettingsPage } from "../components/pages/CcConnectSettingsPage";
 import { SshHostsSettingsPage } from "../components/pages/SshHostsSettingsPage";
@@ -60,7 +58,6 @@ export type SettingsTab =
   | "shortcuts"
   | "templates"
   | "native-providers"
-  | "sponsors"
   | "model-pricing"
   | "cc-connect"
   | "ssh-hosts"
@@ -97,7 +94,6 @@ const SETTINGS_TAB_ORDER: SettingsTab[] = [
   "sidebar",
   "desktop-pet",
   "developer",
-  "sponsors",
   "about",
 ];
 
@@ -159,12 +155,6 @@ const SETTINGS_TAB_CONFIG: Record<SettingsTab, SettingsTabConfig> = {
     description: "settings.tabs.nativeProviders.description",
     icon: Sparkles,
     searchPlaceholder: "settings.tabs.nativeProviders.search",
-  },
-  sponsors: {
-    label: "settings.tabs.sponsors.label",
-    title: "settings.tabs.sponsors.title",
-    description: "settings.tabs.sponsors.description",
-    icon: Handshake,
   },
   "model-pricing": {
     label: "settings.tabs.modelPricing.label",
@@ -335,7 +325,6 @@ export function SettingsModal({ open, onClose, onAfterClose, initialTab, onActiv
     if (activeTab === "shortcuts") return <ShortcutSettingsPage searchValue={searchValue} />;
     if (activeTab === "templates") return <TemplateSettingsPage searchValue={searchValue} />;
     if (activeTab === "native-providers") return <NativeProviderSettingsPage searchValue={searchValue} />;
-    if (activeTab === "sponsors") return <SponsorsSettingsPage />;
     if (activeTab === "model-pricing") return <ModelPricingSettingsPage searchValue={searchValue} />;
     if (activeTab === "cc-connect") return <CcConnectSettingsPage />;
     if (activeTab === "ssh-hosts") return <SshHostsSettingsPage searchValue={searchValue} onTerminalOpened={onClose} />;

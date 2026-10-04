@@ -263,6 +263,42 @@
   box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--border) 24%, transparent) !important;
 }
 
+/* Settings leaves the native title bar visible as a slim chrome strip. Give
+   it the same layered surface treatment instead of a disconnected dark band. */
+.ui-workspace-background-root:has(.ui-workspace-settings-overlay) .window-titlebar {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-container-high) 92%, var(--primary) 8%),
+    var(--surface-container-low)
+  ) !important;
+  background-color: var(--surface-container-low) !important;
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-container-high) 92%, var(--primary) 8%),
+    var(--surface-container-low)
+  ) !important;
+  box-shadow:
+    inset 0 -1px 0 color-mix(in srgb, var(--primary) 28%, transparent),
+    0 2px 14px color-mix(in srgb, var(--on-surface) 12%, transparent) !important;
+}
+
+[data-theme="light"] .ui-workspace-background-root:has(.ui-workspace-settings-overlay) .window-titlebar {
+  background: linear-gradient(
+    180deg,
+    var(--surface-container-lowest),
+    color-mix(in srgb, var(--surface-container-low) 94%, var(--primary) 6%)
+  ) !important;
+  background-color: var(--surface-container-lowest) !important;
+  background-image: linear-gradient(
+    180deg,
+    var(--surface-container-lowest),
+    color-mix(in srgb, var(--surface-container-low) 94%, var(--primary) 6%)
+  ) !important;
+  box-shadow:
+    inset 0 -1px 0 color-mix(in srgb, var(--primary) 22%, transparent),
+    0 2px 12px color-mix(in srgb, var(--on-surface) 8%, transparent) !important;
+}
+
 /* In workspace mode XTerm keeps its transparency theme but does not create a
    second image layer per Pane. Hidden sessions intentionally omit this attr
    and retain their opaque terminal fallback. */
