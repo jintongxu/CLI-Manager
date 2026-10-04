@@ -12,6 +12,13 @@
 - 二轮修复移除可见交互首帧额外的全局 rAF 等待，并将 TUI 颜色归一化从每次 xterm 写回调的同步关键路径移到合并 rAF，降低单个 pwsh 终端执行命令后的主线程顿挫。
 - PowerShell 7 内嵌终端保留用户 oh-my-posh 主题外观：仅对 CLI-Manager 当前 PTY 缓存 profile prompt 输出（路径变化或 2 秒 TTL 到期才重算），避免每条命令重复启动 prompt 渲染进程；保留用户 PowerShell profile、PSReadLine、别名与 Windows Terminal 行为，不修改用户 profile 或主题文件。
 
+### Worktree 完成/丢弃后残留 node_modules 文件夹修复
+
+- 完成或丢弃 worktree 后，对应目录偶尔只残留 `node_modules`（内为指向已删跟踪目录的悬空 pnpm workspace junction）：`git worktree remove --force` 此时仍以 exit 0 返回并已注销登记，却静默跳过残留目录，而前端随后删除 DB 记录，残留永久孤儿化。
+- 后端 `git_worktree_remove` 在 Git 返回成功后校验目录是否仍存在：已注销登记则用文件系统兜底删除残留并 `prune`（输出 `removed_residual_worktree_dir`），仍在登记中则返回 `worktree_remove_incomplete` 并保留记录，避免误删；存在性判断改用 `symlink_metadata` 以感知悬空 junction。
+- 同步更新 worktree 隔离契约错误矩阵与功能清单，并补充残留清理的 Rust 单测（注销/仍登记两条路径）。
+- 修复中文 Windows 丢弃 worktree 直接报 `remove_stale_worktree_dir_failed: 拒绝访问。(os error 5)` 的问题：重试判定此前只匹配英文 `permission denied`/`os error 32`，中文系统的 os error 5 文案命中不了，单次失败就直接报错；现同时匹配 `os error 5`/`Access is denied`/中文“拒绝访问”，且文件系统删除按 `PermissionDenied` 种类直接判定为可重试，不依赖系统语言。
+
 ### GitHub Release Windows 自用发布（2026-10-03）
 
 - Windows 发布流程简化为仅使用 GitHub Release：构建并上传 NSIS/MSI 安装包、便携 ZIP 与 Tauri `latest.json`，不再强制依赖 R2。
