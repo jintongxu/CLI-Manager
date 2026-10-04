@@ -417,7 +417,7 @@ export type TreeNode =
   | { type: "project"; project: Project; worktrees?: WorktreeRecord[] }
   | { type: "worktree"; project: Project; worktree: WorktreeRecord };
 
-export type TerminalSessionKind = "pty" | "subagent-transcript" | "file-editor" | "synced-history";
+export type TerminalSessionKind = "pty" | "subagent-transcript" | "file-editor" | "synced-history" | "ephemeral-pi";
 
 export interface NativeProviderLaunchSnapshot {
   appType: "claude" | "codex" | "grokbuild";
@@ -512,7 +512,7 @@ export interface TerminalSession {
   cliReasoningEffort?: string;
   /** CLI hook 上报的 WSL 发行版名（WSL_DISTRO_NAME）；用于在终端实际所在发行版内组装能力诊断等请求。 */
   wslDistroName?: string;
-  /** 会话类型；缺省视为 "pty"。"subagent-transcript" 为只读转录伪会话（无 PTY、不持久化）。 */
+  /** 会话类型；缺省视为 "pty"。临时 Pi 会话有 PTY，但不持久化。 */
   kind?: TerminalSessionKind;
   /** 仅 kind="subagent-transcript" 时存在：子 Agent 元数据。 */
   subagent?: {

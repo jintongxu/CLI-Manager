@@ -26,7 +26,10 @@ interface SessionStore {
 }
 
 function isPersistableSession(session: TerminalSession): boolean {
-  return session.kind !== "subagent-transcript" && session.kind !== "file-editor" && session.kind !== "synced-history";
+  return session.kind !== "subagent-transcript"
+    && session.kind !== "file-editor"
+    && session.kind !== "synced-history"
+    && session.kind !== "ephemeral-pi";
 }
 
 let store: Store | null = null;
@@ -70,7 +73,7 @@ export const useSessionStore = create<SessionStore>(() => ({
 
   saveSessions: async (sessions) => {
     const s = await getStore();
-    // 伪会话（子 Agent 转录 / 文件编辑器 / 同步历史）是临时视图，绝不持久化/恢复。
+    // 伪会话和匿名 Pi 是临时视图，绝不持久化/恢复。
     const persistable = sessions.filter(isPersistableSession);
     await s.set("sessions", persistable);
     useSessionStore.setState({ sessions: persistable });

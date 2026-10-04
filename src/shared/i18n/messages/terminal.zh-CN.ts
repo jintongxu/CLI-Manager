@@ -114,6 +114,7 @@ export const zh = {
   "terminal.close.cancel": "取消关闭终端",
   "terminal.close.confirm": "确认关闭终端",
   "terminal.toolbar.newTerminal": "新建终端",
+  "terminal.toolbar.newAnonymousPi": "新建匿名 Pi Agent 会话",
   "terminal.toolbar.immersiveFullscreen": "沉浸式全屏",
   "terminal.toolbar.exitImmersiveFullscreen": "退出沉浸式全屏",
   "terminal.toolbar.enterImmersiveFullscreen": "进入沉浸式全屏",

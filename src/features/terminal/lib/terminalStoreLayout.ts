@@ -45,7 +45,11 @@ export function clearProjectEditorWorkspacesIfUnused(project: Project, sessions:
 }
 
 export function isPersistableSession(session: TerminalSession | undefined): boolean {
-  return !!session && session.kind !== "subagent-transcript" && session.kind !== "file-editor" && session.kind !== "synced-history";
+  return !!session
+    && session.kind !== "subagent-transcript"
+    && session.kind !== "file-editor"
+    && session.kind !== "synced-history"
+    && session.kind !== "ephemeral-pi";
 }
 
 export function hasBackendPty(session: TerminalSession): boolean {

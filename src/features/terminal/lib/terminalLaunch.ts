@@ -400,6 +400,29 @@ export async function resolvePtyLaunch(options: DetachedPtyLaunchOptions, os: Os
     ? useProjectStore.getState().projects.find((item) => item.id === options.projectId)
     : undefined;
 
+  if (options.sessionKind === "ephemeral-pi") {
+    const resolvedShell = resolveShellForPty(options.shell, false, os);
+    return {
+      shell: resolvedShell,
+      startupCmd: options.startupCmd?.trim() || "pi --no-session",
+      startupHandledByLaunch: false,
+      environmentType: os === "windows" && normalizeShellKey(resolvedShell) === "wsl" ? "wsl" : "local",
+      providerSnapshot: null,
+      extensionSnapshotId: null,
+      invokeArgs: {
+        cwd: null,
+        envVars: buildPtyEnvVars(options.envVars ?? null, resolvedShell),
+        shell: resolvedShell,
+        hookEnvEnabled: false,
+        claudeProvider: null,
+        codexProvider: null,
+        grokProvider: null,
+        terminalColors: getCurrentTerminalColors(),
+        sshLaunch: null,
+      },
+    };
+  }
+
   const requestedSshHostId = project?.environment_type === "ssh"
     ? project.ssh_host_id?.trim()
     : options.sshHostId?.trim();
