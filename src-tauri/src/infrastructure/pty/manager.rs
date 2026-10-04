@@ -551,13 +551,54 @@ PS0='\e]133;C\a${PS0:0:$((__cli_manager_ran=1,0))}'
         ))
     }
 
+    // 为 CLI-Manager 内嵌的 PowerShell 7 保留 oh-my-posh 外观，同时缓存 prompt 输出。
+    // 只影响当前 PTY，保留用户 profile/PSReadLine/别名加载，不修改用户配置文件或 Windows Terminal。
+    // 路径变化或 2 秒 TTL 到期时才重新调用 oh-my-posh，避免每条命令重复启动一次渲染进程。
+    fn powershell_fast_prompt_args() -> Vec<String> {
+        let script = r#"
+$global:CliManagerPreviousPrompt = if (Test-Path function:\prompt) { (Get-Command prompt).ScriptBlock } else { $null }
+$global:CliManagerPromptCache = $null
+$global:CliManagerPromptCacheAt = [datetime]::MinValue
+$global:CliManagerPromptCachePath = $null
+function global:prompt {
+  $path = $pwd.Path
+  $now = Get-Date
+  if ($null -eq $global:CliManagerPromptCache -or
+      $global:CliManagerPromptCachePath -ne $path -or
+      (($now - $global:CliManagerPromptCacheAt).TotalSeconds -ge 2)) {
+    $global:CliManagerPromptCache = if ($global:CliManagerPreviousPrompt) {
+      & $global:CliManagerPreviousPrompt
+    } else {
+      "PS $path> "
+    }
+    $global:CliManagerPromptCacheAt = $now
+    $global:CliManagerPromptCachePath = $path
+  }
+  $global:CliManagerPromptCache
+}
+"#;
+        vec![
+            "-NoLogo".to_string(),
+            "-NoExit".to_string(),
+            "-Command".to_string(),
+            script.to_string(),
+        ]
+    }
+
     // 按监控开关生成 shell 参数；Git Bash 临时集成写入失败时回退普通启动参数。
+    // PowerShell 7 默认仅在内嵌终端使用轻量 prompt，避免 oh-my-posh 每条命令同步计算 Git 状态。
     fn build_shell_args(
         shell: &str,
         env_vars: Option<&HashMap<String, String>>,
     ) -> Result<(String, Vec<String>), String> {
         let monitoring_enabled = Self::shell_runtime_monitoring_enabled(env_vars);
         if !monitoring_enabled {
+            if shell == "pwsh" && cfg!(target_os = "windows") {
+                return Ok((
+                    "pwsh.exe".to_string(),
+                    Self::powershell_fast_prompt_args(),
+                ));
+            }
             return Self::resolve_shell(shell);
         }
         match shell {
@@ -1383,6 +1424,22 @@ mod tests {
         assert_eq!(summary.active_count, 1);
         assert_eq!(summary.tracked_count, 0);
         assert_eq!(summary.cleaned_count, 0);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    // 验证 PowerShell 7 默认保留原 profile prompt 外观并缓存其结果，不修改用户 profile 文件。
+    fn build_shell_args_uses_cached_prompt_for_pwsh() {
+        let (exe, args) = PtyManager::build_shell_args("pwsh", None).unwrap();
+
+        assert_eq!(exe, "pwsh.exe");
+        assert_eq!(args[0], "-NoLogo");
+        assert_eq!(args[1], "-NoExit");
+        assert_eq!(args[2], "-Command");
+        assert!(args[3].contains("function global:prompt"));
+        assert!(args[3].contains("CliManagerPreviousPrompt"));
+        assert!(args[3].contains("CliManagerPromptCache"));
+        assert!(args[3].contains("$pwd.Path"));
     }
 
     #[cfg(target_os = "macos")]

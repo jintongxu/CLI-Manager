@@ -6,6 +6,17 @@ import type { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { refreshTerminalViewport } from "../lib/terminalVisibility";
+import {
+  clearTerminalLatency,
+  noteTerminalFirstFrame,
+  noteTerminalFlushStart,
+  noteTerminalWriteCommitted,
+} from "../lib/terminalLatencyDiagnostics";
+import {
+  selectScheduledTerminalWrite,
+  selectWriteBatchLimit,
+  type SchedulableTerminalWrite,
+} from "../lib/terminalWriteScheduling";
 import { isLightTerminalTheme } from "../../../shared/lib/terminalThemes";
 import { logError, logWarn } from "../../../shared/platform/logger";
 import { markTerminalSnapshotDirty } from "../api/sessionSnapshotPersistence";
@@ -27,12 +38,15 @@ const MIN_TERMINAL_COLS = 40;
 const MIN_TERMINAL_ROWS = 8;
 const HIDDEN_WEBGL_DISPOSE_DELAY_MS = 10_000;
 const PTY_LIVE_WRITE_BATCH_BYTES = 64 * 1024;
+// 拥塞缓解上限：队列连续积压时单次写允许放宽到 256KB（仍按完整帧边界），
+// 消化积压后回落 64KB。设为与 PTY_LIVE_WRITE_BATCH_BYTES 相等即关闭缓解。
+const PTY_LIVE_WRITE_BATCH_BYTES_RELIEF = 256 * 1024;
+// 连续多少个 flush 周期队列非空即判定拥塞。
+const PTY_LIVE_WRITE_CONGESTED_CYCLES = 3;
 const PTY_VISIBLE_WRITE_BURST = 3;
 const PTY_WRITE_SCHEDULER_FALLBACK_DELAY_MS = 250;
 
-interface ScheduledTerminalWrite {
-  token: symbol;
-  isVisible: () => boolean;
+interface ScheduledTerminalWrite extends SchedulableTerminalWrite {
   flush: () => void;
 }
 
@@ -65,11 +79,17 @@ const runGlobalTerminalWrite = () => {
     terminalWriteSchedulerTimerId = null;
   }
   const entries = [...scheduledTerminalWrites.values()];
-  const visible = entries.find((entry) => entry.isVisible());
-  const hidden = entries.find((entry) => !entry.isVisible());
-  const selected = visible && (!hidden || visibleWriteBurst < PTY_VISIBLE_WRITE_BURST)
-    ? visible
-    : hidden ?? visible;
+  // 回车后首帧优先：带有效交互标记的可见终端跳过 burst 计数，直接选中。
+  // 标记一次性消费，超时自动失效，不饿死隐藏终端。
+  const selected = selectScheduledTerminalWrite(
+    entries,
+    visibleWriteBurst,
+    PTY_VISIBLE_WRITE_BURST,
+    (sessionId) => terminalProcessManager.hasInteractivePriority(sessionId),
+  );
+  if (selected && selected.isVisible()) {
+    terminalProcessManager.consumeInteractivePriority(selected.sessionId);
+  }
   if (!selected) {
     if (scheduledTerminalWrites.size === 0) {
       visibleWriteBurst = 0;
@@ -159,6 +179,8 @@ interface PendingTerminalWrite {
   cols: number;
   rows: number;
   reset: boolean;
+  // 回车后首帧标记：queue 时由 noteTerminalFirstFrame 判定，flush/回调时完成计时。
+  latencyFirstFrame: boolean;
 }
 
 type PendingViewportRestore =
@@ -240,6 +262,9 @@ export function useTerminalDisplay({
   const ptyPendingChunksRef = useRef<PendingTerminalWrite[]>([]);
   const ptyWriteScheduleTokenRef = useRef(Symbol(sessionId));
   const ptyWriteInProgressRef = useRef(false);
+  // 拥塞计数：连续多少个 flush 周期结束时队列仍非空。达阈值则单次写上限
+  // 临时放宽到 RELIEF，队列排空即回落 64KB。
+  const ptyWriteCongestedCyclesRef = useRef(0);
   const ptyUnlistenRef = useRef<UnlistenFn | null>(null);
   const lastObservedSizeRef = useRef<{ width: number; height: number } | null>(null);
   const resizeDebouncerRef = useRef<TerminalResizeDebouncer | null>(null);
@@ -377,15 +402,26 @@ export function useTerminalDisplay({
       fitWhenStable(true);
     };
     const schedulePendingWrite = () => {
-      if (
-        cancelled
-        || ptyWriteInProgressRef.current
-        || ptyPendingChunksRef.current.length === 0
-      ) {
+      if (cancelled || ptyWriteInProgressRef.current) return;
+      // 拥塞记账：每个 flush 周期结束恰更新一次。队列排空则清零回落 64KB；
+      // 仍有积压则计数加一，达阈值后下轮单次写上限放宽到 256KB。
+      if (ptyPendingChunksRef.current.length === 0) {
+        ptyWriteCongestedCyclesRef.current = 0;
         return;
       }
+      ptyWriteCongestedCyclesRef.current += 1;
+
+      // Enter 后首个可见帧是交互反馈，不再额外等待全局 rAF。
+      // 只消费一次优先标记，后续持续输出仍走全局公平调度。
+      if (isVisibleRef.current && terminalProcessManager.consumeInteractivePriority(sessionId)) {
+        cancelGlobalTerminalWrite(ptyWriteScheduleTokenRef.current);
+        queueMicrotask(flushPendingWrites);
+        return;
+      }
+
       requestGlobalTerminalWrite({
         token: ptyWriteScheduleTokenRef.current,
+        sessionId,
         isVisible: () => isVisibleRef.current,
         flush: flushPendingWrites,
       });
@@ -398,6 +434,14 @@ export function useTerminalDisplay({
       if (!first) return;
       const pending = [first];
       const answerQueries = canAnswerTerminalQueryFrame(sessionId, first.sequence, first.replay);
+      // 拥塞判定在本周期入口做：上轮结束时队列仍有积压则计数加一，排空则清零。
+      // 计数达阈值前即使用 relief 上限也不会超 64KB（下轮才生效），避免单轮突增。
+      const writeBatchLimit = selectWriteBatchLimit(
+        ptyWriteCongestedCyclesRef.current,
+        PTY_LIVE_WRITE_CONGESTED_CYCLES,
+        PTY_LIVE_WRITE_BATCH_BYTES,
+        PTY_LIVE_WRITE_BATCH_BYTES_RELIEF,
+      );
       if (!first.replay && !first.reset) {
         let pendingBytes = first.byteLength;
         // Keep each live write bounded at complete PTY frame boundaries so a
@@ -411,7 +455,7 @@ export function useTerminalDisplay({
           const next = ptyPendingChunksRef.current[0];
           if (
             pending.length > 0
-            && pendingBytes + next.byteLength > PTY_LIVE_WRITE_BATCH_BYTES
+            && pendingBytes + next.byteLength > writeBatchLimit
           ) {
             break;
           }
@@ -449,11 +493,15 @@ export function useTerminalDisplay({
       ptyWriteInProgressRef.current = true;
       setTerminalQueryReplay(terminal, !answerQueries);
       const transformed = colorQueries.feed(transformOutputRef.current(combined), !answerQueries);
+      // 延迟埋点：本次 flush 若含回车后首帧，记录开始写入与渲染提交时刻。
+      const tracksLatency = pending.some((chunk) => chunk.latencyFirstFrame);
+      if (tracksLatency) noteTerminalFlushStart(sessionId, performance.now());
       terminal.write(transformed, () => {
         setTerminalQueryReplay(terminal, false);
         pending.forEach((chunk) => claimTerminalQueryFrame(sessionId, chunk.sequence, chunk.replay));
         ptyWriteInProgressRef.current = false;
         if (cancelled || terminalRef.current !== terminal) return;
+        if (tracksLatency) noteTerminalWriteCommitted(sessionId, performance.now());
         outputDiagnosticsRef?.current?.onWriteCommitted(terminal, transformed);
         handleTerminalWriteCommitted(terminal);
         commitPending();
@@ -475,6 +523,9 @@ export function useTerminalDisplay({
         markTerminalSnapshotDirty(sessionId);
         useTerminalStore.getState().recordPtyOutputActivity(sessionId);
       }
+      // 延迟埋点：只统计回车后的首个 live 帧，replay/reset 不计。
+      const isLive = payload.kind !== "replay" && payload.kind !== "reset";
+      const latencyFirstFrame = isLive && noteTerminalFirstFrame(sessionId, performance.now());
       ptyPendingChunksRef.current.push({
         text,
         charCount: rawText.length,
@@ -486,6 +537,7 @@ export function useTerminalDisplay({
         cols: payload.cols,
         rows: payload.rows,
         reset: payload.kind === "reset",
+        latencyFirstFrame,
       });
       schedulePendingWrite();
     };
@@ -624,6 +676,8 @@ export function useTerminalDisplay({
     cancelGlobalTerminalWrite(ptyWriteScheduleTokenRef.current);
     ptyPendingChunksRef.current = [];
     ptyWriteInProgressRef.current = false;
+    ptyWriteCongestedCyclesRef.current = 0;
+    clearTerminalLatency(sessionId);
     forwardPtyResizeRef.current = true;
     outputDiagnosticsRef?.current?.reset();
   };

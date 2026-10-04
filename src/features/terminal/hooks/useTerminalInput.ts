@@ -47,6 +47,7 @@ import {
 import { resolveManualDirectCodexEnterData } from "../lib/codexManualInput";
 import { getTerminalCellWidth, resolveCursorIndexFromCellOffset } from "../lib/terminalCellWidth";
 import { trimTerminalPasteBoundaryLineBreaks } from "../lib/terminalKeyboard";
+import { noteTerminalEnter } from "../lib/terminalLatencyDiagnostics";
 import {
   attachTerminalIme,
   type TerminalImeAnchorResolver,
@@ -806,6 +807,8 @@ export function useTerminalInput({
       });
       const ptyData = manualDirectCodexOverride ?? data;
       if (data === "\r") {
+        // 延迟埋点起点：回车提交时刻，后续首帧到达/渲染提交在 display 侧计时。
+        noteTerminalEnter(sessionId, performance.now());
         onCommandSubmitted?.(inputBufferBefore);
       }
       terminalProcessManager.write(

@@ -2,6 +2,16 @@
 
 ## [TEMP]
 
+### 本地 PowerShell 终端执行卡顿优化（2026-10-04）
+
+- 本地 PowerShell/pwsh 每次执行命令后的顿挫来自输出链路三层串行节流（daemon 5ms 合批 + 全局 rAF 单槽调度 + 64KB 单次写封顶），调用的本来就是本地 PowerShell，并非远程调用。
+- daemon 小帧直通：首帧不大于 4KiB 时只等 1ms 粘连窗口即发出，不再吃满 5ms 合批窗口；大输出保持 5ms/64KiB 合批与背压不变，阈值置 0 可关闭直通。
+- 回车后首帧优先：可见终端在回车 500ms 内的首次输出跳过 burst 计数直接刷出，标记一次性消费，超时自动失效；可见连续 3 批后让位隐藏终端一次的公平规则不变。
+- 自适应写封顶：单次写默认上限仍为 64KB（完整 PTY 帧边界），连续 3 个 flush 周期队列非空时临时放宽到 256KB，排空后回落。
+- 诊断快照新增终端延迟分布：记录回车提交→首帧到达→首帧渲染提交三段时间，按会话保留最近 50 次并输出 P50/P95/max，每 30s 随运行时快照输出。
+- 二轮修复移除可见交互首帧额外的全局 rAF 等待，并将 TUI 颜色归一化从每次 xterm 写回调的同步关键路径移到合并 rAF，降低单个 pwsh 终端执行命令后的主线程顿挫。
+- PowerShell 7 内嵌终端保留用户 oh-my-posh 主题外观：仅对 CLI-Manager 当前 PTY 缓存 profile prompt 输出（路径变化或 2 秒 TTL 到期才重算），避免每条命令重复启动 prompt 渲染进程；保留用户 PowerShell profile、PSReadLine、别名与 Windows Terminal 行为，不修改用户 profile 或主题文件。
+
 ### GitHub Release Windows 自用发布（2026-10-03）
 
 - Windows 发布流程简化为仅使用 GitHub Release：构建并上传 NSIS/MSI 安装包、便携 ZIP 与 Tauri `latest.json`，不再强制依赖 R2。

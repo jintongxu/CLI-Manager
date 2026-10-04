@@ -62,6 +62,12 @@ pub const MAX_SESSIONS: usize = 64;
 pub const HOOK_CACHE_MAX: usize = 200;
 const OUTPUT_BUFFERING_DURATION: Duration = Duration::from_millis(5);
 const OUTPUT_BUFFERING_MAX_BYTES: usize = 64 * 1024;
+// 小帧直通阈值：首帧不大于此值时只等极短粘连窗口，不吃满 5ms 合批。
+// 口径：本地 PowerShell 小命令的回显+结果短突发（约 ≤4KiB）；设为 0 即关闭直通。
+const OUTPUT_PASSTHROUGH_MAX_BYTES: usize = 4 * 1024;
+// 小帧粘连窗口：只为粘住同一 read 后脚跟来的 prompt 重绘尾巴，到期立即 emit。
+// 回落：首帧超阈值仍走上面的 5ms/64KiB 路径。
+const OUTPUT_PASSTHROUGH_WINDOW: Duration = Duration::from_millis(1);
 const CLIENT_OUTPUT_HIGH_WATERMARK: usize = 100_000;
 const CLIENT_OUTPUT_LOW_WATERMARK: usize = 5_000;
 const CLIENT_OUTPUT_QUEUE_MAX_BYTES: usize = 2 * 1024 * 1024;
