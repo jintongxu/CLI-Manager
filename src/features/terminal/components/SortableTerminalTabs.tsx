@@ -139,6 +139,7 @@ export function SortableTab({
           className={`ui-interactive ui-tab-trigger ui-terminal-tab-item mx-1 flex h-7 ${tabMinWidthClass} max-w-[180px] shrink-0 cursor-pointer items-center gap-2 rounded-lg px-3 text-[12px] font-medium`}
           data-terminal-tab-id={id}
           data-session-kind={sessionKind}
+          data-status={notification}
           data-selected={isActive ? "true" : "false"}
           onClick={() => {
             hideHoverCard();
@@ -163,6 +164,7 @@ export function SortableTab({
         >
           <span
             className="ui-tab-runtime-dot w-2 h-2 rounded-full shrink-0"
+            data-status={notification}
             data-pulsing={PULSING_TAB_STATES.has(notification) ? "true" : "false"}
             style={{ backgroundColor: TAB_NOTIFICATION_COLORS[notification], color: TAB_NOTIFICATION_COLORS[notification] }}
             role="status"
@@ -382,6 +384,7 @@ export function SortableWorkspanTab({
             style={style}
             className="ui-interactive ui-tab-trigger ui-terminal-tab-item ui-workspan-tab mx-1 flex h-7 min-w-[104px] max-w-[200px] shrink-0 cursor-pointer items-center gap-2 rounded-lg px-3 text-[12px] font-medium"
             data-workspan-id={workspan.id}
+            data-status={notification}
             data-selected={isActive ? "true" : "false"}
             onClick={() => {
               hideHoverCard();
@@ -409,6 +412,7 @@ export function SortableWorkspanTab({
           >
             <span
               className="ui-tab-runtime-dot h-2 w-2 shrink-0 rounded-full"
+              data-status={notification}
               data-pulsing={PULSING_TAB_STATES.has(notification) ? "true" : "false"}
               style={{ backgroundColor: TAB_NOTIFICATION_COLORS[notification], color: TAB_NOTIFICATION_COLORS[notification] }}
               aria-label={t(TAB_NOTIFICATION_LABELS[notification])}

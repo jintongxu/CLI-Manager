@@ -1,6 +1,13 @@
-.ui-focus-ring:focus-visible {
+.ui-focus-ring:focus-visible,
+.ui-terminal-tab-item:focus-visible,
+.ui-workspan-tab:focus-visible {
   outline: none !important;
   box-shadow: 0 0 0 2px var(--interactive-focus-ring);
+}
+
+.ui-terminal-tab-item:focus-visible,
+.ui-workspan-tab:focus-visible {
+  border-color: color-mix(in srgb, var(--interactive-focus-ring) 72%, transparent);
 }
 
 :where(
@@ -73,15 +80,16 @@
   user-select: none;
   position: relative;
   z-index: 2;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background-color: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 [data-theme="light"] .window-titlebar {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  background-color: var(--surface-container-lowest);
-  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--border) 24%, transparent);
+  background-color: transparent;
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--border) 12%, transparent);
 }
 
 .titlebar-btn {
