@@ -568,7 +568,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     }
     // TUI color normalization scans the visible buffer; keep it off the xterm
     // write callback's critical path and let the controller's coalesced rAF run it.
-    tuiColorSync.schedule(terminal);
+    tuiColorSync.schedule(terminal, true);
   };
 
   displayTransformOutputRef.current = (text) => processCodexCursorVisibility(

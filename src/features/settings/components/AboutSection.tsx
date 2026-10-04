@@ -1,8 +1,7 @@
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
-  BookOpen,
   Check,
   Download,
   ExternalLink,
@@ -18,8 +17,6 @@ import { useUpdateStore } from "../api/updateStore";
 import { MarkdownContent } from "../../../shared/ui/MarkdownContent";
 import { pickByLanguage, useI18n } from "../../../shared/i18n/index";
 
-const REPOSITORY_URL = "https://github.com/jintongxu/CLI-Manager";
-const MANUAL_URL = `${REPOSITORY_URL}/blob/master/docs/%E5%8A%9F%E8%83%BD%E6%B8%85%E5%8D%95.md`;
 const AUTHOR_URL = "https://github.com/dark-hxx";
 const AUR_PACKAGE_URL = "https://aur.archlinux.org/packages/cli-manager-bin";
 
@@ -30,40 +27,12 @@ const PROJECT_HIGHLIGHTS = [
   { zh: "供应商切换与 WebDAV 同步", en: "Provider switching and WebDAV sync" },
 ];
 
-interface ExternalLinkItemProps {
-  icon: ComponentType<{ className?: string }>;
-  title: string;
-  description: string;
-  url: string;
-}
-
 async function openExternalUrl(url: string): Promise<void> {
   try {
     await openUrl(url);
   } catch (e) {
     console.error("Failed to open URL:", e);
   }
-}
-
-function ExternalLinkItem({ icon: Icon, title, description, url }: ExternalLinkItemProps) {
-  return (
-    <button
-      type="button"
-      onClick={() => void openExternalUrl(url)}
-      className="ui-interactive ui-focus-ring ui-surface-card flex min-w-0 items-start gap-3 rounded-2xl border border-border p-4 text-left transition-colors hover:bg-surface-container-high"
-    >
-      <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-surface-container-high text-primary">
-        <Icon className="h-4 w-4" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5 text-sm font-semibold text-on-surface">
-          {title}
-          <ExternalLink className="h-3.5 w-3.5 text-on-surface-variant" />
-        </span>
-        <span className="mt-1 block text-xs leading-5 text-on-surface-variant">{description}</span>
-      </span>
-    </button>
-  );
 }
 
 export function AboutSection() {
@@ -397,24 +366,6 @@ export function AboutSection() {
           </div>
         )}
       </section>
-
-      <div className="space-y-3">
-        <div className="px-1 text-sm font-semibold text-on-surface">{text("项目资源", "Project Resources")}</div>
-        <div className="grid gap-3 md:grid-cols-2">
-          <ExternalLinkItem
-            icon={Github}
-            title={text("Git 开源地址", "Git Repository")}
-            description={text("查看源码、提交 Issue 或参与 Pull Request。", "View source code, submit issues, or contribute pull requests.")}
-            url={REPOSITORY_URL}
-          />
-          <ExternalLinkItem
-            icon={BookOpen}
-            title={text("操作手册", "User Manual")}
-            description={text("查看功能清单、使用说明和能力边界。", "View feature list, usage notes, and capability boundaries.")}
-            url={MANUAL_URL}
-          />
-        </div>
-      </div>
 
       <section className="ui-surface-card rounded-2xl border border-border p-4">
         <div className="flex items-start gap-3">
