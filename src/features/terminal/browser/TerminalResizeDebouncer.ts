@@ -72,13 +72,13 @@ export class TerminalResizeDebouncer {
       if (this.horizontalIdleJob === null) {
         this.horizontalIdleJob = this.scheduleIdle(() => {
           this.horizontalIdleJob = null;
-          if (!this.disposed) this.resizeHorizontal(this.latestCols);
+          if (!this.disposed && this.isVisible()) this.resizeHorizontal(this.latestCols);
         });
       }
       if (this.verticalIdleJob === null) {
         this.verticalIdleJob = this.scheduleIdle(() => {
           this.verticalIdleJob = null;
-          if (!this.disposed) this.resizeVertical(this.latestRows);
+          if (!this.disposed && this.isVisible()) this.resizeVertical(this.latestRows);
         });
       }
       return;
@@ -138,6 +138,7 @@ export class TerminalResizeDebouncer {
   private applyLatestHorizontalResize(): void {
     if (this.disposed) return;
     this.lastHorizontalResizeAt = this.now();
+    if (!this.isVisible()) return;
     this.resizeHorizontal(this.latestCols);
   }
 

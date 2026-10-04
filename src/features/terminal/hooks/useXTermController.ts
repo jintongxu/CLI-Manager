@@ -738,6 +738,9 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
 
     if (!isVisible) {
       finishVisibilityRestoreReveal();
+      // A hidden pane has no usable layout geometry. Drop queued fit/resize work
+      // so an idle callback cannot apply the previous pane size after a switch.
+      cancelScheduledFit();
       scheduleHiddenWebglDispose(lowMemoryMode || linuxGraphicsConstrained);
       return;
     }
@@ -751,6 +754,14 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     const rendererRestored = terminal ? syncWebglRenderer(terminal, baseTheme) : false;
     const becameVisible = !wasVisible;
 
+    // xterm can keep parsing output while display:none. Reusing a WebGL atlas
+    // across that transition may leave Pi's box-drawing glyphs stale even when
+    // the terminal buffer is correct, so invalidate it on every tab restore.
+    if (becameVisible) {
+      clearWebglTextureAtlas();
+      markViewportRefreshNeeded();
+    }
+
     if (!fitAddonRef.current || !containerRef.current) return;
     if (becameVisible || rendererRestored) {
       beginVisibilityRestoreReveal(becameVisible && !rendererRestored);
@@ -758,7 +769,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     if (rendererRestored) {
       markViewportRefreshNeeded();
     }
-    scheduleFit(true, rendererRestored);
+    scheduleFit(true, becameVisible || rendererRestored);
     if (terminalRef.current) {
       tuiColorSync.normalize(terminalRef.current);
       tuiColorSync.schedule(terminalRef.current);

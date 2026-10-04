@@ -25,14 +25,15 @@ writeFileSync(modulePath, transpiled, "utf8");
 
 const { TerminalResizeDebouncer } = await import(pathToFileURL(modulePath).href);
 
-function createHarness() {
+function createHarness(initiallyVisible = true) {
   let now = 0;
+  let visible = initiallyVisible;
   let nextTimerId = 1;
   const timers = new Map();
   const calls = [];
   const terminal = { buffer: { normal: { length: 300 } } };
   const debouncer = new TerminalResizeDebouncer(
-    () => true,
+    () => visible,
     () => terminal,
     (cols, rows) => calls.push(["both", cols, rows]),
     (cols) => calls.push(["cols", cols]),
@@ -52,6 +53,7 @@ function createHarness() {
     calls,
     timers,
     advanceTo(value) { now = value; },
+    setVisible(value) { visible = value; },
   };
 }
 
@@ -99,4 +101,18 @@ test("the final drag size is applied without waiting for a 100ms pause", () => {
   callback();
 
   assert.deepEqual(harness.calls.at(-1), ["cols", 72]);
+});
+
+test("a queued resize is ignored when the terminal becomes hidden before its callback", () => {
+  const harness = createHarness();
+  harness.debouncer.resize(100, 30);
+  harness.advanceTo(20);
+  harness.debouncer.resize(72, 30);
+  const [{ callback }] = harness.timers.values();
+
+  harness.timers.clear();
+  harness.setVisible(false);
+  callback();
+
+  assert.deepEqual(harness.calls, [["both", 100, 30], ["rows", 30]]);
 });
