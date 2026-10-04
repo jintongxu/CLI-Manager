@@ -221,6 +221,7 @@ type TreeNode =
 | Remove path not listed in `git worktree list --porcelain` and path is non-empty | Return `worktree_not_registered`; do not delete filesystem path. |
 | Remove path not listed in `git worktree list --porcelain` and path is empty | Remove the empty stale directory and delete the requested `wt/` branch only when requested. |
 | Remove path listed with matching branch but Git reports missing `.git` / `is not a working tree` | Treat as registered stale worktree: remove the registered directory, run `worktree prune`, and delete the requested `wt/` branch only when requested. |
+| `worktree remove --force` exits 0 but leaves a directory (e.g. dangling pnpm workspace junction after its tracked target was deleted first) | After a successful remove, if the path still exists and is no longer registered, delete the residual directory via filesystem, run `worktree prune`, and report `removed_residual_worktree_dir`; if the path is still registered, return `worktree_remove_incomplete` and do not delete. |
 | Remove path branch mismatch | Return `worktree_branch_mismatch`; do not delete worktree or branch. |
 | Delete branch requested for non-`wt/` branch | Return `invalid_branch`; do not delete branch. |
 

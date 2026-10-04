@@ -367,14 +367,19 @@ where
 }
 
 // 识别权限、文件占用和资源忙等可重试的删除错误。
+// 注意：中文 Windows 上系统错误信息是本地化的（os error 5 显示为“拒绝访问。”），
+// 不能只匹配英文 "permission denied"，必须同时匹配 "os error 5" 与中文文案。
 fn is_retryable_worktree_remove_error(error: &str) -> bool {
     let normalized = error.to_ascii_lowercase();
     normalized.contains("permission denied")
+        || normalized.contains("access is denied")
         || normalized.contains("failed to delete")
         || normalized.contains("unable to unlink")
         || normalized.contains("being used by another process")
+        || normalized.contains("os error 5")
         || normalized.contains("os error 32")
         || normalized.contains("device or resource busy")
+        || error.contains("拒绝访问")
 }
 
 // 识别工作树注册或 .git 指针失效导致的删除错误。
@@ -430,9 +435,11 @@ where
         match remove(target_path) {
             Ok(()) => return Ok(()),
             Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
+            // PermissionDenied 按种类直接判定为可重试，不依赖系统语言的错误文案。
             Err(err)
                 if attempt < WORKTREE_REMOVE_RETRY_ATTEMPTS
-                    && is_retryable_worktree_remove_error(&err.to_string()) =>
+                    && (err.kind() == io::ErrorKind::PermissionDenied
+                        || is_retryable_worktree_remove_error(&err.to_string())) =>
             {
                 last_error = err.to_string();
                 thread::sleep(Duration::from_millis(WORKTREE_REMOVE_RETRY_DELAY_MS));
@@ -461,6 +468,38 @@ fn cleanup_registered_stale_worktree_path(
     target_path: &Path,
 ) -> Result<String, String> {
     let mut output = remove_registered_stale_worktree_dir(target_path)?;
+    append_output_line(
+        &mut output,
+        &run_git_checked(project_path, ["worktree", "prune"])?,
+    );
+    Ok(output)
+}
+
+// 按路径判断工作树是否仍登记在 Git 中（忽略分支），用于 remove 成功后的残留校验。
+fn worktree_path_registered(project_path: &Path, target_path: &Path) -> Result<bool, String> {
+    let output = run_git_checked(project_path, ["worktree", "list", "--porcelain"])?;
+    let target = normalize_path_for_compare(target_path);
+    Ok(parse_worktree_list_entries(&output)
+        .iter()
+        .any(|entry| normalize_path_for_compare(&entry.path) == target))
+}
+
+/// Git 在工作树内存在悬空 junction（pnpm workspace 的 node_modules/@scope/pkg -> apps/...，
+/// 被跟踪目标先被删导致悬空）时，`worktree remove --force` 可能以 exit 0 返回并已注销登记，
+/// 却静默残留 node_modules 目录树。此前只信任退出码，前端随后删除 DB 记录，残留永久孤儿化。
+/// 成功后若目录仍存在且路径已注销，则用文件系统兜底删除并 prune；仍在登记则报错避免误删。
+fn cleanup_residual_worktree_dir_after_remove(
+    project_path: &Path,
+    target_path: &Path,
+) -> Result<String, String> {
+    if fs::symlink_metadata(target_path).is_err() {
+        return Ok(String::new());
+    }
+    if worktree_path_registered(project_path, target_path)? {
+        return Err("worktree_remove_incomplete".to_string());
+    }
+    remove_worktree_path_with_retry(target_path, |path| fs::remove_dir_all(path))?;
+    let mut output = String::from("removed_residual_worktree_dir");
     append_output_line(
         &mut output,
         &run_git_checked(project_path, ["worktree", "prune"])?,
@@ -1255,9 +1294,15 @@ pub async fn git_worktree_remove(
 
         let target_arg = path_to_git_arg(&target_path);
         let mut output = String::new();
-        if target_path.exists() {
+        if fs::symlink_metadata(&target_path).is_ok() {
             match run_git_worktree_remove_with_retry(&project_path, target_arg.as_str()) {
-                Ok(remove_output) => output.push_str(&remove_output),
+                Ok(remove_output) => {
+                    output.push_str(&remove_output);
+                    append_output_line(
+                        &mut output,
+                        &cleanup_residual_worktree_dir_after_remove(&project_path, &target_path)?,
+                    );
+                }
                 Err(err) if is_stale_worktree_remove_error(&err) => {
                     output.push_str(&cleanup_registered_stale_worktree_path(
                         &project_path,
@@ -1289,10 +1334,10 @@ pub async fn git_worktree_remove(
 mod tests {
     use super::{
         check_dependency_need, classify_worktree_registration, cleanup_empty_worktree_parent,
-        cleanup_stale_unregistered_worktree, default_worktree_root, git_create_error_snippet,
-        is_retryable_worktree_remove_error, is_stale_worktree_remove_error,
-        merge_worktree_internal, parse_worktree_list_entries, path_to_git_arg,
-        remove_registered_stale_worktree_dir, remove_worktree_path_with_retry,
+        cleanup_residual_worktree_dir_after_remove, cleanup_stale_unregistered_worktree,
+        default_worktree_root, git_create_error_snippet, is_retryable_worktree_remove_error,
+        is_stale_worktree_remove_error, merge_worktree_internal, parse_worktree_list_entries,
+        path_to_git_arg, remove_registered_stale_worktree_dir, remove_worktree_path_with_retry,
         resolve_worktree_target_path, seed_trellis_developer_identity,
         should_cleanup_worktree_branch_after_failed_add, validate_plain_branch_name,
         validate_task_name, validate_worktree_branch, WorktreeRegistration,
@@ -1419,6 +1464,13 @@ mod tests {
         ));
         assert!(is_retryable_worktree_remove_error(
             "remove_stale_worktree_dir_failed: 另一个程序正在使用此文件，进程无法访问。 (os error 32)"
+        ));
+        // 中文 Windows 的 os error 5 显示为“拒绝访问。”，英文环境显示 Access is denied。
+        assert!(is_retryable_worktree_remove_error(
+            "remove_stale_worktree_dir_failed: 拒绝访问。 (os error 5)"
+        ));
+        assert!(is_retryable_worktree_remove_error(
+            "remove_stale_worktree_dir_failed: Access is denied. (os error 5)"
         ));
         assert!(!is_retryable_worktree_remove_error(
             "git_failed: branch not found"
@@ -1662,6 +1714,35 @@ mod tests {
         let output = remove_registered_stale_worktree_dir(&stale).unwrap();
         assert_eq!(output, "removed_stale_registered_worktree_dir");
         assert!(!stale.exists());
+    }
+
+    #[test]
+    // 验证 remove 成功但 Git 登记注销后残留目录时，兜底清理删除残留并返回标记。
+    fn residual_cleanup_removes_unregistered_leftover_dir() {
+        let (_temp, repo, worktree) = create_test_worktree();
+        fs::create_dir_all(worktree.join("node_modules")).unwrap();
+        fs::write(worktree.join("node_modules").join("leftover.txt"), "data").unwrap();
+        // 模拟悬空 junction 下 git remove exit 0 但静默残留：删掉 worktree 管理目录
+        // 使登记注销，而目录仍存在。
+        let admin = repo.join(".git").join("worktrees");
+        for entry in fs::read_dir(&admin).unwrap() {
+            let entry = entry.unwrap();
+            fs::remove_dir_all(entry.path()).unwrap();
+        }
+        run_test_git(&repo, ["worktree", "prune"]);
+        let output =
+            cleanup_residual_worktree_dir_after_remove(&repo, &worktree).unwrap();
+        assert!(output.contains("removed_residual_worktree_dir"));
+        assert!(fs::symlink_metadata(&worktree).is_err());
+    }
+
+    #[test]
+    // 验证残留目录仍在 Git 登记中时不做文件删除，直接报错避免误删。
+    fn residual_cleanup_refuses_registered_path() {
+        let (_temp, repo, worktree) = create_test_worktree();
+        let error = cleanup_residual_worktree_dir_after_remove(&repo, &worktree).unwrap_err();
+        assert_eq!(error, "worktree_remove_incomplete");
+        assert!(worktree.exists());
     }
 
     #[test]
