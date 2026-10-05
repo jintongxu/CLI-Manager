@@ -109,6 +109,15 @@ test("terminal resize refreshes the frozen composition anchor without accepting 
   assert.match(source, /resizeDisposable\.dispose\(\);/);
 });
 
+test("Pi refreshes the idle helper textarea after TUI renders move xterm's hardware cursor", () => {
+  const renderHandler = source.match(
+    /const renderDisposable = terminal\.onRender\(\(\) => \{([\s\S]*?)\n  \}\);/,
+  )?.[1];
+
+  assert.ok(renderHandler, "render handler was not found");
+  assert.match(renderHandler, /if \(!isComposingRef\.current\) \{[\s\S]*?updateSuggestionPosition\(\);[\s\S]*?if \(shouldRefreshCompositionAnchor\?\.\(\)\) scheduleHelperTextareaAnchorPin\(\);[\s\S]*?return;/);
+});
+
 test("idle helper textarea uses the CLI-specific anchor before composition starts", () => {
   const handler = source.match(
     /const pinHelperTextareaAnchor = \(\) => \{([\s\S]*?)\n  \};/,
