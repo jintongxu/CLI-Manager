@@ -1,7 +1,7 @@
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { Project } from "../../../shared/types/index";
 import { useI18n } from "../../../shared/i18n/index";
-import { AlertTriangle, ChevronRight, Folder, Pin, Play } from "../../../shared/ui/icons";
+import { AlertTriangle, ChevronRight, Folder, Pin, Play, Sparkles } from "../../../shared/ui/icons";
 import { NodeAppearanceIcon } from "../api/NodeAppearanceIcon";
 import { resolveNodeAppearance } from "../api/nodeAppearance";
 import { ProviderBadgeChip, preventSecondaryPointerFocus } from "./TreeNodeItem";
@@ -185,6 +185,9 @@ function PinnedProjectItem({ project, density }: { project: Project; density: "c
             aria-pressed={projectPinned}
           >
             <Pin size={13} strokeWidth={1.7} fill={projectPinned ? "currentColor" : "none"} />
+          </button>
+          <button type="button" className="icon-btn" onClick={(event) => { event.stopPropagation(); actions.onOpenProjectIdeas(project); }} title={t("projectIdeas.open")} aria-label={t("projectIdeas.open")}>
+            <Sparkles size={14} strokeWidth={1.5} />
           </button>
           <button
             type="button"

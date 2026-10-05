@@ -851,6 +851,96 @@ pub(crate) const MIGRATION_ADD_WORKTREE_METADATA_SQL: &str = "
                 ALTER TABLE worktrees ADD COLUMN description TEXT NOT NULL DEFAULT '';
                 UPDATE worktrees SET display_name = name WHERE trim(display_name) = '';
               ";
+
+pub(crate) const MIGRATION_CREATE_PROJECT_IDEAS_VERSION: i64 = 43;
+pub(crate) const MIGRATION_CREATE_PROJECT_IDEAS_DESCRIPTION: &str = "create_project_ideas";
+pub(crate) const MIGRATION_CREATE_PROJECT_IDEAS_SQL: &str = "
+                CREATE TABLE IF NOT EXISTS project_ideas (
+                    id         TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    content    TEXT NOT NULL,
+                    status     TEXT NOT NULL DEFAULT 'open',
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_project_ideas_project_updated
+                    ON project_ideas(project_id, updated_at DESC);
+              ";
+
+pub(crate) const MIGRATION_ADD_PROJECT_IDEA_ORGANIZED_CONTENT_VERSION: i64 = 44;
+pub(crate) const MIGRATION_ADD_PROJECT_IDEA_ORGANIZED_CONTENT_DESCRIPTION: &str =
+    "add_project_idea_organized_content";
+pub(crate) const MIGRATION_ADD_PROJECT_IDEA_ORGANIZED_CONTENT_SQL: &str =
+    "ALTER TABLE project_ideas ADD COLUMN organized_content TEXT NOT NULL DEFAULT '';";
+
+pub(crate) const MIGRATION_ADD_PROJECT_IDEA_METADATA_VERSION: i64 = 45;
+pub(crate) const MIGRATION_ADD_PROJECT_IDEA_METADATA_DESCRIPTION: &str =
+    "add_project_idea_priority_and_tags";
+pub(crate) const MIGRATION_ADD_PROJECT_IDEA_METADATA_SQL: &str = "
+    ALTER TABLE project_ideas ADD COLUMN priority TEXT NOT NULL DEFAULT 'medium';
+    ALTER TABLE project_ideas ADD COLUMN tags TEXT NOT NULL DEFAULT '[]';
+";
+
+pub(crate) const MIGRATION_ADD_PROJECT_IDEA_TITLE_VERSION: i64 = 46;
+pub(crate) const MIGRATION_ADD_PROJECT_IDEA_TITLE_DESCRIPTION: &str =
+    "add_project_idea_title";
+pub(crate) const MIGRATION_ADD_PROJECT_IDEA_TITLE_SQL: &str = "
+    ALTER TABLE project_ideas ADD COLUMN title TEXT NOT NULL DEFAULT '';
+    UPDATE project_ideas
+    SET title = COALESCE(NULLIF(CASE
+        WHEN instr(content, char(10)) > 0
+            THEN substr(trim(substr(content, 1, instr(content, char(10)) - 1)), 1, 200)
+        ELSE substr(trim(content), 1, 200)
+    END, ''), 'Untitled')
+    WHERE trim(title) = '';
+";
+
+pub(crate) const MIGRATION_ADD_PROJECT_IDEA_WORKTREE_VERSION: i64 = 47;
+pub(crate) const MIGRATION_ADD_PROJECT_IDEA_WORKTREE_DESCRIPTION: &str =
+    "add_project_idea_worktree_id";
+pub(crate) const MIGRATION_ADD_PROJECT_IDEA_WORKTREE_SQL: &str =
+    "ALTER TABLE project_ideas ADD COLUMN worktree_id TEXT;";
+
+pub(crate) const MIGRATION_ADD_PROJECT_IDEA_PLANNING_VERSION: i64 = 48;
+pub(crate) const MIGRATION_ADD_PROJECT_IDEA_PLANNING_DESCRIPTION: &str =
+    "add_project_idea_planning_fields_and_checklist";
+pub(crate) const MIGRATION_ADD_PROJECT_IDEA_SORT_ORDER_VERSION: i64 = 49;
+pub(crate) const MIGRATION_ADD_PROJECT_IDEA_SORT_ORDER_DESCRIPTION: &str =
+    "add_project_idea_sort_order";
+pub(crate) const MIGRATION_ADD_PROJECT_IDEA_SORT_ORDER_SQL: &str = "
+    ALTER TABLE project_ideas ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
+    WITH ranked AS (
+        SELECT id, ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY created_at, id) - 1 AS next_order
+        FROM project_ideas
+    )
+    UPDATE project_ideas
+    SET sort_order = (SELECT next_order FROM ranked WHERE ranked.id = project_ideas.id);
+";
+
+pub(crate) const MIGRATION_ADD_PROJECT_IDEA_PLANNING_SQL: &str = "
+    ALTER TABLE project_ideas ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE project_ideas ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE project_ideas ADD COLUMN acceptance_criteria TEXT NOT NULL DEFAULT '[]';
+    CREATE TABLE IF NOT EXISTS project_idea_checklist_items (
+        id TEXT PRIMARY KEY,
+        idea_id TEXT NOT NULL REFERENCES project_ideas(id) ON DELETE CASCADE,
+        text TEXT NOT NULL,
+        is_completed INTEGER NOT NULL DEFAULT 0,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_project_idea_checklist_idea
+        ON project_idea_checklist_items(idea_id, sort_order, created_at);
+    CREATE TABLE IF NOT EXISTS project_idea_delete_snapshots (
+        idea_id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        snapshot_json TEXT NOT NULL,
+        deleted_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_project_idea_delete_snapshots_project
+        ON project_idea_delete_snapshots(project_id, deleted_at DESC);
+";
 // 按既定版本顺序返回向上迁移注册表，由 SQL 插件在初始化时应用；此函数本身不执行 SQL。
 pub(crate) fn migrations() -> Vec<Migration> {
     vec![
@@ -1208,6 +1298,48 @@ pub(crate) fn migrations() -> Vec<Migration> {
             version: MIGRATION_ADD_WORKTREE_METADATA_VERSION,
             description: MIGRATION_ADD_WORKTREE_METADATA_DESCRIPTION,
             sql: MIGRATION_ADD_WORKTREE_METADATA_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: MIGRATION_CREATE_PROJECT_IDEAS_VERSION,
+            description: MIGRATION_CREATE_PROJECT_IDEAS_DESCRIPTION,
+            sql: MIGRATION_CREATE_PROJECT_IDEAS_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: MIGRATION_ADD_PROJECT_IDEA_ORGANIZED_CONTENT_VERSION,
+            description: MIGRATION_ADD_PROJECT_IDEA_ORGANIZED_CONTENT_DESCRIPTION,
+            sql: MIGRATION_ADD_PROJECT_IDEA_ORGANIZED_CONTENT_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: MIGRATION_ADD_PROJECT_IDEA_METADATA_VERSION,
+            description: MIGRATION_ADD_PROJECT_IDEA_METADATA_DESCRIPTION,
+            sql: MIGRATION_ADD_PROJECT_IDEA_METADATA_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: MIGRATION_ADD_PROJECT_IDEA_TITLE_VERSION,
+            description: MIGRATION_ADD_PROJECT_IDEA_TITLE_DESCRIPTION,
+            sql: MIGRATION_ADD_PROJECT_IDEA_TITLE_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: MIGRATION_ADD_PROJECT_IDEA_WORKTREE_VERSION,
+            description: MIGRATION_ADD_PROJECT_IDEA_WORKTREE_DESCRIPTION,
+            sql: MIGRATION_ADD_PROJECT_IDEA_WORKTREE_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: MIGRATION_ADD_PROJECT_IDEA_PLANNING_VERSION,
+            description: MIGRATION_ADD_PROJECT_IDEA_PLANNING_DESCRIPTION,
+            sql: MIGRATION_ADD_PROJECT_IDEA_PLANNING_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: MIGRATION_ADD_PROJECT_IDEA_SORT_ORDER_VERSION,
+            description: MIGRATION_ADD_PROJECT_IDEA_SORT_ORDER_DESCRIPTION,
+            sql: MIGRATION_ADD_PROJECT_IDEA_SORT_ORDER_SQL,
             kind: MigrationKind::Up,
         },
     ]

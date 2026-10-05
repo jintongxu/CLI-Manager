@@ -3,6 +3,7 @@ import { useShallow } from "zustand/shallow";
 import type { DragEndEvent } from "@dnd-kit/core";
 import { invoke } from "@tauri-apps/api/core";
 import { useProjectStore } from "../api/projectStore";
+import { useProjectIdeaStore } from "../api/projectIdeaStore";
 import { useProjectLocate } from "./useProjectLocate";
 import { useTerminalStore, type SessionStatus } from "../../terminal/state";
 import { useFileExplorerStore } from "../../files/api/fileExplorerStore";
@@ -894,8 +895,6 @@ export function useSidebarController({
       return;
     }
 
-    // 项目树的“打开终端”在需要隔离时始终先询问任务名称/说明，
-    // 避免 auto/always 策略直接创建默认名称的 Worktree。
     setWorktreePrompt({
       project,
       targetPaneId,
@@ -903,7 +902,6 @@ export function useSidebarController({
       description: "",
     });
   };
-
   const openProjects = async (items: Project[]) => {
     if (items.length === 0) return;
     if (compactMode || useExternalTerminal) {
@@ -915,16 +913,10 @@ export function useSidebarController({
       await openProjectInternal(project);
     }
   };
-
-  const handleOpen = useCallback(
-    async (project: Project) => {
-      await openProjects([project]);
-    },
-    [openProjects]
-  );
-
-  const handleNewProjectTerminal = useCallback(
-    async (project: Project) => {
+  const handleOpen = useCallback(async (project: Project) => {
+    await openProjects([project]);
+  }, [openProjects]);
+  const handleNewProjectTerminal = useCallback(async (project: Project) => {
       if (compactMode || useExternalTerminal) {
         if (rejectUnsupportedCapability(project, "externalTerminal")) return;
         await openWindowsTerminal([{ title: project.name, cwd: resolveProjectPath(project, groups), shell: project.shell || useSettingsStore.getState().defaultShell }]);
@@ -939,7 +931,6 @@ export function useSidebarController({
     },
     [closeHistory, compactMode, createSession, groups, onTerminalScopeChange, projectScopedTerminalViewEnabled, rejectUnsupportedCapability, useExternalTerminal]
   );
-
   const handleNewWorktreeTerminal = useCallback(
     async (project: Project, worktree: WorktreeRecord) => {
       if (rejectMissingWorktree(worktree)) return;
@@ -957,7 +948,6 @@ export function useSidebarController({
     },
     [closeHistory, compactMode, createSession, onTerminalScopeChange, projectScopedTerminalViewEnabled, useExternalTerminal]
   );
-
   const handleSplitProject = useCallback(
     async (project: Project, direction: TerminalPaneSplitDirection) => {
       if (!activeSessionId || compactMode || useExternalTerminal) return;
@@ -1776,6 +1766,7 @@ export function useSidebarController({
       onSelectGroup: handleSelectGroup,
       onSelectGroupScope: handleSelectGroupScope,
       onOpenProject: handleOpen,
+      onOpenProjectIdeas: (project) => useProjectIdeaStore.getState().openProjectIdeas(project.id),
       onStartGroup: handleStartGroup,
       onRequestDeleteProject: handleRequestDeleteProject,
       onRequestDeleteGroup: handleRequestDeleteGroup,
@@ -1915,6 +1906,7 @@ export function useSidebarController({
     useExternalTerminal,
     openProjectExternally,
     handleNewProjectTerminal,
+    sessions,
     activeSessionId,
     handleSplitProject,
     handleCloneProject,

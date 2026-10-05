@@ -26,6 +26,7 @@ export interface TreeActions {
   onSelectGroup: (e: ReactMouseEvent, groupId: string, forceExpanded: boolean) => void;
   onSelectGroupScope: (groupId: string) => void;
   onOpenProject: (p: Project) => void;
+  onOpenProjectIdeas: (project: Project) => void;
   onStartGroup: (groupId: string) => void;
   onRequestDeleteProject: (p: Project) => void;
   onRequestDeleteGroup: (groupId: string, groupName: string) => void;

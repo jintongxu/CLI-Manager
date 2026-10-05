@@ -15,17 +15,12 @@ import { useProjectStore } from "../../projects/api/projectStore";
 import { useFileExplorerStore } from "../../files/api/fileExplorerStore";
 import { useI18n } from "../../../shared/i18n/index";
 import { logError } from "../../../shared/platform/logger";
-import {
-  DND_ACTIVATION_CONSTRAINT, parseWorkspanDragId, resolveWorkspanDragHoverTarget,
-  WORKSPAN_DRAG_AUTO_ACTIVATE_MS,
-} from "../../workspace/api/dragInteraction";
+import { DND_ACTIVATION_CONSTRAINT, parseWorkspanDragId, resolveWorkspanDragHoverTarget, WORKSPAN_DRAG_AUTO_ACTIVATE_MS } from "../../workspace/api/dragInteraction";
 import type { TerminalPaneLeaf, TerminalPaneSplitDirection } from "../api/terminalPaneTree";
 import { collectPaneLeaves, filterPaneTreeBySessionIds, findFirstSessionId } from "../api/terminalPaneTree";
 import { collectWorkspanSessionIds } from "../api/terminalWorkspan";
 import { type BackgroundTaskMeta } from "../components/BackgroundTasksPanel";
-import {
-  TERMINAL_SIDE_PANEL_TAB_ORDER, type TerminalSidePanelTab,
-} from "../components/TerminalSidePanel";
+import { TERMINAL_SIDE_PANEL_TAB_ORDER, type TerminalSidePanelTab } from "../components/TerminalSidePanel";
 import { openWindowsTerminal } from "../api/externalTerminal";
 import { createAnonymousPiSessionHandler } from "../api/anonymousPiSession";
 import { resolveProjectPath } from "../../projects/api/groupPath";
@@ -43,23 +38,14 @@ import { useAppConfirm } from "../../../shared/ui/useAppConfirm";
 import { useHistoryStore } from "../../history/index";
 import { useGitWorkspaceStore } from "../../git/api/gitWorkspaceStore";
 import { useSaveSessionToSidebar } from "../../projects/api/useSaveSessionToSidebar";
-import {
-  shouldConfirmTerminalTabClose, TERMINAL_TAB_CLOSE_REQUEST_EVENT, type TerminalTabCloseRequestDetail,
-} from "../api/terminalCloseConfirm";
+import { shouldConfirmTerminalTabClose, TERMINAL_TAB_CLOSE_REQUEST_EVENT, type TerminalTabCloseRequestDetail } from "../api/terminalCloseConfirm";
 import type { Project, TerminalSession, WorktreeRecord } from "../../../shared/types/index";
 import type { NativeProviderAppType } from "../../settings/api/nativeProviderTypes";
 import { getTerminalTheme, isLightTerminalTheme } from "../../../shared/lib/terminalThemes";
 import { getTerminalSidePanelSkinStyle } from "../../stats/api/termStatsUi";
-import {
-  findWorktreeForSession, isSameProjectFileContext, projectWithWorktreeProviderOverrides,
-  resolveProjectForSessionFileContext,
-} from "../api/terminalProject";
-import {
-  ALL_TERMINALS_SCOPE, collectProjectIdsForGroup, sessionMatchesTerminalScope,
-} from "../api/terminalScope";
-import {
-  TERMINAL_FILE_NAVIGATION_REQUEST_EVENT, type TerminalFileNavigationRequest,
-} from "../lib/terminalFileNavigation";
+import { findWorktreeForSession, isSameProjectFileContext, projectWithWorktreeProviderOverrides, resolveProjectForSessionFileContext } from "../api/terminalProject";
+import { ALL_TERMINALS_SCOPE, collectProjectIdsForGroup, sessionMatchesTerminalScope } from "../api/terminalScope";
+import { TERMINAL_FILE_NAVIGATION_REQUEST_EVENT, type TerminalFileNavigationRequest } from "../lib/terminalFileNavigation";
 import { consumeTerminalFileDragPanelSyncSuppression } from "../api/terminalFileDrag";
 import {
   WORKSPAN_TABBAR_END_DROP_ID, type WorkspanTabModel, type WorkspanTabOverflowState,
@@ -737,7 +723,8 @@ export function useTerminalTabsController({
   const handleNewAnonymousPi = useMemo(
     () => createAnonymousPiSessionHandler(createSession, closeHistory, setActiveWorkspaceTab),
     [closeHistory, createSession],
-  ); const handleOpenScopedTerminal = useCallback(async () => {
+  );
+  const handleOpenScopedTerminal = useCallback(async () => {
     if (!scopedProject || useExternalTerminal) return;
 
     if (terminalScopeValue.kind === "worktree") {
@@ -1723,6 +1710,8 @@ export function useTerminalTabsController({
     systemResourcesPanelActive,
     handleNewTab,
     handleNewAnonymousPi,
+    projects,
+    activeProject: filePanelProject,
     terminalSidePanelSide,
     terminalActionSidebarStyle,
     onToggleFullscreen,

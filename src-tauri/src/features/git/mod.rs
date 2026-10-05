@@ -1048,28 +1048,18 @@ pub async fn git_unstage_file(project_path: String, file_path: String) -> Result
     .map_err(|e| format!("task_failed: {e}"))?
 }
 
-/// 全部暂存：add_all 收新增/修改/未跟踪，update_all 补已跟踪文件的删除。
+/// 全部暂存：通过仓库工作目录执行 Git CLI，收纳新增、修改、删除和未跟踪文件。
+///
+/// 不使用 libgit2 的 `index.add_all(["*"])`：通配符由 libgit2 解释时会遗漏
+/// 某些路径（尤其是嵌套目录、Unicode/空格路径），而 CLI 能按 Git 自身的路径规则
+/// 处理整个工作树。参数数组和 `--` 保证项目路径及文件名不会经过 shell 解析。
 #[tauri::command]
-// 将新增、修改与删除批量同步到索引并一次写入。
+// 在本地、WSL 挂载路径或 WSL Linux 路径统一执行 git add --all --。
 pub async fn git_stage_all(project_path: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
-        let effective_project_path = effective_git_project_path(&project_path);
-        let path = Path::new(&effective_project_path);
-        if !crate::wsl::is_wsl_config_dir(&project_path) && !path.exists() {
-            return Err("path_not_found".to_string());
-        }
-        let repo = open_git_repo(path).map_err(|e| format!("open_repo_failed: {e}"))?;
-        let mut index = repo.index().map_err(|e| format!("index_failed: {e}"))?;
-        index
-            .add_all(["*"], git2::IndexAddOption::DEFAULT, None)
-            .map_err(|e| format!("stage_all_failed: {e}"))?;
-        index
-            .update_all(["*"], None)
-            .map_err(|e| format!("stage_all_update_failed: {e}"))?;
-        index
-            .write()
-            .map_err(|e| format!("index_write_failed: {e}"))?;
-        Ok(())
+        run_git_cli(&project_path, &["add", "--all", "--"])
+            .map(|_| ())
+            .map_err(|e| format!("stage_all_failed: {e}"))
     })
     .await
     .map_err(|e| format!("task_failed: {e}"))?
