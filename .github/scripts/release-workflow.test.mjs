@@ -28,13 +28,13 @@ assert.doesNotMatch(releaseWorkflow, /tauri:build:local/);
 
 assert.match(windowsWorkflow, /^name: Windows Release \(manual\)$/m);
 assert.match(windowsWorkflow, /workflow_dispatch:/);
-assert.match(windowsWorkflow, /default: V1\.4\.2/);
+assert.match(windowsWorkflow, /default: V1\.4\.3/);
 assert.match(windowsWorkflow, /uses: \.\/\.github\/workflows\/release\.yml/);
 assert.match(windowsWorkflow, /secrets: inherit/);
 assert.doesNotMatch(windowsWorkflow, /R2_PUBLIC_BASE_URL|r2-release-config|aws s3 cp/);
 
 const config = JSON.parse(readFileSync(new URL("../../src-tauri/tauri.conf.json", import.meta.url), "utf8"));
-assert.equal(config.version, "1.4.2");
+assert.equal(config.version, "1.4.3");
 assert.equal(config.bundle.createUpdaterArtifacts, true);
 assert.deepEqual(config.plugins.updater.endpoints, [
   "https://github.com/jintongxu/CLI-Manager/releases/latest/download/latest.json",
