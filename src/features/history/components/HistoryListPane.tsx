@@ -1103,7 +1103,7 @@ export function HistoryListPane({
                           : "min-h-[68px] rounded-xl border-border/70 bg-surface-container-lowest px-2.5 py-2",
                         "cursor-pointer",
                       ].join(" ")}
-                      style={{ backgroundColor: row.item.sessionKey === activeSessionKey ? "var(--bg-tertiary)" : undefined }}
+                      data-selected={row.item.sessionKey === activeSessionKey ? "true" : "false"}
                     >
                       <button
                         type="button"

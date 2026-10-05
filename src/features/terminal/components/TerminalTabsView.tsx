@@ -175,7 +175,7 @@ export function TerminalTabsView({
       <div className="relative flex-1 min-h-0 overflow-hidden">
         {historyOpen && (
           <div
-            className={`absolute min-h-0 overflow-hidden ${fullscreen ? "inset-x-0 bottom-0 top-0" : "inset-x-3 bottom-3 top-3"}`}
+            className="absolute inset-0 min-h-0 overflow-hidden"
             style={{ display: historyActive ? "block" : "none" }}
           >
             <Suspense fallback={null}>
@@ -185,7 +185,7 @@ export function TerminalTabsView({
         )}
         {gitWorkspaceOpen && (
           <div
-            className={`absolute z-[2] min-h-0 overflow-hidden border-t shadow-2xl ${fullscreen ? "inset-x-0 bottom-0" : "inset-x-3 bottom-3"}`}
+            className="absolute inset-x-0 bottom-0 z-[2] min-h-0 overflow-hidden border-t shadow-2xl"
             style={{ height: gitWorkspaceHeight, borderColor: "var(--border-subtle, rgba(255,255,255,0.12))" }}
           >
             <div

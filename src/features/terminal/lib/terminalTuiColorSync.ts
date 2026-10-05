@@ -24,7 +24,7 @@ export interface TerminalTuiColorSyncOptions {
 
 export interface TerminalTuiColorSyncController {
   normalize: (terminal: Terminal) => void;
-  schedule: (terminal: Terminal | null) => void;
+  schedule: (terminal: Terminal | null, force?: boolean) => void;
   reset: () => void;
   dispose: () => void;
 }
@@ -34,6 +34,7 @@ export function createTerminalTuiColorSyncController(
 ): TerminalTuiColorSyncController {
   let frameId: number | null = null;
   let tuiSessionDetected = false;
+  let lastNormalizedViewportY: number | null = null;
 
   const normalize = (terminal: Terminal) => {
     const options = getOptions();
@@ -72,10 +73,14 @@ export function createTerminalTuiColorSyncController(
       tuiUserColor: options.tuiUserColor,
       tuiAssistantColor: options.tuiAssistantColor,
     });
+    lastNormalizedViewportY = terminal.buffer?.active?.viewportY ?? null;
   };
 
-  const schedule = (terminal: Terminal | null) => {
-    if (!terminal || frameId !== null) return;
+  const schedule = (terminal: Terminal | null, force = false) => {
+    if (!terminal) return;
+    const viewportY = terminal.buffer?.active?.viewportY ?? null;
+    if (!force && viewportY !== null && frameId === null && lastNormalizedViewportY === viewportY) return;
+    if (frameId !== null) return;
     frameId = window.requestAnimationFrame(() => {
       frameId = null;
       normalize(terminal);
@@ -84,6 +89,7 @@ export function createTerminalTuiColorSyncController(
 
   const reset = () => {
     tuiSessionDetected = false;
+    lastNormalizedViewportY = null;
   };
 
   const dispose = () => {

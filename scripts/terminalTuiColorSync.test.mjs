@@ -130,6 +130,27 @@ test("hidden terminal skips scheduled TUI color scanning until it becomes visibl
   assert.equal(tuiDisplayStub.normalizeCalls, 1);
 });
 
+test("scheduled color sync skips repeated renders in the same viewport", (t) => {
+  tuiDisplayStub.resetNormalizeCalls();
+  const options = { ...createOptions(), isVisible: true };
+  const controller = createTerminalTuiColorSyncController(() => options);
+  const terminal = { buffer: { active: { viewportY: 12 } } };
+  t.after(() => controller.dispose());
+
+  controller.schedule(terminal);
+  flushNextAnimationFrame();
+  assert.equal(tuiDisplayStub.normalizeCalls, 1);
+
+  controller.schedule(terminal);
+  assert.equal(animationFrames.size, 0);
+  assert.equal(tuiDisplayStub.normalizeCalls, 1);
+
+  terminal.buffer.active.viewportY = 13;
+  controller.schedule(terminal);
+  flushNextAnimationFrame();
+  assert.equal(tuiDisplayStub.normalizeCalls, 2);
+});
+
 test("light theme Claude and Pi sessions request dark block erasure without a TUI signature", (t) => {
   tuiDisplayStub.resetNormalizeCalls();
   cliContextStub.setDetectedContexts({ pi: true });

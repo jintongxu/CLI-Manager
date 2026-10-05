@@ -78,8 +78,6 @@ export const en: Record<keyof typeof zh, string> = {
   "sidebar.openStats": "Open historical usage stats dashboard",
   "sidebar.settings": "Settings",
   "sidebar.openSettings": "Open settings",
-  "sidebar.tokenStation": "AI token station",
-  "sidebar.openTokenStation": "Open AI token station sponsors",
   "sidebar.hook.refreshFailed": "Failed to refresh Hook status",
   "sidebar.hook.chooseConfigDir": "Select a Hook config directory first",
   "sidebar.hook.reinstalled": "Hook reinstalled",

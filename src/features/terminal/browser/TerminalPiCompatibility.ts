@@ -11,6 +11,7 @@ import { createPiTerminalDiagnostics } from "./TerminalPiDiagnostics";
 import {
   resolvePiImeCompositionAnchor,
   resolvePiImeTextareaAnchor,
+  isPiImeCompositionAnchorValid,
 } from "./TerminalPiIme";
 import { createPiOutputFilter } from "./TerminalPiOutputFilter";
 
@@ -22,6 +23,7 @@ export interface PiTerminalCompatibility {
   updateContext(context: TerminalCliContext): void;
   resolveImeCompositionAnchor(terminal: Terminal, anchor: TerminalImeAnchor): TerminalImeAnchor;
   resolveImeTextareaAnchor(terminal: Terminal, anchor: TerminalImeAnchor): TerminalImeAnchor;
+  isImeCompositionAnchorValid(terminal: Terminal, anchor: TerminalImeAnchor): boolean;
   shouldRefreshImeCompositionAnchor(): boolean;
   transformOutput(text: string): string;
   onFrame(frame: TerminalBinaryFrame, rawText: string, normalizedText: string): void;
@@ -60,6 +62,9 @@ export function createPiTerminalCompatibility(
     resolveImeTextareaAnchor(terminal, anchor) {
       return piActive ? resolvePiImeTextareaAnchor(terminal, anchor) : anchor;
     },
+    isImeCompositionAnchorValid(terminal, anchor) {
+      return piActive ? isPiImeCompositionAnchorValid(terminal, anchor) : true;
+    },
     shouldRefreshImeCompositionAnchor() {
       return piActive;
     },
@@ -87,4 +92,8 @@ export function createPiTerminalCompatibility(
 }
 
 export { isPiToolBackgroundRgb } from "./TerminalPiAnsiTransform";
-export { resolvePiImeCompositionAnchor, resolvePiImeTextareaAnchor } from "./TerminalPiIme";
+export {
+  resolvePiImeCompositionAnchor,
+  resolvePiImeTextareaAnchor,
+  isPiImeCompositionAnchorValid,
+} from "./TerminalPiIme";

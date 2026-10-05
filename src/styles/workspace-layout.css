@@ -24,8 +24,8 @@
 .ui-workspace-main-layout[data-project-sidebar-side="right"] > .ui-sidebar-shell {
   order: 2;
   border-right: 0;
-  border-left: 1px solid color-mix(in srgb, var(--border) 18%, transparent);
-  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--border) 12%, transparent);
+  border-left: 1px solid color-mix(in srgb, var(--border) 12%, transparent);
+  box-shadow: none;
 }
 
 .ui-workspace-main-layout[data-project-sidebar-side="right"] > .ui-main-shell {
@@ -33,7 +33,7 @@
 }
 
 [data-theme="light"] .ui-workspace-main-layout[data-project-sidebar-side="right"] > .ui-sidebar-shell {
-  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--border) 12%, transparent);
+  box-shadow: none;
 }
 
 .ui-workspan-terminal-body {
@@ -50,9 +50,9 @@
   display: none;
 }
 
-/* Auxiliary panels keep the separator on the edge facing the terminal. */
+/* Auxiliary panels keep a subtle separator on the edge facing the terminal. */
 .ui-terminal-well > .ui-terminal-side-panel-frame[data-dock-side="left"] {
-  box-shadow: inset -1px 0 0 color-mix(in srgb, #000 18%, transparent);
+  box-shadow: inset -1px 0 0 color-mix(in srgb, var(--border) 10%, transparent);
 }
 
 .ui-workspace-background-layer {
@@ -107,7 +107,7 @@
 .ui-workspace-background-layer::after {
   content: "";
   z-index: 1;
-  --workspace-bg-status-scrim-alpha: clamp(0, calc(0.46 - var(--workspace-bg-darken, 0)), 0.46);
+  --workspace-bg-status-scrim-alpha: clamp(0, calc(0.52 - var(--workspace-bg-darken, 0)), 0.52);
   background-color: rgba(
     var(--workspace-bg-overlay-color, 0, 0, 0),
     var(--workspace-bg-darken, 0)
@@ -182,7 +182,8 @@
 .ui-workspace-background-root[data-workspace-background="true"] .ui-sidebar-shell .ui-tree-project[data-selected="true"],
 .ui-workspace-background-root[data-workspace-background="true"] .ui-sidebar-shell .ui-tree-collapsed-item[data-selected="true"],
 .ui-workspace-background-root[data-workspace-background="true"] .ui-sidebar-shell .ui-tree-group[data-selected="true"] {
-  background: color-mix(in srgb, var(--primary) 14%, transparent) !important;
+  background: color-mix(in srgb, var(--primary) 18%, transparent) !important;
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--primary) 68%, transparent);
 }
 
 .ui-workspace-background-root[data-workspace-background="true"] .ui-main-shell,
@@ -260,6 +261,42 @@
   background: var(--surface-container-lowest) !important;
   background-color: var(--surface-container-lowest) !important;
   box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--border) 24%, transparent) !important;
+}
+
+/* Settings leaves the native title bar visible as a slim chrome strip. Give
+   it the same layered surface treatment instead of a disconnected dark band. */
+.ui-workspace-background-root:has(.ui-workspace-settings-overlay) .window-titlebar {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-container-high) 92%, var(--primary) 8%),
+    var(--surface-container-low)
+  ) !important;
+  background-color: var(--surface-container-low) !important;
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-container-high) 92%, var(--primary) 8%),
+    var(--surface-container-low)
+  ) !important;
+  box-shadow:
+    inset 0 -1px 0 color-mix(in srgb, var(--primary) 28%, transparent),
+    0 2px 14px color-mix(in srgb, var(--on-surface) 12%, transparent) !important;
+}
+
+[data-theme="light"] .ui-workspace-background-root:has(.ui-workspace-settings-overlay) .window-titlebar {
+  background: linear-gradient(
+    180deg,
+    var(--surface-container-lowest),
+    color-mix(in srgb, var(--surface-container-low) 94%, var(--primary) 6%)
+  ) !important;
+  background-color: var(--surface-container-lowest) !important;
+  background-image: linear-gradient(
+    180deg,
+    var(--surface-container-lowest),
+    color-mix(in srgb, var(--surface-container-low) 94%, var(--primary) 6%)
+  ) !important;
+  box-shadow:
+    inset 0 -1px 0 color-mix(in srgb, var(--primary) 22%, transparent),
+    0 2px 12px color-mix(in srgb, var(--on-surface) 8%, transparent) !important;
 }
 
 /* In workspace mode XTerm keeps its transparency theme but does not create a

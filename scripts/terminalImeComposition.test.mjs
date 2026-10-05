@@ -101,10 +101,10 @@ test("a new composition or disposal cancels stale deferred cleanup", () => {
   );
 });
 
-test("terminal resize invalidates the frozen composition anchor", () => {
+test("terminal resize refreshes the frozen composition anchor without accepting an invalid fallback", () => {
   assert.match(
     source,
-    /const resizeDisposable = terminal\.onResize\(\(\) => \{[\s\S]*?if \(!isComposingRef\.current\) \{[\s\S]*?scheduleHelperTextareaAnchorPin\(\);[\s\S]*?return;[\s\S]*?\}[\s\S]*?compositionAnchorCell = null;[\s\S]*?scheduleCompositionAnchorFix\(\);[\s\S]*?\}\);/,
+    /const resizeDisposable = terminal\.onResize\(\(\) => \{[\s\S]*?if \(!isComposingRef\.current\) \{[\s\S]*?scheduleHelperTextareaAnchorPin\(\);[\s\S]*?return;[\s\S]*?\}[\s\S]*?refreshCompositionAnchorIfNeeded\(\);[\s\S]*?scheduleCompositionAnchorFix\(\);[\s\S]*?\}\);/,
   );
   assert.match(source, /resizeDisposable\.dispose\(\);/);
 });
@@ -126,6 +126,14 @@ test("composition anchor resolver runs after the generic fallback", () => {
     source,
     /const fallbackAnchor = resolveTerminalImeCompositionAnchor\(terminal\);[\s\S]*?return resolveCompositionAnchor\?\.\(terminal, fallbackAnchor\) \?\? fallbackAnchor;/,
   );
+});
+
+test("composition start does not freeze an invalid CLI anchor", () => {
+  assert.match(
+    source,
+    /const initialAnchor = resolveCompositionAnchorCell\(\);[\s\S]*?compositionAnchorCell = isCompositionAnchorValid\?\.\(terminal, initialAnchor\) === false\s*\n\s*\? null\s*\n\s*:\s*initialAnchor;/,
+  );
+  assert.match(source, /if \(isCompositionAnchorValid\?\.\(terminal, anchor\) === false\) return;/);
 });
 
 test("Process key synchronously restores the helper textarea before composition starts", () => {

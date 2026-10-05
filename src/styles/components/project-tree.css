@@ -44,6 +44,7 @@
 
 .ui-tree-project {
   position: relative;
+  min-height: 30px;
   border: 1px solid transparent;
   /* 常态不铺底：一屏数十行时，逐行铺底会堆出"每行一块卡片"的沉重感。
      填充只保留给 hover / selected 这类真正需要表态的状态。 */
@@ -72,8 +73,8 @@
    单层 primary 底。去掉描边与 inset 阴影，避免选中的瞬间"长出一个框"。 */
 .ui-tree-project[data-selected="true"] {
   border-color: transparent;
-  background: color-mix(in srgb, var(--primary) 12%, transparent);
-  box-shadow: none;
+  background: color-mix(in srgb, var(--primary) 15%, transparent);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--primary) 62%, transparent);
 }
 
 [data-theme="dark"] .ui-tree-project:hover {
@@ -81,7 +82,7 @@
 }
 
 [data-theme="dark"] .ui-tree-project[data-selected="true"]:hover {
-  background-color: color-mix(in srgb, var(--primary) 17%, transparent);
+  background-color: color-mix(in srgb, var(--primary) 20%, transparent);
 }
 
 [data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-tree-project:hover {
@@ -89,9 +90,9 @@
 }
 
 [data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-tree-project[data-selected="true"] {
-  background: color-mix(in srgb, #66d9ef 10%, #111c2d 90%);
-  border-color: color-mix(in srgb, #66d9ef 20%, transparent);
-  box-shadow: inset 3px 0 0 #66d9ef;
+  background: color-mix(in srgb, #66d9ef 14%, #111c2d 86%);
+  border-color: transparent;
+  box-shadow: inset 2px 0 0 color-mix(in srgb, #66d9ef 78%, transparent);
 }
 
 [data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-tree-project[data-selected="true"]:hover {
@@ -475,10 +476,27 @@
 
 .ui-tree-status-dot {
   box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 14%, transparent);
+  transition: box-shadow var(--animate-duration-fast), transform var(--animate-duration-fast);
+}
+
+.ui-tree-project:hover .ui-tree-status-dot,
+.ui-tree-project[data-selected="true"] .ui-tree-status-dot {
+  box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 18%, transparent);
+  transform: scale(1.08);
 }
 
 [data-theme="dark"] .ui-tree-status-dot {
   box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 10%, transparent);
+}
+
+@media (max-width: 860px) {
+  .ui-tree-project {
+    min-height: 28px;
+  }
+
+  .ui-tree-meta-chip {
+    padding-inline: 0.3rem;
+  }
 }
 
 .ui-tree-meta-chip {

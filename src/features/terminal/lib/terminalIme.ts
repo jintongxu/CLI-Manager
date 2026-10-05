@@ -14,6 +14,11 @@ export type {
   TerminalImeTextareaAnchorResolver,
 } from "./terminalImeAnchor";
 
+export type TerminalImeAnchorValidator = (
+  terminal: Terminal,
+  anchor: TerminalImeAnchor,
+) => boolean;
+
 const IME_PROCESS_KEY_CODE = 229;
 const IME_PROCESS_KEY_RECOVERY_WINDOW_MS = 400;
 const IME_COMPOSITION_END_SUPPRESS_WINDOW_MS = 80;
@@ -54,6 +59,7 @@ export interface TerminalImeControllerOptions {
   onCompositionCommitted: (textareaValue: string) => void;
   resolveCompositionAnchor?: TerminalImeAnchorResolver;
   resolveTextareaAnchor?: TerminalImeTextareaAnchorResolver;
+  isCompositionAnchorValid?: TerminalImeAnchorValidator;
   shouldRefreshCompositionAnchor?: () => boolean;
 }
 
@@ -74,6 +80,7 @@ export const attachTerminalIme = ({
   onCompositionCommitted,
   resolveCompositionAnchor,
   resolveTextareaAnchor,
+  isCompositionAnchorValid,
   shouldRefreshCompositionAnchor,
 }: TerminalImeControllerOptions) => {
   const textarea = container.querySelector(".xterm-helper-textarea") as HTMLTextAreaElement | null;
@@ -148,8 +155,10 @@ export const attachTerminalIme = ({
   };
 
   const refreshCompositionAnchorIfNeeded = () => {
-    if (shouldRefreshCompositionAnchor?.()) {
-      compositionAnchorCell = resolveCompositionAnchorCell();
+    if (!shouldRefreshCompositionAnchor?.()) return;
+    const nextAnchor = resolveCompositionAnchorCell();
+    if (!isCompositionAnchorValid || isCompositionAnchorValid(terminal, nextAnchor)) {
+      compositionAnchorCell = nextAnchor;
     }
   };
 
@@ -158,6 +167,7 @@ export const attachTerminalIme = ({
     const compositionView = container.querySelector(".composition-view") as HTMLElement | null;
     if (!textarea && !compositionView) return;
     const anchor = compositionAnchorCell ?? resolveCompositionAnchorCell();
+    if (isCompositionAnchorValid?.(terminal, anchor) === false) return;
     const textareaAnchor = resolveTextareaAnchor?.(terminal, anchor) ?? anchor;
     const cell = estimateCellSize();
     const left = String(Math.max(0, anchor.x * cell.width)) + "px";
@@ -292,7 +302,10 @@ export const attachTerminalIme = ({
     isComposingRef.current = true;
     clearSuggestion();
     lastImeProcessKeyAt = -1;
-    compositionAnchorCell = resolveCompositionAnchorCell();
+    const initialAnchor = resolveCompositionAnchorCell();
+    compositionAnchorCell = isCompositionAnchorValid?.(terminal, initialAnchor) === false
+      ? null
+      : initialAnchor;
     cancelHelperTextareaAnchorPin();
     captureCompositionScroll();
     scheduleCompositionScrollRestore();
@@ -355,7 +368,7 @@ export const attachTerminalIme = ({
       scheduleHelperTextareaAnchorPin();
       return;
     }
-    compositionAnchorCell = null;
+    refreshCompositionAnchorIfNeeded();
     scheduleCompositionScrollRestore();
     scheduleCompositionAnchorFix();
   });

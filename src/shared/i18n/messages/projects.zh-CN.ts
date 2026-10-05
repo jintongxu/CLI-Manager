@@ -76,8 +76,6 @@ export const zh = {
   "sidebar.openStats": "打开历史用量统计看板",
   "sidebar.settings": "设置",
   "sidebar.openSettings": "打开设置",
-  "sidebar.tokenStation": "AI Token 中转站",
-  "sidebar.openTokenStation": "打开 AI Token 中转站赞助商列表",
   "sidebar.hook.refreshFailed": "刷新 Hook 状态失败",
   "sidebar.hook.chooseConfigDir": "请先选择 Hook 配置目录",
   "sidebar.hook.reinstalled": "Hook 已重新安装",

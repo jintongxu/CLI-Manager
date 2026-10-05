@@ -51,6 +51,7 @@ import { noteTerminalEnter } from "../lib/terminalLatencyDiagnostics";
 import {
   attachTerminalIme,
   type TerminalImeAnchorResolver,
+  type TerminalImeAnchorValidator,
   type TerminalImeTextareaAnchorResolver,
 } from "../lib/terminalIme";
 import {
@@ -192,6 +193,7 @@ interface TerminalInputImeOptions {
   onCompositionCommitted: (textareaValue: string) => void;
   resolveCompositionAnchor?: TerminalImeAnchorResolver;
   resolveTextareaAnchor?: TerminalImeTextareaAnchorResolver;
+  isCompositionAnchorValid?: TerminalImeAnchorValidator;
   shouldRefreshCompositionAnchor?: () => boolean;
 }
 
@@ -852,6 +854,7 @@ export function useTerminalInput({
       onCompositionCommitted,
       resolveCompositionAnchor,
       resolveTextareaAnchor,
+      isCompositionAnchorValid,
       shouldRefreshCompositionAnchor,
     }: TerminalInputImeOptions,
   ) => {
@@ -874,6 +877,7 @@ export function useTerminalInput({
       onCompositionCommitted,
       resolveCompositionAnchor,
       resolveTextareaAnchor,
+      isCompositionAnchorValid,
       shouldRefreshCompositionAnchor,
     });
   };
