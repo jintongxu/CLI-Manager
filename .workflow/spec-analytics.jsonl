@@ -1,2 +1,3 @@
 {"type":"cli","id":"CLI-1791015319479-1","timestamp":"2026-10-03T08:15:19.479Z","command":"load","args":{"type":"spec","id":"spec:global:ui-conventions"}}
 {"type":"cli","id":"CLI-1791031997859-1","timestamp":"2026-10-03T12:53:17.859Z","command":"load","args":{"type":"spec","id":"spec:global:ui-conventions"}}
+{"type":"cli","id":"CLI-1791166935549-1","timestamp":"2026-10-05T02:22:15.549Z","command":"load","args":{"type":"spec","id":"spec:global:review-standards"}}

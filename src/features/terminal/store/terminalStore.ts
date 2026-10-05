@@ -608,17 +608,21 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       }
 
       if (launchStartupCmd && !launch.startupHandledByLaunch) {
-        setTimeout(() => {
-          terminalProcessManager.write(sessionId, formatStartupInputForPty(launchStartupCmd, normalizeShellKey(resolvedShell) ?? null)).catch((err) => {
-            toast.error("启动命令写入失败", { description: String(err) });
-            logError("Failed to write startup command", {
-              sessionId,
-              hasStartupCmd: true,
-              startupCmdSummary: summarizeStartupCmd(launchStartupCmd),
-              err,
-            });
+        try {
+          await terminalProcessManager.write(
+            sessionId,
+            formatStartupInputForPty(launchStartupCmd, normalizeShellKey(resolvedShell) ?? null),
+          );
+        } catch (err) {
+          toast.error("启动命令写入失败", { description: String(err) });
+          logError("Failed to write startup command", {
+            sessionId,
+            hasStartupCmd: true,
+            startupCmdSummary: summarizeStartupCmd(launchStartupCmd),
+            err,
           });
-        }, 500);
+          throw err;
+        }
       }
 
       return sessionId;

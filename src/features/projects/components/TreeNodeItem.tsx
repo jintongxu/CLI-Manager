@@ -6,7 +6,7 @@ import type { TreeNode as TNode } from "../../../shared/types/index";
 import { countProjectsInNode, type ProviderBadge } from "../api/projectStore";
 import { getWorktreeDisplayName } from "../api/worktreeMetadata";
 import { useTreeActions, worktreeListCollapseId } from "./TreeContext";
-import { ChevronRight, AlertTriangle, Link2, Pin, Play } from "../../../shared/ui/icons";
+import { ChevronRight, AlertTriangle, Link2, Pin, Play, Sparkles } from "../../../shared/ui/icons";
 import { VendorIcon, inferVendor } from "../../../shared/ui/VendorIcon";
 import { WorktreeIcon } from "../../../shared/ui/WorktreeIcon";
 import { useI18n } from "../../../shared/i18n/index";
@@ -397,7 +397,17 @@ function TreeNodeItemImpl({
             >
               <Pin size={13} strokeWidth={1.7} fill={projectPinned ? "currentColor" : "none"} />
             </button>
-            <button onClick={(e) => { e.stopPropagation(); actions.onOpenProject(p); }} className="icon-btn" style={{ color: "var(--success)", opacity: 0.7 }} title={t("sidebar.tree.openTerminal")}>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); actions.onOpenProjectIdeas(p); }}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="icon-btn"
+              title={t("projectIdeas.open")}
+              aria-label={t("projectIdeas.open")}
+            >
+              <Sparkles size={14} strokeWidth={1.5} />
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); actions.onOpenProject(p); }} className="icon-btn" style={{ color: "var(--success)", opacity: 0.7 }} title={t("sidebar.tree.openTerminal")} aria-label={t("sidebar.tree.openTerminal")}>
               <Play size={14} strokeWidth={1.5} />
             </button>
           </span>

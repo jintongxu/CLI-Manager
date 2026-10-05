@@ -24,6 +24,8 @@ import { FileExplorerSidebar } from "../../files/api/FileExplorerSidebar";
 import { ArrowLeftRight, Check, CircleStop, Copy, Crosshair, FileCode, FolderOpen, FolderPlus, ListClockIcon, Palette, Pencil, Pin, Play, Plus, Settings, SquareSplitHorizontal, SquareSplitVertical, Terminal, TerminalSquare, Trash2, X } from "../../../shared/ui/icons";
 import { buildProjectSplitOptions } from "../lib/sidebarModel";
 import { getWorktreeDisplayName } from "../api/worktreeMetadata";
+import { useProjectIdeaStore } from "../api/projectIdeaStore";
+import { ProjectIdeasDialog } from "./ProjectIdeasDialog";
 import type { Project, WorktreeRecord } from "../../../shared/types/index";
 
 export function SidebarView({
@@ -153,6 +155,9 @@ export function SidebarView({
   setConfirmAction,
   startResize,
 }: ReturnType<typeof useSidebarController>) {
+  const activeProjectIdeaId = useProjectIdeaStore((state) => state.activeProjectId);
+  const closeProjectIdeas = useProjectIdeaStore((state) => state.closeProjectIdeas);
+  const activeProjectIdeaProject = activeProjectIdeaId ? projects.find((project) => project.id === activeProjectIdeaId) ?? null : null;
   const [extensionTarget, setExtensionTarget] = useState<{
     project: Project;
     worktree?: WorktreeRecord;
@@ -198,6 +203,11 @@ export function SidebarView({
       style={{ width: compactMode ? "100%" : sidebarWidth }}
     >
       {appConfirmDialog}
+      <ProjectIdeasDialog
+        project={activeProjectIdeaProject}
+        projects={projects}
+        onClose={closeProjectIdeas}
+      />
       <div className="ui-sidebar-top">
         <SidebarHeader
           collapsed={compactMode ? false : sidebarCollapsed}

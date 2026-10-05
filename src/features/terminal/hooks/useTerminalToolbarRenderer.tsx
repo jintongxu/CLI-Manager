@@ -6,6 +6,7 @@ import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { useI18n } from "../../../shared/i18n/index";
 import { CommandTemplatePanel } from "../../prompts/api/CommandTemplatePanel";
+import { ProjectIdeasPanel } from "../../projects";
 import { BackgroundTasksPanel, type BackgroundTaskMeta } from "../components/BackgroundTasksPanel";
 import {
   Activity, ArrowLeftRight, Plus, ListClockIcon, Maximize2, Minimize2, BarChart3, GitBranch, Folder,
@@ -28,6 +29,8 @@ interface TerminalToolbarContext {
   systemResourcesPanelActive: boolean;
   handleNewTab: () => void;
   handleNewAnonymousPi: () => void;
+  projects: Project[];
+  activeProject: Project | null;
   terminalSidePanelSide: "left" | "right";
   terminalActionSidebarStyle: CSSProperties;
   onToggleFullscreen: (() => void) | undefined;
@@ -68,6 +71,8 @@ export function useTerminalToolbarRenderer({
   systemResourcesPanelActive,
   handleNewTab,
   handleNewAnonymousPi,
+  projects,
+  activeProject,
   terminalSidePanelSide,
   terminalActionSidebarStyle,
   onToggleFullscreen,
@@ -98,6 +103,7 @@ export function useTerminalToolbarRenderer({
     const toolbarTooltips: Record<string, string> = {
       new: t("terminal.toolbar.newTerminal"),
       anonymousPi: t("terminal.toolbar.newAnonymousPi"),
+      projectIdeas: t("projectIdeas.toolbar.open"),
       templates: t("commandTemplate.title"),
       fullscreen: fullscreen ? t("terminal.toolbar.exitImmersiveFullscreen") : t("terminal.toolbar.immersiveFullscreen"),
       sessionHistory: `${t("terminal.toolbar.sessionHistory")} (${sessionHistoryShortcutHint})`,
@@ -136,6 +142,14 @@ export function useTerminalToolbarRenderer({
         >
           <CliToolIcon icon="pi" size={16} />
         </button>
+      ),
+      projectIdeas: (
+        <ProjectIdeasPanel
+          projects={projects}
+          activeProject={activeProject}
+          popoverSide={terminalSidePanelSide === "left" ? "right" : "left"}
+          popoverStyle={terminalActionSidebarStyle}
+        />
       ),
       templates: (
         <CommandTemplatePanel
@@ -275,6 +289,13 @@ export function useTerminalToolbarRenderer({
         </div>
       </div>
     );
+    const projectIdeasButton = (
+      <div className="ui-terminal-action-fixed-slot">
+        <div className="ui-terminal-action-sort-item flex w-full justify-center" data-tooltip={t("projectIdeas.toolbar.open")}>
+          {buttonMap.projectIdeas}
+        </div>
+      </div>
+    );
 
     return (
       <DndContext
@@ -302,6 +323,7 @@ export function useTerminalToolbarRenderer({
                   {btn.element}
                 </SortableToolbarButton>
                 {btn.id === "new" && anonymousPiButton}
+                {btn.id === "new" && projectIdeasButton}
               </Fragment>
             ))}
           </SortableContext>
@@ -324,6 +346,7 @@ export function useTerminalToolbarRenderer({
     );
   }, [
     activeToolbarDragId,
+    activeProject,
     backgroundTasks,
     cpuResourceCardVisible,
     fullscreen,
@@ -354,6 +377,7 @@ export function useTerminalToolbarRenderer({
     systemResourceMonitoringEnabled,
     systemResourcesPanelActive,
     t,
+    projects,
     terminalToolbarOrder,
     terminalToolbarVisibility,
     terminalActionSidebarStyle,

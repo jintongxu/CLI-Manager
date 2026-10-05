@@ -85,6 +85,15 @@ function createStashRestoreError(result: GitWorktreeMergeResult, t: Translate): 
 
 function formatFinishError(err: unknown, t: Translate, projectPath?: string): FinishErrorInfo {
   const raw = errorText(err).trim();
+  if (raw.includes("stage_all_failed") || raw.includes("stage_all_update_failed")) {
+    return {
+      code: "stage_all_failed",
+      title: t("worktree.finish.error.stageAllFailedTitle"),
+      description: t("worktree.finish.error.stageAllFailedDescription", { path: projectPath ?? "" }),
+      raw,
+    };
+  }
+
   if (raw.includes("dirty_main_worktree")) {
     return {
       code: "dirty_main_worktree",
