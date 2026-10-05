@@ -155,14 +155,14 @@ test("Pi IME resolves the editor input row before its textarea bottom border", (
   assert.deepEqual(resolvePiImeTextareaAnchor(terminal, compositionAnchor), { x: 7, y: 4 });
 });
 
-test("Pi IME prefers the live cursor over a stale inverse cursor inside the editor", () => {
+test("Pi IME prefers the visible inverse cursor over a stale hardware cursor inside the editor", () => {
   const terminal = terminalWithLines(
     ["output", "────────", "  input", "", "────────", "status"],
     { x: 79, y: 2 },
     [{ x: 4, y: 2 }],
   );
 
-  assert.deepEqual(resolvePiImeCompositionAnchor(terminal, { x: 0, y: 0 }), { x: 79, y: 2 });
+  assert.deepEqual(resolvePiImeCompositionAnchor(terminal, { x: 0, y: 0 }), { x: 4, y: 2 });
 });
 
 test("Pi IME keeps the live cursor inside the editor when no software cursor is visible", () => {

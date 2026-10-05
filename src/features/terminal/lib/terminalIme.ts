@@ -349,6 +349,7 @@ export const attachTerminalIme = ({
       return;
     }
     updateSuggestionPosition();
+    if (shouldRefreshCompositionAnchor?.()) scheduleHelperTextareaAnchorPin();
     if (!textarea || document.activeElement !== textarea) return;
     scheduleTerminalContainerScrollReset();
     scheduleHelperTextareaAnchorPin();
@@ -356,6 +357,7 @@ export const attachTerminalIme = ({
   const renderDisposable = terminal.onRender(() => {
     if (!isComposingRef.current) {
       updateSuggestionPosition();
+      if (shouldRefreshCompositionAnchor?.()) scheduleHelperTextareaAnchorPin();
       return;
     }
     clearSuggestion();

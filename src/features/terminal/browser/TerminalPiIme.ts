@@ -72,8 +72,12 @@ export function resolvePiImeCompositionAnchor(
   const regions = findPiEditorRegions(terminal);
   for (let index = regions.length - 1; index >= 0; index -= 1) {
     const region = regions[index];
-    if (containsRow(region, cursor.y)) return cursor;
     const inverseAnchor = findInverseAnchor(terminal, region);
+    // Pi draws its visible caret as an inverse cell while the xterm hardware
+    // cursor can lag behind during a TUI redraw. Prefer the software caret in
+    // the active editor so the native IME is anchored to what the user sees.
+    if (inverseAnchor && containsRow(region, cursor.y)) return inverseAnchor;
+    if (containsRow(region, cursor.y)) return cursor;
     if (inverseAnchor) return inverseAnchor;
   }
   return fallbackAnchor;
