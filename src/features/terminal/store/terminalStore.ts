@@ -547,6 +547,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
           set((state) => ({
             sessions: applyPtyStatusToSessions(state.sessions, sessionId, payload),
             sessionStatuses: { ...state.sessionStatuses, [sessionId]: status },
+            ...buildTabStatusUpdate(state, sessionId, "shell", status === "running" ? "running" : status === "error" ? "failed" : "done", new Date().toISOString()),
           }));
           persistSshConnectionStateAfterPtyStatus(sessionId, payload);
           if (
@@ -1007,6 +1008,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
           set((state) => ({
             sessions: applyPtyStatusToSessions(state.sessions, splitSessionId, payload),
             sessionStatuses: { ...state.sessionStatuses, [splitSessionId]: status },
+            ...buildTabStatusUpdate(state, splitSessionId, "shell", status === "running" ? "running" : status === "error" ? "failed" : "done", new Date().toISOString()),
           }));
           persistSshConnectionStateAfterPtyStatus(splitSessionId, payload);
         });

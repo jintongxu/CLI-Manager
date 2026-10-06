@@ -13,7 +13,7 @@ export function WorkspanTerminalLayout({ position, tabBar, tabBarVisible, childr
     <div
       className="ui-workspan-tabbar-slot"
       data-visible={tabBarVisible ? "true" : "false"}
-      style={{ display: tabBarVisible ? "contents" : "none" }}
+      style={{ display: tabBarVisible ? "block" : "none" }}
     >
       {tabBar}
     </div>

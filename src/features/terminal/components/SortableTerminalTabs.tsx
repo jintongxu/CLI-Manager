@@ -8,12 +8,10 @@ import { type TerminalWorkspan } from "../api/terminalWorkspan";
 import { PULSING_TAB_STATES, TAB_NOTIFICATION_COLORS } from "../api/terminalTabVisuals";
 import { type CliToolIconKey } from "../../../shared/lib/cliTools";
 import { Terminal, X, Cloud } from "../../../shared/ui/icons";
-import { WorktreeIcon } from "../../../shared/ui/WorktreeIcon";
 import { VendorIcon, type VendorKey } from "../../../shared/ui/VendorIcon";
 import { CliToolIcon } from "../../../shared/ui/CliToolIcon";
-import type { TerminalSession, WorktreeRecord } from "../../../shared/types/index";
+import type { TerminalSession } from "../../../shared/types/index";
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent } from "../../../shared/ui/context-menu";
-import { Popover, PopoverContent, PopoverTrigger } from "../../../shared/ui/popover";
 import { Portal } from "../../../shared/ui/Portal";
 import {
   TAB_NOTIFICATION_LABELS, type SplitPickerAnchor, SSH_CONNECTION_STATE_COLORS,
@@ -21,20 +19,18 @@ import {
 } from "../lib/terminalTabsModel";
 import { useTerminalTabHoverCard } from "../hooks/useTerminalTabHoverCard";
 import { TerminalTabHoverCard } from "./TerminalTabHoverCard";
-import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
 
 export interface SortableTabProps {
   id: string;
   paneId: string;
   title: string;
+  displayTitle?: string;
   sessionKind: TerminalSession["kind"];
   isActive: boolean;
   isEditing: boolean;
   notification: TabNotificationState;
   vendor?: VendorKey | null;
   cliToolIcon?: CliToolIconKey | null;
-  worktree?: WorktreeRecord | null;
-  worktreeMenuContent?: (closeMenu: () => void) => ReactNode;
   hoverInfo: TerminalTabHoverInfo;
   onActivate: () => void;
   onClose: (anchor?: SplitPickerAnchor) => void;
@@ -49,14 +45,13 @@ export function SortableTab({
   id,
   paneId,
   title,
+  displayTitle = title,
   sessionKind,
   isActive,
   isEditing,
   notification,
   vendor,
   cliToolIcon,
-  worktree,
-  worktreeMenuContent,
   hoverInfo,
   onActivate,
   onClose,
@@ -72,7 +67,7 @@ export function SortableTab({
     data: {
       type: "session",
       paneId,
-      overlay: { title, notification, vendor, cliToolIcon },
+      overlay: { title: displayTitle, notification, vendor, cliToolIcon }
     },
     transition: DND_SORTABLE_TRANSITION,
   });
@@ -83,7 +78,6 @@ export function SortableTab({
   const skipNextBlurSubmitRef = useRef(false);
   const statusLabel = t(TAB_NOTIFICATION_LABELS[notification]);
   const tabMinWidthClass = "min-w-[92px]";
-  const [worktreePopoverOpen, setWorktreePopoverOpen] = useState(false);
   const {
     enabled: terminalTabHoverInfoEnabled,
     hoverCardPosition,
@@ -127,7 +121,6 @@ export function SortableTab({
   }, [setNodeRef]);
 
   const getTabAnchor = useCallback(() => contextMenuPointRef.current ?? tabElementRef.current?.getBoundingClientRect(), []);
-  const closeWorktreePopover = useCallback(() => setWorktreePopoverOpen(false), []);
 
   return (
     <>
@@ -136,7 +129,7 @@ export function SortableTab({
         <div
           ref={setTabNodeRef}
           style={style}
-          className={`ui-interactive ui-tab-trigger ui-terminal-tab-item mx-1 flex h-7 ${tabMinWidthClass} max-w-[180px] shrink-0 cursor-pointer items-center gap-2 rounded-lg px-3 text-[12px] font-medium`}
+          className={`ui-interactive ui-tab-trigger ui-terminal-tab-item mx-1 flex h-7 ${tabMinWidthClass} max-w-[280px] shrink-0 cursor-pointer items-center gap-2 rounded-lg px-3 text-[12px] font-medium`}
           data-terminal-tab-id={id}
           data-session-kind={sessionKind}
           data-status={notification}
@@ -179,39 +172,7 @@ export function SortableTab({
               <CliToolIcon icon={cliToolIcon} size={14} className="text-current" />
             </span>
           ) : null}
-          {worktree && (
-            <Popover open={worktreePopoverOpen} onOpenChange={setWorktreePopoverOpen}>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className="ui-worktree-tab-badge inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none"
-                  title={`${getWorktreeDisplayName(worktree)}\n${worktree.description}\n${worktree.branch}\n${worktree.path}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    hideHoverCard();
-                  }}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onDoubleClick={(event) => event.stopPropagation()}
-                >
-                  <WorktreeIcon className="h-3 w-3" />
-                  <span>WT</span>
-                </button>
-              </PopoverTrigger>
-              {worktreeMenuContent && (
-                <PopoverContent
-                  className="terminal-skin context-menu min-w-[160px] p-1"
-                  style={menuStyle}
-                  onClick={(event) => event.stopPropagation()}
-                  onDoubleClick={(event) => event.stopPropagation()}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onPointerMove={(event) => event.stopPropagation()}
-                  onPointerUp={(event) => event.stopPropagation()}
-                >
-                  {worktreeMenuContent(closeWorktreePopover)}
-                </PopoverContent>
-              )}
-            </Popover>
-          )}
+
           {isEditing ? (
             <input
               ref={editInputRef}
@@ -257,7 +218,7 @@ export function SortableTab({
                   aria-label={t(`terminal.ssh.connection.${hoverInfo.connectionState}` as TranslationKey)}
                 />
               )}
-              <span className="ui-terminal-tab-title min-w-0 flex-1 truncate tracking-[0.01em]">{title}</span>
+              <span className="ui-terminal-tab-title min-w-0 flex-1 truncate tracking-[0.01em]">{displayTitle}</span>
             </>
           )}
           <button

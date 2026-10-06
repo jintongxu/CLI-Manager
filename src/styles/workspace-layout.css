@@ -44,6 +44,12 @@
   flex-direction: column;
 }
 
+.ui-workspan-tabbar-slot {
+  display: block;
+  flex: 0 0 78px;
+  min-height: 78px;
+}
+
 /* Keep panel content mounted while letting the title-bar control reclaim the
    terminal width immediately. This preserves panel-local state and effects. */
 .ui-terminal-well[data-terminal-side-panel-visible="false"] > .ui-terminal-side-panel-frame {

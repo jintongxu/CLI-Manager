@@ -95,6 +95,7 @@ export function TerminalTabsView({
   workspanTabBarVisible,
   workspanEnabled,
   workspanTabModels,
+  workspanContextOptions,
   workspanTabOverflow,
   workspanTabListOpen,
   effectiveActiveWorkspanId,
@@ -106,6 +107,7 @@ export function TerminalTabsView({
   activateWorkspanTab,
   handleCloseSessions,
   projectById,
+  worktrees,
   handleSubmitTabEdit,
   prompt,
   renameWorkspan,
@@ -120,6 +122,7 @@ export function TerminalTabsView({
   useExternalTerminal,
   scopedEmptyState,
   sessions,
+  tabNotifications,
   handleNewTab,
 }: ReturnType<typeof useTerminalTabsController>) {
   return (
@@ -342,12 +345,15 @@ export function TerminalTabsView({
                     listOpen={workspanTabListOpen}
                     activeWorkspanId={effectiveActiveWorkspanId}
                     hasScopedTerminalFilter={hasScopedTerminalFilter}
+                    contextOptions={workspanContextOptions}
                     menuStyle={splitPickerMenuStyle}
                     tabBarRef={workspanTabBarRef}
                     tabScrollRef={workspanTabScrollRef}
                     detachPreview={workspanDetachPreview}
                     onToggleList={setWorkspanTabListOpen}
                     onActivate={activateWorkspanTab}
+                    onNewTab={(sessionId) => { void handleNewTab(sessionId); }}
+                    notifications={tabNotifications}
                     onClose={(model, anchor) => handleCloseSessions(model.closeSessionIds, anchor)}
                     renderTab={(model, index) => (
                       <SortableWorkspanTab
@@ -357,7 +363,16 @@ export function TerminalTabsView({
                         notification={model.notification}
                         vendor={model.vendor}
                         cliToolIcon={model.cliToolIcon}
-                        hoverInfo={model.singleSession ? buildTerminalTabHoverInfo(model.singleSession, model.singleSession.projectId ? projectById.get(model.singleSession.projectId) : undefined) : undefined}
+                        hoverInfo={model.singleSession ? buildTerminalTabHoverInfo(
+                          model.singleSession,
+                          model.singleSession.projectId ? projectById.get(model.singleSession.projectId) : undefined,
+                          model.singleSession.worktreeId ? worktrees.find((worktree) => worktree.id === model.singleSession?.worktreeId) : null,
+                          {
+                            unboundProject: t("terminal.context.unboundProject"),
+                            missingWorktree: t("terminal.context.worktreeMissing"),
+                            defaultShell: t("terminal.context.defaultShell"),
+                          },
+                        ) : undefined}
                         isActive={model.workspan.id === effectiveActiveWorkspanId}
                         dragDisabled={hasScopedTerminalFilter}
                         renameDisabled={!model.singleSession}

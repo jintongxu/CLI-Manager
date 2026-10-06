@@ -17,9 +17,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "../../../shared/ui/popo
 import { getTerminalTheme } from "../../../shared/lib/terminalThemes";
 import {
   normalizeTabMenuHex, tabMenuHexToRgba, PANE_DROP_PREFIX, type SplitPickerAnchor,
-  buildTerminalTabHoverInfo, inferSessionVendor, inferSessionCliToolIcon,
+  buildTerminalTabDisplayTitle, buildTerminalTabHoverInfo,
+  getTerminalTabScopeKey, inferSessionVendor, inferSessionCliToolIcon,
 } from "../lib/terminalTabsModel";
 import { SortableTab } from "./SortableTerminalTabs";
+
 
 export interface PaneTabBarProps {
   pane: TerminalPaneLeaf;
@@ -140,6 +142,25 @@ export function PaneTabBar({
     .filter((session) => !visibleSessionIds || (session && visibleSessionIds.has(session.id)))
     .filter((session): session is TerminalSession => Boolean(session));
   const paneSessionIds = paneSessions.map((session) => session.id);
+  const tabScopeCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const session of sessions) {
+      const key = getTerminalTabScopeKey(session);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  }, [sessions]);
+  const tabScopeOrdinals = useMemo(() => {
+    const ordinals = new Map<string, number>();
+    const seen = new Map<string, number>();
+    for (const session of sessions) {
+      const key = getTerminalTabScopeKey(session);
+      const next = (seen.get(key) ?? 0) + 1;
+      seen.set(key, next);
+      ordinals.set(session.id, next);
+    }
+    return ordinals;
+  }, [sessions]);
   const activePaneTabId =
     activeSessionId && paneSessionIds.includes(activeSessionId)
       ? activeSessionId
@@ -360,33 +381,28 @@ export function PaneTabBar({
               id={session.id}
               paneId={pane.id}
               title={session.title}
+              displayTitle={buildTerminalTabDisplayTitle(
+                session,
+                session.projectId ? projectById.get(session.projectId) : undefined,
+                tabScopeOrdinals.get(session.id) ?? 1,
+                tabScopeCounts.get(getTerminalTabScopeKey(session)) ?? 1,
+              )}
               sessionKind={session.kind}
               isActive={session.id === activeSessionId}
               isEditing={editingSessionId === session.id}
               notification={tabNotifications[session.id] ?? "none"}
               vendor={inferVendor(projectById.get(session.projectId!)?.cli_tool) ?? inferSessionVendor(session)}
               cliToolIcon={inferSessionCliToolIcon(session, projectById.get(session.projectId!))}
-              worktree={session.worktreeId ? worktreeById.get(session.worktreeId) ?? null : null}
-              worktreeMenuContent={session.worktreeId && worktreeById.get(session.worktreeId) && session.projectId && projectById.get(session.projectId) ? (closeMenu) => {
-                const project = projectById.get(session.projectId!);
-                const activeWorktree = worktreeById.get(session.worktreeId!);
-                if (!project || !activeWorktree) return null;
-                const runAndClose = (action: () => void) => {
-                  closeMenu();
-                  action();
-                };
-                return (
-                  <>
-                    <button type="button" className="context-menu-item w-full" onClick={() => runAndClose(() => onOpenWorktreeChanges(session.id))}>{t("worktree.menu.viewChanges")}</button>
-                    <button type="button" className="context-menu-item w-full" onClick={() => runAndClose(() => onOpenWorktreeHistory(project, activeWorktree))}>{t("worktree.menu.viewHistory")}</button>
-                    <button type="button" className="context-menu-item w-full" onClick={() => runAndClose(() => onFinishWorktree(project, activeWorktree))}>{t("worktree.menu.finish")}</button>
-                    <button type="button" className="context-menu-item w-full" onClick={() => runAndClose(() => onInstallWorktreeDeps(project, activeWorktree))}>{t("worktree.menu.installDeps")}</button>
-                    <button type="button" className="context-menu-item w-full" onClick={() => runAndClose(() => onOpenWorktreeDirectory(activeWorktree))}>{t("worktree.menu.openDirectory")}</button>
-                    <button type="button" className="context-menu-item danger w-full" onClick={() => runAndClose(() => onDiscardWorktree(project, activeWorktree))}>{t("worktree.menu.discard")}</button>
-                  </>
-                );
-              } : undefined}
-              hoverInfo={buildTerminalTabHoverInfo(session, session.projectId ? projectById.get(session.projectId) : undefined)}
+              hoverInfo={buildTerminalTabHoverInfo(
+                session,
+                session.projectId ? projectById.get(session.projectId) : undefined,
+                session.worktreeId ? worktreeById.get(session.worktreeId) : null,
+                {
+                  unboundProject: t("terminal.context.unboundProject"),
+                  missingWorktree: t("terminal.context.worktreeMissing"),
+                  defaultShell: t("terminal.context.defaultShell"),
+                },
+              )}
               onActivate={() => onActivateSession(session.id)}
               onClose={(anchor) => closePaneSessions([session.id], anchor)}
               onSubmitEdit={(title) => onSubmitEdit(session.id, title)}
