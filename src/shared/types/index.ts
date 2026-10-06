@@ -472,6 +472,9 @@ export interface RemoteHandoffSessionState {
 }
 
 export interface TerminalSession {
+  /** Sidebar presentation only; never controls pane/workspan/tab layout. */
+  sidebarPinned?: boolean;
+  sidebarOrder?: number;
   id: string;
   /** 本次 PTY 启动时间，用于将无 Hook 的 SSH Codex 终端安全关联到远端历史。 */
   createdAtMs?: number;
@@ -512,6 +515,8 @@ export interface TerminalSession {
   cliReasoningEffort?: string;
   /** CLI hook 上报的 WSL 发行版名（WSL_DISTRO_NAME）；用于在终端实际所在发行版内组装能力诊断等请求。 */
   wslDistroName?: string;
+  /** 标签呈现隐藏；缺省可见。隐藏不删除会话/布局，也不停止 PTY。 */
+  tabHidden?: boolean;
   /** 会话类型；缺省视为 "pty"。临时 Pi 会话有 PTY，但不持久化。 */
   kind?: TerminalSessionKind;
   /** 仅 kind="subagent-transcript" 时存在：子 Agent 元数据。 */

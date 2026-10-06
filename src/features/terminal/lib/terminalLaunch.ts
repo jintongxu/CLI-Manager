@@ -226,7 +226,10 @@ export function buildPtyEnvVars(
   return Object.keys(next).length > 0 ? next : null;
 }
 
-export function getProjectAgentTerminalMetadata(projectId?: string) {
+export function getProjectAgentTerminalMetadata(projectId?: string, startupCmd?: string) {
+  // An explicit empty command requests a plain shell, not the project CLI.
+  // Undefined retains the existing project-default launch intent.
+  if (startupCmd === "") return { isAgentSession: false, cliTool: undefined };
   const project = projectId
     ? useProjectStore.getState().projects.find((item) => item.id === projectId)
     : undefined;

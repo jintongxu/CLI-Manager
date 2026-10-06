@@ -1,3 +1,6 @@
+import { createWorktreeOrderUpdater } from "./worktreeOrderPersistence";
+import type { WorktreeRecord } from "../types/index";
+import { sanitizeWorktreeOrder, type WorktreeOrderByProject } from "../lib/worktreeOrder";
 import { create } from "zustand";
 import { normalizeExternalTerminalProgram, type ExternalTerminalProgram } from "../lib/externalTerminalProgram";
 import { normalizeWebTerminalBatchKiB, type WebTerminalBatchKiB } from "../lib/webTerminalFrames";
@@ -528,10 +531,13 @@ export interface Settings {
 }
 
 interface SettingsStore extends Settings {
+  /** Local project-ID keyed presentation state, intentionally not portable sync preferences. */
+  worktreeOrderByProject: WorktreeOrderByProject;
   resolvedTheme: "dark" | "light";
   loaded: boolean;
   /** Transient flag: set when the saved terminal background image was not found on disk at load. */
   terminalBackgroundMissing: boolean;
+  updateWorktreeOrder: (projectId: string, orderedIds: string[], worktrees: readonly WorktreeRecord[]) => Promise<boolean>;
   load: () => Promise<void>;
   update: <K extends keyof Settings>(key: K, value: Settings[K]) => Promise<void>;
   updateHistoryDetailSortDirections: (value: HistoryDetailSortDirections) => void;
@@ -1325,6 +1331,12 @@ async function applyDebugMode(enabled: boolean) {
 
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
   ...DEFAULTS,
+  worktreeOrderByProject: {},
+  updateWorktreeOrder: createWorktreeOrderUpdater(
+    () => get().worktreeOrderByProject,
+    (worktreeOrderByProject) => set({ worktreeOrderByProject }),
+    async (order) => { const s = await getStore(); await s.set("worktreeOrderByProject", order); },
+  ),
   resolvedTheme: resolveTheme(DEFAULTS.theme),
   loaded: false,
   terminalBackgroundMissing: false,
@@ -1334,7 +1346,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     const rawEntries = await s.entries();
     const entries = Object.fromEntries(
       rawEntries.filter(([, value]) => value !== null && value !== undefined)
-    ) as Partial<Settings>;
+    ) as Partial<SettingsStore>;
     const pendingStoreWrites: Promise<void>[] = [];
     const persistSetting = (key: keyof Settings, value: Settings[keyof Settings]) => {
       pendingStoreWrites.push(s.set(key, value));
@@ -1448,6 +1460,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     entries.sidebarWidth = clampNumber(entries.sidebarWidth, 64, 500, DEFAULTS.sidebarWidth);
     entries.historySidebarWidth = clampNumber(entries.historySidebarWidth, 180, 520, DEFAULTS.historySidebarWidth);
     entries.historySmartTitle = migrateHistorySmartTitleSettings(entries.historySmartTitle);
+    entries.worktreeOrderByProject = sanitizeWorktreeOrder(entries.worktreeOrderByProject);
+
     const storedHistoryDetailSortDirections = entries.historyDetailSortDirections;
     const historyDetailSortDirections = migrateHistoryDetailSortDirections(storedHistoryDetailSortDirections);
     entries.historyDetailSortDirections = historyDetailSortDirections;

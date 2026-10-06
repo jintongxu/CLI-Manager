@@ -22,3 +22,6 @@ export {
   formatManualDirectCodexInputForPty,
   createDetachedPtyProcess,
 } from "./lib/terminalLaunch";
+
+export { isTaskQualifiedAgent, getAgentTaskNotification, buildAgentTaskNotifications } from "./lib/terminalTaskPresentation";
+export type { TabStatusSources } from "./types/terminalStoreTypes";

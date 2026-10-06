@@ -122,8 +122,11 @@ export function createTerminalRuntime(
     if (saveActiveIdTimer !== null) clearTimeout(saveActiveIdTimer);
     saveActiveIdTimer = setTimeout(() => {
       saveActiveIdTimer = null;
-      const session = id ? useTerminalStore.getState().sessions.find((item) => item.id === id) : undefined;
-      useSessionStore.getState().saveActiveSessionId(isPersistableSession(session) ? id : null).catch(() => { });
+      const state = useTerminalStore.getState();
+      const session = id ? state.sessions.find((item) => item.id === id) : undefined;
+      const activeId = id === state.activeSessionId && !session?.tabHidden ? id : state.activeSessionId;
+      const activeSession = state.sessions.find((item) => item.id === activeId);
+      useSessionStore.getState().saveActiveSessionId(isPersistableSession(activeSession) ? activeId : null).catch(() => { });
     }, 200);
   }
 
@@ -474,7 +477,7 @@ export function createTerminalRuntime(
       syncTerminalWorkspanLayout(workspan, nextTree, workspan.activePaneId, workspan.activeSessionId)
     ));
     const workspanState = state.activeWorkspanId === parentWorkspan.id
-      ? buildWorkspanMirror(workspans, parentWorkspan.id)
+      ? buildWorkspanMirror(workspans, parentWorkspan.id, newSessions)
       : { workspans };
     set({
       sessions: newSessions,
@@ -593,6 +596,19 @@ export function createTerminalRuntime(
           reason: resolution.reason,
         });
       }
+      // Live hook identity also qualifies manually launched Pi in a plain shell.
+      const identityAt = payload.timestamp ?? new Date().toISOString();
+      const previousIdentity = get().tabStatuses[tabId];
+      if (previousIdentity?.hookUpdatedAt && Date.parse(identityAt) < Date.parse(previousIdentity.hookUpdatedAt)) return tabId;
+      if (previousIdentity?.agentExited && payload.event !== "SessionStart") return tabId;
+      const identitySource = payload.source;
+      if (identitySource) {
+        set((current) => ({ tabStatuses: { ...current.tabStatuses, [tabId]: {
+          ...current.tabStatuses[tabId], agentIdentity: { source: identitySource, sessionId: payload.sessionId?.trim() || undefined },
+          agentExited: false,
+          ...(payload.event === "SessionStart" ? { hook: "none" as const, hookUpdatedAt: identityAt } : {}),
+        } } }));
+      }
       const cliSessionId = payload.sessionId?.trim();
       const remoteTranscriptRef = payload.environmentType === "ssh" ? payload.remoteTranscriptRef?.trim() : undefined;
       const cliReasoningEffort = payload.reasoningEffort?.trim();
@@ -710,7 +726,18 @@ export function createTerminalRuntime(
     handleShellRuntimeEvent: (payload) => {
       const tabId = resolvePrimaryTabId(payload.sessionId, get().splits);
       const session = get().sessions.find((item) => item.id === tabId);
-      if (!session || !isShellRuntimeMonitoringEnabled()) return null;
+      if (!session) return null;
+      // Only existing trusted OSC prompt evidence clears Agent identity. Stop is not exit.
+      const sources = get().tabStatuses[tabId];
+      if (payload.event === "prompt_shown" && payload.origin === "osc"
+        && (sources?.agentIdentity || session.isAgentSession === true)
+        && (!payload.timestamp || !sources?.hookUpdatedAt || Date.parse(payload.timestamp) >= Date.parse(sources.hookUpdatedAt))) {
+        clearHookRunningTimeout(tabId);
+        set((current) => ({ tabStatuses: { ...current.tabStatuses, [tabId]: {
+          ...current.tabStatuses[tabId], agentExited: true,
+        } } }));
+      }
+      if (!isShellRuntimeMonitoringEnabled()) return null;
       const project = session.projectId
         ? useProjectStore.getState().projects.find((item) => item.id === session.projectId)
         : undefined;

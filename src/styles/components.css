@@ -1,6 +1,7 @@
 @import "./components/surfaces-command-panels.css";
 @import "./components/terminal-empty-tabs.css";
 @import "./components/project-tree.css";
+@import "../features/projects/styles/sidebar-terminals.css";
 @import "./components/focus-controls.css";
 @import "./components/history-scroll-markdown.css";
 @import "./components/history-transcript-diff.css";

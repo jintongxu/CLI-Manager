@@ -1,3 +1,4 @@
+import { buildAgentTaskNotifications } from "../lib/terminalTaskPresentation";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useShallow } from "zustand/shallow";
 import { invoke } from "@tauri-apps/api/core";
@@ -6,7 +7,7 @@ import {
   PointerSensor, useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent,
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
-import { useTerminalStore, type TabNotificationState } from "../state";
+import { useTerminalStore } from "../state";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { updateWorkspaceLayout } from "../../../shared/lib/workspaceLayout";
 import { useWorktreeStore } from "../../projects/api/worktreeStore";
@@ -17,8 +18,6 @@ import { useI18n } from "../../../shared/i18n/index";
 import { logError } from "../../../shared/platform/logger";
 import { DND_ACTIVATION_CONSTRAINT, parseWorkspanDragId, resolveWorkspanDragHoverTarget, WORKSPAN_DRAG_AUTO_ACTIVATE_MS } from "../../workspace/api/dragInteraction";
 import type { TerminalPaneLeaf, TerminalPaneSplitDirection } from "../api/terminalPaneTree";
-import { collectPaneLeaves, filterPaneTreeBySessionIds, findFirstSessionId } from "../api/terminalPaneTree";
-import { collectWorkspanSessionIds } from "../api/terminalWorkspan";
 import { type BackgroundTaskMeta } from "../components/BackgroundTasksPanel";
 import { TERMINAL_SIDE_PANEL_TAB_ORDER, type TerminalSidePanelTab } from "../components/TerminalSidePanel";
 import { openWindowsTerminal } from "../api/externalTerminal";
@@ -59,6 +58,8 @@ import {
 import { MemoPaneLeafView } from "../components/PaneLeafView";
 import { useTerminalToolbarRenderer } from "./useTerminalToolbarRenderer";
 import { useScopedTerminalEmptyState } from "./useScopedTerminalEmptyState";
+import { useTerminalVisibleLayouts } from "./useTerminalVisibleLayouts";
+import { isHideableTerminalSession } from "../lib/terminalTabVisibility";
 import { buildWorkspanTabModels } from "../lib/workspanTabModel";
 
 export function useTerminalTabsController({
@@ -73,13 +74,12 @@ export function useTerminalTabsController({
   const { prompt, promptDialog } = useAppPrompt();
   const { confirm, confirmDialog } = useAppConfirm();
   const { saveSession: saveSessionToSidebar, saveSessionDialog } = useSaveSessionToSidebar();
-  const { sessions, activeSessionId, workspans, activeWorkspanId, tabNotifications, tabStatuses } = useTerminalStore(
+  const { sessions, activeSessionId, workspans, activeWorkspanId, tabStatuses } = useTerminalStore(
     useShallow((s) => ({
       sessions: s.sessions,
       activeSessionId: s.activeSessionId,
       workspans: s.workspans,
       activeWorkspanId: s.activeWorkspanId,
-      tabNotifications: s.tabNotifications,
       tabStatuses: s.tabStatuses,
     }))
   );
@@ -89,7 +89,7 @@ export function useTerminalTabsController({
   const renameWorkspan = useTerminalStore((s) => s.renameWorkspan);
   const restoreWorkspanToSinglePane = useTerminalStore((s) => s.restoreWorkspanToSinglePane);
   const mergeWorkspanAtPaneEdge = useTerminalStore((s) => s.mergeWorkspanAtPaneEdge);
-  const closeSession = useTerminalStore((s) => s.closeSession);
+  const hideSession = useTerminalStore((s) => s.hideSession);
   const createSession = useTerminalStore((s) => s.createSession);
   const reorderSessions = useTerminalStore((s) => s.reorderSessions);
   const moveSessionToPane = useTerminalStore((s) => s.moveSessionToPane);
@@ -122,13 +122,8 @@ export function useTerminalTabsController({
   const terminalBackgroundEnabled = useSettingsStore((s) => s.terminalBackground.enabled);
   const paneMarkerSettings = useSettingsStore((s) => s.terminalPaneMarker);
   const [isAppFocused, setIsAppFocused] = useState(() => document.visibilityState !== "hidden" && document.hasFocus());
-  const hookNotifications = useMemo<Record<string, TabNotificationState>>(() => {
-    const next: Record<string, TabNotificationState> = {};
-    for (const [sessionId, status] of Object.entries(tabStatuses)) {
-      next[sessionId] = status.hook ?? "none";
-    }
-    return next;
-  }, [tabStatuses]);
+  const tabNotifications = useMemo(() => buildAgentTaskNotifications(sessions, tabStatuses), [sessions, tabStatuses]);
+  const hookNotifications = tabNotifications;
 
   useEffect(() => {
     const updateFocusState = () => {
@@ -191,7 +186,8 @@ export function useTerminalTabsController({
     targetId: null as string | null,
     visible: false,
   });
-  const [fullscreenPaneId, setFullscreenPaneId] = useState<string | null>(null);
+  const fullscreenPaneId = useTerminalStore((s) => s.fullscreenPaneId);
+  const setFullscreenPaneId = useTerminalStore((s) => s.setFullscreenPaneId);
   const [workspanTabListOpen, setWorkspanTabListOpen] = useState(false);
   const [workspanTabOverflow, setWorkspanTabOverflow] = useState<WorkspanTabOverflowState>({
     isOverflowing: false,
@@ -279,75 +275,20 @@ export function useTerminalTabsController({
     }
     return next;
   }, [projectById, projectScopedTerminalViewEnabled, projects, scopedGroupProjectIds, sessions, terminalScopeValue, worktrees]);
-  // Keep the original Workspan trees mounted. The scoped tree is presentation-only;
-  // moving a session into a separate hidden tree would recreate its xterm instance.
-  const mountedWorkspanLayouts = useMemo(() => workspans.flatMap((workspan) => {
-    if (!workspan.paneTree) return [];
-    const visiblePaneTree = scopedSessionIds
-      ? filterPaneTreeBySessionIds(workspan.paneTree, scopedSessionIds)
-      : workspan.paneTree;
-    const visiblePanes = collectPaneLeaves(visiblePaneTree);
-    const visibleSessionIds = visiblePanes.flatMap((pane) => pane.sessionIds);
-    return [{
-      workspan,
-      paneTree: workspan.paneTree,
-      visiblePaneTree,
-      visiblePanes,
-      visiblePaneIds: new Set(visiblePanes.map((pane) => pane.id)),
-      sessionIds: collectWorkspanSessionIds(workspan),
-      closeSessionIds: visibleSessionIds,
-    }];
-  }), [scopedSessionIds, workspans]);
-  const visibleWorkspanLayouts = useMemo(() => mountedWorkspanLayouts.flatMap((layout) => (
-    layout.visiblePaneTree
-      ? [{
-          workspan: layout.workspan,
-          paneTree: layout.visiblePaneTree,
-          panes: layout.visiblePanes,
-          sessionIds: layout.sessionIds,
-          closeSessionIds: layout.closeSessionIds,
-        }]
-      : []
-  )), [mountedWorkspanLayouts]);
-  const effectiveActiveWorkspanId = visibleWorkspanLayouts.some(({ workspan }) => workspan.id === activeWorkspanId)
-    ? activeWorkspanId
-    : visibleWorkspanLayouts[0]?.workspan.id ?? null;
-  const activeWorkspanLayout = visibleWorkspanLayouts.find(({ workspan }) => workspan.id === effectiveActiveWorkspanId) ?? null;
-  const renderPaneTree = activeWorkspanLayout?.paneTree ?? null;
-  const visibleSessions = useMemo(
-    () => (scopedSessionIds ? sessions.filter((session) => scopedSessionIds.has(session.id)) : sessions),
-    [scopedSessionIds, sessions]
-  );
-  const allPanes = activeWorkspanLayout?.panes ?? [];
-  const activeFullscreenPaneId = useMemo(() => {
-    if (!fullscreenPaneId) return null;
-    const pane = allPanes.find((item) => item.id === fullscreenPaneId);
-    if (!pane) return null;
-    if (scopedSessionIds && !pane.sessionIds.some((sessionId) => scopedSessionIds.has(sessionId))) return null;
-    return fullscreenPaneId;
-  }, [allPanes, fullscreenPaneId, scopedSessionIds]);
-  const preferredScopedSessionId = useMemo(() => {
-    if (!scopedSessionIds) return null;
-    if (activeSessionId && scopedSessionIds.has(activeSessionId)) return activeSessionId;
-    return findFirstSessionId(renderPaneTree);
-  }, [activeSessionId, renderPaneTree, scopedSessionIds]);
-  const effectiveActiveSessionId = preferredScopedSessionId ?? activeSessionId;
-  const activeSession = useMemo(
-    () => {
-      if (scopedSessionIds && !preferredScopedSessionId) return null;
-      return effectiveActiveSessionId ? sessions.find((session) => session.id === effectiveActiveSessionId) ?? null : null;
-    },
-    [effectiveActiveSessionId, preferredScopedSessionId, scopedSessionIds, sessions]
-  );
+  const {
+    visibleSessionIds, mountedWorkspanLayouts, visibleWorkspanLayouts, effectiveActiveWorkspanId,
+    activeWorkspanLayout, visibleSessions, allPanes, activeFullscreenPaneId,
+    preferredScopedSessionId, effectiveActiveSessionId, activeSession,
+  } = useTerminalVisibleLayouts(workspans, sessions, scopedSessionIds, activeWorkspanId, activeSessionId, fullscreenPaneId);
   // 子 Agent 转录伪会话没有自己的 CLI 会话/项目：实时统计与 Git 面板落到其父终端，
   // 避免聚焦转录 Tab 时面板被清空/错位。
   useEffect(() => {
     if (!projectScopedTerminalViewEnabled || terminalScopeValue.kind === "all") return;
     const currentActiveSessionId = useTerminalStore.getState().activeSessionId;
-    if (currentActiveSessionId && scopedSessionIds?.has(currentActiveSessionId)) return;
+    if (currentActiveSessionId && visibleSessionIds.has(currentActiveSessionId)) return;
     if (!preferredScopedSessionId || preferredScopedSessionId === currentActiveSessionId) return;
     setActive(preferredScopedSessionId);
-  }, [preferredScopedSessionId, projectScopedTerminalViewEnabled, scopedSessionIds, setActive, terminalScopeValue]);
+  }, [preferredScopedSessionId, projectScopedTerminalViewEnabled, visibleSessionIds, setActive, terminalScopeValue]);
 
   const panelSession = useMemo(() => {
     if (activeSession?.kind === "subagent-transcript" && activeSession.subagent) {
@@ -647,7 +588,7 @@ export function useTerminalTabsController({
     if (!fullscreenPaneId || activeFullscreenPaneId) return;
 
     setFullscreenPaneId(null);
-  }, [activeFullscreenPaneId, fullscreenPaneId]);
+  }, [activeFullscreenPaneId, fullscreenPaneId, setFullscreenPaneId]);
 
   const clearSplitPickerOpenSchedule = useCallback(() => {
     if (splitPickerOpenFrameRef.current !== null) {
@@ -693,7 +634,8 @@ export function useTerminalTabsController({
     const sourceWorktree = sourceSession?.worktreeId ? worktrees.find((worktree) => worktree.id === sourceSession.worktreeId) ?? null : null;
     const projectLaunchOptions = activeProject ? buildProjectSplitOptions(activeProject, groups) : null;
     const launchCwd = sourceWorktree?.path.trim() || newTerminalContext.cwd;
-    const launchStartupCmd = projectLaunchOptions?.startupCmd || (activeProject ? undefined : undefined);
+    const launchStartupCmd = sourceSession?.isAgentSession === false && !sourceSession.startupCmd
+      ? "" : projectLaunchOptions?.startupCmd;
     const launchEnvVars = projectLaunchOptions?.envVars;
     const launchShell = projectLaunchOptions?.shell;
     if (useExternalTerminal) {
@@ -852,7 +794,7 @@ export function useTerminalTabsController({
       session.projectId,
       session.cwd,
       session.title,
-      normalizeDirectCodexStartupCommand(session.startupCmd),
+      session.isAgentSession === false && !session.startupCmd ? "" : normalizeDirectCodexStartupCommand(session.startupCmd),
       session.envVars ? { ...session.envVars } : undefined,
       session.shell ?? undefined,
       undefined,
@@ -891,7 +833,7 @@ export function useTerminalTabsController({
     }
 
     setFullscreenPaneId(paneId);
-  }, [activeFullscreenPaneId, activeSessionId, allPanes, closeHistory, handleActivateSession]);
+  }, [activeFullscreenPaneId, activeSessionId, allPanes, closeHistory, handleActivateSession, setFullscreenPaneId]);
 
   const handleRestoreWorkspanToSinglePane = useCallback((workspanId: string) => {
     if (workspanId === effectiveActiveWorkspanId && activeFullscreenPaneId) {
@@ -923,13 +865,13 @@ export function useTerminalTabsController({
     void (async () => {
       for (const sessionId of sessionIds) {
         try {
-          await closeSession(sessionId);
+          await hideSession(sessionId);
         } catch (err) {
           logError("Failed to close terminal session", { sessionId, err });
         }
       }
     })();
-  }, [closeSession]);
+  }, [hideSession]);
 
   const closeSessionsWithDirtyGuard = useCallback(async (sessionIds: string[]) => {
     const currentSessions = useTerminalStore.getState().sessions;
@@ -970,7 +912,7 @@ export function useTerminalTabsController({
 
     const terminalSessionCount = uniqueSessionIds.filter((sessionId) => {
       const session = sessions.find((item) => item.id === sessionId);
-      return session?.kind !== "file-editor";
+      return session && !isHideableTerminalSession(session) && session.kind !== "file-editor";
     }).length;
 
     if (!shouldConfirmTerminalTabClose(terminalSessionCount)) {
@@ -1695,7 +1637,7 @@ export function useTerminalTabsController({
       setFullscreenPaneId(null);
     }
     onToggleFullscreen?.();
-  }, [activeFullscreenPaneId, onToggleFullscreen]);
+  }, [activeFullscreenPaneId, onToggleFullscreen, setFullscreenPaneId]);
 
   const renderToolbarActions = useTerminalToolbarRenderer({
     t,
@@ -1778,15 +1720,13 @@ export function useTerminalTabsController({
     layoutActiveSessionId: string | null,
     layoutVisible: boolean
   ) => {
-    const visiblePaneSessionCount = scopedSessionIds
-      ? pane.sessionIds.filter((sessionId) => scopedSessionIds.has(sessionId)).length
-      : pane.sessionIds.length;
+    const visiblePaneSessionCount = pane.sessionIds.filter((sessionId) => visibleSessionIds.has(sessionId)).length;
     return (
       <MemoPaneLeafView
         key={pane.id}
         pane={pane}
         sessions={sessions}
-        visibleSessionIds={scopedSessionIds}
+        visibleSessionIds={visibleSessionIds}
         projects={projects}
         worktrees={worktrees}
         allPanes={layoutPanes}
@@ -1868,7 +1808,7 @@ export function useTerminalTabsController({
     projects,
     resolvedTheme,
     detachSessionToWorkspan,
-    scopedSessionIds,
+    visibleSessionIds,
     sessions,
     worktrees,
     workspanEnabled,

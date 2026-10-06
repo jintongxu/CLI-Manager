@@ -1,0 +1,214 @@
+/* Shared by tree, pinned projects and narrow-sidebar flyouts; no global tree overrides. */
+.sidebar-terminal-list {
+  min-width: 0;
+  border-inline-start: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  border-end-start-radius: 6px;
+  margin-block: 2px 8px;
+  padding: 1px 0 2px 7px;
+}
+
+.sidebar-terminal-row {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  min-height: 28px;
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--on-surface-variant);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.sidebar-terminal-row::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: -8px;
+  top: 50%;
+  width: 7px;
+  height: 1px;
+  background: color-mix(in srgb, var(--border) 55%, transparent);
+  pointer-events: none;
+}
+
+.sidebar-terminal-row:hover {
+  background: color-mix(in srgb, var(--on-surface) 5%, transparent);
+}
+
+.sidebar-terminal-row[data-selected="true"] {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  box-shadow: inset 2px 0 0 var(--primary);
+}
+
+.sidebar-terminal-row[data-selected="true"]:hover {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+/* Inset focus stays visible even when a narrow/flyout scroll container clips edges. */
+.sidebar-terminal-row:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--on-surface) 65%, var(--primary)) !important;
+  outline-offset: -2px !important;
+  box-shadow: inset 0 0 0 1px var(--surface-container-low);
+}
+
+.sidebar-terminal-title {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-terminal-heading {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sidebar-terminal-title-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  font-weight: 400;
+}
+
+.sidebar-terminal-icon {
+  flex: 0 0 auto;
+  margin-block-start: 3px;
+  color: var(--on-surface-variant);
+}
+
+/* Compact fixed indicators stay on the existing title-aligned second tier. */
+.sidebar-terminal-metadata {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.sidebar-terminal-status,
+.sidebar-terminal-hidden {
+  display: inline-flex;
+  flex: 0 0 12px;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  white-space: nowrap;
+  color: var(--on-surface-variant);
+}
+
+.sidebar-terminal-row[data-status="running"] .sidebar-terminal-status,
+.sidebar-terminal-row[data-status="remote"] .sidebar-terminal-status {
+  color: color-mix(in srgb, var(--on-surface) 75%, var(--primary));
+}
+
+.sidebar-terminal-row[data-status="wait"] .sidebar-terminal-status {
+  color: color-mix(in srgb, var(--on-surface) 75%, var(--warning));
+}
+
+.sidebar-terminal-row[data-status="completed"] .sidebar-terminal-status {
+  color: color-mix(in srgb, var(--on-surface) 75%, var(--success));
+}
+
+.sidebar-terminal-row[data-status="failed"] .sidebar-terminal-status {
+  color: color-mix(in srgb, var(--on-surface) 75%, var(--danger));
+}
+
+.sidebar-terminal-list[data-density="compact"] .sidebar-terminal-row {
+  min-height: 24px;
+  padding-block: 2px;
+  font-size: 11px;
+}
+
+/* Keep the same leading column for empty, folded and expanded Worktree rows. */
+.worktree-terminal-toggle-slot {
+  display: inline-flex;
+  flex: 0 0 14px;
+  align-items: center;
+  width: 14px;
+  height: 22px;
+}
+
+/* Existing action visibility handles hover/focus; its width must always be reserved. */
+.ui-worktree-row > .ui-tree-item-actions {
+  display: flex;
+  flex: 0 0 22px;
+}
+
+/* Title/badges own the first tier; optional summary owns the second, title-aligned tier. */
+.worktree-terminal-heading {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1px;
+  min-width: 0;
+}
+
+.worktree-terminal-title-line {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.worktree-terminal-title {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.worktree-terminal-summary {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--on-surface-variant);
+  font-size: 10px;
+  line-height: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.worktree-terminal-summary-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.worktree-terminal-summary-token {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.worktree-terminal-summary-token > svg,
+.worktree-terminal-summary-glyph {
+  flex: 0 0 12px;
+  width: 12px;
+  text-align: center;
+}
+
+.sidebar-terminal-pin { flex: 0 0 auto; color: var(--primary); }
