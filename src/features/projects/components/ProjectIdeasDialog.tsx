@@ -10,11 +10,12 @@ import {
   DialogTitle,
 } from "../../../shared/ui/dialog";
 import { Button } from "../../../shared/ui/button";
+import { ConfirmDialog } from "../../../shared/ui/ConfirmDialog";
 import { useI18n, type TranslationKey } from "../../../shared/i18n";
 import type { Project, WorktreeRecord } from "../../../shared/types";
 import { getWorktreeDisplayName } from "../api/worktreeMetadata";
 import { useWorktreeStore } from "../api/worktreeStore";
-import { Folder, Check, Copy, Pencil, Plus, Star, Trash2, GripVertical } from "../../../shared/ui/icons";
+import { Folder, Check, Copy, Pencil, Plus, Star, Trash2, GripVertical, X } from "../../../shared/ui/icons";
 import { formatProjectIdea } from "../lib/projectIdeaFormatter";
 import {
   useProjectIdeaStore,
@@ -59,6 +60,9 @@ export function ProjectIdeasDialog({
   const [copyFormat, setCopyFormat] = useState<"plain" | "markdown" | "prompt" | "context">("plain");
   const [copyState, setCopyState] = useState<"idle" | "success" | "failure">("idle");
   const [acceptanceText, setAcceptanceText] = useState("");
+  const [saveRequested, setSaveRequested] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ProjectIdea | null>(null);
   const [checklist, setChecklist] = useState<import("../api/projectIdeaStore").ProjectIdeaChecklistItem[]>([]);
   const [checklistText, setChecklistText] = useState("");
   const [undoDelete, setUndoDelete] = useState<{ id: string; projectId: string } | null>(null);
@@ -151,6 +155,7 @@ export function ProjectIdeasDialog({
       setOrganized(selected.organized_content);
       setTags(selected.tags.join(", "));
       setAcceptanceText(selected.acceptance_criteria.join("\n"));
+      setIsEditing(false);
       if (selectedProject) void listChecklist(selected.id, selectedProject.id).then(setChecklist).catch(() => setChecklist([]));
     }
   }, [selected?.id, selectedProject?.id, listChecklist]);
@@ -176,11 +181,29 @@ export function ProjectIdeasDialog({
         parseTags(),
       );
       await updateAcceptance(selected.id, selectedProject.id, acceptanceText.split("\n"));
+      setIsEditing(false);
     } catch (error) {
       setMutationError(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
     }
+  };
+
+  const requestSave = () => {
+    if (isEditing && selected && selectedProject && !busy && title.trim() && draft.trim()) {
+      setSaveRequested(true);
+    }
+  };
+
+  const cancelEditing = () => {
+    if (selected) {
+      setTitle(selected.title);
+      setDraft(selected.content);
+      setOrganized(selected.organized_content);
+      setTags(selected.tags.join(", "));
+      setAcceptanceText(selected.acceptance_criteria.join("\n"));
+    }
+    setIsEditing(false);
   };
 
   const add = async () => {
@@ -211,17 +234,21 @@ export function ProjectIdeasDialog({
     }
   };
 
-  const deleteSelected = async () => {
-    if (!selected || !window.confirm(t("projectIdeas.workspace.confirmDelete"))) {
-      return;
-    }
+  const requestDeleteSelected = () => {
+    if (selected && !busy) setDeleteTarget(selected);
+  };
+
+  const confirmDeleteSelected = async () => {
+    const target = deleteTarget;
+    if (!target) return;
+    setDeleteTarget(null);
     setBusy(true);
     try {
       setMutationError(null);
-      await remove(selected);
-      setUndoDelete({ id: selected.id, projectId: selected.project_id });
+      await remove(target);
+      setUndoDelete({ id: target.id, projectId: target.project_id });
       setSelectedId(null);
-      window.setTimeout(() => setUndoDelete((current) => current?.id === selected.id ? null : current), 6000);
+      window.setTimeout(() => setUndoDelete((current) => current?.id === target.id ? null : current), 6000);
     } catch (error) {
       setMutationError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -230,7 +257,8 @@ export function ProjectIdeasDialog({
   };
 
   return (
-    <Dialog open={project !== null} onOpenChange={(open) => !open && onClose()}>
+    <>
+      <Dialog open={project !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="flex max-h-[min(760px,calc(100vh-32px))] min-h-0 max-w-5xl flex-col gap-0 p-0">
         <DialogHeader className="shrink-0 border-b border-border px-5 py-4">
           <DialogTitle>
@@ -338,25 +366,28 @@ export function ProjectIdeasDialog({
               checklist={checklist}
               checklistText={checklistText}
               setChecklistText={setChecklistText}
-              onAddChecklist={async () => { if (selected && selectedProject && checklistText.trim()) { const item = await addChecklist(selected.id, selectedProject.id, checklistText); setChecklist((items) => [...items, item]); setChecklistText(""); } }}
-              onToggleChecklist={async (item) => { if (selected && selectedProject) { await updateChecklist(item.id, selected.id, selectedProject.id, { is_completed: !item.is_completed }); setChecklist((items) => items.map((current) => current.id === item.id ? { ...current, is_completed: !current.is_completed } : current)); } }}
-              onDeleteChecklist={async (item) => { if (selected && selectedProject) { await deleteChecklist(item.id, selected.id, selectedProject.id); setChecklist((items) => items.filter((current) => current.id !== item.id)); } }}
-              onToggle={() => selected && void toggle(selected)}
-              onPin={() => selected && selectedProject && void setPinned(selected.id, selectedProject.id, !selected.is_pinned)}
-              onArchive={() => selected && selectedProject && void setArchived(selected.id, selectedProject.id, !selected.is_archived)}
-              onDelete={() => void deleteSelected()}
-              onSave={() => void save()}
+              onAddChecklist={async () => { if (isEditing && selected && selectedProject && checklistText.trim()) { const item = await addChecklist(selected.id, selectedProject.id, checklistText); setChecklist((items) => [...items, item]); setChecklistText(""); } }}
+              onToggleChecklist={async (item) => { if (isEditing && selected && selectedProject) { await updateChecklist(item.id, selected.id, selectedProject.id, { is_completed: !item.is_completed }); setChecklist((items) => items.map((current) => current.id === item.id ? { ...current, is_completed: !current.is_completed } : current)); } }}
+              onDeleteChecklist={async (item) => { if (isEditing && selected && selectedProject) { await deleteChecklist(item.id, selected.id, selectedProject.id); setChecklist((items) => items.filter((current) => current.id !== item.id)); } }}
+              onToggle={() => isEditing && selected && void toggle(selected)}
+              onPin={() => isEditing && selected && selectedProject && void setPinned(selected.id, selectedProject.id, !selected.is_pinned)}
+              onArchive={() => isEditing && selected && selectedProject && void setArchived(selected.id, selectedProject.id, !selected.is_archived)}
+              isEditing={isEditing}
+              onEdit={() => setIsEditing(true)}
+              onCancelEditing={cancelEditing}
+              onDelete={requestDeleteSelected}
+              onSave={requestSave}
               worktrees={projectWorktrees}
               selectedWorktree={selectedWorktree}
               onWorktreeChange={(worktreeId) => {
-                if (selected && selectedProject) {
+                if (isEditing && selected && selectedProject) {
                   void updateIdeaWorktree(selected.id, selectedProject.id, worktreeId).catch((error) => {
                     setMutationError(error instanceof Error ? error.message : String(error));
                   });
                 }
               }}
               onPriorityChange={(value) => {
-                if (selected) {
+                if (isEditing && selected) {
                   void updateMetadata(
                     selected.id,
                     selected.project_id,
@@ -370,6 +401,29 @@ export function ProjectIdeasDialog({
         </div>
       </DialogContent>
     </Dialog>
+    <ConfirmDialog
+      open={saveRequested}
+      title={t("projectIdeas.workspace.confirmSaveTitle")}
+      message={t("projectIdeas.workspace.confirmSaveMessage")}
+      confirmText={t("projectIdeas.workspace.saveConfirm")}
+      cancelText={t("projectIdeas.workspace.cancel")}
+      onConfirm={() => {
+        setSaveRequested(false);
+        void save();
+      }}
+      onClose={() => setSaveRequested(false)}
+    />
+    <ConfirmDialog
+      open={deleteTarget !== null}
+      title={t("projectIdeas.workspace.confirmDelete")}
+      message={deleteTarget?.title}
+      confirmText={t("projectIdeas.workspace.deleteConfirm")}
+      cancelText={t("projectIdeas.workspace.cancel")}
+      danger
+      onConfirm={() => void confirmDeleteSelected()}
+      onClose={() => setDeleteTarget(null)}
+    />
+    </>
   );
 }
 
@@ -607,6 +661,7 @@ interface IdeaInspectorProps {
   organized: string;
   tags: string;
   busy: boolean;
+  isEditing: boolean;
   setTitle: (value: string) => void;
   setDraft: (value: string) => void;
   setOrganized: (value: string) => void;
@@ -626,6 +681,8 @@ interface IdeaInspectorProps {
   onToggle: () => void;
   onPin: () => void;
   onArchive: () => void;
+  onEdit: () => void;
+  onCancelEditing: () => void;
   onDelete: () => void;
   onSave: () => void;
   onPriorityChange: (value: ProjectIdeaPriority) => void;
@@ -641,6 +698,7 @@ function IdeaInspector({
   organized,
   tags,
   busy,
+  isEditing,
   setTitle,
   setDraft,
   setOrganized,
@@ -660,6 +718,8 @@ function IdeaInspector({
   onToggle,
   onPin,
   onArchive,
+  onEdit,
+  onCancelEditing,
   onDelete,
   onSave,
   onPriorityChange,
@@ -682,8 +742,27 @@ function IdeaInspector({
     <section className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded border border-border p-3">
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold">{t("projectIdeas.workspace.original")}</h3>
+          <h3
+            className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-md border px-2.5 py-1 text-xs font-semibold tracking-wide ${
+              isEditing
+                ? "border-amber-400/40 bg-amber-400/10 text-amber-200"
+                : "border-sky-400/40 bg-sky-400/10 text-sky-200"
+            }`}
+          >
+            {isEditing ? t("projectIdeas.workspace.editing") : t("projectIdeas.workspace.preview")}
+          </h3>
           <div className="flex flex-wrap justify-end gap-1">
+            {isEditing ? (
+              <Button size="sm" variant="outline" onClick={onCancelEditing} disabled={busy}>
+                <X size={13} />
+                {t("projectIdeas.workspace.cancelEdit")}
+              </Button>
+            ) : (
+              <Button size="sm" onClick={onEdit}>
+                <Pencil size={13} />
+                {t("projectIdeas.workspace.edit")}
+              </Button>
+            )}
             <select value={copyFormat} onChange={(event) => setCopyFormat(event.currentTarget.value as typeof copyFormat)} aria-label={t("projectIdeas.toolbar.copyFormat")} className="h-8 rounded border border-border bg-bg-primary px-1 text-xs">
               <option value="plain">{t("projectIdeas.toolbar.copyPlain")}</option>
               <option value="markdown">{t("projectIdeas.toolbar.copyMarkdown")}</option>
@@ -695,9 +774,9 @@ function IdeaInspector({
               {copyState === "success" ? t("projectIdeas.toolbar.copied") : t("projectIdeas.toolbar.copyIdea")}
             </Button>
             {copyState === "failure" && <span className="self-center text-[11px] text-danger">{t("projectIdeas.toolbar.copyFailed")}</span>}
-            <Button size="sm" onClick={onPin} aria-label={selected.is_pinned ? t("projectIdeas.toolbar.unpinned") : t("projectIdeas.toolbar.pinned")} title={selected.is_pinned ? t("projectIdeas.toolbar.unpinned") : t("projectIdeas.toolbar.pinned")}><Star size={13} className={selected.is_pinned ? "fill-amber-400 text-amber-400" : ""} /></Button>
-            <Button size="sm" onClick={onArchive} aria-label={selected.is_archived ? t("projectIdeas.toolbar.unarchived") : t("projectIdeas.toolbar.archived")} title={selected.is_archived ? t("projectIdeas.toolbar.unarchived") : t("projectIdeas.toolbar.archived")}><Folder size={13} /></Button>
-            <Button size="sm" onClick={onToggle}>
+            <Button size="sm" onClick={onPin} disabled={!isEditing} aria-label={selected.is_pinned ? t("projectIdeas.toolbar.unpinned") : t("projectIdeas.toolbar.pinned")} title={selected.is_pinned ? t("projectIdeas.toolbar.unpinned") : t("projectIdeas.toolbar.pinned")}><Star size={13} className={selected.is_pinned ? "fill-amber-400 text-amber-400" : ""} /></Button>
+            <Button size="sm" onClick={onArchive} disabled={!isEditing} aria-label={selected.is_archived ? t("projectIdeas.toolbar.unarchived") : t("projectIdeas.toolbar.archived")} title={selected.is_archived ? t("projectIdeas.toolbar.unarchived") : t("projectIdeas.toolbar.archived")}><Folder size={13} /></Button>
+            <Button size="sm" onClick={onToggle} disabled={!isEditing}>
               <Check size={13} />
               {selected.status === "done"
                 ? t("projectIdeas.reopen")
@@ -707,6 +786,7 @@ function IdeaInspector({
               size="sm"
               variant="destructive"
               onClick={onDelete}
+              disabled={!isEditing}
               aria-label={t("projectIdeas.workspace.deleteAria")}
             >
               <Trash2 size={13} />
@@ -715,12 +795,13 @@ function IdeaInspector({
         </div>
         <label className="block text-xs text-text-muted">
           {t("projectIdeas.workspace.title")}
-          <input value={title} onChange={(event) => setTitle(event.currentTarget.value)} aria-label={t("projectIdeas.workspace.titleAria")} className="mt-1 h-8 w-full rounded border border-border bg-bg-primary px-2 text-sm" />
+          <input value={title} onChange={(event) => setTitle(event.currentTarget.value)} readOnly={!isEditing} aria-label={t("projectIdeas.workspace.titleAria")} className="mt-1 h-8 w-full rounded border border-border bg-bg-primary px-2 text-sm read-only:cursor-default read-only:opacity-80" />
         </label>
         <label className="block text-xs text-text-muted">{t("projectIdeas.workspace.original")}
         <textarea
           value={draft}
           onChange={(event) => setDraft(event.currentTarget.value)}
+          readOnly={!isEditing}
           rows={6}
           aria-label={t("projectIdeas.workspace.originalAria")}
           className="max-h-56 w-full resize-y overflow-y-auto rounded border border-border bg-bg-primary p-2 text-sm"
@@ -731,6 +812,7 @@ function IdeaInspector({
           <select
             value={selected?.worktree_id ?? ""}
             onChange={(event) => onWorktreeChange(event.currentTarget.value || null)}
+            disabled={!isEditing}
             className="mt-1 block h-8 w-full rounded border border-border bg-bg-primary px-2 text-xs"
             aria-label={t("projectIdeas.workspace.worktree")}
           >
@@ -755,6 +837,7 @@ function IdeaInspector({
             onChange={(event) =>
               onPriorityChange(event.currentTarget.value as ProjectIdeaPriority)
             }
+            disabled={!isEditing}
             className="mt-1 block h-8 rounded border border-border bg-bg-primary px-2 text-xs"
           >
             <option value="high">{t("projectIdeas.workspace.priorityHigh")}</option>
@@ -767,35 +850,57 @@ function IdeaInspector({
           <input
             value={tags}
             onChange={(event) => setTags(event.currentTarget.value)}
+            readOnly={!isEditing}
             placeholder={t("projectIdeas.workspace.tagsHint")}
             className="mt-1 block h-8 w-full rounded border border-border bg-bg-primary px-2 text-xs"
           />
         </label>
         <label className="block text-xs text-text-muted">
           {t("projectIdeas.workspace.acceptanceCriteria")}
-          <textarea value={acceptanceText} onChange={(event) => setAcceptanceText(event.currentTarget.value)} rows={3} placeholder={t("projectIdeas.workspace.acceptanceCriteriaHint")} className="mt-1 w-full resize-y rounded border border-border bg-bg-primary p-2 text-sm" />
+          <textarea value={acceptanceText} onChange={(event) => setAcceptanceText(event.currentTarget.value)} readOnly={!isEditing} rows={3} placeholder={t("projectIdeas.workspace.acceptanceCriteriaHint")} className="mt-1 w-full resize-y rounded border border-border bg-bg-primary p-2 text-sm read-only:cursor-default read-only:opacity-80" />
         </label>
         <div className="rounded border border-border p-2">
           <h4 className="text-xs font-semibold">{t("projectIdeas.workspace.checklist")}</h4>
           <div className="mt-1 space-y-1">
-            {checklist.map((item) => <div key={item.id} className="flex items-center gap-2 text-xs"><input type="checkbox" checked={Boolean(item.is_completed)} onChange={() => void onToggleChecklist(item)} /><span className={item.is_completed ? "line-through opacity-60" : ""}>{item.text}</span><button type="button" className="ml-auto text-danger" onClick={() => void onDeleteChecklist(item)} aria-label={t("projectIdeas.workspace.deleteChecklist")}><Trash2 size={12} /></button></div>)}
+            {checklist.map((item) => (
+              <div key={item.id} className="flex items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={Boolean(item.is_completed)}
+                  disabled={!isEditing}
+                  onChange={() => void onToggleChecklist(item)}
+                />
+                <span className={item.is_completed ? "line-through opacity-60" : ""}>{item.text}</span>
+                {isEditing && (
+                  <button
+                    type="button"
+                    className="ml-auto text-danger"
+                    onClick={() => void onDeleteChecklist(item)}
+                    aria-label={t("projectIdeas.workspace.deleteChecklist")}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
-          <div className="mt-2 flex gap-1"><input value={checklistText} onChange={(event) => setChecklistText(event.currentTarget.value)} placeholder={t("projectIdeas.workspace.checklistPlaceholder")} className="h-7 min-w-0 flex-1 rounded border border-border bg-bg-primary px-2 text-xs" /><Button size="sm" onClick={() => void onAddChecklist()} disabled={!checklistText.trim()}><Plus size={12} /></Button></div>
+          {isEditing && <div className="mt-2 flex gap-1"><input value={checklistText} onChange={(event) => setChecklistText(event.currentTarget.value)} placeholder={t("projectIdeas.workspace.checklistPlaceholder")} className="h-7 min-w-0 flex-1 rounded border border-border bg-bg-primary px-2 text-xs" /><Button size="sm" onClick={() => void onAddChecklist()} disabled={!checklistText.trim()}><Plus size={12} /></Button></div>}
         </div>
         <label className="block text-xs text-text-muted">
           {t("projectIdeas.workspace.organized")}
           <textarea
             value={organized}
             onChange={(event) => setOrganized(event.currentTarget.value)}
+            readOnly={!isEditing}
             rows={8}
             aria-label={t("projectIdeas.workspace.organizedAria")}
             className="mt-1 max-h-64 w-full resize-y overflow-y-auto rounded border border-border bg-bg-primary p-2 text-sm"
           />
         </label>
-        <Button onClick={onSave} disabled={busy || !title.trim() || !draft.trim()}>
+        {isEditing && <Button onClick={onSave} disabled={busy || !title.trim() || !draft.trim()}>
           <Pencil size={13} />
           {t("projectIdeas.workspace.save")}
-        </Button>
+        </Button>}
       </div>
     </section>
   );
