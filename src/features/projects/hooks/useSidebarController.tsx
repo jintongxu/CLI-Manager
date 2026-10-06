@@ -1,11 +1,12 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, type MouseEvent as ReactMouseEvent } from "react";
 import { useShallow } from "zustand/shallow";
-import type { DragEndEvent } from "@dnd-kit/core";
+import { useSidebarTreeDrag } from "./useSidebarTreeDrag";
 import { invoke } from "@tauri-apps/api/core";
 import { useProjectStore } from "../api/projectStore";
 import { useProjectIdeaStore } from "../api/projectIdeaStore";
 import { useProjectLocate } from "./useProjectLocate";
-import { useTerminalStore, type SessionStatus } from "../../terminal/state";
+import { useTerminalStore } from "../../terminal/state";
+import { summarizeProjectTerminalStates, type SidebarTerminalState } from "../lib/sidebarTerminals";
 import { useFileExplorerStore } from "../../files/api/fileExplorerStore";
 import { useHistoryStore } from "../../history/index";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
@@ -13,7 +14,7 @@ import { createDefaultWorktreeTaskName, isWorktreeCreateInProgressError, useWork
 import { getWorktreeDisplayName } from "../api/worktreeMetadata";
 import { useExternalSessionSyncStore } from "../../history/api/externalSessionSyncStore";
 import type { TerminalPaneSplitDirection } from "../../terminal/api/terminalPaneTree";
-import type { Project, TreeNode as TNode, Group, WorktreeRecord } from "../../../shared/types/index";
+import type { Project, TreeNode as TNode, Group, WorktreeRecord, TerminalScope } from "../../../shared/types/index";
 import { useAppConfirm } from "../../../shared/ui/useAppConfirm";
 import { openWindowsTerminal } from "../../terminal/api/externalTerminal";
 import { resolveProjectStartupCommand } from "../api/projectStartupCommand";
@@ -39,6 +40,7 @@ import {
   type SidebarConfirmAction,
 } from "../lib/sidebarModel";
 import { useSidebarLayout } from "./useSidebarLayout";
+import { useSidebarTerminals } from "./useSidebarTerminals";
 import { createSidebarDeleteConfirmation } from "../lib/sidebarDeleteConfirmation";
 import { usePinnedProjects } from "./usePinnedProjects";
 import { registerWebDeviceActionHandler, type WebDeviceActionRequest } from "../../../shared/lib/webDeviceActionBus";
@@ -106,6 +108,8 @@ export function useSidebarController({
   const activeSessionId = useTerminalStore((s) => s.activeSessionId);
   const setActiveSession = useTerminalStore((s) => s.setActive);
   const sessionStatuses = useTerminalStore((s) => s.sessionStatuses);
+  const tabNotifications = useTerminalStore((s) => s.tabNotifications);
+  const taskSources = useTerminalStore((s) => s.tabStatuses);
   const createWorktreeForProject = useWorktreeStore((s) => s.createWorktreeForProject);
   const shouldIsolateNewSession = useWorktreeStore((s) => s.shouldIsolateNewSession);
   const validateProjectGit = useWorktreeStore((s) => s.validateProjectGit);
@@ -435,105 +439,7 @@ export function useSidebarController({
   const [loadError, setLoadError] = useState<string | null>(null);
 
 
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      const { active, over } = event;
-      if (!over || active.id === over.id) return;
-      const activeId = active.id as string;
-      const overId = over.id as string;
-      const isGroup = (id: string) => groups.some((g) => g.id === id);
-      const isProject = (id: string) => projects.some((p) => p.id === id);
-      const isInheritedNode = (id: string) => {
-        const group = groups.find((item) => item.id === id);
-        if (group) return group.parent_id !== null && !(group.bound_path ?? "").trim();
-        const project = projects.find((item) => item.id === id);
-        return project?.path_mode === "inherit" && project.group_id !== null;
-      };
-
-      // 1) 拖入指定分组
-      if (overId.startsWith("into:")) {
-        const targetGroupId = overId.slice("into:".length);
-        if (activeId === targetGroupId) return;
-        if (isGroup(activeId)) void moveGroupToParent(activeId, targetGroupId);
-        else if (isProject(activeId)) void moveProjectToGroup(activeId, targetGroupId);
-        return;
-      }
-
-      // 3) 拖到 sibling 节点：先定位 over 所在父级与同级列表
-      const findParentChildren = (
-        nodes: TNode[],
-        targetId: string,
-        parentId: string | null
-      ): { parentId: string | null; nodes: TNode[] } | null => {
-        const here = nodes.some((n) =>
-          n.type === "group" ? n.group.id === targetId : n.project.id === targetId
-        );
-        if (here) return { parentId, nodes };
-        for (const n of nodes) {
-          if (n.type === "group") {
-            const r = findParentChildren(n.children, targetId, n.group.id);
-            if (r) return r;
-          }
-        }
-        return null;
-      };
-
-      const overContext = findParentChildren(tree, overId, null);
-      if (!overContext) return;
-
-      const ids = overContext.nodes.map((c) => (c.type === "group" ? c.group.id : c.project.id));
-      const oldIndex = ids.indexOf(activeId);
-      const newIndex = ids.indexOf(overId);
-      if (newIndex === -1) return;
-
-      const preservesInheritedPrefix = (orderedIds: string[], movedId: string) => {
-        // 只有被移动的节点本身是继承节点时才限制落点；自定义节点可以正常
-        // 在继承节点前后排序，不应因为目标节点类型不同而失去拖拽能力。
-        if (!isInheritedNode(movedId)) return true;
-        let sawCustom = false;
-        for (const id of orderedIds) {
-          if (isInheritedNode(id)) {
-            if (sawCustom) return false;
-          } else {
-            sawCustom = true;
-          }
-        }
-        return true;
-      };
-
-      // active 不在同层 → 跨层移到 over 所在父级
-      if (oldIndex === -1) {
-        const targetParent = overContext.parentId;
-        if (isGroup(activeId) && targetParent) {
-          let current = groups.find((group) => group.id === targetParent);
-          while (current) {
-            if (current.id === activeId) return;
-            current = current.parent_id
-              ? groups.find((group) => group.id === current?.parent_id)
-              : undefined;
-          }
-        }
-        const reordered = [...ids];
-        reordered.splice(newIndex, 0, activeId);
-        if (!preservesInheritedPrefix(reordered, activeId)) return;
-        void (async () => {
-          if (isGroup(activeId)) await moveGroupToParent(activeId, targetParent);
-          else if (isProject(activeId)) await moveProjectToGroup(activeId, targetParent);
-          else return;
-          await reorderItems(targetParent, reordered);
-        })();
-        return;
-      }
-
-      // 同层 reorder
-      const reordered = [...ids];
-      reordered.splice(oldIndex, 1);
-      reordered.splice(newIndex, 0, activeId);
-      if (!preservesInheritedPrefix(reordered, activeId)) return;
-      void reorderItems(overContext.parentId, reordered);
-    },
-    [groups, projects, tree, reorderItems, moveGroupToParent, moveProjectToGroup]
-  );
+  const handleDragEnd = useSidebarTreeDrag(groups, projects, tree, reorderItems, moveGroupToParent, moveProjectToGroup);
 
   const loadProjects = useCallback(async () => {
     try {
@@ -656,31 +562,13 @@ export function useSidebarController({
   // 把 sessions × statuses 预聚合成 Map<projectId, status>，从每节点 O(N) filter
   // 变成 O(1) lookup。原方案在 TreeNodeItem 中每行调用一次，叠加项目树 + 状态变化
   // 会触发 O(N·M) 全表扫描。
-  const projectStatusMap = useMemo(() => {
-    const map = new Map<string, SessionStatus>();
-    for (const session of sessions) {
-      const projectId = session.projectId;
-      if (!projectId) continue;
-      const status = (sessionStatuses[session.id] ?? "running") as SessionStatus;
-      const current = map.get(projectId);
-      // running 优先级最高，其次 error，最后 exited
-      if (status === "running") {
-        map.set(projectId, "running");
-        continue;
-      }
-      if (current === "running") continue;
-      if (status === "error") {
-        map.set(projectId, "error");
-        continue;
-      }
-      if (current === "error") continue;
-      map.set(projectId, "exited");
-    }
-    return map;
-  }, [sessions, sessionStatuses]);
+  const projectStatusMap = useMemo(
+    () => summarizeProjectTerminalStates(sessions, sessionStatuses, tabNotifications, taskSources),
+    [sessions, sessionStatuses, tabNotifications, taskSources]
+  );
 
   const getProjectStatus = useCallback(
-    (projectId: string): SessionStatus | null => projectStatusMap.get(projectId) ?? null,
+    (projectId: string): SidebarTerminalState | null => projectStatusMap.get(projectId) ?? null,
     [projectStatusMap]
   );
 
@@ -1741,8 +1629,16 @@ export function useSidebarController({
     onBeforeLocate: () => setContextMenu(null),
   });
 
+  const selectTerminalScope = useCallback((scope: TerminalScope) => {
+    setShowFileExplorer(false);
+    setSelectedId(scope.kind === "worktree" ? scope.worktreeId : scope.kind === "project" ? scope.projectId : null);
+    setSelectedProjectIds(new Set()); setSelectedGroupIds(new Set()); setSelectedWorktreeIds(new Set());
+    if (projectScopedTerminalViewEnabled) onTerminalScopeChange?.(scope);
+  }, [onTerminalScopeChange, projectScopedTerminalViewEnabled]);
+  const sidebarTerminals = useSidebarTerminals(selectTerminalScope, confirm);
   const treeActions = useMemo<TreeActions>(
     () => ({
+      ...sidebarTerminals,
       selectedId,
       locateRequest,
       onLocateProject: locateProject,
@@ -1789,6 +1685,7 @@ export function useSidebarController({
       onDragEnd: handleDragEnd,
     }),
     [
+      sidebarTerminals,
       selectedId,
       locateRequest,
       locateProject,

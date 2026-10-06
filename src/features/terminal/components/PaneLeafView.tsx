@@ -231,7 +231,7 @@ export function PaneLeafView({
             ) : (
               <XTermTerminal
                 sessionId={session.id}
-                isActive={!historyActive && session.id === activeSessionId}
+                isActive={!historyActive && isLayoutVisible && !session.tabHidden && session.id === activeSessionId}
                 isVisible={!historyActive && isLayoutVisible && session.id === effectivePaneActiveSessionId}
                 fontSize={fontSize}
                 fontFamily={fontFamily}

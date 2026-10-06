@@ -59,12 +59,12 @@ export function isGenericDaemonSessionTitle(title: string | null | undefined): b
 }
 
 export function normalizeDaemonTaskStatus(status: string | null | undefined): TabNotificationState | null {
-  if (status === "running" || status === "attention" || status === "done" || status === "failed") return status;
+  if (status === "none" || status === "running" || status === "attention" || status === "done" || status === "failed") return status;
   return null;
 }
 
 export function resolveDaemonAttachTaskStatus(attach: DaemonSessionState): TabNotificationState {
-  return normalizeDaemonTaskStatus(attach.taskStatus) ?? (attach.alive ? "running" : "done");
+  return normalizeDaemonTaskStatus(attach.taskStatus) ?? (attach.alive ? "none" : "done");
 }
 
 export function resolveDaemonAttachUpdatedAt(attach: DaemonSessionState): string {

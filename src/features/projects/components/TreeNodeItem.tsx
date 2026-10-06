@@ -5,7 +5,9 @@ import { CSS } from "@dnd-kit/utilities";
 import type { TreeNode as TNode } from "../../../shared/types/index";
 import { countProjectsInNode, type ProviderBadge } from "../api/projectStore";
 import { getWorktreeDisplayName } from "../api/worktreeMetadata";
-import { useTreeActions, worktreeListCollapseId } from "./TreeContext";
+import { useTreeActions, worktreeListCollapseId, worktreeTerminalsCollapseId } from "./TreeContext";
+import { WorktreeTerminalSummary } from "./WorktreeTerminalSummary";
+import { WorktreeTerminalsToggle } from "./WorktreeTerminalsToggle";
 import { ChevronRight, AlertTriangle, Link2, Pin, Play, Sparkles } from "../../../shared/ui/icons";
 import { VendorIcon, inferVendor } from "../../../shared/ui/VendorIcon";
 import { WorktreeIcon } from "../../../shared/ui/WorktreeIcon";
@@ -13,6 +15,11 @@ import { useI18n } from "../../../shared/i18n/index";
 import { DND_SORTABLE_TRANSITION } from "../../workspace/api/dragInteraction";
 import { NodeAppearanceIcon } from "../api/NodeAppearanceIcon";
 import { NewGroupRow } from "./NewGroupRow";
+import { useProjectStore } from "../api/projectStore";
+import { useSettingsStore } from "../../../shared/preferences/settingsStore";
+import { orderProjectWorktrees } from "../api/worktreeOrder";
+import { worktreeMoveIds } from "../lib/sidebarOrdering";
+import { SidebarTerminalList } from "./SidebarTerminalList";
 import { resolveNodeAppearance } from "../api/nodeAppearance";
 import { resolveCliToolIconKey } from "../../../shared/lib/cliTools";
 
@@ -111,10 +118,10 @@ function TreeNodeItemImpl({
   const { t } = useI18n();
   const actions = useTreeActions();
   const itemId = node.type === "group" ? node.group.id : node.type === "project" ? node.project.id : `wt:${node.worktree.id}`;
-  const { active, attributes, isOver, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { active, attributes, isOver, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: itemId,
-    data: { parentGroupId },
-    disabled: !sortableEnabled || node.type === "worktree",
+    data: { parentGroupId, type: node.type, projectId: node.type === "worktree" ? node.project.id : undefined, sortableEnabled },
+    disabled: !sortableEnabled,
     transition: DND_SORTABLE_TRANSITION,
   });
   const showCrossGroupDropPreview = Boolean(
@@ -139,6 +146,8 @@ function TreeNodeItemImpl({
     const isSelected = actions.selectedId === worktree.id;
     const isMultiSelected = actions.selectedWorktreeIds.has(worktree.id);
     const providerBadge = actions.providerBadges[`wt:${worktree.id}`];
+    const hasTerminals = actions.getTerminals(project.id, worktree.id).length > 0;
+    const terminalsOpen = !actions.collapsedIds.has(worktreeTerminalsCollapseId(worktree.id));
 
     return (
       <div
@@ -151,32 +160,56 @@ function TreeNodeItemImpl({
         aria-selected={isSelected || isMultiSelected}
         tabIndex={focusedNodeKey === treeKey ? 0 : -1}
         onFocus={() => onFocusNode(treeKey)}
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget || !event.altKey ||
+            !["ArrowUp", "ArrowDown"].includes(event.key)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          if (!sortableEnabled) return;
+          const store = useProjectStore.getState();
+          const order = useSettingsStore.getState().worktreeOrderByProject;
+          const siblings = orderProjectWorktrees(store.worktrees, project.id, order);
+          const index = siblings.findIndex((item) => item.id === worktree.id);
+          if (index < 0) return;
+          const target = siblings[index + (event.key === "ArrowUp" ? -1 : 1)];
+          if (!target) return;
+          const ids = worktreeMoveIds(store.worktrees, order, project.id, worktree.id, target.id);
+          if (ids) void store.reorderWorktrees(project.id, ids);
+        }}
       >
         <div
-          className={`ui-tree-node ui-tree-project ui-focus-ring flex items-center rounded-lg cursor-pointer group/item ${
+          ref={setActivatorNodeRef}
+          onPointerDown={(event) => {
+            event.stopPropagation();
+            if (!sortableEnabled || event.button !== 0 || !event.isPrimary ||
+              (event.target as Element).closest("button, input, textarea, select, [contenteditable], [data-sidebar-terminals]")) return;
+            listeners?.onPointerDown?.(event);
+          }}
+          className={`ui-tree-node ui-tree-project ui-worktree-row ui-focus-ring flex items-center rounded-lg cursor-pointer group/item ${
             compact ? "gap-1.5 py-1 text-[12px]" : "gap-2 py-1.5 text-[13px]"
           }`}
           data-selected={isSelected || isMultiSelected ? "true" : "false"}
           data-status="idle"
           data-invalid={worktree.status === "missing" ? "true" : "false"}
           style={{ paddingLeft, paddingRight: compact ? 8 : 10 }}
-          onClick={(e) => actions.onSelectWorktree(e, worktree)}
-          onDoubleClick={() => actions.onOpenWorktree(project, worktree)}
+          onClick={(e) => { if (!isDragging) actions.onSelectWorktree(e, worktree); }}
+          onDoubleClick={() => { if (!isDragging) actions.onOpenWorktree(project, worktree); }}
           onContextMenu={(e) => actions.onContextMenuWorktree(e, project, worktree)}
         >
+          <span className="worktree-terminal-toggle-slot">
+            {hasTerminals ? <WorktreeTerminalsToggle worktreeId={worktree.id} /> : (
+              <span aria-hidden="true" />
+            )}
+          </span>
           <span className="ui-tree-leading-icon ui-worktree-tree-icon" title={worktree.branch}>
             <WorktreeIcon className="h-4 w-4" />
           </span>
-          <span className="flex min-w-0 flex-1 items-center gap-1.5" title={`${getWorktreeDisplayName(worktree)}\n${worktree.description}\n${worktree.branch}\n${worktree.path}`}>
-            <span className="block truncate font-medium">{getWorktreeDisplayName(worktree)}</span>
-            <span
-              className="ui-worktree-short-chip inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[10px] leading-none"
-              title={worktree.branch}
-              aria-label={worktree.branch}
-            >
-              WT
+          <span className="worktree-terminal-heading" title={`${getWorktreeDisplayName(worktree)}\n${worktree.description}\n${worktree.branch}\n${worktree.path}`}>
+            <span className="worktree-terminal-title-line">
+              <span className="worktree-terminal-title truncate font-medium">{getWorktreeDisplayName(worktree)}</span>
+              {providerBadge && <ProviderBadgeChip badge={providerBadge} />}
             </span>
-            {providerBadge && <ProviderBadgeChip badge={providerBadge} />}
+            <WorktreeTerminalSummary projectId={project.id} worktreeId={worktree.id} compact={compact} />
           </span>
           {worktree.status === "missing" && (
             <span
@@ -188,7 +221,7 @@ function TreeNodeItemImpl({
             </span>
           )}
           <span
-            className="ui-tree-item-actions hidden shrink-0 items-center gap-0.5 group-hover/item:flex group-focus-within/item:flex"
+            className="ui-tree-item-actions flex shrink-0 items-center gap-0.5"
             onDoubleClick={(e) => e.stopPropagation()}
           >
             <button
@@ -204,6 +237,9 @@ function TreeNodeItemImpl({
             </button>
           </span>
         </div>
+        {hasTerminals && terminalsOpen && (
+          <SidebarTerminalList projectId={project.id} worktreeId={worktree.id} depth={depth + 1} compact={compact} />
+        )}
       </div>
     );
   }
@@ -224,7 +260,7 @@ function TreeNodeItemImpl({
       ...(appearance.hasColor ? { "--node-accent": appearance.colorVar } : {}),
     } as CSSProperties;
     const projectWorktrees = node.worktrees ?? [];
-    const hasWorktrees = projectWorktrees.length > 0;
+    const hasWorktrees = projectWorktrees.length > 0 || actions.getTerminals(p.id).length > 0;
     const providerBadge = actions.providerBadges[p.id];
     const projectPinned = actions.isProjectPinned(p.id);
     const worktreeCollapseKey = worktreeListCollapseId(p.id);
@@ -318,8 +354,8 @@ function TreeNodeItemImpl({
             <button
               type="button"
               className="ui-tree-chevron inline-flex items-center justify-center"
-              aria-label={worktreesOpen ? t("sidebar.tree.collapseWorktrees") : t("sidebar.tree.expandWorktrees")}
-              title={worktreesOpen ? t("sidebar.tree.collapseWorktrees") : t("sidebar.tree.expandWorktrees")}
+              aria-label={worktreesOpen ? t("sidebar.terminals.collapseChildren") : t("sidebar.terminals.expandChildren")}
+              title={worktreesOpen ? t("sidebar.terminals.collapseChildren") : t("sidebar.terminals.expandChildren")}
               onPointerDownCapture={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
@@ -414,6 +450,8 @@ function TreeNodeItemImpl({
         </div>
         {hasWorktrees && worktreesOpen && (
           <div className={`ui-worktree-children ${compact ? "space-y-0.5" : "space-y-0.5"}`} role="group">
+            <SidebarTerminalList projectId={p.id} depth={depth + 1} compact={compact} />
+            <SortableContext items={projectWorktrees.map((worktree) => `wt:${worktree.id}`)} strategy={verticalListSortingStrategy}>
             {projectWorktrees.map((worktree) => (
               <TreeNodeItem
                 key={`wt:${worktree.id}`}
@@ -424,9 +462,10 @@ function TreeNodeItemImpl({
                 focusedNodeKey={focusedNodeKey}
                 onFocusNode={onFocusNode}
                 forceExpanded={forceExpanded}
-                sortableEnabled={false}
+                sortableEnabled={sortableEnabled}
               />
             ))}
+            </SortableContext>
           </div>
         )}
       </div>

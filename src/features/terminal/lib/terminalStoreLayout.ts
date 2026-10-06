@@ -3,22 +3,25 @@ import type { Project, TerminalSession } from "../../../shared/types/index";
 import { logError } from "../../../shared/platform/logger";
 import { useSessionStore } from "../api/sessionStore";
 import { useFileExplorerStore } from "../../files/api/fileExplorerStore";
+import { resolveVisibleTerminalFocus } from "./terminalTabVisibility";
 import { type TerminalWorkspan } from "../api/terminalWorkspan";
 import { type SplitTerminalOptions, type TerminalStore } from "../types/terminalStoreTypes";
 
 export function buildWorkspanMirror(
   workspans: TerminalWorkspan[],
-  requestedActiveWorkspanId: string | null
+  requestedActiveWorkspanId: string | null,
+  sessions?: TerminalSession[]
 ): Pick<TerminalStore, "workspans" | "activeWorkspanId" | "paneTree" | "activePaneId" | "activeSessionId"> {
-  const activeWorkspan = workspans.find((workspan) => workspan.id === requestedActiveWorkspanId)
-    ?? workspans[0]
+  const focus = sessions ? resolveVisibleTerminalFocus(workspans, requestedActiveWorkspanId, sessions) : null;
+  const activeWorkspan = workspans.find((workspan) => workspan.id === (focus ? focus.activeWorkspanId : requestedActiveWorkspanId))
+    ?? (focus ? null : workspans[0])
     ?? null;
   return {
     workspans,
-    activeWorkspanId: activeWorkspan?.id ?? null,
+    activeWorkspanId: focus ? focus.activeWorkspanId : activeWorkspan?.id ?? null,
     paneTree: activeWorkspan?.paneTree ?? null,
-    activePaneId: activeWorkspan?.activePaneId ?? null,
-    activeSessionId: activeWorkspan?.activeSessionId ?? null,
+    activePaneId: focus ? focus.activePaneId : activeWorkspan?.activePaneId ?? null,
+    activeSessionId: focus ? focus.activeSessionId : activeWorkspan?.activeSessionId ?? null,
   };
 }
 

@@ -1,0 +1,3 @@
+# 设计
+projects纯resolver抽取SidebarTerminalList既有五态规则，列表和统计共用。小WorktreeTerminalSummary订阅只读sessions/status/notifications统计PTY，hidden不排除、无终端null；精确Worktree归属。TreeNodeItem、SidebarWorktreeTerminals和group flyout工作树行接入summary，collapsed不卸载统计。不嵌套button、不引入action，现有本域CSS/theme tokens/staticglyph，compact数量/可访问full说明，中英领域字典。
+不改PTY/IPC/persistence/fold协议/主仓库汇总/排序置顶/依赖，保护dirty<=2000行。GitNexus缺失契约+调用点审计图risk未知。纯统计与组件test，不扩大到Pane/WSL/后台恢复无关边界。

@@ -1,18 +1,24 @@
+import { findNodeById } from "../lib/treeNodeLookup";
 import { DndContext, DragOverlay, PointerSensor, closestCenter, useSensor, useSensors, type CollisionDetection, type DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { Project, TerminalScope, TreeNode as TNode } from "../../../shared/types/index";
 import { SidebarSkeleton } from "../../../shared/ui/Skeleton";
 import { EmptyState } from "../../../shared/ui/EmptyState";
-import { Popover, PopoverAnchor, PopoverContent } from "../../../shared/ui/popover";
+import { Popover, PopoverAnchor, PopoverTrigger, PopoverContent } from "../../../shared/ui/popover";
 import { Folder, Pin, Plus, Terminal } from "../../../shared/ui/icons";
 import { CliToolIcon } from "../../../shared/ui/CliToolIcon";
 import { WorktreeIcon } from "../../../shared/ui/WorktreeIcon";
 import { TreeNodeItem } from "./TreeNodeItem";
+import { SidebarTerminalList } from "./SidebarTerminalList";
+import { SidebarProjectTerminals } from "./SidebarProjectTerminals";
+import { SidebarWorktreeTerminals } from "./SidebarWorktreeTerminals";
+import { WorktreeTerminalSummary } from "./WorktreeTerminalSummary";
+import { WorktreeTerminalsToggle } from "./WorktreeTerminalsToggle";
 import { NewGroupRow } from "./NewGroupRow";
 import { NodeAppearanceIcon } from "../api/NodeAppearanceIcon";
 import { resolveNodeAppearance } from "../api/nodeAppearance";
-import { useTreeActions, worktreeListCollapseId, type TreeActions } from "./TreeContext";
+import { useTreeActions, worktreeListCollapseId, worktreeTerminalsCollapseId, type TreeActions } from "./TreeContext";
 import { useI18n } from "../../../shared/i18n/index";
 import { toast } from "sonner";
 import { countProjectsInNode } from "../api/projectStore";
@@ -20,6 +26,7 @@ import { getWorktreeDisplayName } from "../api/worktreeMetadata";
 import { resolveCliToolIconKey } from "../../../shared/lib/cliTools";
 import { DND_ACTIVATION_CONSTRAINT } from "../../workspace/api/dragInteraction";
 import { PinnedProjectSection } from "./PinnedProjectSection";
+import { treeDragCandidate } from "../lib/sidebarOrdering";
 import type { ProjectListFilter } from "./SidebarHeader";
 
 interface ProjectTreeProps {
@@ -128,7 +135,8 @@ function filterTreeNodes(nodes: TNode[], query: string): TNode[] {
 // 指针在边缘 30%（上/下） → 命中 group 节点本身（触发同层 reorder）
 // 这样可以让用户把分组内项目自然拖到根级（命中根级 group 边缘 = 同层 reorder）
 const treeCollisionDetection: CollisionDetection = (args) => {
-  const collisions = closestCenter(args);
+  const collisions = closestCenter({ ...args, droppableContainers: args.droppableContainers.filter((item) =>
+    treeDragCandidate(String(args.active.id), args.active.data.current, String(item.id), item.data.current)) });
   const activeId = args.active.id;
   const filtered = collisions.filter((c) => c.id !== activeId);
   if (filtered.length === 0) return [];
@@ -177,7 +185,8 @@ function flattenVisibleTree(
   nodes: TNode[],
   collapsedIds: Set<string>,
   parentGroupKey: string | null = null,
-  out: VisibleTreeNode[] = []
+  out: VisibleTreeNode[] = [],
+  hasProjectTerminals: (projectId: string) => boolean = () => false
 ): VisibleTreeNode[] {
   for (const node of nodes) {
     if (node.type === "group") {
@@ -195,7 +204,7 @@ function flattenVisibleTree(
         firstChildKey,
       });
       if (isOpen) {
-        flattenVisibleTree(node.children, collapsedIds, currentKey, out);
+        flattenVisibleTree(node.children, collapsedIds, currentKey, out, hasProjectTerminals);
       }
       continue;
     }
@@ -220,7 +229,7 @@ function flattenVisibleTree(
       parentGroupKey,
       projectId: node.project.id,
       isOpen,
-      hasChildren: projectWorktrees.length > 0,
+      hasChildren: projectWorktrees.length > 0 || hasProjectTerminals(node.project.id),
       firstChildKey,
     });
     if (!isOpen) continue;
@@ -282,12 +291,12 @@ export function ProjectTree({
   );
   const visibleNodes = useMemo(
     () => {
-      const nodes = flattenVisibleTree(filteredTree, searchActive ? new Set<string>() : actions.collapsedIds);
+      const nodes = flattenVisibleTree(filteredTree, searchActive ? new Set<string>() : actions.collapsedIds, null, [], (id) => actions.getTerminals(id).length > 0);
       return projectScopedTerminalViewEnabled && !pinnedFilterActive
         ? [{ key: "scope:all", kind: "all-terminals", parentGroupKey: null } satisfies VisibleTreeNode, ...nodes]
         : nodes;
     },
-    [actions.collapsedIds, filteredTree, pinnedFilterActive, projectScopedTerminalViewEnabled, searchActive]
+    [actions.collapsedIds, actions.getTerminals, filteredTree, pinnedFilterActive, projectScopedTerminalViewEnabled, searchActive]
   );
   const visibleNodeIndex = useMemo(() => {
     const map = new Map<string, number>();
@@ -771,6 +780,7 @@ export function ProjectTree({
 
         {!pinnedFilterActive && (
         <DndContext
+          accessibility={{ screenReaderInstructions: { draggable: t("sidebar.order.treeInstructions") } }}
           sensors={sensors}
           collisionDetection={treeCollisionDetection}
           onDragStart={(event: DragStartEvent) => {
@@ -783,7 +793,7 @@ export function ProjectTree({
           onDragEnd={(event) => {
             suppressClickAfterDragUntilRef.current = performance.now() + 250;
             setActiveId(null);
-            actions.onDragEnd(event);
+            if (!searchActive && projectFilter === "all") actions.onDragEnd(event);
           }}
         >
           <SortableContext
@@ -902,12 +912,15 @@ export function ProjectTree({
 function CollapsedProjectButton({ node, sizeClass, pinned = false }: { node: TNode; sizeClass: string; pinned?: boolean }) {
   const { t } = useI18n();
   const actions = useTreeActions();
+  const [open, setOpen] = useState(false);
   if (node.type !== "project") return null;
   const p = node.project;
   const terminalCount = actions.getProjectTerminalCount(p.id);
   const selected = actions.selectedId === p.id || actions.selectedProjectIds.has(p.id);
   const appearance = resolveNodeAppearance({ icon: p.icon, color: p.color });
   return (
+    <Popover open={open} onOpenChange={setOpen}>
+    <PopoverTrigger asChild>
     <button
       className={`ui-tree-collapsed-item relative my-0.5 flex ${sizeClass} items-center justify-center rounded-xl transition-colors`}
       data-selected={selected ? "true" : "false"}
@@ -915,6 +928,8 @@ function CollapsedProjectButton({ node, sizeClass, pinned = false }: { node: TNo
       title={p.name}
       aria-label={t(pinned ? "sidebar.pinned.openProject" : "sidebar.tree.openProject", { name: p.name })}
       onPointerDownCapture={preventSecondaryPointerFocus}
+      aria-haspopup="dialog"
+      aria-expanded={open}
       onClick={(event) => actions.onSelectProject(event, p)}
       onDoubleClick={() => actions.onOpenProject(p)}
       onContextMenu={(e) => actions.onContextMenuProject(e, p)}
@@ -930,6 +945,12 @@ function CollapsedProjectButton({ node, sizeClass, pinned = false }: { node: TNo
       </span>
       {terminalCount > 0 && <span className="ui-tree-collapsed-badge">{terminalCount > 99 ? "99+" : terminalCount}</span>}
     </button>
+    </PopoverTrigger>
+    <PopoverContent side="right" align="start" className="ui-collapsed-flyout max-h-[60vh] overflow-y-auto p-1.5" aria-label={p.name}>
+      <div className="px-2 py-1 text-xs font-medium">{p.name}</div>
+      <SidebarProjectTerminals projectId={p.id} compact />
+    </PopoverContent>
+    </Popover>
   );
 }
 
@@ -987,6 +1008,7 @@ function CollapsedGroupButton({
           style={(groupAppearance.hasColor ? { "--node-accent": groupAppearance.colorVar } : {}) as CSSProperties}
           title={g.name}
           aria-label={t("sidebar.tree.directoryProjectCount", { name: g.name, count })}
+          onFocus={openNow}
           onMouseEnter={openNow}
           onMouseLeave={scheduleClose}
           onPointerDownCapture={preventSecondaryPointerFocus}
@@ -1054,9 +1076,15 @@ function renderFlyoutNodes(nodes: TNode[], depth: number, actions: TreeActions, 
     }
     if (child.type === "worktree") {
       return (
+        <div key={`wt:${child.worktree.id}`}>
+        <div className="flex items-center">
+        <span className="worktree-terminal-toggle-slot">
+          {actions.getTerminals(child.project.id, child.worktree.id).length > 0 ? (
+            <WorktreeTerminalsToggle worktreeId={child.worktree.id} />
+          ) : <span aria-hidden="true" />}
+        </span>
         <button
-          key={`wt:${child.worktree.id}`}
-          className="ui-collapsed-flyout-item flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-[12px] text-on-surface"
+          className="ui-collapsed-flyout-item flex min-w-0 w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-[12px] text-on-surface"
           style={{ paddingLeft: padLeft }}
           title={child.worktree.path}
           onClick={() => {
@@ -1068,8 +1096,18 @@ function renderFlyoutNodes(nodes: TNode[], depth: number, actions: TreeActions, 
           <span className="ui-tree-leading-icon ui-worktree-tree-icon flex shrink-0 items-center">
             <WorktreeIcon className="h-3.5 w-3.5" />
           </span>
-          <span className="flex-1 truncate">{getWorktreeDisplayName(child.worktree)}</span>
+          <span className="worktree-terminal-heading">
+            <span className="worktree-terminal-title-line">
+              <span className="worktree-terminal-title truncate">{getWorktreeDisplayName(child.worktree)}</span>
+            </span>
+            <WorktreeTerminalSummary projectId={child.project.id} worktreeId={child.worktree.id} compact />
+          </span>
         </button>
+        </div>
+        {!actions.collapsedIds.has(worktreeTerminalsCollapseId(child.worktree.id)) && (
+          <SidebarTerminalList projectId={child.project.id} worktreeId={child.worktree.id} depth={depth + 1} compact />
+        )}
+        </div>
       );
     }
 
@@ -1077,8 +1115,8 @@ function renderFlyoutNodes(nodes: TNode[], depth: number, actions: TreeActions, 
     const terminalCount = actions.getProjectTerminalCount(p.id);
     const cliIcon = resolveCliToolIconKey(p.cli_tool);
     return (
+      <div key={`p:${p.id}`}>
       <button
-        key={`p:${p.id}`}
         className="ui-collapsed-flyout-item flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-[12px] text-on-surface"
         style={{ paddingLeft: padLeft }}
         title={p.name}
@@ -1104,24 +1142,15 @@ function renderFlyoutNodes(nodes: TNode[], depth: number, actions: TreeActions, 
           </span>
         )}
       </button>
+      <SidebarTerminalList projectId={p.id} depth={depth + 1} compact />
+      {(child.worktrees ?? []).map((worktree) => (
+        <SidebarWorktreeTerminals key={worktree.id} projectId={p.id} worktree={worktree} depth={depth + 1} compact />
+      ))}
+      </div>
     );
   });
 }
 
-function findNodeById(nodes: TNode[], id: string): TNode | null {
-  for (const n of nodes) {
-    if (n.type === "group") {
-      if (n.group.id === id) return n;
-      const found = findNodeById(n.children, id);
-      if (found) return found;
-    } else if (n.type === "project" && n.project.id === id) {
-      return n;
-    } else if (n.type === "worktree" && `wt:${n.worktree.id}` === id) {
-      return n;
-    }
-  }
-  return null;
-}
 
 function DragGhost({ activeId, tree }: { activeId: string; tree: TNode[] }) {
   const node = findNodeById(tree, activeId);

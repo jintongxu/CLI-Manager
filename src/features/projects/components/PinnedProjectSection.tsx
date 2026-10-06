@@ -6,6 +6,7 @@ import { NodeAppearanceIcon } from "../api/NodeAppearanceIcon";
 import { resolveNodeAppearance } from "../api/nodeAppearance";
 import { ProviderBadgeChip, preventSecondaryPointerFocus } from "./TreeNodeItem";
 import { useTreeActions } from "./TreeContext";
+import { SidebarProjectTerminals } from "./SidebarProjectTerminals";
 
 interface PinnedProjectSectionProps {
   projects: Project[];
@@ -204,6 +205,7 @@ function PinnedProjectItem({ project, density }: { project: Project; density: "c
           </button>
         </span>
       </div>
+      <SidebarProjectTerminals projectId={project.id} compact={compact} />
     </div>
   );
 }

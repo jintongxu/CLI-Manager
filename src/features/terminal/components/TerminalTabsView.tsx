@@ -85,7 +85,6 @@ export function TerminalTabsView({
   systemResourcesOpen,
   providersOpen,
   renderToolbarActions,
-  visibleWorkspanLayouts,
   sensors,
   handleDragStart,
   handleDragOver,
@@ -121,7 +120,6 @@ export function TerminalTabsView({
   visibleSessions,
   useExternalTerminal,
   scopedEmptyState,
-  sessions,
   tabNotifications,
   handleNewTab,
 }: ReturnType<typeof useTerminalTabsController>) {
@@ -324,8 +322,8 @@ export function TerminalTabsView({
             ]}
             actions={renderToolbarActions()}
           >
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            {visibleWorkspanLayouts.length > 0 ? (
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+            {mountedWorkspanLayouts.length > 0 ? (
               <DndContext
                 sensors={sensors}
                 collisionDetection={terminalTabCollisionDetection}
@@ -507,7 +505,7 @@ export function TerminalTabsView({
               </DndContext>
             ) : null}
             {hasScopedTerminalFilter && visibleSessions.length === 0 && !useExternalTerminal && scopedEmptyState && (
-              <div className="flex h-full items-center justify-center">
+              <div className="absolute inset-0 flex items-center justify-center">
                 <EmptyState
                   icon={<Terminal size={40} strokeWidth={1} />}
                   title={scopedEmptyState.title}
@@ -517,8 +515,8 @@ export function TerminalTabsView({
                 />
               </div>
             )}
-            {sessions.length === 0 && !useExternalTerminal && !hasScopedTerminalFilter && (
-              <div className="flex h-full items-center justify-center">
+            {visibleSessions.length === 0 && !useExternalTerminal && !hasScopedTerminalFilter && (
+              <div className="absolute inset-0 flex items-center justify-center">
                 <EmptyState
                   icon={<Terminal size={40} strokeWidth={1} />}
                   title={t("terminal.empty.title")}
