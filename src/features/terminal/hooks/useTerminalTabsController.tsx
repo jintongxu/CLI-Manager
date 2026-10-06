@@ -32,7 +32,6 @@ import {
 import { resolveHistoryProjectPath } from "../../history/api/historyProjectPaths";
 import { resolveAgentRuntimeKind } from "../../agents/api/agentCapabilities";
 import { resolveProviderSwitchAppType } from "../../providers/api/providerSwitching";
-import { inferVendor } from "../../../shared/ui/VendorIcon";
 import { useAppPrompt } from "../../../shared/ui/useAppPrompt";
 import { useAppConfirm } from "../../../shared/ui/useAppConfirm";
 import { useHistoryStore } from "../../history/index";
@@ -48,18 +47,19 @@ import { ALL_TERMINALS_SCOPE, collectProjectIdsForGroup, sessionMatchesTerminalS
 import { TERMINAL_FILE_NAVIGATION_REQUEST_EVENT, type TerminalFileNavigationRequest } from "../lib/terminalFileNavigation";
 import { consumeTerminalFileDragPanelSyncSuppression } from "../api/terminalFileDrag";
 import {
-  WORKSPAN_TABBAR_END_DROP_ID, type WorkspanTabModel, type WorkspanTabOverflowState,
+  WORKSPAN_TABBAR_END_DROP_ID, type WorkspanTabOverflowState,
 } from "../../workspace/api/WorkspanTabBar";
 import {
-  normalizeTabMenuHex, TERMINAL_PANEL_SEMANTIC_COLORS, tabMenuHexToRgba,
+  buildTerminalContextOptions, normalizeTabMenuHex, TERMINAL_PANEL_SEMANTIC_COLORS, tabMenuHexToRgba,
   SPLIT_PICKER_OUTSIDE_GUARD_MS, type SplitPickerAnchor, type SplitPickerAlign, type SplitPickerState,
-  type TerminalCloseConfirmState, type PaneDropPreview, getWorkspanNotification, parsePaneDropTarget,
-  resolveWorkspanDropEdge, resolveHistorySourceFilter, inferSessionVendor, inferSessionCliToolIcon,
+  type TerminalCloseConfirmState, type PaneDropPreview, parsePaneDropTarget,
+  resolveWorkspanDropEdge, resolveHistorySourceFilter,
   buildProjectSplitOptions, type TerminalTabsProps,
 } from "../lib/terminalTabsModel";
 import { MemoPaneLeafView } from "../components/PaneLeafView";
 import { useTerminalToolbarRenderer } from "./useTerminalToolbarRenderer";
 import { useScopedTerminalEmptyState } from "./useScopedTerminalEmptyState";
+import { buildWorkspanTabModels } from "../lib/workspanTabModel";
 
 export function useTerminalTabsController({
   fullscreen = false,
@@ -380,24 +380,13 @@ export function useTerminalTabsController({
     ?? (gitWorkspaceProject?.environment_type === "ssh"
       ? gitWorkspaceProject.remote_path.trim() || null
       : gitWorkspaceProject?.path.trim() || null);
-  const workspanTabModels = useMemo<WorkspanTabModel[]>(() => visibleWorkspanLayouts.map(({ workspan, sessionIds, closeSessionIds }) => {
-    const memberSessions = sessionIds
-      .map((sessionId) => sessions.find((session) => session.id === sessionId))
-      .filter((session): session is TerminalSession => Boolean(session));
-    const singleSession = memberSessions.length === 1 ? memberSessions[0] : null;
-    return {
-      workspan,
-      sessionIds,
-      closeSessionIds,
-      singleSession,
-      title: workspan.customTitle ?? singleSession?.title ?? t("terminal.workspan.title", { count: memberSessions.length }),
-      notification: getWorkspanNotification(sessionIds, tabNotifications),
-      vendor: singleSession ? (inferVendor(projectById.get(singleSession.projectId!)?.cli_tool) ?? inferSessionVendor(singleSession)) : null,
-      cliToolIcon: singleSession
-        ? inferSessionCliToolIcon(singleSession, projectById.get(singleSession.projectId!))
-        : null,
-    };
-  }), [projectById, sessions, t, tabNotifications, visibleWorkspanLayouts]);
+  const workspanContextOptions = useMemo(() => buildTerminalContextOptions(visibleWorkspanLayouts, sessions, projectById, worktrees, {
+    unboundProject: t("terminal.context.unboundProject"), missingWorktree: t("terminal.context.worktreeMissing"), defaultShell: t("terminal.context.defaultShell"),
+  }, tabNotifications), [projectById, sessions, t, tabNotifications, visibleWorkspanLayouts, worktrees]);
+  const workspanTabModels = useMemo(
+    () => buildWorkspanTabModels(visibleWorkspanLayouts, sessions, projectById, tabNotifications, t),
+    [projectById, sessions, t, tabNotifications, visibleWorkspanLayouts, worktrees]
+  );
   const workspanTabSignature = workspanTabModels
     .map(({ workspan, title, vendor, cliToolIcon }) => `${workspan.id}:${title}:${vendor ?? "none"}:${cliToolIcon ?? "none"}`)
     .join("|");
@@ -691,35 +680,46 @@ export function useTerminalTabsController({
     return Date.now() < closeConfirmOutsideGuardUntilRef.current;
   }, []);
 
-  const handleNewTab = useCallback(async () => {
-    if (rejectMissingSessionWorktree(activeSession)) return;
+  const handleNewTab = useCallback(async (sourceSessionId?: string) => {
+    const sourceSession = sourceSessionId ? sessions.find((session) => session.id === sourceSessionId) ?? null : activeSession;
+    if (rejectMissingSessionWorktree(sourceSession)) return;
     const newTerminalContext =
-      activeSession?.kind === "subagent-transcript"
+      sourceSession?.kind === "subagent-transcript"
         ? { cwd: undefined, title: "Terminal" }
-        : activeSession?.kind === "file-editor"
-          ? { cwd: activeSession.fileEditor?.projectPath, title: "Terminal" }
-          : { cwd: activeSession?.cwd, title: activeSession?.title ?? "Terminal" };
-    const activeProject = activeSession?.projectId ? projectById.get(activeSession.projectId) : null;
+        : sourceSession?.kind === "file-editor"
+          ? { cwd: sourceSession.fileEditor?.projectPath, title: "Terminal" }
+          : { cwd: sourceSession?.cwd, title: sourceSession?.title ?? "Terminal" };
+    const activeProject = sourceSession?.projectId ? projectById.get(sourceSession.projectId) : null;
+    const sourceWorktree = sourceSession?.worktreeId ? worktrees.find((worktree) => worktree.id === sourceSession.worktreeId) ?? null : null;
+    const projectLaunchOptions = activeProject ? buildProjectSplitOptions(activeProject, groups) : null;
+    const launchCwd = sourceWorktree?.path.trim() || newTerminalContext.cwd;
+    const launchStartupCmd = projectLaunchOptions?.startupCmd || (activeProject ? undefined : undefined);
+    const launchEnvVars = projectLaunchOptions?.envVars;
+    const launchShell = projectLaunchOptions?.shell;
     if (useExternalTerminal) {
       if (rejectUnsupportedCapability(activeProject, "externalTerminal")) return;
       await openWindowsTerminal([{
-        title: newTerminalContext.title, cwd: newTerminalContext.cwd ?? undefined,
-        shell: activeProject ? activeProject.shell || useSettingsStore.getState().defaultShell : activeSession?.shell ?? undefined,
+        title: newTerminalContext.title, cwd: launchCwd ?? undefined,
+        shell: launchShell ?? (activeProject ? activeProject.shell || useSettingsStore.getState().defaultShell : sourceSession?.shell ?? undefined),
       }]);
       closeHistory();
       setActiveWorkspaceTab("terminal");
       return;
     }
-    const isRemoteProject = activeProject?.environment_type === "ssh";
     await createSession(
-      isRemoteProject ? activeProject.id : undefined,
-      newTerminalContext.cwd ?? undefined,
+      activeProject?.id,
+      launchCwd ?? undefined,
       newTerminalContext.title,
-      isRemoteProject ? "" : undefined,
+      launchStartupCmd,
+      launchEnvVars,
+      launchShell,
+      undefined,
+      sourceSession?.worktreeId,
+      sourceSession?.sshHostId,
     );
     closeHistory();
     setActiveWorkspaceTab("terminal");
-  }, [activeSession, closeHistory, createSession, projectById, rejectMissingSessionWorktree, rejectUnsupportedCapability, useExternalTerminal]);
+  }, [activeSession, closeHistory, createSession, projectById, rejectMissingSessionWorktree, rejectUnsupportedCapability, sessions, useExternalTerminal]);
   const handleNewAnonymousPi = useMemo(
     () => createAnonymousPiSessionHandler(createSession, closeHistory, setActiveWorkspaceTab),
     [closeHistory, createSession],
@@ -1959,6 +1959,7 @@ export function useTerminalTabsController({
     workspanTabBarVisible,
     workspanEnabled,
     workspanTabModels,
+    workspanContextOptions,
     workspanTabOverflow,
     workspanTabListOpen,
     effectiveActiveWorkspanId,
@@ -1970,6 +1971,7 @@ export function useTerminalTabsController({
     activateWorkspanTab,
     handleCloseSessions,
     projectById,
+    worktrees,
     handleSubmitTabEdit,
     prompt,
     renameWorkspan,
@@ -1984,6 +1986,7 @@ export function useTerminalTabsController({
     useExternalTerminal,
     scopedEmptyState,
     sessions,
+    tabNotifications,
     handleNewTab,
   };
 }

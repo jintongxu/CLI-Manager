@@ -322,7 +322,21 @@
 }
 
 .ui-tab-runtime-dot[data-status="done"] {
-  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 22%, transparent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: transparent !important;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.ui-tab-runtime-dot[data-status="done"]::after {
+  content: "✓";
+  font-weight: 800;
 }
 
 .ui-tab-runtime-dot[data-status="attention"] {

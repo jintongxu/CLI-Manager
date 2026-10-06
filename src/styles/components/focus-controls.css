@@ -544,6 +544,49 @@
   color: var(--success);
 }
 
+.ui-terminal-context-switcher,
+.ui-workspan-context-button {
+  border: 1px solid color-mix(in srgb, var(--on-surface) 18%, transparent);
+  background-color: color-mix(in srgb, var(--surface-container-highest) 78%, transparent);
+  color: var(--on-surface);
+  white-space: nowrap;
+}
+
+.ui-terminal-context-switcher:hover,
+.ui-terminal-context-switcher[data-state="open"],
+.ui-workspan-context-button:hover,
+.ui-workspan-context-button[data-selected="true"] {
+  border-color: color-mix(in srgb, var(--primary) 55%, transparent);
+  background-color: color-mix(in srgb, var(--primary) 10%, var(--surface-container-highest) 90%);
+}
+
+.ui-workspan-context-row {
+  scrollbar-width: thin;
+}
+
+.ui-workspan-context-status {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.ui-workspan-context-status .ui-workspan-status-running,
+.ui-workspan-context-status .ui-workspan-status-done,
+.ui-workspan-context-status .ui-workspan-status-failed {
+  font-size: 11px;
+}
+
+.ui-terminal-tab-context {
+  position: relative;
+  max-width: 34px;
+  border: 0;
+  border-left: 3px solid var(--terminal-project-color);
+  border-radius: 0;
+  padding-left: 3px;
+  background: transparent;
+  color: var(--on-surface-variant);
+  white-space: nowrap;
+}
+
 .ui-worktree-short-chip,
 .ui-worktree-tab-badge {
   border: 1px solid color-mix(in srgb, var(--success) 38%, transparent);
@@ -553,13 +596,19 @@
 }
 
 .ui-worktree-tab-badge {
-  max-width: 48px;
+  max-width: 112px;
   line-height: 1;
 }
 
 .ui-worktree-tab-badge:hover {
   border-color: color-mix(in srgb, var(--success) 54%, transparent);
   background-color: color-mix(in srgb, var(--success) 16%, var(--surface-container-highest) 84%);
+}
+
+.ui-worktree-tab-badge-missing {
+  border-color: color-mix(in srgb, var(--error) 52%, transparent);
+  background-color: color-mix(in srgb, var(--error) 12%, var(--surface-container-highest) 88%);
+  color: var(--error);
 }
 
 [data-theme="dark"] .ui-worktree-tree-icon,

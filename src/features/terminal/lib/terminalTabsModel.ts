@@ -13,8 +13,9 @@ import { resolveProjectStartupCommand } from "../../projects/api/projectStartupC
 import { resolveCliToolHistorySourceId, resolveCliToolIconKey, type CliToolIconKey } from "../../../shared/lib/cliTools";
 import { parseProjectEnvVars } from "../../providers/api/providerSwitching";
 import { inferVendor, type VendorKey } from "../../../shared/ui/VendorIcon";
-import type { Group, HistorySourceFilter, Project, TerminalScope, TerminalSession } from "../../../shared/types/index";
-import { WORKSPAN_TABBAR_END_DROP_ID } from "../../workspace/api/WorkspanTabBar";
+import type { Group, HistorySourceFilter, Project, TerminalScope, TerminalSession, WorktreeRecord } from "../../../shared/types/index";
+import { WORKSPAN_TABBAR_END_DROP_ID, type WorkspanContextOption } from "../../workspace/api/WorkspanTabBar";
+import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
 
 export const normalizeTabMenuHex = (value: string | undefined, fallback: string) => (
   value && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback
@@ -122,12 +123,32 @@ export const SSH_CONNECTION_STATE_COLORS: Record<NonNullable<TerminalSession["co
   failed: "#ef4444",
 };
 
+export interface TerminalTabContextLabels {
+  unboundProject: string;
+  missingWorktree: string;
+  defaultShell: string;
+}
+
+export interface TerminalTabContext {
+  project: string;
+  projectShort: string;
+  worktree?: string;
+  worktreeFull?: string;
+  branch?: string;
+  environment: string;
+  projectColor: string;
+  unresolvedWorktree: boolean;
+}
+
 export interface TerminalTabHoverInfo {
   name: string;
   cli: string;
   cliVendor: VendorKey | null;
   shell: string;
   project: string;
+  worktree?: string;
+  branch?: string;
+  environment: string;
   path: string;
   sessionId: string;
   sshHost?: string;
@@ -190,9 +211,9 @@ export function formatCliToolLabel(value: string | null | undefined): string {
   return trimmed;
 }
 
-export function formatShellLabel(value: string | null | undefined): string {
+export function formatShellLabel(value: string | null | undefined, fallback = "Default shell"): string {
   const trimmed = value?.trim();
-  if (!trimmed) return "默认 Shell";
+  if (!trimmed) return fallback;
 
   const normalized = trimmed.toLowerCase();
   if (normalized === "powershell" || normalized === "powershell.exe") return "PowerShell";
@@ -213,14 +234,145 @@ export function formatSessionIdPreview(value: string): string {
   return `${trimmed.slice(0, 8)}...${trimmed.slice(-6)}`;
 }
 
-export function buildTerminalTabHoverInfo(session: TerminalSession, project?: Project): TerminalTabHoverInfo {
+export function getTerminalTabScopeKey(session: TerminalSession): string {
+  return [session.projectId ?? "unbound", session.worktreeId ?? "project-root", session.environmentType ?? "local", session.sshHostId ?? ""].join(":");
+}
+
+export function buildTerminalContextOptions(
+  sessionGroups: Array<{ sessionIds: string[] }>,
+  sessions: TerminalSession[],
+  projectById: Map<string, Project>,
+  worktrees: WorktreeRecord[],
+  labels: TerminalTabContextLabels,
+  notifications: Record<string, TabNotificationState> = {},
+): WorkspanContextOption[] {
+  const options = new Map<string, WorkspanContextOption>();
+  for (const group of sessionGroups) for (const sessionId of group.sessionIds) {
+    const session = sessions.find((item) => item.id === sessionId);
+    if (!session) continue;
+    const key = getTerminalTabScopeKey(session);
+    const existing = options.get(key);
+    if (existing) {
+      existing.count += 1;
+      const status = notifications[session.id] ?? "none";
+      if (status === "running") existing.running = (existing.running ?? 0) + 1;
+      if (status === "done") existing.done = (existing.done ?? 0) + 1;
+      if (status === "failed") existing.failed = (existing.failed ?? 0) + 1;
+      continue;
+    }
+    const project = session.projectId ? projectById.get(session.projectId) : undefined;
+    const worktree = session.worktreeId ? worktrees.find((item) => item.id === session.worktreeId) : null;
+    const context = buildTerminalTabContext(session, project, worktree, labels, session.projectId ? worktrees.filter((item) => item.project_id === session.projectId && item.status === "active") : []);
+    const status = notifications[session.id] ?? "none";
+    options.set(key, {
+      key, project: context.project, worktree: context.worktreeFull ?? labels.missingWorktree, count: 1,
+      running: status === "running" ? 1 : 0, done: status === "done" ? 1 : 0, failed: status === "failed" ? 1 : 0,
+    });
+  }
+  return [...options.values()];
+}
+
+export function buildTerminalTabDisplayTitle(
+  session: TerminalSession,
+  project?: Project,
+  ordinal = 1,
+  siblingCount = 1,
+): string {
+  const title = session.title.trim();
+  const projectName = project?.name.trim();
+  const isGeneric = !title
+    || /^(terminal|shell|cmd|powershell|pwsh)$/i.test(title)
+    || (Boolean(projectName) && title === projectName);
+  const purpose = isGeneric
+    ? formatCliToolLabel(session.cliTool ?? project?.cli_tool ?? session.startupCmd)
+    : title;
+  return siblingCount > 1 ? `${purpose} · ${ordinal}` : purpose;
+}
+
+function resolveProjectColor(projectKey: string): string {
+  let hash = 0;
+  for (const character of projectKey) hash = (hash * 31 + character.charCodeAt(0)) | 0;
+  return `hsl(${Math.abs(hash) % 360} 65% 48%)`;
+}
+
+function getProjectShortName(projectName: string): string {
+  const words = projectName.split(/[\s_-]+/).filter(Boolean);
+  if (words.length > 1) return words.map((word) => word[0]).join("").slice(0, 3).toUpperCase();
+  return projectName.replace(/[^\p{L}\p{N}]/gu, "").slice(0, 3).toUpperCase() || "?";
+}
+
+function getWorktreeName(worktree: WorktreeRecord): string {
+  return getWorktreeDisplayName(worktree).trim() || worktree.name.trim() || "Worktree";
+}
+
+export function getCompactWorktreeLabel(worktree: WorktreeRecord, siblings: WorktreeRecord[] = []): string {
+  const fullName = getWorktreeName(worktree);
+  const names = siblings.map(getWorktreeName).filter(Boolean);
+  if (names.length <= 1) return fullName;
+  const normalized = fullName.replace(/[\\/]+/g, "-");
+  const commonPrefix = names.reduce((prefix, name) => {
+    let length = 0;
+    while (length < prefix.length && length < name.length && prefix[length].toLowerCase() === name[length].toLowerCase()) length += 1;
+    return prefix.slice(0, length);
+  }, normalized);
+  const suffix = normalized.slice(commonPrefix.length).replace(/^[\\/_.-]+/, "");
+  if (suffix && names.filter((name) => name.toLowerCase().endsWith(suffix.toLowerCase())).length === 1) return suffix;
+  const parts = normalized.split(/[-\\/]/).filter(Boolean);
+  const tail = parts[parts.length - 1] || normalized;
+  if (names.filter((name) => name.toLowerCase().endsWith(tail.toLowerCase())).length === 1) return tail;
+  return normalized.length > 12 ? `…${normalized.slice(-10)}` : normalized;
+}
+
+export function buildTerminalTabContext(
+  session: TerminalSession,
+  project?: Project,
+  worktree?: WorktreeRecord | null,
+  labels: TerminalTabContextLabels = {
+    unboundProject: "Unbound project",
+    missingWorktree: "Worktree missing",
+    defaultShell: "Default shell",
+  },
+  siblingWorktrees: WorktreeRecord[] = [],
+): TerminalTabContext {
+  const projectName = project?.name.trim() || labels.unboundProject;
+  const activeWorktree = worktree?.status === "active" ? worktree : null;
+  const unresolvedWorktree = Boolean(session.worktreeId && !activeWorktree);
+  return {
+    project: projectName,
+    projectShort: getProjectShortName(projectName),
+    worktree: activeWorktree ? getCompactWorktreeLabel(activeWorktree, siblingWorktrees) : unresolvedWorktree ? labels.missingWorktree : undefined,
+    worktreeFull: activeWorktree ? getWorktreeName(activeWorktree) : undefined,
+    branch: activeWorktree?.branch?.trim() || undefined,
+    environment: session.environmentType === "ssh"
+      ? "SSH"
+      : formatShellLabel(session.shell ?? project?.shell, labels.defaultShell),
+    projectColor: resolveProjectColor(project?.id || projectName),
+    unresolvedWorktree,
+  };
+}
+
+export function buildTerminalTabHoverInfo(
+  session: TerminalSession,
+  project?: Project,
+  worktree?: WorktreeRecord | null,
+  labels?: TerminalTabContextLabels,
+): TerminalTabHoverInfo {
+  const contextLabels = labels ?? {
+    unboundProject: "Unbound project",
+    missingWorktree: "Worktree missing",
+    defaultShell: "Default shell",
+  };
+  const context = buildTerminalTabContext(session, project, worktree, contextLabels);
   if (session.kind === "subagent-transcript") {
     return {
       name: session.title.trim() || "Terminal",
       cli: "Subagent",
       cliVendor: null,
       shell: "Transcript",
-      project: project?.name.trim() || "\u672a\u7ed1\u5b9a\u9879\u76ee",
+      project: context.project,
+      worktree: context.worktree,
+      branch: context.branch,
+      environment: context.environment,
       path: session.cwd?.trim() || project?.path.trim() || "-",
       sessionId: session.cliSessionId?.trim() || session.id,
     };
@@ -230,8 +382,11 @@ export function buildTerminalTabHoverInfo(session: TerminalSession, project?: Pr
       name: session.title.trim() || "同步记录",
       cli: "Synced History",
       cliVendor: null,
-      shell: formatShellLabel(session.shell ?? project?.shell),
-      project: project?.name.trim() || session.syncedHistory?.title || "\u672a\u7ed1\u5b9a\u9879\u76ee",
+      shell: formatShellLabel(session.shell ?? project?.shell, contextLabels.defaultShell),
+      project: project?.name.trim() || session.syncedHistory?.title || context.project,
+      worktree: context.worktree,
+      branch: context.branch,
+      environment: context.environment,
       path: session.syncedHistory?.cwd || session.cwd?.trim() || project?.path.trim() || "-",
       sessionId: session.syncedHistory?.key || session.id,
     };
@@ -243,8 +398,11 @@ export function buildTerminalTabHoverInfo(session: TerminalSession, project?: Pr
     name: session.title.trim() || "Terminal",
     cli: formatCliToolLabel(project?.cli_tool),
     cliVendor: inferVendor(project?.cli_tool) ?? inferSessionVendor(session),
-    shell: session.environmentType === "ssh" ? "SSH" : formatShellLabel(session.shell ?? project?.shell),
-    project: project?.name.trim() || "\u672a\u7ed1\u5b9a\u9879\u76ee",
+    shell: session.environmentType === "ssh" ? "SSH" : formatShellLabel(session.shell ?? project?.shell, contextLabels.defaultShell),
+    project: context.project,
+    worktree: context.worktree,
+    branch: context.branch,
+    environment: context.environment,
     path: session.remotePath?.trim() || session.cwd?.trim() || project?.remote_path.trim() || project?.path.trim() || "-",
     sessionId: session.cliSessionId?.trim() || session.id,
     sshHost: sshHost?.name || sshHost?.config_alias || sshHost?.host || session.sshHostId,

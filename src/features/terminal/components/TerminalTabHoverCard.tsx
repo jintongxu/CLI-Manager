@@ -1,7 +1,7 @@
 import { useCallback, type CSSProperties } from "react";
 import { toast } from "sonner";
 import { useI18n, type TranslationKey } from "../../../shared/i18n/index";
-import { Activity, TerminalSquare, Sparkles, Copy, Folder, FolderOpen, Hash, Cloud } from "../../../shared/ui/icons";
+import { Activity, TerminalSquare, Sparkles, Copy, Folder, FolderOpen, Hash, Cloud, GitBranch } from "../../../shared/ui/icons";
 import { VendorIcon } from "../../../shared/ui/VendorIcon";
 import { type TerminalTabHoverInfo, type TerminalTabHoverRow, formatSessionIdPreview } from "../lib/terminalTabsModel";
 
@@ -24,6 +24,9 @@ export function TerminalTabHoverCard({
     { key: "cli", label: "CLI", value: info.cli, icon: Sparkles, vendor: info.cliVendor },
     { key: "shell", label: "Shell", value: info.shell, icon: TerminalSquare },
     { key: "project", label: t("termStats.project"), value: info.project, icon: Folder },
+    ...(info.worktree ? [{ key: "worktree", label: t("terminal.context.worktree"), value: info.worktree, icon: GitBranch }] : []),
+    ...(info.branch ? [{ key: "branch", label: t("terminal.context.branch"), value: info.branch, icon: GitBranch }] : []),
+    { key: "environment", label: t("terminal.context.environment"), value: info.environment, icon: TerminalSquare },
     {
       key: "path",
       label: t("termStats.path"),
