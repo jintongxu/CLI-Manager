@@ -200,6 +200,13 @@ type TreeNode =
 - It distinguishes stored path/branch/base/status metadata from checkout/merge/cleanup evidence, includes blockers and stash references, and offers refresh/close only. Do not infer branch existence from `sourceOid`, merge success from unknown state, or filesystem/registration fields the inspect response does not supply.
 - Inspect viewing must not write SQL, issue force authorization, close sessions, stage/commit/merge/prune or delete. Stable identity/open request generations prevent late results overwriting a new target or reopening; translation/object refresh must not restart inspection. Focused actual-mock verification: `node --test scripts/worktreeStatus.test.mjs`.
 
+#### Merge-resolution commit authority
+
+- `git_commit` must record HEAD as first parent and all real MERGE_HEAD commits, deduplicated in order. A resolved index tree equal to HEAD is still a valid merge commit; `nothing_staged` applies only to ordinary empty commits.
+- Reject unresolved index entries and malformed/unresolvable merge parents without clearing merge evidence. Only a successfully created merge commit may call `cleanup_state`; creation/identity failures retain HEAD/index/MERGE_HEAD. A cleanup failure must expose `commit_created:<OID>` and `do_not_retry_commit`, not claim the commit never happened.
+- Linked worktrees read their own Git administration state, not the physical-main MERGE_HEAD. Paths-only commit retains native `git commit --only` behavior. Focused authority tests: Rust library filter `commands::git::commit::tests`.
+- Resolving file contents alone does not finish integration: verify base is an ancestor of the resulting commit and MERGE_HEAD is gone before retrying Finish. Do not repeatedly merge already resolved content using a single-parent commit API.
+
 #### Finish task lifecycle
 
 The recoverable finish path is separate from explicitly confirmed destructive discard:
