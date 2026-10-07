@@ -68,7 +68,7 @@ export interface WebWorkspaceSnapshot {
     description?: string;
     branch: string;
     cwd?: string | null;
-    status: "active" | "missing";
+    status: "active" | "missing" | "pending";
   }>;
   updatedAt: number;
 }

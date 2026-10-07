@@ -6,6 +6,8 @@ import { hasConfiguredCliTool } from "../../providers/api/providerSwitching";
 import { projectSupportsCapability } from "./projectCapabilities";
 import type { Project, TerminalSession, WorktreeIsolationStrategy, WorktreeRecord } from "../../../shared/types/index";
 import { useProjectStore } from "./projectStore";
+import { finalizeFinish, finishRequest, finishStatus, withFinishLock, type FinishState } from "./worktreeFinish";
+import { inspectForceDelete, finalizeForceDelete, type ForceDeleteConfirmation } from "./worktreeForceDelete";
 import { useTerminalStore } from "../../terminal/state";
 
 export interface GitWorktreeCreateResult {
@@ -82,6 +84,11 @@ interface WorktreeStore {
   mergeWorktree: (worktree: WorktreeRecord) => Promise<GitWorktreeMergeResult>;
   forceMergeWorktree: (worktree: WorktreeRecord) => Promise<GitWorktreeMergeResult>;
   removeWorktree: (worktree: WorktreeRecord, deleteBranch: boolean) => Promise<void>;
+  inspectFinish: (worktree: WorktreeRecord) => Promise<FinishState>;
+  finishMerge: (worktree: WorktreeRecord, force?: boolean) => Promise<FinishState>;
+  finishCleanup: (worktree: WorktreeRecord, deleteBranch: boolean, confirmedSessionIds: string[]) => Promise<void>;
+  inspectForceDelete: (worktree: WorktreeRecord) => Promise<ForceDeleteConfirmation>;
+  forceDelete: (worktree: WorktreeRecord, confirmation: ForceDeleteConfirmation, typedPath: string, isCurrent?: () => boolean) => Promise<void>;
   markMissingWorktrees: () => Promise<void>;
 }
 
@@ -252,24 +259,115 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
   },
 
   markMissingWorktrees: async () => {
-    const active = get().worktrees.filter((worktree) => worktree.status === "active");
-    if (active.length === 0) return;
-    let exists: boolean[];
-    try {
-      exists = await invoke<boolean[]>("check_paths_exist", { paths: active.map((worktree) => worktree.path) });
-    } catch {
-      return;
+    // Startup reads authority only; never resume cleanup or close sessions.
+    for (const worktree of get().worktrees) {
+      try { await get().inspectFinish(worktree); }
+      catch (err) { logWarn("worktree validity inspection failed", err); }
     }
-    const missingIds = active.filter((_, index) => !exists[index]).map((worktree) => worktree.id);
-    if (missingIds.length === 0) return;
-    const db = await getDb();
-    const ts = Date.now().toString();
-    for (const id of missingIds) {
-      await db.execute("UPDATE worktrees SET status = $1, updated_at = $2 WHERE id = $3", ["missing", ts, id]);
+    try { await useProjectStore.getState().fetchAll("startup"); }
+    finally {
+      // A failed SQL status write must not make pending checkouts effective again.
+      for (const item of get().worktrees) useProjectStore.getState().setWorktreeStatusLocal(item.id, item.status);
     }
-    await get().loadWorktrees();
-    await useProjectStore.getState().fetchAll("startup");
   },
+
+  inspectFinish: async (worktree) => {
+    const project = useProjectStore.getState().projects.find(item => item.id === worktree.project_id);
+    if (!project) throw new Error("project_not_found");
+    let state: FinishState;
+    try {
+      state = await invoke<FinishState>("git_worktree_finish_inspect", { req: finishRequest(worktree, project.path) });
+    } catch (err) {
+      // Failed authority is not evidence that an old active checkout is usable.
+      // Preserve pending recovery visibility, but fail closed for runtime consumers.
+      const current = get().worktrees.find(item => item.id === worktree.id);
+      const status = current?.status === "pending" ? "pending" : "missing";
+      set(store => ({ worktrees: store.worktrees.map(item => item.id === worktree.id ? { ...item, status } : item) }));
+      useProjectStore.getState().setWorktreeStatusLocal(worktree.id, status);
+      throw err;
+    }
+    const status = finishStatus(state);
+    useProjectStore.getState().setWorktreeStatusLocal(worktree.id, status);
+    const current = get().worktrees.find(item => item.id === worktree.id);
+    if (current && current.status !== status) {
+      set(store => ({ worktrees: store.worktrees.map(item => item.id === worktree.id ? { ...item, status } : item) }));
+      const db = await getDb();
+      await db.execute("UPDATE worktrees SET status = $1, updated_at = $2 WHERE id = $3", [status, Date.now().toString(), worktree.id]);
+    }
+    return state;
+  },
+
+  finishMerge: async (worktree, force = false) => {
+    const project = useProjectStore.getState().projects.find(item => item.id === worktree.project_id);
+    if (!project) throw new Error("project_not_found");
+    return withFinishLock(worktree.id, async () => {
+      const inspected = await get().inspectFinish(worktree);
+      if (inspected.cleanupPending || inspected.done || inspected.blocker || inspected.unknown || !inspected.checkoutValid) {
+        throw new Error(inspected.blocker || "finish_invalid_checkout");
+      }
+      try {
+        return await invoke<FinishState>("git_worktree_finish_merge", { req: finishRequest(worktree, project.path), force });
+      } finally { await get().inspectFinish(worktree); }
+    });
+  },
+
+  finishCleanup: async (worktree, deleteBranch, confirmedSessionIds) => {
+    const project = useProjectStore.getState().projects.find(item => item.id === worktree.project_id);
+    if (!project) throw new Error("project_not_found");
+    const req = finishRequest(worktree, project.path);
+    await withFinishLock(worktree.id, async () => {
+      try {
+        await finalizeFinish({
+          inspect: () => get().inspectFinish(worktree),
+          sessionIds: () => useTerminalStore.getState().sessions.filter(item => item.worktreeId === worktree.id).map(item => item.id),
+          closeSession: id => useTerminalStore.getState().closeSession(id),
+          releaseSessions: waitForSessionRelease,
+          cleanup: () => invoke<FinishState>("git_worktree_finish_cleanup", { req, deleteBranch }),
+          deleteRecord: async () => { const db = await getDb(); await db.execute("DELETE FROM worktrees WHERE id = $1", [worktree.id]); },
+          removeLocal: () => {
+            set(store => ({ worktrees: store.worktrees.filter(item => item.id !== worktree.id) }));
+            useProjectStore.getState().removeWorktreeLocal(worktree.id);
+          },
+          ack: () => invoke("git_worktree_finish_ack", { req }),
+          refresh: () => useProjectStore.getState().fetchAll("interactive"),
+          warn: err => logWarn("worktree finalized; acknowledgement/sidebar refresh failed", err),
+        }, confirmedSessionIds);
+      } catch (err) {
+        try { await get().inspectFinish(worktree); } catch (inspectErr) { logWarn("finish recovery inspect failed", inspectErr); }
+        throw err;
+      }
+    });
+  },
+
+  inspectForceDelete: async (worktree) => {
+    const project = useProjectStore.getState().projects.find(item => item.id === worktree.project_id);
+    if (!project) throw new Error("project_not_found");
+    const req = finishRequest(worktree, project.path);
+    const inspection = await inspectForceDelete(req);
+    return { ...inspection, req, sessionIds: useTerminalStore.getState().sessions.filter(item => item.worktreeId === worktree.id).map(item => item.id) };
+  },
+
+  forceDelete: async (worktree, confirmation, typedPath, isCurrent) => withFinishLock(worktree.id, async () => {
+    await finalizeForceDelete({
+      isCurrent,
+      currentRequest: () => {
+        const current = get().worktrees.find(item => item.id === worktree.id);
+        const project = useProjectStore.getState().projects.find(item => item.id === worktree.project_id);
+        if (!current || !project) throw new Error("force_delete_identity_changed");
+        return finishRequest(current, project.path);
+      },
+      sessionIds: () => useTerminalStore.getState().sessions.filter(item => item.worktreeId === worktree.id).map(item => item.id),
+      closeSession: id => useTerminalStore.getState().closeSession(id),
+      releaseSessions: waitForSessionRelease,
+      deleteRecord: async () => { const db = await getDb(); await db.execute("DELETE FROM worktrees WHERE id = $1", [worktree.id]); },
+      removeLocal: () => {
+        set(store => ({ worktrees: store.worktrees.filter(item => item.id !== worktree.id) }));
+        useProjectStore.getState().removeWorktreeLocal(worktree.id);
+      },
+      refresh: () => useProjectStore.getState().fetchAll("interactive"),
+      warn: err => logWarn("force deletion complete; sidebar refresh failed", err),
+    }, confirmation, typedPath);
+  }),
 
   createWorktreeForProject: async (project, input) => {
     if (!projectSupportsCapability(project, "worktree")) {
@@ -433,25 +531,30 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
   removeWorktree: async (worktree, deleteBranch) => {
     const project = useProjectStore.getState().projects.find((item) => item.id === worktree.project_id);
     if (!project) throw new Error("project_not_found");
-    const terminalStore = useTerminalStore.getState();
-    const linkedSessionIds = terminalStore.sessions
-      .filter((session) => session.worktreeId === worktree.id)
-      .map((session) => session.id);
-    for (const sessionId of linkedSessionIds) {
-      await terminalStore.closeSession(sessionId);
-    }
-    if (linkedSessionIds.length > 0) {
-      await waitForSessionRelease();
-    }
-    await invoke<string>("git_worktree_remove", {
-      projectPath: project.path,
-      worktreePath: worktree.path,
-      branch: worktree.branch,
-      deleteBranch,
+    // Explicit discard remains destructive, but cannot close sessions or mutate
+    // Git while a finish/commit operation owns this Worktree.
+    await withFinishLock(worktree.id, async () => {
+      const terminalStore = useTerminalStore.getState();
+      const linkedSessionIds = terminalStore.sessions
+        .filter((session) => session.worktreeId === worktree.id)
+        .map((session) => session.id);
+      for (const sessionId of linkedSessionIds) {
+        await terminalStore.closeSession(sessionId);
+      }
+      if (linkedSessionIds.length > 0) {
+        await waitForSessionRelease();
+      }
+      await invoke<string>("git_worktree_remove", {
+        projectPath: project.path,
+        worktreePath: worktree.path,
+        branch: worktree.branch,
+        deleteBranch,
+      });
+      const db = await getDb();
+      await db.execute("DELETE FROM worktrees WHERE id = $1", [worktree.id]);
+      set((state) => ({ worktrees: state.worktrees.filter((item) => item.id !== worktree.id) }));
+      useProjectStore.getState().removeWorktreeLocal(worktree.id);
+      await useProjectStore.getState().fetchAll("interactive");
     });
-    const db = await getDb();
-    await db.execute("DELETE FROM worktrees WHERE id = $1", [worktree.id]);
-    set((state) => ({ worktrees: state.worktrees.filter((item) => item.id !== worktree.id) }));
-    await useProjectStore.getState().fetchAll("interactive");
   },
 }));

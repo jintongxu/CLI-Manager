@@ -1,0 +1,18 @@
+# 重复冲突根因：提交丢失 MERGE_HEAD（已批准）
+
+用户clipboard14重复冲突，root只读核验3854bd61仅parent83accf4c，当前MERGE_HEAD=f4cd8c13，indexworktreeclean；masterf4cd8c13仍非HEADancestor。应用git_commit(mod.rs)只HEADparent未收集MERGE_HEAD/cleanup，因此上次已整合内容但历史未记录master；上轮建议UI提交未发现此缺陷。
+
+批准Pi20261007T013251886Z-r0010 handoff3d4cacb5ebb6384dee1103f82a7df4c24e4db172f401bb7954d1d7e2809e34cc，沿用task/TEMP。图Todo22→23→24。
+
+## 代码修复
+
+git_commit IPC签名不变，窄commithelper模块可测试，保持普通/unborn/error语义，mod.rs近2000行不可超限。merge时真实HEAD+MERGE_HEAD多个parents去重，indexunresolved拒绝；sameindexHEADtree的merge也须生成mergecommit，普通nothingstaged继续拒绝。commit成功后statecleanup，创建失败保留merge证据；cleanupfail明示commit已创建，不允许错误误作未提交重做。git_commit_paths --only不扩。
+
+tempRust普通/unborn/diffmerge/相同树merge/multipleparents/未解决/commitfailstate保留/cleanupfail，focusedlibrarytests，TAURI_CONFIG resources=[]局部覆盖缺bundle，无newdeps/migration/source>2000。
+
+## 当前仓库恢复授权
+
+用户Execute本计划已授权ROOT在修复和验证后使用标准Git创建当前worktree合并提交：message fix: 修复合并提交父关系并整合 master，parents3854bd61+f4cd8c13。stage仅本次代码/doc（本轮起始clean）。Noamend/reset/真实master变更/push/旧目录DBbranchdelete。开发job已退出，不启动旧代码或称binary更新。验收masterancestorHEAD、MERGE_HEADmissing、index无unmergedmarkers、gitmerge-tree--write-tree masterHEAD无冲突。若currentstate被外部改先停核对。
+
+root更新TEMP/功能清单Git提交板块与领域contract/task证据，strictarchitecture/diff；复用上轮有效Node146（144pass+2fixture修重跑）/tsc，不跑全库。
+Graph/OCR不可用contractsourcefallback不claimgraphpass；首次新knowledge搜索只命中Git网络proxy与本地操作无关，无网络操作不load无关recipe。需要真实commit但只限批准root恢复阶段，child不得提前commit。

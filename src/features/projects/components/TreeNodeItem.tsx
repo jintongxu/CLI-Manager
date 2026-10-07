@@ -190,7 +190,7 @@ function TreeNodeItemImpl({
           }`}
           data-selected={isSelected || isMultiSelected ? "true" : "false"}
           data-status="idle"
-          data-invalid={worktree.status === "missing" ? "true" : "false"}
+          data-invalid={worktree.status !== "active" ? "true" : "false"}
           style={{ paddingLeft, paddingRight: compact ? 8 : 10 }}
           onClick={(e) => { if (!isDragging) actions.onSelectWorktree(e, worktree); }}
           onDoubleClick={() => { if (!isDragging) actions.onOpenWorktree(project, worktree); }}
@@ -211,11 +211,11 @@ function TreeNodeItemImpl({
             </span>
             <WorktreeTerminalSummary projectId={project.id} worktreeId={worktree.id} compact={compact} />
           </span>
-          {worktree.status === "missing" && (
+          {worktree.status !== "active" && (
             <span
               className="ui-tree-warning-chip inline-flex shrink-0 items-center justify-center rounded-full"
-              title={t("worktree.status.missing")}
-              aria-label={t("worktree.status.missing")}
+              title={t(worktree.status === "pending" ? "worktree.status.pending" : "worktree.status.missing")}
+              aria-label={t(worktree.status === "pending" ? "worktree.status.pending" : "worktree.status.missing")}
             >
               <AlertTriangle size={12} strokeWidth={1.5} />
             </span>

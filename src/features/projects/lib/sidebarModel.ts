@@ -113,13 +113,13 @@ export function filterTreeForOpenTerminals(
       continue;
     }
     if (node.type === "worktree") {
-      if (openWorktreeIds.has(node.worktree.id)) filtered.push(node);
+      if (node.worktree.status !== "active" || openWorktreeIds.has(node.worktree.id)) filtered.push(node);
       continue;
     }
-    if (!openProjectIds.has(node.project.id)) continue;
+    if (!openProjectIds.has(node.project.id) && !(node.worktrees ?? []).some(item => item.status !== "active")) continue;
     filtered.push({
       ...node,
-      worktrees: (node.worktrees ?? []).filter((worktree) => openWorktreeIds.has(worktree.id)),
+      worktrees: (node.worktrees ?? []).filter((worktree) => worktree.status !== "active" || openWorktreeIds.has(worktree.id)),
     });
   }
   return filtered;

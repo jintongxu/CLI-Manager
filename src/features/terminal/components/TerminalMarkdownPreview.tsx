@@ -124,13 +124,14 @@ export function TerminalMarkdownPreview({ sessionId, open, onClose }: TerminalMa
   const cliSessionId = session?.cliSessionId?.trim() || null;
   const isSshProject = project?.environment_type === "ssh" || session?.environmentType === "ssh";
   const lookupProjectPath = useMemo(() => {
+    if (worktree && worktree.status !== "active") return project?.path ?? "";
     if (worktree?.path?.trim()) return worktree.path.trim();
     return resolveTerminalProjectPath(
       session?.cwd,
       isSshProject ? project?.remote_path : project?.path,
       "unknown",
     ) ?? "";
-  }, [isSshProject, project?.path, project?.remote_path, session?.cwd, worktree?.path]);
+  }, [isSshProject, project?.path, project?.remote_path, session?.cwd, worktree?.path, worktree?.status]);
 
   const [previewMessages, setPreviewMessages] = useState<MarkdownPreviewMessage[]>([]);
   const [selectedMessageIndex, setSelectedMessageIndex] = useState<number | null>(null);

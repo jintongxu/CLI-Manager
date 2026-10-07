@@ -458,7 +458,7 @@ export function GitWorkspace({
   const projectWorktrees = useMemo(
     () =>
       worktrees.filter(
-        (worktree) => worktree.project_id === project?.id && worktree.status === "active",
+        (worktree) => worktree.project_id === project?.id,
       ),
     [project?.id, worktrees],
   );
@@ -848,6 +848,7 @@ export function GitWorkspace({
 
   const openWorktreeDirectory = useCallback(
     async (worktree: WorktreeRecord) => {
+      if (worktree.status !== "active") return;
       try {
         await invoke("open_folder_in_explorer", { path: worktree.path });
       } catch (reason) {
@@ -1307,7 +1308,7 @@ export function GitWorkspace({
                 worktrees={projectWorktrees}
                 onCreateWorktree={requestCreateWorktree}
                 onOpenWorktree={(worktree) =>
-                  void (onOpenWorktreeSession
+                  void (worktree.status !== "active" ? undefined : onOpenWorktreeSession
                     ? onOpenWorktreeSession(worktree)
                     : openWorktreeDirectory(worktree))
                 }

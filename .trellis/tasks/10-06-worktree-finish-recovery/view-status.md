@@ -1,0 +1,11 @@
+# 追加只读查看Worktree状态（已批准）
+
+批准handoff6232c905c4939f82ebc2f4093348ed5cdc5c22c6806aec6105c167e9dbeb1472（Pi20261006T151845718Z-r0008）。Todo17→18，沿用task/TEMP。与彻底force任务并行，保留所有dirty，不覆盖force字典/组件。
+
+Sidebar Worktree右键菜单完成之前新增“查看 Worktree 状态…”非危险项，active/missing/pending都能看。独立dialog readonly invoke现有git_worktree_finish_inspect req，不能走Store.inspectFinish因为会SQL更新，不能发force-token/sessionsclose/stagecommitmerge/prune/delete/GitDBsideeffects。
+
+展示name/projectWT完整path/recordbranchbase/recordstatus明确记录非实时/sourceOid/checkoutvalid/merged或no_diff或未确认/cleanup pending-ready-done/blocker已知指导rawcode/stash。现有inspect没有path/branch存在/registration分离fields不造假、不扩backend；sourceOid不代表branch仍存在。summary明确已验证merge待cleanup/no_diff无需merge/doneGitFS完成待SQL/blocked/unknown不猜merged，valid仅有效待完成不猜dirty。
+刷新/close/errorretry、loading清旧结果/stableidentity/open generation防迟到/换target/close reopen/lang-object不误reset，hooks先guards。无删除或完成按钮，不改pending标识。
+
+范围newStatusDialog/helper/Nodeactualmock tests、Sidebar target/menu、zh-en精确新增keys；全清force任务同字典等写入需协调。tsc/focusedstatusNode与共享menuforce测试；backend不变沿用证据，不run全库。strictarchitecture/diffcheck、TEMP/功能清单/领域contract/taskverifyroot后续。
+No newdeps/migration/源代码>2000/no devrestart或实际app目录DBbranch删除/no commitpush；graph/OCR缺失降级contractsource不claimpass；手动desktop语言视觉未执行须披露。

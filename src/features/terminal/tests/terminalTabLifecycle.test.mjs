@@ -25,7 +25,7 @@ const plain = (value) => JSON.parse(JSON.stringify(value));
 
 const agent = load("../../agents/api/agentTerminal.ts");
 
-function fixture(sessions = [], workspans = [], daemon = [], projects = []) {
+function fixture(sessions = [], workspans = [], daemon = [], projects = [], worktrees = []) {
   const calls = [];
   const persisted = {
     sessions, workspans, activeSessionId: sessions[0]?.id ?? null, activeWorkspanId: workspans[0]?.id ?? null, splits: [],
@@ -53,7 +53,7 @@ function fixture(sessions = [], workspans = [], daemon = [], projects = []) {
     isCliManagerSyncArtifactText: () => false,
     resolveDaemonAttachTaskStatus: status.resolveDaemonAttachTaskStatus, resolveDaemonAttachUpdatedAt: () => "now",
     resolveAttachedDaemonSession: (ps) => ps ?? {},
-    useProjectStore: { getState: () => ({ projects }) },
+    useProjectStore: { getState: () => ({ projects, worktrees }) },
     ...agent,
     recordCrashActivity() {}, summarizeStartupCmd: () => null,
     buildTabStatusUpdate: status.buildTabStatusUpdate,
@@ -436,7 +436,8 @@ function monitoredRuntime(f, enabled = true) {
 
 for (const worktreeId of [undefined, "wt"]) {
   test(`actual create classifies explicit plain ${worktreeId ? "worktree" : "project"} shell and accepts monitored commands`, async () => {
-    const f = fixture([], [], [], [{ id: "project", cli_tool: "codex" }]);
+    const f = fixture([], [], [], [{ id: "project", cli_tool: "codex" }],
+      worktreeId ? [{ id: worktreeId, project_id: "project", status: "active" }] : []);
     await f.api.getState().createSession("project", "/repo", "Shell", "", undefined, "powershell", undefined, worktreeId);
     const created = f.api.getState().sessions[0];
     assert.equal(created.isAgentSession, false);
@@ -485,7 +486,8 @@ test("ephemeral Pi overrides explicit plain startup intent and disabled monitori
 });
 
 test("actual project/worktree plain split preserves no-inherit intent and accepts command_started", async () => {
-  const f = fixture([session("a")], [span("w", "p", "a")], [], [{ id: "project", cli_tool: "codex" }]);
+  const f = fixture([session("a")], [span("w", "p", "a")], [], [{ id: "project", cli_tool: "codex" }],
+    [{ id: "wt", project_id: "project", status: "active" }]);
   await f.api.getState().splitTerminal("a", "horizontal", { projectId: "project", worktreeId: "wt", startupCmd: "" });
   const created = f.api.getState().sessions.find((s) => s.id === "recreated");
   assert.equal(created.isAgentSession, false);

@@ -16,4 +16,3 @@ export function findNodeById(nodes: TreeNode[], id: string): TreeNode | null {
   }
   return null;
 }
-

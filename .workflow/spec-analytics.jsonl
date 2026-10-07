@@ -2,6 +2,16 @@
 {"type":"cli","id":"CLI-1791031997859-1","timestamp":"2026-10-03T12:53:17.859Z","command":"load","args":{"type":"spec","id":"spec:global:ui-conventions"}}
 {"type":"cli","id":"CLI-1791166935549-1","timestamp":"2026-10-05T02:22:15.549Z","command":"load","args":{"type":"spec","id":"spec:global:review-standards"}}
 {"type":"cli","id":"CLI-1791203967892-1","timestamp":"2026-10-05T12:39:27.892Z","command":"load","args":{"type":"spec","id":"spec:global:ui-conventions"}}
+{"type":"cli","id":"CLI-1791284244720-1","timestamp":"2026-10-06T10:57:24.720Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791284896954-1","timestamp":"2026-10-06T11:08:16.954Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791286265855-1","timestamp":"2026-10-06T11:31:05.855Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791286854816-1","timestamp":"2026-10-06T11:40:54.816Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791286870794-1","timestamp":"2026-10-06T11:41:10.794Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791287356401-1","timestamp":"2026-10-06T11:49:16.401Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791288018744-1","timestamp":"2026-10-06T12:00:18.744Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791299459363-1","timestamp":"2026-10-06T15:10:59.363Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791300039093-1","timestamp":"2026-10-06T15:20:39.093Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791300709846-1","timestamp":"2026-10-06T15:31:49.846Z","command":"load","args":{"type":"spec","category":"coding"}}
 {"type":"cli","id":"CLI-1791284699528-1","timestamp":"2026-10-06T11:04:59.528Z","command":"spec add","args":{"category":"coding","scope":"project","keywords":"临时版,开发版,开发模式,tauri dev,构建,打包"}}
 {"type":"cli","id":"CLI-1791284706319-1","timestamp":"2026-10-06T11:05:06.319Z","command":"load","args":{"type":"spec","id":"S-20261006-axbt"}}
 {"type":"cli","id":"CLI-1791284720258-1","timestamp":"2026-10-06T11:05:20.258Z","command":"load","args":{"type":"spec","id":"spec:project:coding-conventions-001"}}

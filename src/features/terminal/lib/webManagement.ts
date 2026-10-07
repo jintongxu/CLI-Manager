@@ -264,7 +264,7 @@ async function resolveProjectStartTargets(payload: Payload): Promise<ProjectStar
     const worktreeId = requiredString(payload, "targetId", 128);
     const worktree = store.worktrees.find((item) => item.id === worktreeId);
     if (!worktree) managementError("worktree_not_found", "Worktree was not found");
-    if (worktree.status === "missing") managementError("worktree_missing", "target Worktree no longer exists");
+    if (worktree.status !== "active") managementError("worktree_missing", "target Worktree no longer exists");
     const project = store.projects.find((item) => item.id === worktree.project_id);
     if (!project) managementError("project_not_found", "Worktree project was not found");
     return [{ id: worktree.id, project, worktree }];
@@ -296,7 +296,7 @@ function projectLaunch(target: ProjectStartTarget): ProjectLaunch {
   const project = target.worktree ? projectWithWorktreeProviderOverrides(target.project, target.worktree) : target.project;
   const cwd = target.worktree?.path ?? (project.environment_type === "ssh" ? project.remote_path : project.path);
   if (!cwd.trim()) managementError("project_path_required", "project path is not configured");
-  if (target.worktree?.status === "missing") managementError("worktree_missing", "target Worktree no longer exists");
+  if (target.worktree && target.worktree.status !== "active") managementError("worktree_missing", "target Worktree no longer exists");
   return {
     project,
     worktree: target.worktree,
@@ -442,7 +442,7 @@ async function resolveLocalContext(payload: Payload): Promise<LocalContext> {
     : null;
   if (worktreeId && !worktree) managementError("worktree_not_found", "Worktree was not found");
   if (project.environment_type === "ssh") managementError("ssh_project_unsupported", "local management is unavailable for SSH projects");
-  if (worktree?.status === "missing") managementError("worktree_missing", "target Worktree no longer exists");
+  if (worktree && worktree.status !== "active") managementError("worktree_missing", "target Worktree no longer exists");
   const rootPath = worktree?.path ?? project.path;
   await webDeviceApi.validateContext(rootPath, rootPath);
   return { project, worktree: worktree ?? null, rootPath };

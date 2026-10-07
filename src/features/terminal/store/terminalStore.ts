@@ -489,6 +489,9 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
     },
 
     createSession: async (projectId, cwd, title, startupCmd, envVars, shell, paneId, worktreeId, sshHostId, cliSessionId, remoteHistoryConsumerId, remoteHistorySourceInstanceId, options) => {
+      if (worktreeId && !useProjectStore.getState().worktrees.some(item => item.id === worktreeId && item.status === "active")) {
+        throw new Error("finish_invalid_checkout");
+      }
       const sessionKind = options?.sessionKind;
       const os = await getOsPlatform();
       const createdAtMs = Date.now();
@@ -953,6 +956,10 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
     },
 
     splitTerminal: async (sessionId, direction, options) => {
+      const targetWorktreeId = options?.worktreeId ?? get().sessions.find(item => item.id === sessionId)?.worktreeId;
+      if (targetWorktreeId && !useProjectStore.getState().worktrees.some(item => item.id === targetWorktreeId && item.status === "active")) {
+        throw new Error("finish_invalid_checkout");
+      }
       const initialState = get();
       const owner = findWorkspanBySession(initialState.workspans, sessionId);
       const targetPane = owner ? findPaneLeafBySession(owner.paneTree, sessionId) : null;

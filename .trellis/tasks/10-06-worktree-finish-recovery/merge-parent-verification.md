@@ -1,0 +1,9 @@
+# 重复冲突提交权威修复验证
+
+图23 root审查commit.rs/mod.rs/tests：Git libgit2边界HEAD first+MERGE_HEADall去重真实commit，unresolved拒绝，同树merge允许，普通empty/unborn兼容，成功才cleanup；创建/identity失败保留state；cleanupfail返回commit_created OID + do_not_retry_commit。路径限定/注册/调用参数不改。10focusedtemp Rusttests通过(agent://277aed80-b373-434c-bbdd-ef855c1e474d)，rootstrictarchitecture1248zero oversizeviolations/diffpass；Rustcompile由focusedtest证明，仅已有daemonwarning。No frontend行为变化，旧前端146pass有效（144初始+2fixture修目标重跑）。
+
+发现rootcause生产者git_commitsingleparent，源调用点LocalGitTransport/GitStore/WorktreeFinishDialog/webManagement沿用，git_commit_paths无修改。新cleanup error为rawdetail没有自动retry，但既有泛化UI标题可能仍称提交失败，当前不扩前端交互，只强调不能盲目重提。真实cleanupfail罕见且测试注入已验证，不声称全面用户UI修复。
+
+TEMP/功能清单Git提交、worktree领域合并提交authority契约记录新nonobvious规则。无activeRun/Session knowledgeauthority，0另造候选，规则已contract。GitNexusrunner/CLI/index缺失已尝试impact命令未可用，不graphpass；OCR缺失，source/spec根流程窄审查。
+
+当前残留MERGE_HEAD由标准Gitcommit恢复，用户Execute明确授权只当前WT的localintegrationcommit，不amend/reset、不改master或push、不delete旧dirsDBbranch。提交事实/parents/merge-tree由后续root记录。开发进程此前关闭，源码修复不代表旧devbinary已更新。

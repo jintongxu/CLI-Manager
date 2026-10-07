@@ -669,8 +669,8 @@ export function useSidebarController({
   };
 
   const rejectMissingWorktree = (worktree: WorktreeRecord): boolean => {
-    if (worktree.status !== "missing") return false;
-    toast.error(t("worktree.status.missing"), { description: worktree.path });
+    if (worktree.status === "active") return false;
+    toast.error(t(worktree.status === "pending" ? "worktree.status.pending" : "worktree.status.missing"), { description: worktree.path });
     return true;
   };
 
@@ -693,7 +693,7 @@ export function useSidebarController({
   };
 
   const maybePromptWorktreeDeps = async (project: Project, worktree: WorktreeRecord) => {
-    if (worktree.status === "missing") return;
+    if (worktree.status !== "active") return;
     if (!project.worktree_deps_prompt_enabled) return;
     if (worktree.deps_prompt_dismissed || depsPromptingWorktreeIdsRef.current.has(worktree.id)) return;
     depsPromptingWorktreeIdsRef.current.add(worktree.id);
@@ -1554,7 +1554,6 @@ export function useSidebarController({
         handleInstallWorktreeDeps(project!, worktree!);
         return { opened: true };
       case "worktree.finish":
-        if (rejectMissingWorktree(worktree!)) return { opened: false };
         setFinishTarget({ project: project!, worktree: worktree! });
         return { opened: true };
       case "worktree.discard": {

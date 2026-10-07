@@ -1,3 +1,4 @@
+mod commit;
 mod status;
 use status::{git_get_changes_native, git_get_changes_wsl};
 mod wsl;
@@ -1171,7 +1172,7 @@ pub async fn git_unstage_paths(project_path: String, paths: Vec<String>) -> Resu
     .map_err(|e| format!("task_failed: {e}"))?
 }
 
-/// 提交已暂存内容。空信息 / 无暂存 / 无 git 身份返回稳定错误。成功返回短 commit id。
+/// 提交已暂存内容（合并时保留所有父提交并清理状态）。普通空提交和身份错误保持兼容。
 #[tauri::command]
 // 验证说明与暂存内容，使用仓库身份创建提交并返回七位提交 ID。
 pub async fn git_commit(project_path: String, message: String) -> Result<String, String> {
@@ -1185,45 +1186,8 @@ pub async fn git_commit(project_path: String, message: String) -> Result<String,
         if !crate::wsl::is_wsl_config_dir(&project_path) && !path.exists() {
             return Err("path_not_found".to_string());
         }
-        let repo = open_git_repo(path).map_err(|e| format!("open_repo_failed: {e}"))?;
-
-        let mut index = repo.index().map_err(|e| format!("index_failed: {e}"))?;
-        let tree_oid = index
-            .write_tree()
-            .map_err(|e| format!("write_tree_failed: {e}"))?;
-
-        // HEAD 当前 commit（unborn 时为 None）。
-        let head_commit = repo.head().ok().and_then(|h| h.peel_to_commit().ok());
-
-        // 无暂存内容检测：暂存树与 HEAD 树一致（或 unborn 下 index 为空）→ 拒绝空提交。
-        match &head_commit {
-            Some(c) => {
-                let head_tree_oid = c.tree().map_err(|e| format!("head_tree_failed: {e}"))?.id();
-                if head_tree_oid == tree_oid {
-                    return Err("nothing_staged".to_string());
-                }
-            }
-            None => {
-                if index.is_empty() {
-                    return Err("nothing_staged".to_string());
-                }
-            }
-        }
-
-        let tree = repo
-            .find_tree(tree_oid)
-            .map_err(|e| format!("find_tree_failed: {e}"))?;
-        // 读取 user.name / user.email；缺失给出明确错误供前端引导配置。
-        let sig = repo
-            .signature()
-            .map_err(|_| "no_git_identity".to_string())?;
-        let parents: Vec<&git2::Commit> = head_commit.as_ref().map(|c| vec![c]).unwrap_or_default();
-
-        let oid = repo
-            .commit(Some("HEAD"), &sig, &sig, &msg, &tree, &parents)
-            .map_err(|e| format!("commit_failed: {e}"))?;
-
-        Ok(oid.to_string().chars().take(7).collect::<String>())
+        let mut repo = open_git_repo(path).map_err(|e| format!("open_repo_failed: {e}"))?;
+        commit::commit_staged(&mut repo, &msg)
     })
     .await
     .map_err(|e| format!("task_failed: {e}"))?
