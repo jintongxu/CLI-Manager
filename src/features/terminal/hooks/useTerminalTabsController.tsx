@@ -253,8 +253,8 @@ export function useTerminalTabsController({
     [terminalScopeValue, worktreeById]
   );
   const rejectMissingWorktree = useCallback((worktree: WorktreeRecord | null | undefined): boolean => {
-    if (!worktree || worktree.status !== "missing") return false;
-    toast.error(t("worktree.status.missing"), { description: worktree.path });
+    if (!worktree || worktree.status === "active") return false;
+    toast.error(t(worktree.status === "pending" ? "worktree.status.pending" : "worktree.status.missing"), { description: worktree.path });
     return true;
   }, [t]);
   const rejectMissingSessionWorktree = useCallback((session: TerminalSession | null | undefined): boolean => {
@@ -1765,9 +1765,8 @@ export function useTerminalTabsController({
     void unsplitTerminal(sessionId);
   }, [unsplitTerminal]);
   const handlePaneFinishWorktree = useCallback((project: Project, worktree: WorktreeRecord) => {
-    if (rejectMissingWorktree(worktree)) return;
     setFinishTarget({ project, worktree });
-  }, [rejectMissingWorktree]);
+  }, []);
   const handlePaneDiscardWorktree = useCallback((project: Project, worktree: WorktreeRecord) => {
     setDiscardTarget({ project, worktree });
   }, []);

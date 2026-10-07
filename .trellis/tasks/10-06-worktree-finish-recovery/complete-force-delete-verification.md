@@ -1,0 +1,11 @@
+# 全清强制删除交付
+
+用户纠正要异常兜底彻底删除，approved502cee... 生效，替代旧preservebranch契约。当前右键force默认目录+Gitregistration+对应localwtbranch+SQL/sidebar全清；不stagecommitmerge、不删remoteref、不回滚master已有merge，不对真实旧task执行cleanup。
+
+RustBinding branchOID/None、originaltokenvalidate-before-sessionclose、其他WT/physicalmain/base/nonwt保护，FS/prune后使用capturedOID update-ref --no-deref comparedelete且再检查branch使用/OID。missingbranch幂等，branchdeletefailSQL不得收尾，freshinspect/精确path确认可missingpathretry。frontend deleteBranch/branchOid/branchDeleted synchronized，warn未合并commits失去ref，已有token/session/generation/path/link/prune保障保持，finishreceipt独立。
+
+实现agent://d1921e21-3572-41fb-aa3f-c00a5d434099：Rustforce21/21、全部worktree相关76/76；Nodeforce38（含21finish）、tsc pass。后续只读状态共享菜单/i18n验证agent://68227985-a20b-4ea0-b9c2-ba1eb7adea98 combinedstatus+forceNode67/67与最终tsc通过。独立窄reviewagent://1257aa88-1adf-480d-9e1e-b37b625ea63e未发现confirmedblocking，无改动，不重新earn有效tests。root strictarchitecture1219source零违规/diffpass；TEMP/功能清单与domaincontract更正至当前deletebranch规则。0额外knowledge候选，已有OID/partialfailure约束足够，未制造重复。
+
+devjobbg-1-muwt4q46一回status核验仍running，日志显示新状态组件HMR更新；无重启第二实例/kill会话。自动updater网络check失败为日志中无关issue，不因它声称devstop。
+
+剩余界限：processlock不是跨process原子安全；branchuse check与comparedelete可受外部Git竞争，同OIDexistingbranch删除重建不可区分，absent→present或newOID可拒绝。Unixlinks平台用例未在Windows执行；真实desktop/OS锁/用户DB手动不测。Graph/OCRunavailable contractsourcefallback不claimpass。branchgitcommit对象可能留Gitreflog/对象库，彻底清理是取消Worktree实体/ref/record而非清空仓库全部历史。未真实delete旧dirs/DBbranches/no commitpush。

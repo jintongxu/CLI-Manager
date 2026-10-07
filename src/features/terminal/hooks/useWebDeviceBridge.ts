@@ -458,7 +458,7 @@ async function executeOperation(operation: WebDeviceOperation) {
       ? worktrees.find((item) => item.id === payload.worktreeId && item.project_id === project.id) ?? null
       : null;
     if (payload.worktreeId && !worktree) throw operationError("worktree_not_found", "desktop Worktree context was not found");
-    if (worktree?.status === "missing") throw operationError("worktree_missing", "target Worktree no longer exists");
+    if (worktree && worktree.status !== "active") throw operationError("worktree_missing", "target Worktree no longer exists");
     const resolvedCwd = worktree?.path ?? (project.environment_type === "ssh" ? project.remote_path : project.path);
     if (!resolvedCwd?.trim()) throw operationError("project_path_required", "project path is not configured");
     if (project.environment_type === "ssh") throw operationError("ssh_not_supported", "SSH projects are not supported by Web P0");

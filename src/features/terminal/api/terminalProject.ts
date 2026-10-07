@@ -104,6 +104,7 @@ export function findWorktreeForSession(
 }
 
 export function projectWithWorktreePath(project: Project, worktree: WorktreeRecord): Project {
+  if (worktree.status !== "active") return project;
   if (normalizeProjectPath(project.path) === normalizeProjectPath(worktree.path)) return project;
   return {
     ...project,

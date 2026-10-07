@@ -466,7 +466,7 @@ export function TerminalStatsPanel({ activeSessionId, open, visible = true, embe
 
   // Worktree tabs must query history/Git by the isolated checkout path.
   const activeWorktree = terminalSession?.worktreeId
-    ? worktrees.find((worktree) => worktree.id === terminalSession.worktreeId) ?? null
+    ? worktrees.find((worktree) => worktree.id === terminalSession.worktreeId && worktree.status === "active") ?? null
     : null;
   const isSshProject = project?.environment_type === "ssh";
   const terminalProjectPath = resolveTerminalProjectPath(
@@ -474,15 +474,15 @@ export function TerminalStatsPanel({ activeSessionId, open, visible = true, embe
     isSshProject ? project?.remote_path : project?.path,
     "unknown"
   );
-  const lookupProjectPath = activeWorktree?.path || terminalProjectPath;
-  const displayProjectPath = activeWorktree?.path || terminalProjectPath;
+  const lookupProjectPath = activeWorktree?.path || (terminalSession?.worktreeId && !activeWorktree ? project?.path || "unknown" : terminalProjectPath);
+  const displayProjectPath = lookupProjectPath;
   // Issue #137：今日项目用量按「主项目路径 + 该项目下全部 worktree」聚合，避免 worktree 被当成独立目录。
   const todayUsageProjectPaths = useMemo(() => {
     const worktreePaths: string[] = [];
     if (project?.id) {
       for (const worktree of worktrees) {
         if (worktree.project_id !== project.id) continue;
-        if (worktree.status === "missing") continue;
+        if (worktree.status !== "active") continue;
         if (worktree.path?.trim()) worktreePaths.push(worktree.path.trim());
       }
     }

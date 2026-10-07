@@ -290,7 +290,7 @@ export interface SshConfigImportPreview {
   warnings: SshConfigImportWarning[];
 }
 
-export type WorktreeStatus = "active" | "missing";
+export type WorktreeStatus = "active" | "missing" | "pending";
 
 export interface WorktreeRecord {
   id: string;

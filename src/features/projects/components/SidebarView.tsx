@@ -4,7 +4,9 @@ import { ConfigModal } from "./ConfigModal";
 import { ProjectExtensionsDialog } from "../../extensions";
 import { ConfirmDialog } from "../../../shared/ui/ConfirmDialog";
 import { ProviderSwitchModal } from "../../providers/api/ProviderSwitchModal";
+import { WorktreeForceDeleteFlow } from "../api/WorktreeForceDeleteFlow";
 import { WorktreeFinishDialog } from "../api/WorktreeFinishDialog";
+import { WorktreeStatusDialog } from "../api/WorktreeStatusDialog";
 import { getProviderSwitchAppType } from "../../providers/api/providerSwitching";
 import { projectSupportsCapability } from "../api/projectCapabilities";
 import { TreeContext } from "./TreeContext";
@@ -100,7 +102,6 @@ export function SidebarView({
   handleRequestDeleteProject,
   handleOpenWorktree,
   handleNewWorktreeTerminal,
-  rejectMissingWorktree,
   setFinishTarget,
   handleOpenWorktreeHistory,
   handleInstallWorktreeDeps,
@@ -158,6 +159,8 @@ export function SidebarView({
   const activeProjectIdeaId = useProjectIdeaStore((state) => state.activeProjectId);
   const closeProjectIdeas = useProjectIdeaStore((state) => state.closeProjectIdeas);
   const activeProjectIdeaProject = activeProjectIdeaId ? projects.find((project) => project.id === activeProjectIdeaId) ?? null : null;
+  const [statusTarget, setStatusTarget] = useState<{ project: Project; worktree: WorktreeRecord } | null>(null);
+  const [forceDeleteTarget, setForceDeleteTarget] = useState<{ project: Project; worktree: WorktreeRecord } | null>(null);
   const [extensionTarget, setExtensionTarget] = useState<{
     project: Project;
     worktree?: WorktreeRecord;
@@ -624,10 +627,17 @@ export function SidebarView({
                   className="context-menu-item"
                   role="menuitem"
                   onClick={() => {
-                    if (rejectMissingWorktree(contextMenu.worktree)) {
-                      setContextMenu(null);
-                      return;
-                    }
+                    setStatusTarget({ project: contextMenu.project, worktree: contextMenu.worktree });
+                    setContextMenu(null);
+                  }}
+                >
+                  <ListClockIcon size={14} />
+                  {t("worktree.statusView.menu")}
+                </button>
+                <button
+                  className="context-menu-item"
+                  role="menuitem"
+                  onClick={() => {
                     setFinishTarget({ project: contextMenu.project, worktree: contextMenu.worktree });
                     setContextMenu(null);
                   }}
@@ -742,6 +752,17 @@ export function SidebarView({
                 >
                   <Trash2 size={14} strokeWidth={1.5} />
                   {t("worktree.menu.discard")}
+                </button>
+                <button
+                  className="context-menu-item danger"
+                  role="menuitem"
+                  onClick={() => {
+                    setForceDeleteTarget({ project: contextMenu.project, worktree: contextMenu.worktree });
+                    setContextMenu(null);
+                  }}
+                >
+                  <Trash2 size={14} strokeWidth={1.5} />
+                  {t("worktree.menu.forceDelete")}
                 </button>
               </>
             )}
@@ -1049,6 +1070,20 @@ export function SidebarView({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <WorktreeForceDeleteFlow
+        open={!!forceDeleteTarget}
+        project={forceDeleteTarget?.project ?? null}
+        worktree={forceDeleteTarget?.worktree ?? null}
+        onClose={() => setForceDeleteTarget(null)}
+      />
+
+      <WorktreeStatusDialog
+        open={!!statusTarget}
+        project={statusTarget?.project ?? null}
+        worktree={statusTarget?.worktree ?? null}
+        onClose={() => setStatusTarget(null)}
+      />
 
       <WorktreeFinishDialog
         open={!!finishTarget}

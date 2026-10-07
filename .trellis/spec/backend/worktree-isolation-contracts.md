@@ -126,7 +126,7 @@ interface WorktreeRecord {
   path: string;
   base_branch: string;
   deps_prompt_dismissed: number;
-  status: "active" | "missing";
+  status: "active" | "missing" | "pending";
   created_at: string;
   updated_at: string;
 }
@@ -184,7 +184,51 @@ type TreeNode =
 - Dismissing/skipping the dependency prompt sets `deps_prompt_dismissed` for that worktree, so the same worktree does not repeatedly prompt.
 - Once the expected dependency directory exists (`node_modules`, etc.), the detection condition self-heals and should not prompt.
 
+#### Explicit force-delete recovery
+
+- The Sidebar Worktree context menu offers a separate danger action directly below Discard Worktree, opening a standalone force-delete flow for unknown nonempty residuals or dirty/unmerged checkout discard. The finish dialog does not offer a force-delete button. Explicit confirmation authorizes complete removal of the target directory, registration, matching local `wt/*` branch and SQL/sidebar record; it does not relax automatic finish cleanup or assert merge success. Uncommitted/untracked data is deleted and unmerged commits may lose their branch reference. Never remove remote refs or roll back base-branch merges.
+- `git_worktree_force_delete_inspect({req})` returns an ephemeral authorization: `token`, `confirmedPath` (exact original record path spelling), `deleteBranch=true`, `branchOid` (string or explicit null absence), `pathMissing`. The UI must show full project/target paths, branch to delete, irreversible directory-data and unmerged-commit risk and current associated sessions, and require exact typed target-path confirmation.
+- `git_worktree_force_delete_validate({req,token,confirmedPath})` rechecks the original authorization without consuming or replacing it. Call this before closing sessions under the frontend Worktree lock. New sessions invalidate the user confirmation. `git_worktree_force_delete({req,token,confirmedPath})` independently rechecks and consumes authorization, returning `done=true, branchDeleted=true` only after filesystem, registration and matching local branch absence have been verified. SQL finalization follows this result, never a partial branch-deletion failure.
+- Tokens are bounded, expire after ten minutes, and bind original request, native root/project/common-directory identity the registration snapshot and the inspected branch OID or explicit absence. Reject changed/absent-to-present refs and any physical-main/other-worktree use; validate again immediately before expected-OID `update-ref --no-deref -d`. Branch-use checking is not cross-process atomic, and same-OID delete/recreate cannot be distinguished solely by the OID. Failed validation/execution requires fresh inspection and explicit confirmation, never silently replacing a token after a directory change.
+- Force rejects project and physical-main roots, ancestors/admin paths, other or contained Worktrees, branch/path mismatch, traversal and unsafe root/ancestor links. Internal symlink/junction traversal must unlink only the link itself, not its outside target. Reuse root-absence verification and bounded remove retries; reject prune if unrelated registration removal is possible or cannot be proved excluded.
+- Force deletes only the explicitly confirmed matching local `wt/*` branch and never stages, commits, merges, deletes remote branches, acknowledges a finish receipt or automatically closes sessions. Missing path/branch permits explicitly authorized SQL finalization without claiming a merge. SQL failure retains the record for a fresh confirmed retry; SQL success removes local state before best-effort refresh.
+- Focused regression commands: Rust library filter `commands::git_worktree::finish::force_delete`; `node scripts/worktreeForceDelete.test.mjs` (includes imported finish recovery tests). Use temporary repositories only, covering exact confirmation, opaque-original-token preflight, replacement/mismatch/protected paths, internal links preserving external targets, unrelated prune candidates, dirty/unmerged complete deletion, changed/recreated refs, branch-in-use/main/base protection, branch-deletion failure and missing-path fresh-confirmation retry, session arrival and SQL/refresh ordering.
+
+#### Read-only status view
+
+- Sidebar Worktree context menu exposes View Worktree status before Finish, including active/missing/pending records. The standalone dialog directly invokes `git_worktree_finish_inspect`, not Store.inspectFinish which persists record status.
+- It distinguishes stored path/branch/base/status metadata from checkout/merge/cleanup evidence, includes blockers and stash references, and offers refresh/close only. Do not infer branch existence from `sourceOid`, merge success from unknown state, or filesystem/registration fields the inspect response does not supply.
+- Inspect viewing must not write SQL, issue force authorization, close sessions, stage/commit/merge/prune or delete. Stable identity/open request generations prevent late results overwriting a new target or reopening; translation/object refresh must not restart inspection. Focused actual-mock verification: `node --test scripts/worktreeStatus.test.mjs`.
+
 #### Finish task lifecycle
+
+The recoverable finish path is separate from explicitly confirmed destructive discard:
+
+```ts
+interface FinishRequest {
+  worktreeId: string;
+  projectPath: string;
+  worktreePath: string;
+  branch: string;
+  baseBranch: string;
+}
+// git_worktree_finish_inspect({ req }): read-only authority check
+// git_worktree_finish_merge({ req, force }): journaled merge, including stash blockers
+// git_worktree_finish_cleanup({ req, deleteBranch }): owned, verified cleanup
+// git_worktree_finish_ack({ req }): acknowledgement only after SQL record deletion
+```
+
+- Rust stores versioned finish receipts beneath the repository common Git administration directory, outside the target checkout and its removable worktree registration. Receipt identity binds the worktree ID, repository, normalized path, branch/base and source OID. Critical intent must be durably published before destructive operations.
+- Response fields are camelCase: `checkoutValid`, `merged`, `outcome` (`null | "merged" | "no_diff"`), `sourceOid`, `cleanupReady`, `cleanupPending`, `blocker`, `unknown`, `done`, `stashReference`, and optional-result `mergeResult`. `done` means Git/filesystem completion, not SQL completion. `no_diff` does not assert ancestry.
+- `inspect` does not delete, merge, close sessions or create a cleanup receipt. Checkout validity requires matching path/branch registration, a usable `.git` file and matching repository/root; directory existence alone is insufficient. Missing branch with no trusted receipt is unknown, not completed.
+- Merge/stash-restoration blockers are durable. Ancestry must not clear a pending force-restore blocker or reapply a stash automatically. Captured source/base evidence must still match before cleanup; dirty or newly advanced checkouts must not be silently discarded.
+- Before unregistering, capture root identity and bounded file-content ownership evidence. A retry may delete only the same root and an unchanged residual subset; replaced roots, new/modified content, new Git metadata, path/branch mismatch, protected repository paths and links/junctions fail conservatively. Historical ancestry may prove a branch merged but cannot prove ownership of an unregistered nonempty directory.
+- Finish snapshots do not traverse links/junctions. Trees exceeding the bounded snapshot limits require manual handling. This conservative finish policy is distinct from old discard behavior.
+- Only root `NotFound` proves absence. Permission/I/O errors and inner-entry `NotFound` must not be treated as completed root deletion; verify root absence after deletion. Reuse existing bounded remove retries and prune helpers.
+- Branch deletion is conditional on the recorded OID and explicit choice. An already-deleted branch is idempotent only with trusted finish progress. Preserve the receipt through SQL finalization; acknowledgement retains an idempotent completion tombstone.
+- Frontend `pending` is a recovery/display status, never a runnable checkout. Invalid and pending records remain accessible through finish inspection. Dialog initialization uses stable identity/open-cycle generations, clears old changes, and ignores late requests; translation/object refresh must not rewind completion progress. Inspect before checkout reads or staging.
+- Cleanup inspects safety before closing any associated sessions, requires explicit confirmation, and rejects sessions arriving after confirmation. SQL failure preserves finalization-only progress. SQL success immediately removes local records/tree nodes; ack or refresh failure must not re-run Git cleanup.
+- Current operation locks serialize within the application process; they are not a cross-process filesystem lock. Do not claim protection against arbitrary concurrent external mutation between validation and deletion.
 
 - MVP finish flow commits all worktree changes, merges the worktree branch back into the base branch, then removes the worktree and optionally deletes the branch.
 - Before merge, the main project checkout must be clean. Dirty main checkout returns a stable error and performs no Git mutation.
@@ -242,6 +286,10 @@ type TreeNode =
 - Bad: Returning only the first 300 characters of Git output when checkout progress occupies that prefix; the actual fatal cause becomes invisible and cannot be diagnosed.
 
 ### 6. Tests Required
+
+- Focused finish regression tests use temporary repositories and injected cleanup/journal failures: successful completion, unregister followed by deletion failure/restart/retry, deleted branch with/without trusted receipt, changed source/base/checkout/residual/root, unknown residual refusal, protected paths/links, durable force-restore blockers, root inspection errors and internal `NotFound`.
+- `node --test scripts/worktreeFinishRecovery.test.mjs` covers actual mocked dialog/store callbacks: reopen and late-response isolation, object/language refresh, invalid staging guards, cleanup retry without merge, SQL/refresh failure ordering, shared operation guards and explicit session confirmation/newcomer rejection.
+- No regression test may clean real user worktree directories, branches or database rows.
 
 - Rust unit tests:
   - task-name validation accepts safe names and rejects empty, whitespace/control, path separators, leading `-`, and Windows reserved device names.

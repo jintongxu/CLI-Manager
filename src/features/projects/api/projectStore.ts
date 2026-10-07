@@ -18,7 +18,7 @@ import { validateSshToolConfigRoot } from "../../remote/api/sshToolIntegration";
 import { resolveGroupBoundPath, resolveProjectPath } from "./groupPath";
 import type {
   Project, CreateProjectInput, UpdateProjectInput,
-  Group, CreateGroupInput, UpdateGroupInput, TreeNode, WorktreeRecord,
+  Group, CreateGroupInput, UpdateGroupInput, TreeNode, WorktreeRecord, WorktreeStatus,
 } from "../../../shared/types/index";
 
 let inflightFetchAll: Promise<void> | null = null;
@@ -34,6 +34,8 @@ interface ProjectStore {
   projects: Project[];
   groups: Group[];
   worktrees: WorktreeRecord[];
+  removeWorktreeLocal: (id: string) => void;
+  setWorktreeStatusLocal: (id: string, status: WorktreeStatus) => void;
   tree: TreeNode[];
   loaded: boolean;
   searchQuery: string;
@@ -176,6 +178,16 @@ async function selectWorktreesOrEmpty(db: Awaited<ReturnType<typeof getDb>>): Pr
 export const useProjectStore = create<ProjectStore>((set, get) => ({
   projects: [],
   groups: [],
+  setWorktreeStatusLocal: (id, status) => {
+    const { groups, projects, searchQuery, worktrees } = get();
+    const updated = worktrees.map(item => item.id === id ? { ...item, status } : item);
+    set({ worktrees: updated, tree: buildTree(groups, projects, searchQuery, updated) });
+  },
+  removeWorktreeLocal: (id) => {
+    const { groups, projects, searchQuery, worktrees } = get();
+    const remaining = worktrees.filter(item => item.id !== id);
+    set({ worktrees: remaining, tree: buildTree(groups, projects, searchQuery, remaining) });
+  },
   worktrees: [],
   tree: [],
   loaded: false,

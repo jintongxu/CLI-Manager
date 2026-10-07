@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import type { GitFileChange, Project, WorktreeRecord } from "../../../shared/types/index";
 import { useI18n, type TranslationKey } from "../../../shared/i18n/index";
 import { useWorktreeStore, type GitWorktreeMergeResult } from "./worktreeStore";
+import { useTerminalStore } from "../../terminal/state";
+import { canReviewFinish, assertCleanupReady, FinishGeneration, readFinishReview, withFinishLock, type FinishState } from "./worktreeFinish";
 import { getWorktreeDisplayName } from "./worktreeMetadata";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "../../../shared/ui/dialog";
 import { Button } from "../../../shared/ui/button";
@@ -85,6 +87,12 @@ function createStashRestoreError(result: GitWorktreeMergeResult, t: Translate): 
 
 function formatFinishError(err: unknown, t: Translate, projectPath?: string): FinishErrorInfo {
   const raw = errorText(err).trim();
+  if (raw.includes("finish_database_failed")) return { code: "database", title: t("worktree.finish.databasePending"), description: t("worktree.finish.databaseFailed"), raw };
+  if (raw.includes("finish_sessions_changed")) return { code: "sessions", title: t("worktree.finish.sessionsTitle"), description: t("worktree.finish.sessionsChanged"), raw };
+  if (raw.includes("finish_unknown")) return { code: "unknown", title: t("worktree.finish.unknownTitle"), description: t("worktree.finish.unknownMessage"), raw };
+  if (raw.includes("finish_legacy_residual_manual_review")) return { code: "legacy", title: t("worktree.finish.blockedTitle"), description: t("worktree.finish.legacyResidualMessage", { path: projectPath ?? "" }), raw };
+  if (raw.includes("merge_conflict")) return { ...createMergeConflictError([], t), raw };
+  if (raw.includes("finish_")) return { code: "blocked", title: t("worktree.finish.blockedTitle"), description: t("worktree.finish.blockedMessage"), raw };
   if (raw.includes("stage_all_failed") || raw.includes("stage_all_update_failed")) {
     return {
       code: "stage_all_failed",
@@ -171,138 +179,156 @@ function formatFinishError(err: unknown, t: Translate, projectPath?: string): Fi
 
 export function WorktreeFinishDialog({ project, worktree, open, onClose }: WorktreeFinishDialogProps) {
   const { t } = useI18n();
-  const mergeWorktree = useWorktreeStore((state) => state.mergeWorktree);
-  const forceMergeWorktree = useWorktreeStore((state) => state.forceMergeWorktree);
-  const removeWorktree = useWorktreeStore((state) => state.removeWorktree);
+  const inspectFinish = useWorktreeStore(state => state.inspectFinish);
+  const finishMerge = useWorktreeStore(state => state.finishMerge);
+  const finishCleanup = useWorktreeStore(state => state.finishCleanup);
   const [changes, setChanges] = useState<GitFileChange[]>([]);
   const [loadingChanges, setLoadingChanges] = useState(false);
   const [step, setStep] = useState<Step>("review");
   const [commitMessage, setCommitMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const generation = useRef(new FinishGeneration());
+  const [authority, setAuthority] = useState<FinishState | null>(null);
   const [output, setOutput] = useState("");
-  const [error, setError] = useState<FinishErrorInfo | null>(null);
+  const [failureStage, setFailureStage] = useState<"operation" | "cleanup">("operation");
+  const [failure, setFailure] = useState<unknown>(null);
   const [forceConfirmOpen, setForceConfirmOpen] = useState(false);
+  const [cleanupConfirmation, setCleanupConfirmation] = useState<string[] | null>(null);
+  const currentProps = useRef({ project, worktree });
+  currentProps.current = { project, worktree };
+  const identity = project && worktree ? `${project.path}\0${worktree.id}\0${worktree.path}\0${worktree.branch}\0${worktree.base_branch}` : "";
 
+  // 仅当前打开周期可发布结果；重新检查前先由 Rust 判定路径是否可读。
+  const refresh = async (token: number, target: WorktreeRecord) => {
+    const review = await readFinishReview(() => inspectFinish(target), () => generation.current.current(token)
+      ? invoke<GitFileChange[]>("git_get_changes", { projectPath: target.path }) : Promise.resolve([]));
+    if (!generation.current.current(token)) return;
+    setAuthority(review.state);
+    setChanges(review.changes);
+    setStep(review.step);
+    setOutput(review.state.mergeResult?.output ?? "");
+  };
   useEffect(() => {
-    if (!open || !worktree) return;
-    setStep("review");
-    setCommitMessage(getWorktreeDisplayName(worktree));
+    const token = generation.current.begin();
+    setChanges([]);
+    setAuthority(null);
+    setFailure(null);
     setOutput("");
-    setError(null);
+    setStep("review");
     setForceConfirmOpen(false);
+    setCleanupConfirmation(null);
+    const target = currentProps.current.worktree;
+    if (!open || !target) return () => generation.current.cancel();
+    setFailureStage("operation");
+    setCommitMessage(getWorktreeDisplayName(target));
     setLoadingChanges(true);
-    invoke<GitFileChange[]>("git_get_changes", { projectPath: worktree.path })
-      .then((items) => {
-        setChanges(items);
-        if (items.length === 0) setStep("merge");
-      })
-      .catch((err) => setError(formatFinishError(err, t, worktree.path)))
-      .finally(() => setLoadingChanges(false));
-  }, [open, t, worktree]);
+    void refresh(token, target).catch(err => {
+      if (generation.current.current(token)) setFailure(err);
+    }).finally(() => {
+      if (generation.current.current(token)) setLoadingChanges(false);
+    });
+    return () => generation.current.cancel();
+    // Object and language refreshes are not new open cycles.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, identity]);
 
   const changeSummary = useMemo(() => formatChangeSummary(changes), [changes]);
-  const canCommit = changes.length > 0 && commitMessage.trim().length > 0 && !busy;
-  const mergeBlockedByRestore =
-    error?.code === "force_merge_restore_conflict" ||
-    error?.code === "force_merge_restore_failed" ||
-    error?.code === "force_merge_abort_failed";
+  const error: FinishErrorInfo | null = failure ? failureStage === "cleanup" && !errorText(failure).includes("finish_database_failed") && !errorText(failure).includes("finish_sessions_changed")
+    ? { title: t("worktree.finish.cleanupFailedTitle"), description: t("worktree.finish.cleanupFailedMessage"), raw: errorText(failure) }
+    : formatFinishError(failure, t, worktree?.path) : authority?.blocker && !canReviewFinish(authority)
+    ? authority.mergeResult?.stashCreated && !authority.mergeResult.stashRestored
+      ? createStashRestoreError(authority.mergeResult, t)
+      : formatFinishError(authority.blocker, t, worktree?.path)
+    : authority?.unknown ? formatFinishError("finish_unknown", t) : null;
+  const canCommit = !!authority && canReviewFinish(authority) && changes.length > 0 && commitMessage.trim().length > 0 && !busy && !loadingChanges && !failure;
+  const mergeBlockedByRestore = !authority || !canReviewFinish(authority) || loadingChanges;
 
   if (!project || !worktree) return null;
 
-  const handleCommit = async () => {
+  // 操作失败先恢复后端实际阶段，再显示本次错误，不用异常回退历史合并进度。
+  const run = async (action: (token: number) => Promise<void>) => {
+    if (busyRef.current || loadingChanges) return;
+    busyRef.current = true;
+    setBusy(true);
+    setFailure(null);
+    setFailureStage("operation");
+    const token = generation.current.begin();
+    try { await action(token); }
+    catch (err) {
+      if (generation.current.current(token)) {
+        setChanges([]);
+        setAuthority(null);
+        try { await refresh(token, worktree); } catch { /* Keep original stage error. */ }
+        if (generation.current.current(token)) setFailure(err);
+      }
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  };
+  // 暂存及提交前分别复核有效 checkout；共享锁阻止同 Worktree 的并发丢弃。
+  const handleCommit = () => {
     if (!canCommit) return;
-    setBusy(true);
-    setError(null);
-    setOutput(`git add --all\ngit commit -m "${commitMessage.trim()}"`);
-    try {
-      await invoke("git_stage_all", { projectPath: worktree.path });
-      const commitId = await invoke<string>("git_commit", { projectPath: worktree.path, message: commitMessage.trim() });
-      setOutput((current) => `${current}\n${t("worktree.finish.commitResult", { commitId })}`);
-      setStep("merge");
-    } catch (err) {
-      const text = errorText(err);
-      if (text === "nothing_staged") {
-        setOutput((current) => `${current}\n${t("worktree.finish.nothingToCommit")}`);
-        setStep("merge");
-      } else {
-        setError(formatFinishError(err, t, worktree.path));
-      }
-    } finally {
-      setBusy(false);
-    }
+    void run(async token => {
+      await withFinishLock(worktree.id, async () => {
+        const checked = await inspectFinish(worktree);
+        if (!generation.current.current(token)) return;
+        if (!canReviewFinish(checked)) throw new Error(checked.blocker || "finish_invalid_checkout");
+        await invoke("git_stage_all", { projectPath: worktree.path });
+        const beforeCommit = await inspectFinish(worktree);
+        if (!generation.current.current(token)) return;
+        if (!canReviewFinish(beforeCommit)) throw new Error(beforeCommit.blocker || "finish_invalid_checkout");
+        await invoke("git_commit", { projectPath: worktree.path, message: commitMessage.trim() });
+      });
+      await refresh(token, worktree);
+    });
   };
-
-  const handleMerge = async () => {
-    if (busy) return;
-    setBusy(true);
-    setError(null);
-    setOutput((current) => `${current}\n\ngit -C "${project.path}" merge --no-ff --no-edit ${worktree.branch}`);
-    try {
-      const result = await mergeWorktree(worktree);
-      setOutput((current) => `${current}\n${result.output}`);
-      if (result.merged && (!result.stashCreated || result.stashRestored)) {
-        setStep("cleanup");
-      } else if (result.skipped && result.skipReason === "no_diff") {
-        setOutput((current) => `${current}\n${t("worktree.finish.noDiffToMerge")}`);
-        setStep("cleanup");
-      } else if (result.stashCreated && !result.stashRestored) {
-        setError(createStashRestoreError(result, t));
-      } else {
-        setError(createMergeConflictError(result.conflictFiles, t, result.stashCreated));
-      }
-    } catch (err) {
-      setError(formatFinishError(err, t, project.path));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  // 只有确认框的显式确定按钮会进入此处，stash/merge/恢复由 Rust 作为一个受锁保护的序列执行。
-  const handleForceMerge = async () => {
-    if (busy) return;
+  const merge = (force: boolean) => {
+    if (mergeBlockedByRestore || changes.length) return;
     setForceConfirmOpen(false);
-    setBusy(true);
-    setError(null);
-    setOutput((current) => `${current}\n\n${t("worktree.finish.forceMergeStarted")}`);
-    try {
-      const result = await forceMergeWorktree(worktree);
-      setOutput((current) => `${current}\n${result.output}`);
-      if (result.merged && (!result.stashCreated || result.stashRestored)) {
-        setStep("cleanup");
-      } else if (result.skipped && result.skipReason === "no_diff") {
-        setOutput((current) => `${current}\n${t("worktree.finish.noDiffToMerge")}`);
-        setStep("cleanup");
-      } else if (result.stashCreated && !result.stashRestored) {
-        setError(createStashRestoreError(result, t));
-      } else {
-        setError(createMergeConflictError(result.conflictFiles, t, result.stashCreated));
+    void run(async token => {
+      const review = await readFinishReview(() => inspectFinish(worktree), () => invoke<GitFileChange[]>("git_get_changes", { projectPath: worktree.path }));
+      if (!generation.current.current(token)) return;
+      if (review.changes.length || !canReviewFinish(review.state)) { await refresh(token, worktree); return; }
+      const state = await finishMerge(worktree, force);
+      await refresh(token, worktree);
+      if (generation.current.current(token) && state.mergeResult) setOutput(state.mergeResult.output);
+      if (!state.merged && state.outcome !== "no_diff" && state.mergeResult) {
+        throw new Error(`merge_conflict: ${state.mergeResult.conflictFiles.join(", ")}\n${state.mergeResult.output}`);
       }
-    } catch (err) {
-      setError(formatFinishError(err, t, project.path));
-    } finally {
-      setBusy(false);
-    }
+    });
   };
-
-  const handleCleanup = async () => {
-    setBusy(true);
-    setError(null);
-    setOutput((current) => `${current}\n\ngit worktree remove "${worktree.path}"\ngit branch -D ${worktree.branch}`);
-    try {
-      await removeWorktree(worktree, true);
-      setStep("done");
-      toast.success(t("worktree.finish.cleanupDone"));
-      onClose();
-    } catch (err) {
-      setError(formatFinishError(err, t, project.path));
-    } finally {
-      setBusy(false);
+  const handleMerge = () => merge(false);
+  const handleForceMerge = () => merge(true);
+  // 先验证清理授权，再列出当前关联会话；打开确认框不执行关闭或删除。
+  const handleCleanup = () => void run(async token => {
+    const checked = await inspectFinish(worktree);
+    if (!generation.current.current(token)) return;
+    assertCleanupReady(checked);
+    if (generation.current.current(token)) {
+      setAuthority(checked);
+      setCleanupConfirmation(useTerminalStore.getState().sessions.filter(session => session.worktreeId === worktree.id).map(session => session.id));
     }
+  });
+  const confirmCleanup = () => {
+    if (cleanupConfirmation === null) return;
+    const confirmed = cleanupConfirmation;
+    setCleanupConfirmation(null);
+    void run(async token => {
+      setFailureStage("cleanup");
+      await finishCleanup(worktree, true, confirmed);
+      if (generation.current.current(token)) {
+        setStep("done");
+        toast.success(t("worktree.finish.cleanupDone"));
+        onClose();
+      }
+    });
   };
 
   return (
     <>
-      <Dialog open={open} onOpenChange={(next) => { if (!next && !forceConfirmOpen) onClose(); }}>
+      <Dialog open={open} onOpenChange={(next) => { if (!next && !busyRef.current && !forceConfirmOpen && cleanupConfirmation === null) onClose(); }}>
       <DialogContent className="max-w-[520px]" showCloseButton={false}>
         <DialogTitle>{t("worktree.finish.title", { name: getWorktreeDisplayName(worktree) })}</DialogTitle>
         <DialogDescription className="mt-2">
@@ -332,6 +358,11 @@ export function WorktreeFinishDialog({ project, worktree, open, onClose }: Workt
             </div>
           )}
 
+          {authority && changes.length === 0 && (authority.merged || authority.outcome === "no_diff" || authority.done) && (
+            <div className="text-xs text-text-secondary">{t(authority.done ? "worktree.finish.databasePending" : authority.outcome === "no_diff" ? "worktree.finish.noDiffToMerge" : "worktree.finish.mergedEvidence")}</div>
+          )}
+          {authority && !authority.checkoutValid && <div className="text-xs text-text-muted">{t("worktree.finish.invalidCheckout")}</div>}
+          {authority?.stashReference && <div className="text-xs text-danger">{t("worktree.finish.error.forceRestoreStashReference", { reference: authority.stashReference })}</div>}
           {output && (
             <pre className="max-h-36 overflow-auto rounded-lg border border-border bg-bg-tertiary p-2 text-[11px] text-text-secondary">{output}</pre>
           )}
@@ -372,13 +403,25 @@ export function WorktreeFinishDialog({ project, worktree, open, onClose }: Workt
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={busy}>{t("common.cancel")}</Button>
+          <Button variant="outline" onClick={() => void run(async token => { setChanges([]); await refresh(token, worktree); })} disabled={busy || loadingChanges}>{t("worktree.finish.reinspect")}</Button>
+          <Button variant="outline" onClick={() => { if (!busyRef.current && !forceConfirmOpen && cleanupConfirmation === null) onClose(); }} disabled={busy}>{t("common.cancel")}</Button>
           {step === "review" && <Button onClick={handleCommit} disabled={!canCommit}>{busy ? t("common.processing") : t("worktree.finish.commitAll")}</Button>}
-          {step === "merge" && <Button onClick={handleMerge} disabled={busy || mergeBlockedByRestore}>{busy ? t("common.processing") : t("worktree.finish.merge")}</Button>}
-          {step === "cleanup" && <Button onClick={handleCleanup} disabled={busy}>{busy ? t("common.processing") : t("worktree.finish.cleanup")}</Button>}
+          {step === "merge" && <Button onClick={handleMerge} disabled={busy || mergeBlockedByRestore || changes.length > 0}>{busy ? t("common.processing") : t("worktree.finish.merge")}</Button>}
+          {step === "cleanup" && <Button onClick={handleCleanup} disabled={busy || loadingChanges || !authority || !!authority.blocker || authority.unknown || (!authority.done && !authority.cleanupReady)}>{busy ? t("common.processing") : t("worktree.finish.cleanup")}</Button>}
         </DialogFooter>
       </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={cleanupConfirmation !== null}
+        title={t("worktree.finish.sessionsTitle")}
+        message={t("worktree.finish.sessionsMessage", { count: cleanupConfirmation?.length ?? 0 })}
+        confirmText={t("worktree.finish.cleanup")}
+        cancelText={t("common.cancel")}
+        danger
+        explicitCloseOnly
+        onConfirm={confirmCleanup}
+        onClose={() => { if (!busyRef.current) setCleanupConfirmation(null); }}
+      />
       <ConfirmDialog
         open={forceConfirmOpen}
         title={t("worktree.finish.forceMergeConfirmTitle")}
@@ -388,7 +431,7 @@ export function WorktreeFinishDialog({ project, worktree, open, onClose }: Workt
         danger
         explicitCloseOnly
         onConfirm={handleForceMerge}
-        onClose={() => setForceConfirmOpen(false)}
+        onClose={() => { if (!busyRef.current) setForceConfirmOpen(false); }}
       />
     </>
   );
