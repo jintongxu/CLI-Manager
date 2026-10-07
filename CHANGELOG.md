@@ -1,5 +1,11 @@
 # Changelog
 
+## [V1.4.4] - 2026-10-07
+
+### Windows 发布
+
+- 发布 Windows 版本 `V1.4.4`，提供 NSIS/MSI 安装包、便携 ZIP 与 Tauri `latest.json`，统一使用 GitHub Release 分发。
+
 ## [V1.4.3] - 2026-10-04
 
 ### Windows 发布

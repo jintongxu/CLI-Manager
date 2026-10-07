@@ -9,7 +9,7 @@ on:
       tag:
         description: Existing tag to build and publish
         required: true
-        default: V1.4.3
+        default: V1.4.4
         type: string
   workflow_call:
     inputs:
