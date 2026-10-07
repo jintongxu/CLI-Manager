@@ -1,4 +1,7 @@
+import { orderProjectWorktrees } from "../../../shared/lib/worktreeOrder";
 import { create } from "zustand";
+import { toast } from "sonner";
+import { translateCurrent } from "../../../shared/i18n/index";
 import { invoke } from "@tauri-apps/api/core";
 import { getDb, batchUpdateSortOrder, batchUpdateProjectShell as dbBatchUpdateProjectShell } from "../../../shared/platform/db";
 import { resolveProjectFetchPolicy, type ProjectFetchReason } from "../lib/projectLoadPolicy";
@@ -59,6 +62,7 @@ interface ProjectStore {
   saveGroupBinding: (groupId: string, boundPath: string, shellProjectIds?: string[], shell?: string) => Promise<void>;
   renameGroup: (id: string, name: string) => Promise<void>;
   deleteGroup: (id: string) => Promise<void>;
+  reorderWorktrees: (projectId: string, orderedIds: string[]) => Promise<boolean>;
   reorderItems: (parentId: string | null, orderedIds: string[]) => Promise<void>;
   moveProjectToGroup: (projectId: string, targetGroupId: string | null) => Promise<void>;
   moveGroupToParent: (groupId: string, targetParentId: string | null) => Promise<void>;
@@ -142,7 +146,7 @@ function buildTree(groups: Group[], projects: Project[], search: string, worktre
       (a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name)
     );
     for (const p of projs) {
-      const projectWorktrees = (worktreesByProject.get(p.id) ?? []).sort((a, b) => a.name.localeCompare(b.name));
+      const projectWorktrees = orderProjectWorktrees(worktreesByProject.get(p.id) ?? [], p.id, useSettingsStore.getState().worktreeOrderByProject);
       nodes.push({ type: "project", project: p, worktrees: projectWorktrees });
     }
 
@@ -557,9 +561,23 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     await get().fetchAll();
   },
 
+  reorderWorktrees: async (projectId, orderedIds) => {
+    if (!get().projects.some((project) => project.id === projectId)) return Promise.resolve(false);
+    try {
+      const saved = await useSettingsStore.getState().updateWorktreeOrder(projectId, orderedIds, get().worktrees);
+      if (!saved) toast.error(translateCurrent("sidebar.order.saveFailed"));
+      return saved;
+    } catch (error) {
+      // Contain unexpected boundary errors for void UI callers as well.
+      toast.error(translateCurrent("sidebar.order.saveFailed"));
+      logWarn("Failed to save Worktree order", error);
+      return false;
+    }
+  },
+
   reorderItems: async (_parentId, orderedIds) => {
     if (orderedIds.length === 0) return;
-    const { groups, projects, worktrees, searchQuery, tree } = get();
+    const { groups, projects, worktrees, searchQuery } = get();
     const groupIds = new Set(groups.map((g) => g.id));
     const orderById = new Map(orderedIds.map((id, index) => [id, index]));
     const nextGroups = groups.map((group) => {
@@ -595,13 +613,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       await batchUpdateSortOrder(db, "projects", projectUpdates);
       await get().fetchAll();
     } catch (err) {
-      set({ groups, projects, tree });
+      set({ groups, projects, tree: buildTree(groups, projects, get().searchQuery, get().worktrees) });
       throw err;
     }
   },
 
   moveProjectToGroup: async (projectId, targetGroupId) => {
-    const { groups, projects, worktrees, searchQuery, tree } = get();
+    const { groups, projects, worktrees, searchQuery } = get();
     const project = projects.find((p) => p.id === projectId);
     if (!project) return;
     if (project.group_id === targetGroupId) return;
@@ -641,14 +659,14 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       }
       await get().fetchAll();
     } catch (err) {
-      set({ projects, tree });
+      set({ projects, tree: buildTree(get().groups, projects, get().searchQuery, get().worktrees) });
       throw err;
     }
   },
 
   moveGroupToParent: async (groupId, targetParentId) => {
     if (groupId === targetParentId) return;
-    const { groups, projects, worktrees, searchQuery, tree } = get();
+    const { groups, projects, worktrees, searchQuery } = get();
     const group = groups.find((g) => g.id === groupId);
     if (!group) return;
     if (group.parent_id === targetParentId) return;
@@ -707,8 +725,15 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       }
       await get().fetchAll();
     } catch (err) {
-      set({ groups, tree });
+      set({ groups, tree: buildTree(groups, get().projects, get().searchQuery, get().worktrees) });
       throw err;
     }
   },
 }));
+
+// Settings load and optimistic updates rebuild the existing tree without touching project/group order.
+useSettingsStore.subscribe((state, previous) => {
+  if (state.worktreeOrderByProject === previous.worktreeOrderByProject) return;
+  const { groups, projects, worktrees, searchQuery } = useProjectStore.getState();
+  useProjectStore.setState({ tree: buildTree(groups, projects, searchQuery, worktrees) });
+});

@@ -1,10 +1,21 @@
 import { createContext, useContext, type MouseEvent as ReactMouseEvent } from "react";
 import type { DragEndEvent } from "@dnd-kit/core";
-import type { Project, TerminalScope, WorktreeRecord } from "../../../shared/types/index";
+import type { Project, TerminalScope, TerminalSession, WorktreeRecord } from "../../../shared/types/index";
 import type { ProviderBadge } from "../api/projectStore";
+import type { SidebarTerminalState } from "../lib/sidebarTerminals";
 import type { SessionStatus } from "../../terminal/state";
 
 export interface TreeActions {
+  onPinTerminal: (id: string, pinned: boolean) => boolean;
+  onMoveTerminal: (id: string, delta: 1 | -1) => boolean;
+  onReorderTerminal: (from: string, to: string) => boolean;
+  getTerminals: (projectId: string, worktreeId?: string) => TerminalSession[];
+  terminalStatuses: Record<string, SessionStatus>;
+  activeTerminalId: string | null;
+  onOpenTerminal: (id: string) => void;
+  onDeleteTerminal: (id: string) => void;
+  getTerminalRenameTarget: (id: string) => { id: string; title: string } | null;
+  onRenameTerminal: (id: string, title: string) => void;
   selectedId: string | null;
   selectedProjectIds: Set<string>;
   selectedGroupIds: Set<string>;
@@ -48,7 +59,7 @@ export interface TreeActions {
   onUpdateAppearance: (target: { kind: "group" | "project"; id: string }, next: { icon?: string; color?: string }) => void;
   onCancelNewGroup: () => void;
   toggleCollapsed: (id: string) => void;
-  getProjectStatus: (projectId: string) => SessionStatus | null;
+  getProjectStatus: (projectId: string) => SidebarTerminalState | null;
   getProjectTerminalCount: (projectId: string) => number;
   isPathInvalid: (projectId: string) => boolean;
   onDragEnd: (event: DragEndEvent) => void;
@@ -58,6 +69,10 @@ export const TreeContext = createContext<TreeActions | null>(null);
 
 export function worktreeListCollapseId(projectId: string): string {
   return `project-worktrees:${projectId}`;
+}
+
+export function worktreeTerminalsCollapseId(worktreeId: string): string {
+  return `worktree-terminals:${worktreeId}`;
 }
 
 export function useTreeActions(): TreeActions {

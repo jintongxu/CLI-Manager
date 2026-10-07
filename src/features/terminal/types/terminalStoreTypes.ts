@@ -69,6 +69,9 @@ export interface DaemonSessionMeta extends DaemonSessionState {
 export type TabStatusSourceName = "hook" | "shell";
 
 export interface TabStatusSources {
+  /** Runtime-only Agent identity, never persisted with session metadata. */
+  agentIdentity?: { source: CliHookSource; sessionId?: string };
+  agentExited?: boolean;
   hook?: TabNotificationState;
   shell?: TabNotificationState;
   hookUpdatedAt?: string;
@@ -195,6 +198,9 @@ export interface TerminalStore {
   activePaneId: string | null;
   workspans: TerminalWorkspan[];
   activeWorkspanId: string | null;
+  /** Runtime-only pane focus mode; explicit navigation reconciles it atomically. */
+  fullscreenPaneId: string | null;
+  setFullscreenPaneId: (id: string | null) => void;
   sessionStatuses: Record<string, SessionStatus>;
   statusListeners: Record<string, UnlistenFn>;
   tabNotifications: Record<string, TabNotificationState>;
@@ -207,7 +213,10 @@ export interface TerminalStore {
   daemonAttachPendingSessionIds: Set<string>;
   subagentTranscripts: Record<string, SubagentTranscriptContent>;
   createSession: (projectId?: string, cwd?: string, title?: string, startupCmd?: string, envVars?: Record<string, string>, shell?: string, paneId?: string, worktreeId?: string, sshHostId?: string, cliSessionId?: string, remoteHistoryConsumerId?: string, remoteHistorySourceInstanceId?: string, options?: { sessionKind?: "ephemeral-pi" }) => Promise<string>;
+  /** Explicit destructive deletion, including hidden sessions. */
   closeSession: (id: string) => Promise<void>;
+  hideSession: (id: string) => Promise<void>;
+  reopenSession: (id: string) => void;
   setActive: (id: string) => void;
   setWorkspanModeEnabled: (enabled: boolean) => void;
   setActiveWorkspan: (id: string) => void;
@@ -234,6 +243,9 @@ export interface TerminalStore {
   /** 终端侧栏实时统计刷新序号：Hook 绑定 sessionId / 回合结束时递增，面板立即重拉。 */
   statsPanelRefreshSeq: number;
   bumpStatsPanelRefresh: () => void;
+  setSidebarPinned: (id: string, pinned: boolean) => boolean;
+  reorderSidebarSessions: (fromId: string, toId: string) => boolean;
+  moveSidebarSession: (id: string, delta: 1 | -1) => boolean;
   reorderSessions: (fromId: string, toId: string) => void;
   moveSessionToPane: (sessionId: string, targetPaneId: string, beforeSessionId?: string) => void;
   detachSessionToWorkspan: (sessionId: string, insertAt?: number) => void;

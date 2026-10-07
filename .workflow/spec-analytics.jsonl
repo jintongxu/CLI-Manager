@@ -12,3 +12,23 @@
 {"type":"cli","id":"CLI-1791299459363-1","timestamp":"2026-10-06T15:10:59.363Z","command":"load","args":{"type":"spec","category":"coding"}}
 {"type":"cli","id":"CLI-1791300039093-1","timestamp":"2026-10-06T15:20:39.093Z","command":"load","args":{"type":"spec","category":"coding"}}
 {"type":"cli","id":"CLI-1791300709846-1","timestamp":"2026-10-06T15:31:49.846Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791284699528-1","timestamp":"2026-10-06T11:04:59.528Z","command":"spec add","args":{"category":"coding","scope":"project","keywords":"临时版,开发版,开发模式,tauri dev,构建,打包"}}
+{"type":"cli","id":"CLI-1791284706319-1","timestamp":"2026-10-06T11:05:06.319Z","command":"load","args":{"type":"spec","id":"S-20261006-axbt"}}
+{"type":"cli","id":"CLI-1791284720258-1","timestamp":"2026-10-06T11:05:20.258Z","command":"load","args":{"type":"spec","id":"spec:project:coding-conventions-001"}}
+{"type":"cli","id":"CLI-1791285015290-1","timestamp":"2026-10-06T11:10:15.290Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791285616095-1","timestamp":"2026-10-06T11:20:16.095Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791286390613-1","timestamp":"2026-10-06T11:33:10.613Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791287231368-1","timestamp":"2026-10-06T11:47:11.369Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791287894715-1","timestamp":"2026-10-06T11:58:14.715Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791288826635-1","timestamp":"2026-10-06T12:13:46.635Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791289263588-1","timestamp":"2026-10-06T12:21:03.588Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791289271461-1","timestamp":"2026-10-06T12:21:11.461Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791290381913-1","timestamp":"2026-10-06T12:39:41.913Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791290864847-1","timestamp":"2026-10-06T12:47:44.847Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791292203107-1","timestamp":"2026-10-06T13:10:03.107Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791293768534-1","timestamp":"2026-10-06T13:36:08.534Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791294888293-1","timestamp":"2026-10-06T13:54:48.293Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791295831413-1","timestamp":"2026-10-06T14:10:31.413Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791296876481-1","timestamp":"2026-10-06T14:27:56.481Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791297165536-1","timestamp":"2026-10-06T14:32:45.536Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791298456846-1","timestamp":"2026-10-06T14:54:16.846Z","command":"load","args":{"type":"spec","category":"coding"}}

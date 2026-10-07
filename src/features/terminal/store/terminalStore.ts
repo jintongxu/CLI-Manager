@@ -53,6 +53,10 @@ import {
   applyPtyStatusToSessions, isCliManagerSyncArtifactText,
 } from "../lib/terminalStatus";
 import { create } from "zustand";
+import { createTerminalTabLifecycle } from "./terminalTabLifecycle";
+import { visibleTerminalSessionIds } from "../lib/terminalTabVisibility";
+import { filterPaneTreeBySessionIds } from "../api/terminalPaneTree";
+import { createTerminalSidebarMetadata } from "./terminalSidebarMetadata";
 import { createTerminalRuntime } from "./terminalRuntime";
 
 let restoreInProgress = false;
@@ -86,13 +90,17 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
     clearPendingSubagentPanesForParent,
     scheduleSaveActiveId,
   } = createTerminalRuntime(set, get, api);
+  const tabLifecycle = createTerminalTabLifecycle(set, get, queueSshSessionPersistence);
   return {
+    ...tabLifecycle,
+    ...createTerminalSidebarMetadata(set, get, queueSshSessionPersistence),
     sessions: [],
     activeSessionId: null,
     paneTree: null,
     activePaneId: null,
     workspans: [],
     activeWorkspanId: null,
+    fullscreenPaneId: null,
     sessionStatuses: {},
     statusListeners: {},
     tabNotifications: {},
@@ -193,7 +201,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         tabStatusDetails,
         ptyOutputActivityAt,
       });
-      await useSessionStore.getState().saveSessions(nextSessions);
+      await queueSshSessionPersistence(nextSessions);
     },
 
     updateSessionRemoteHandoff: async (sessionId, handoff) => {
@@ -203,7 +211,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         session.id === sessionId ? { ...session, remoteHandoff: handoff } : session
       ));
       set({ sessions });
-      await useSessionStore.getState().saveSessions(sessions);
+      await queueSshSessionPersistence(sessions);
     },
 
     resumeSessionFromRemoteHandoff: async (sessionId) => {
@@ -357,7 +365,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         current.sessions.map((session) => [session.id, session.id === sessionId ? newSessionId : session.id])
       );
       const workspans = restoreTerminalWorkspans(current.workspans, sessionIdMap);
-      const mirror = buildWorkspanMirror(workspans, current.activeWorkspanId);
+      const mirror = buildWorkspanMirror(workspans, current.activeWorkspanId, sessions);
       const sessionStatuses = { ...current.sessionStatuses };
       const statusListeners = { ...current.statusListeners };
       const tabNotifications = { ...current.tabNotifications };
@@ -383,7 +391,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         ptyOutputActivityAt,
       });
       try {
-        await useSessionStore.getState().saveSessions(sessions);
+        await queueSshSessionPersistence(sessions);
         await useSessionStore.getState().saveActiveSessionId(mirror.activeSessionId);
         await useSessionStore.getState().saveWorkspans(workspans, mirror.activeWorkspanId, sessions);
       } catch (err) {
@@ -431,7 +439,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       const activeWorkspanId = state.activeWorkspanId
         ?? workspans[workspans.length - 1]?.id
         ?? null;
-      const mirror = buildWorkspanMirror(workspans, activeWorkspanId);
+      const mirror = buildWorkspanMirror(workspans, activeWorkspanId, sessions);
       const sessionStatuses = { ...state.sessionStatuses };
       for (const session of missing) sessionStatuses[session.id] = "exited";
       set({ sessions, ...mirror, sessionStatuses });
@@ -525,10 +533,11 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         cwd: sessionKind === "ephemeral-pi" ? undefined : cwd,
         shell: resolvedShell,
         envVars,
-        startupCmd: launch.startupHandledByLaunch || sessionKind === "ephemeral-pi" ? launchStartupCmd : startupCmd,
+        startupCmd: sessionKind !== "ephemeral-pi" && startupCmd === "" ? ""
+          : launch.startupHandledByLaunch || sessionKind === "ephemeral-pi" ? launchStartupCmd : startupCmd,
         ...(sessionKind === "ephemeral-pi"
           ? { kind: sessionKind, isAgentSession: true, cliTool: "pi" }
-          : getProjectAgentTerminalMetadata(projectId)),
+          : getProjectAgentTerminalMetadata(projectId, startupCmd)),
         environmentType: launch.environmentType,
         sshHostId: launch.sshHostId,
         remotePath: launch.remotePath,
@@ -550,7 +559,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
           set((state) => ({
             sessions: applyPtyStatusToSessions(state.sessions, sessionId, payload),
             sessionStatuses: { ...state.sessionStatuses, [sessionId]: status },
-            ...buildTabStatusUpdate(state, sessionId, "shell", status === "running" ? "running" : status === "error" ? "failed" : "done", new Date().toISOString()),
+            ...(status === "running" ? {} : buildTabStatusUpdate(state, sessionId, "shell", status === "error" ? "failed" : "done", new Date().toISOString())),
           }));
           persistSshConnectionStateAfterPtyStatus(sessionId, payload);
           if (
@@ -592,7 +601,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         workspans = [...state.workspans, workspan];
         activeWorkspanId = workspan.id;
       }
-      const mirror = buildWorkspanMirror(workspans, activeWorkspanId);
+      const mirror = buildWorkspanMirror(workspans, activeWorkspanId, newSessions);
       set({
         sessions: newSessions,
         ...mirror,
@@ -602,7 +611,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
 
       // 临时 Pi 会话只存在于当前运行，不写入会话恢复数据。
       if (sessionKind !== "ephemeral-pi") {
-        await useSessionStore.getState().saveSessions(newSessions);
+        await queueSshSessionPersistence(newSessions);
         await useSessionStore.getState().saveActiveSessionId(sessionId);
         await useSessionStore.getState().saveWorkspans(workspans, activeWorkspanId, newSessions);
       }
@@ -677,7 +686,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       if (owner?.id === state.activeWorkspanId && !ownerStillExists) {
         activeWorkspanId = workspans[Math.min(Math.max(ownerIndex, 0), Math.max(workspans.length - 1, 0))]?.id ?? null;
       }
-      const mirror = buildWorkspanMirror(workspans, activeWorkspanId);
+      const mirror = buildWorkspanMirror(workspans, activeWorkspanId, remaining);
 
       delete newStatuses[id];
       delete newListeners[id];
@@ -714,7 +723,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       });
 
       try {
-        await useSessionStore.getState().saveSessions(remaining);
+        await queueSshSessionPersistence(remaining);
         const nextActiveSession = mirror.activeSessionId ? remaining.find((session) => session.id === mirror.activeSessionId) : undefined;
         await useSessionStore.getState().saveActiveSessionId(isPersistableSession(nextActiveSession) ? mirror.activeSessionId : null);
         await useSessionStore.getState().saveWorkspans(workspans, mirror.activeWorkspanId, remaining);
@@ -765,10 +774,17 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       const workspans = updateTerminalWorkspan(state.workspans, owner.id, (workspan) => (
         syncTerminalWorkspanLayout(workspan, paneResult.tree, paneResult.activePaneId ?? workspan.activePaneId, id)
       ));
-      const mirror = buildWorkspanMirror(workspans, owner.id);
-      set(mirror);
+      const sessions = state.sessions.map((session) => session.id === id && session.tabHidden ? { ...session, tabHidden: false } : session);
+      const mirror = buildWorkspanMirror(workspans, owner.id, sessions);
+      // Navigation outside the focused pane exits focus mode in the same update.
+      const fullscreenPaneId = state.activeWorkspanId === mirror.activeWorkspanId
+        && state.fullscreenPaneId === mirror.activePaneId ? state.fullscreenPaneId : null;
+      set({ sessions, ...mirror, fullscreenPaneId });
+      if (sessions.some((session, index) => session !== state.sessions[index])) {
+        void queueSshSessionPersistence(sessions);
+      }
       scheduleSaveActiveId(id);
-      persistWorkspanState(workspans, owner.id, state.sessions);
+      persistWorkspanState(workspans, owner.id, sessions);
     },
 
     setWorkspanModeEnabled: (enabled) => {
@@ -779,7 +795,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       const activeWorkspanId = enabled
         ? state.activeWorkspanId
         : workspans[0]?.id ?? null;
-      const mirror = buildWorkspanMirror(workspans, activeWorkspanId);
+      const mirror = buildWorkspanMirror(workspans, activeWorkspanId, get().sessions);
       set({ ...mirror, splits: {} });
       scheduleSaveActiveId(mirror.activeSessionId);
       persistWorkspanState(workspans, mirror.activeWorkspanId, state.sessions);
@@ -788,8 +804,10 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
     setActiveWorkspan: (id) => {
       const state = get();
       if (!state.workspans.some((workspan) => workspan.id === id)) return;
-      const mirror = buildWorkspanMirror(state.workspans, id);
-      set(mirror);
+      const mirror = buildWorkspanMirror(state.workspans, id, get().sessions);
+      const fullscreenPaneId = state.activeWorkspanId === mirror.activeWorkspanId
+        && state.fullscreenPaneId === mirror.activePaneId ? state.fullscreenPaneId : null;
+      set({ ...mirror, fullscreenPaneId });
       scheduleSaveActiveId(mirror.activeSessionId);
       persistWorkspanState(state.workspans, id, state.sessions);
     },
@@ -823,7 +841,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       const requestedActiveWorkspanId = state.activeWorkspanId === id
         ? detached.find((workspan) => workspan.activeSessionId === current.activeSessionId)?.id ?? detached[0]?.id ?? null
         : state.activeWorkspanId;
-      const mirror = buildWorkspanMirror(workspans, requestedActiveWorkspanId);
+      const mirror = buildWorkspanMirror(workspans, requestedActiveWorkspanId, get().sessions);
       set(state.activeWorkspanId === id ? mirror : { workspans });
       persistWorkspanState(workspans, mirror.activeWorkspanId, state.sessions);
     },
@@ -839,7 +857,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         createPaneId
       );
       if (!result.changed) return;
-      const mirror = buildWorkspanMirror(result.workspans, result.activeWorkspanId);
+      const mirror = buildWorkspanMirror(result.workspans, result.activeWorkspanId, get().sessions);
       set({ ...mirror, splits: {} });
       scheduleSaveActiveId(mirror.activeSessionId);
       persistWorkspanState(result.workspans, result.activeWorkspanId, state.sessions);
@@ -860,7 +878,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       const workspans = updateTerminalWorkspan(state.workspans, owner!.id, (workspan) => (
         syncTerminalWorkspanLayout(workspan, nextTree, pane.id, fromId)
       ));
-      set(buildWorkspanMirror(workspans, owner!.id));
+      set(buildWorkspanMirror(workspans, owner!.id, get().sessions));
       scheduleSaveActiveId(fromId);
       persistWorkspanState(workspans, owner!.id, state.sessions);
     },
@@ -877,7 +895,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       const workspans = updateTerminalWorkspan(state.workspans, owner.id, (workspan) => (
         syncTerminalWorkspanLayout(workspan, result.tree, result.activePaneId, sessionId)
       ));
-      set(buildWorkspanMirror(workspans, owner.id));
+      set(buildWorkspanMirror(workspans, owner.id, get().sessions));
       scheduleSaveActiveId(sessionId);
       persistWorkspanState(workspans, owner.id, state.sessions);
     },
@@ -892,7 +910,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         insertAt
       );
       if (!result.changed || !result.detachedWorkspanId) return;
-      set(buildWorkspanMirror(result.workspans, result.detachedWorkspanId));
+      set(buildWorkspanMirror(result.workspans, result.detachedWorkspanId, get().sessions));
       scheduleSaveActiveId(sessionId);
       persistWorkspanState(result.workspans, result.detachedWorkspanId, state.sessions);
     },
@@ -906,7 +924,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       const workspans = updateTerminalWorkspan(state.workspans, owner.id, (workspan) => (
         syncTerminalWorkspanLayout(workspan, result.tree, result.activePaneId, result.activeSessionId)
       ));
-      set({ ...buildWorkspanMirror(workspans, owner.id), splits: {} });
+      set({ ...buildWorkspanMirror(workspans, owner.id, get().sessions), splits: {} });
       scheduleSaveActiveId(result.activeSessionId);
       persistWorkspanState(workspans, owner.id, state.sessions);
     },
@@ -923,7 +941,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       });
       if (!changed) return;
       set({ sessions: nextSessions });
-      useSessionStore.getState().saveSessions(nextSessions).catch(() => { });
+      queueSshSessionPersistence(nextSessions).catch(() => { });
     },
 
     splitPaneEmpty: (paneId, direction) => {
@@ -934,7 +952,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       const workspans = updateTerminalWorkspan(state.workspans, owner.id, (workspan) => (
         syncTerminalWorkspanLayout(workspan, result.tree, result.activePaneId, workspan.activeSessionId)
       ));
-      set(buildWorkspanMirror(workspans, owner.id));
+      set(buildWorkspanMirror(workspans, owner.id, get().sessions));
     },
 
     splitTerminal: async (sessionId, direction, options) => {
@@ -995,8 +1013,8 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         cwd: options?.cwd,
         shell: resolvedShell,
         envVars: options?.envVars,
-        startupCmd: launch.startupHandledByLaunch ? launchStartupCmd : options?.startupCmd,
-        ...getProjectAgentTerminalMetadata(options?.projectId),
+        startupCmd: options?.startupCmd === "" ? "" : launch.startupHandledByLaunch ? launchStartupCmd : options?.startupCmd,
+        ...getProjectAgentTerminalMetadata(options?.projectId, options?.startupCmd),
         environmentType: launch.environmentType,
         sshHostId: launch.sshHostId,
         remotePath: launch.remotePath,
@@ -1015,7 +1033,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
           set((state) => ({
             sessions: applyPtyStatusToSessions(state.sessions, splitSessionId, payload),
             sessionStatuses: { ...state.sessionStatuses, [splitSessionId]: status },
-            ...buildTabStatusUpdate(state, splitSessionId, "shell", status === "running" ? "running" : status === "error" ? "failed" : "done", new Date().toISOString()),
+            ...(status === "running" ? {} : buildTabStatusUpdate(state, splitSessionId, "shell", status === "error" ? "failed" : "done", new Date().toISOString())),
           }));
           persistSshConnectionStateAfterPtyStatus(splitSessionId, payload);
         });
@@ -1046,13 +1064,13 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       ));
       set((state) => ({
         sessions: newSessions,
-        ...buildWorkspanMirror(workspans, currentOwner.id),
+        ...buildWorkspanMirror(workspans, currentOwner.id, newSessions),
         splits: {},
         sessionStatuses: { ...state.sessionStatuses, [splitSessionId]: "running" },
         statusListeners: { ...state.statusListeners, [splitSessionId]: unlisten },
       }));
 
-      await useSessionStore.getState().saveSessions(newSessions);
+      await queueSshSessionPersistence(newSessions);
       await useSessionStore.getState().saveActiveSessionId(splitSessionId);
       await useSessionStore.getState().saveSplits([]);
       await useSessionStore.getState().saveWorkspans(workspans, currentOwner.id, newSessions);
@@ -1140,10 +1158,10 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
 
       set({
         sessions,
-        ...buildWorkspanMirror(workspans, activeWorkspanId),
+        ...buildWorkspanMirror(workspans, activeWorkspanId, sessions),
         splits: {},
       });
-      void useSessionStore.getState().saveSessions(sessions).catch(() => { });
+      void queueSshSessionPersistence(sessions).catch(() => { });
       persistWorkspanState(workspans, activeWorkspanId, sessions);
       return editorSessionId;
     },
@@ -1242,12 +1260,12 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
 
       set({
         sessions,
-        ...buildWorkspanMirror(workspans, activeWorkspanId),
+        ...buildWorkspanMirror(workspans, activeWorkspanId, sessions),
         sessionStatuses: { ...state.sessionStatuses, [launch.sessionId]: "running" },
         statusListeners: { ...state.statusListeners, [launch.sessionId]: unlisten },
         splits: {},
       });
-      void useSessionStore.getState().saveSessions(sessions).catch(() => { });
+      void queueSshSessionPersistence(sessions).catch(() => { });
       void useSessionStore.getState().saveActiveSessionId(null).catch(() => { });
       persistWorkspanState(workspans, activeWorkspanId, sessions);
       return launch.sessionId;
@@ -1325,7 +1343,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       const workspans = updateTerminalWorkspan(state.workspans, owner.id, (workspan) => (
         syncTerminalWorkspanLayout(workspan, result.tree, result.activePaneId, result.activeSessionId)
       ));
-      const mirror = buildWorkspanMirror(workspans, owner.id);
+      const mirror = buildWorkspanMirror(workspans, owner.id, remaining);
       set({
         sessions: remaining,
         ...mirror,
@@ -1341,7 +1359,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         subagentTranscripts: newSubagentTranscripts,
       });
 
-      await useSessionStore.getState().saveSessions(remaining);
+      await queueSshSessionPersistence(remaining);
       const nextActiveSession = mirror.activeSessionId
         ? remaining.find((session) => session.id === mirror.activeSessionId)
         : undefined;
@@ -1381,20 +1399,23 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       const workspans = updateTerminalWorkspan(state.workspans, activeWorkspan.id, (workspan) => (
         syncTerminalWorkspanLayout(workspan, paneTree, workspan.activePaneId, workspan.activeSessionId)
       ));
-      set(buildWorkspanMirror(workspans, activeWorkspan.id));
+      set(buildWorkspanMirror(workspans, activeWorkspan.id, get().sessions));
       persistWorkspanState(workspans, activeWorkspan.id, state.sessions);
     },
 
     getNextSessionIdForShortcut: (delta) => {
       const state = get();
       const nextSessionId = resolveNextSessionIdForShortcut(
-        state.paneTree,
+        filterPaneTreeBySessionIds(state.paneTree, visibleTerminalSessionIds(state.sessions)),
         state.activePaneId,
         state.activeSessionId,
         delta
       );
       if (nextSessionId && nextSessionId !== state.activeSessionId) return nextSessionId;
-      return getAdjacentWorkspanSessionId(state.workspans, state.activeWorkspanId, delta);
+      return getAdjacentWorkspanSessionId(state.workspans.flatMap((workspan) => {
+        const paneTree = filterPaneTreeBySessionIds(workspan.paneTree, visibleTerminalSessionIds(state.sessions));
+        return paneTree ? [syncTerminalWorkspanLayout(workspan, paneTree, workspan.activePaneId, workspan.activeSessionId)] : [];
+      }), state.activeWorkspanId, delta);
     },
 
     restoreSessions: async (projectMap, projectHealth) => {
@@ -1473,6 +1494,9 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
               const attachedMeta = resolveAttachedDaemonSession(ps, daemonSession);
               const attachedSession: TerminalSession = {
                 id: ps.id,
+                tabHidden: ps.tabHidden,
+            sidebarPinned: ps.sidebarPinned,
+            sidebarOrder: ps.sidebarOrder,
                 createdAtMs: daemonSession.createdAtMs ?? ps.createdAtMs,
                 projectId: attachedMeta.projectId,
                 worktreeId: attachedMeta.worktreeId,
@@ -1549,7 +1573,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
 
           // 重建 PTY
           const restoreProject = ps.projectId ? projectMap.get(ps.projectId) : undefined;
-          const cliKind = detectCliResumeKind(ps.startupCmd, restoreProject);
+          const cliKind = ps.isAgentSession === false ? null : detectCliResumeKind(ps.startupCmd, restoreProject);
           const restoredStartupCmd = cliKind
             ? buildCliResumeStartupCommand(
               cliKind,
@@ -1557,7 +1581,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
               restoreProject,
               ps.providerSnapshot ? { includeProviderOverrides: false } : {},
             )
-            : normalizeDirectCodexStartupCommand(ps.startupCmd);
+            : ps.isAgentSession === false && !ps.startupCmd ? "" : normalizeDirectCodexStartupCommand(ps.startupCmd);
           let launch: ResolvedPtyLaunch;
           try {
             launch = await resolvePtyLaunch({
@@ -1614,6 +1638,9 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
           const hasInitialOutput = !!initialTerminalOutput;
           const restoredSession: TerminalSession = {
             id: newSessionId,
+            tabHidden: ps.tabHidden,
+            sidebarPinned: ps.sidebarPinned,
+            sidebarOrder: ps.sidebarOrder,
             createdAtMs: Date.now(),
             projectId: ps.projectId,
             worktreeId: ps.worktreeId,
@@ -1621,7 +1648,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
             cwd: ps.cwd,
             shell: resolvedShell,
             envVars: ps.envVars,
-            startupCmd: launch.startupHandledByLaunch ? restoredStartupCmd : launchStartupCmd,
+            startupCmd: restoredStartupCmd === "" ? "" : launch.startupHandledByLaunch ? restoredStartupCmd : launchStartupCmd,
             ...getRestoredAgentTerminalMetadata(ps, ps.projectId),
             environmentType: launch.environmentType ?? ps.environmentType,
             sshHostId: launch.sshHostId ?? ps.sshHostId,
@@ -1714,7 +1741,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
           workspans = collapseTerminalWorkspansToLegacy(workspans, activeWorkspanId, createPaneId);
           activeWorkspanId = workspans[0]?.id ?? null;
         }
-        const mirror = buildWorkspanMirror(workspans, activeWorkspanId);
+        const mirror = buildWorkspanMirror(workspans, activeWorkspanId, restoredSessions);
 
         set({
           sessions: restoredSessions,
@@ -1818,7 +1845,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       const nextSessions = [...current.sessions, session];
       const nextWorkspan = createTerminalWorkspan(createWorkspanId(), createPaneId(), sessionId);
       const workspans = [...current.workspans, nextWorkspan];
-      const mirror = buildWorkspanMirror(workspans, nextWorkspan.id);
+      const mirror = buildWorkspanMirror(workspans, nextWorkspan.id, nextSessions);
       const initialTabState = buildTabStatusUpdate(
         current,
         sessionId,
@@ -1841,7 +1868,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         ]),
         ...initialTabState,
       });
-      await useSessionStore.getState().saveSessions(nextSessions);
+      await queueSshSessionPersistence(nextSessions);
       await useSessionStore.getState().saveActiveSessionId(sessionId);
       await useSessionStore.getState().saveWorkspans(workspans, nextWorkspan.id, nextSessions);
       return true;
