@@ -183,6 +183,7 @@ export function useSidebarController({
     project: Project;
     targetPaneId?: string;
     direction?: TerminalPaneSplitDirection;
+    taskName: string;
     displayName: string;
     description: string;
   } | null>(null);
@@ -734,9 +735,12 @@ export function useSidebarController({
       .catch((err) => toast.error(t("worktree.deps.checkFailed"), { description: String(err) }));
   };
 
-  const createAndOpenWorktree = async (project: Project, targetPaneId?: string, displayName?: string, description = "") => {
+  // Serialize prompt initialization, while allowing independent normal/split actions.
+  const worktreePromptActionsRef = useRef(new Set<string>());
+
+  const createAndOpenWorktree = async (project: Project, targetPaneId?: string, displayName?: string, description = "", taskName?: string) => {
     try {
-      const worktree = await createWorktreeForProject(project, displayName ? { displayName, description } : undefined);
+      const worktree = await createWorktreeForProject(project, { taskName, displayName, description });
       await openWorktreeSession(project, worktree, targetPaneId);
       toast.success(t("worktree.toast.created"), { description: worktree.path });
       void maybePromptWorktreeDeps(project, worktree);
@@ -747,10 +751,10 @@ export function useSidebarController({
     }
   };
 
-  const createAndSplitWorktree = async (project: Project, direction: TerminalPaneSplitDirection, displayName?: string, description = "") => {
+  const createAndSplitWorktree = async (project: Project, direction: TerminalPaneSplitDirection, displayName?: string, description = "", taskName?: string) => {
     if (!activeSessionId) return;
     try {
-      const worktree = await createWorktreeForProject(project, displayName ? { displayName, description } : undefined);
+      const worktree = await createWorktreeForProject(project, { taskName, displayName, description });
       const options = buildProjectSplitOptions(project);
       await splitTerminal(activeSessionId, direction, {
         ...options,
@@ -777,18 +781,27 @@ export function useSidebarController({
       return;
     }
 
-    const validGitProject = await validateProjectGit(project);
-    if (!validGitProject) {
-      await openProjectDirect(project, targetPaneId);
-      return;
-    }
+    const actionKey = JSON.stringify(["open", project.id, targetPaneId]);
+    if (worktreePromptActionsRef.current.has(actionKey)) return;
+    worktreePromptActionsRef.current.add(actionKey);
+    try {
+      const validGitProject = await validateProjectGit(project);
+      if (!validGitProject) {
+        await openProjectDirect(project, targetPaneId);
+        return;
+      }
 
-    setWorktreePrompt({
-      project,
-      targetPaneId,
-      displayName: createDefaultWorktreeTaskName(project.id),
-      description: "",
-    });
+      const taskName = createDefaultWorktreeTaskName(project.id);
+      setWorktreePrompt({
+        taskName,
+        project,
+        targetPaneId,
+        displayName: taskName,
+        description: "",
+      });
+    } finally {
+      worktreePromptActionsRef.current.delete(actionKey);
+    }
   };
   const openProjects = async (items: Project[]) => {
     if (items.length === 0) return;
@@ -852,21 +865,26 @@ export function useSidebarController({
         return;
       }
 
-      const validGitProject = await validateProjectGit(project);
-      if (!validGitProject) {
-        await splitDirect();
-        return;
+      const actionKey = JSON.stringify(["split", project.id, activeSessionId, direction]);
+      if (worktreePromptActionsRef.current.has(actionKey)) return;
+      worktreePromptActionsRef.current.add(actionKey);
+      try {
+        const validGitProject = await validateProjectGit(project);
+        if (!validGitProject) {
+          await splitDirect();
+          return;
+        }
+        const taskName = createDefaultWorktreeTaskName(project.id);
+        setWorktreePrompt({
+          taskName,
+          project,
+          direction,
+          displayName: taskName,
+          description: "",
+        });
+      } finally {
+        worktreePromptActionsRef.current.delete(actionKey);
       }
-      if (decision === "auto") {
-        await createAndSplitWorktree(project, direction);
-        return;
-      }
-      setWorktreePrompt({
-        project,
-        direction,
-        displayName: createDefaultWorktreeTaskName(project.id),
-        description: "",
-      });
     },
     [
       activeSessionId,

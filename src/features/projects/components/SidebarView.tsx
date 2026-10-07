@@ -952,12 +952,26 @@ export function SidebarView({
           <div className="mt-4">
             <label className="mb-1 block text-xs text-text-muted">{t("worktree.prompt.taskName")}</label>
             <Input
+              aria-label={t("worktree.prompt.taskName")}
               value={worktreePrompt?.displayName ?? ""}
-              onChange={(event) => setWorktreePrompt((current) => current ? { ...current, displayName: event.currentTarget.value } : current)}
+              onChange={(event) => {
+                const displayName = event.currentTarget.value;
+                setWorktreePrompt((current) => current ? { ...current, displayName } : current);
+              }}
               className="text-sm"
             />
+            <label className="mb-1 mt-3 block text-xs text-text-muted">{t("worktree.prompt.internalName")}</label>
+            <Input readOnly value={worktreePrompt?.taskName ?? ""} aria-label={t("worktree.prompt.internalName")} className="select-text text-sm" />
+            <p className="mt-1 text-xs text-text-muted">{t("worktree.prompt.internalNameHelp")}</p>
             <label className="mb-1 mt-3 block text-xs text-text-muted">{t("worktree.prompt.descriptionLabel")}</label>
-            <textarea value={worktreePrompt?.description ?? ""} onChange={(event) => setWorktreePrompt((current) => current ? { ...current, description: event.currentTarget.value } : current)} className="min-h-20 w-full rounded-md border border-border bg-bg-primary px-2 py-1 text-sm" />
+            <textarea
+              value={worktreePrompt?.description ?? ""}
+              onChange={(event) => {
+                const description = event.currentTarget.value;
+                setWorktreePrompt((current) => current ? { ...current, description } : current);
+              }}
+              className="min-h-20 w-full rounded-md border border-border bg-bg-primary px-2 py-1 text-sm"
+            />
             {worktreePrompt && (worktreePrompt.displayName.trim().length === 0 || Array.from(worktreePrompt.displayName.trim()).length > 64) && (
               <p className="mt-1 text-[11px] text-danger">{t("worktree.prompt.invalidName")}</p>
             )}
@@ -988,9 +1002,9 @@ export function SidebarView({
                 if (worktreePrompt) {
                   void updateProject(worktreePrompt.project.id, { worktree_strategy: "autoParallel" }).then(() => {
                     if (worktreePrompt.direction) {
-                      return createAndSplitWorktree(worktreePrompt.project, worktreePrompt.direction, worktreePrompt.displayName, worktreePrompt.description);
+                      return createAndSplitWorktree(worktreePrompt.project, worktreePrompt.direction, worktreePrompt.displayName, worktreePrompt.description, worktreePrompt.taskName);
                     }
-                    return createAndOpenWorktree(worktreePrompt.project, worktreePrompt.targetPaneId, worktreePrompt.displayName, worktreePrompt.description);
+                    return createAndOpenWorktree(worktreePrompt.project, worktreePrompt.targetPaneId, worktreePrompt.displayName, worktreePrompt.description, worktreePrompt.taskName);
                   }).catch((err) => {
                     logError("Failed to enable automatic worktree isolation", err);
                     toast.error(t("worktree.toast.createFailed"), { description: String(err) });
@@ -1006,9 +1020,9 @@ export function SidebarView({
               className="ui-worktree-prompt-action ui-worktree-prompt-action-primary"
               onClick={() => {
                 if (worktreePrompt?.direction) {
-                  void createAndSplitWorktree(worktreePrompt.project, worktreePrompt.direction, worktreePrompt.displayName, worktreePrompt.description);
+                  void createAndSplitWorktree(worktreePrompt.project, worktreePrompt.direction, worktreePrompt.displayName, worktreePrompt.description, worktreePrompt.taskName);
                 } else if (worktreePrompt) {
-                  void createAndOpenWorktree(worktreePrompt.project, worktreePrompt.targetPaneId, worktreePrompt.displayName, worktreePrompt.description);
+                  void createAndOpenWorktree(worktreePrompt.project, worktreePrompt.targetPaneId, worktreePrompt.displayName, worktreePrompt.description, worktreePrompt.taskName);
                 }
                 setWorktreePrompt(null);
               }}

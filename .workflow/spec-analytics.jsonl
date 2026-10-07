@@ -32,3 +32,4 @@
 {"type":"cli","id":"CLI-1791296876481-1","timestamp":"2026-10-06T14:27:56.481Z","command":"load","args":{"type":"spec","category":"coding"}}
 {"type":"cli","id":"CLI-1791297165536-1","timestamp":"2026-10-06T14:32:45.536Z","command":"load","args":{"type":"spec","category":"coding"}}
 {"type":"cli","id":"CLI-1791298456846-1","timestamp":"2026-10-06T14:54:16.846Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791377337101-1","timestamp":"2026-10-07T12:48:57.101Z","command":"load","args":{"type":"spec","id":"spec:project:coding-conventions-001"}}

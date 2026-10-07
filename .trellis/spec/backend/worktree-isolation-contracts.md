@@ -53,10 +53,16 @@ pub async fn git_worktree_validate(project_path: String) -> Result<bool, String>
 
 #[tauri::command]
 pub async fn git_worktree_create(
-    project_path: String,
-    task_name: String,
-    worktree_root: Option<String>,
+    req: GitWorktreeCreateRequest,
 ) -> Result<GitWorktreeCreateResult, String>
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitWorktreeCreateRequest {
+    pub project_path: String,
+    pub task_name: String,
+    pub worktree_root: Option<String>,
+}
 
 #[tauri::command]
 pub async fn git_worktree_check_deps(
@@ -66,14 +72,14 @@ pub async fn git_worktree_check_deps(
 #[tauri::command]
 pub async fn git_worktree_merge(
     project_path: String,
-    branch: String,
+    worktree_branch: String,
     base_branch: String,
 ) -> Result<GitWorktreeMergeResult, String>
 
 #[tauri::command]
 pub async fn git_worktree_force_merge(
     project_path: String,
-    branch: String,
+    worktree_branch: String,
     base_branch: String,
 ) -> Result<GitWorktreeMergeResult, String>
 
@@ -152,8 +158,8 @@ type TreeNode =
 |---|---|
 | `prompt` | If the project has a configured CLI tool and at least one existing same-project terminal session, ask whether to open in an isolated worktree. Direct-open must preserve legacy behavior. |
 | `disabled` | Default. Do nothing. Always open a normal project terminal; never prompt and never auto-create a worktree, regardless of CLI tool configuration or existing same-project sessions. |
-| `autoParallel` | If the project has a configured CLI tool and at least one existing same-project terminal session, create a worktree without prompting. The first session opens normally. |
-| `always` | Every project terminal launch creates a worktree. This strategy still only applies to local Git projects that support `git worktree`; non-Git/WSL projects open normally. |
+| `autoParallel` | If the project has a configured CLI tool and at least one existing same-project terminal session, propose isolation and show the display/internal-name form before creating. The first session opens normally. |
+| `always` | Every supported local Git project launch shows the display/internal-name form before creating a new worktree. Non-Git/WSL projects open normally. |
 
 - `disabled` must short-circuit before Git validation and preserve pre-worktree behavior exactly.
 - `prompt` / `autoParallel` must not depend on visible tab runtime state, `running` notifications, startup commands such as `npm run dev`, or shell process liveness.
@@ -164,15 +170,19 @@ type TreeNode =
 
 #### Worktree creation
 
-- The frontend may propose a task name, but Rust is the authority for validation and path construction.
+- The frontend generates an ASCII internal candidate with a random suffix once per creation dialog open (or automatic action). The preview is immutable within that action; display name initializes to the preview but can be edited independently, including Chinese or duplicate labels. Legacy string/Web `taskName` display inputs do not determine internal identity.
+- Rust is the authority for validation, path construction and bounded allocation: try at most five candidates total, reallocating only for actual directory, local ref (including `wt/<candidate>/child` descendants), or registered checkout occupancy. Missing directories with retained registration remain occupied. Never reuse or delete occupied objects. An exact local `wt` ref blocks all candidates and returns `worktree_branch_namespace_blocked` without blind retries.
+- Successful creation returns the authoritative final `name`, `branch`, `path` and `baseBranch`; the Store persists these, preserving the independent display name. Normally final name equals preview; rare occupancy/creation races may reallocate, as explained in both languages. SQL save failure reports the created name/path and does not roll back Git objects.
 - Task names must be non-empty, 1..64 chars, only ASCII letters/digits/`-`/`_`, not start with `-`, and not be Windows reserved device names (`CON`, `NUL`, `COM1`, `LPT1`, etc.).
 - Branch names must be `wt/<taskName>` and pass Git-safe validation.
 - Default path is under a sibling worktree root (`<project-parent>/<project-name>-worktrees/<taskName>`). A custom root may only be used as a root; the task name is still appended by Rust.
 - Git commands must be executed with argument arrays (`Command::new("git").args([...])`), never through shell string concatenation.
 - Windows extended-length path prefixes (`\\?\` / `//?/`) must be stripped before passing paths to `git worktree add/remove`; Git CLI receives normal local paths only.
 - WSL / UNC / remote paths remain unsupported and must be rejected before appending the task name or executing Git.
-- If `git worktree add -b wt/<task>` fails after creating the branch, cleanup may delete only a branch that did not exist before the add attempt and still validates as a `wt/` worktree branch. Never delete non-`wt/` branches.
+- A failed `git worktree add -b wt/<task>` does not prove ownership of any remaining branch/directory, even if it was absent before add. Unknown failed-add ownership prohibits deletion: preserve residual and concurrent objects and report the error.
+- Retry failed add only for explicit diagnostics bound to this candidate path/branch plus confirmed current occupancy. Mixed or unknown diagnostics (including permission, checkout or hook failures) terminate conservatively; branch existence alone is not collision evidence.
 - While a Worktree create request for the same project path, worktree root, and task name is in flight, the frontend must not invoke `git_worktree_create` again. Duplicate triggers must fail locally with `worktree_create_in_progress` and release the guard on both success and failure.
+- All supported normal/split launches that would create a new Worktree, including `autoParallel` and `always`, show the name form first; creation happens only after user confirmation. Existing Worktree terminal creation and ordinary non-isolated terminals do not show this form. UI entrypoints use synchronous per-action guards during asynchronous validation/prompt initialization, released in `finally`; retain the Store candidate guard for confirmed creation.
 - A failed `git_worktree_create` response must preserve the final Git error tail. Checkout progress prefixes may be normalized or truncated only after the terminal `fatal`/`error` text remains available to the frontend.
 
 #### Dependency prompt
@@ -257,9 +267,12 @@ interface FinishRequest {
 | WSL UNC path or unsupported remote path | Return `unsupported_wsl`; no prompt/auto isolation. |
 | `projectWorktreeConfigEnabled=false` | Open the project directly; do not validate Git, prompt, or auto-create a Worktree. Preserve stored project Worktree fields. |
 | Invalid task name | Return `invalid_task_name`; no directory or branch is created. |
-| Branch already exists | Return Git failure; frontend asks for a different name or auto-generates a collision suffix. |
+| Candidate branch exists or has descendant refs | Rust reallocates within the five-candidate bound; preserve blocking refs. |
+| Exact local `wt` prefix ref exists | Return `worktree_branch_namespace_blocked`; no blind retry or deletion. |
 | Same project/root/task creation already in flight | Return `worktree_create_in_progress` locally; do not issue another Git command or show an unhandled Promise rejection. |
-| Worktree path already exists | Return `worktree_path_exists`; frontend must not reuse silently. |
+| Worktree path exists or remains registered while missing | Rust reallocates within the five-candidate bound; never reuse/delete the reserved path. |
+| Five candidates occupied | Return `worktree_create_candidates_exhausted`; preserve all objects. |
+| Failed add has mixed/unrelated occupancy and fatal permission/hook diagnostics | Stop, preserve final Git error tail and residual objects; do not retry based on branch existence. |
 | Main checkout dirty before merge | Return `dirty_main_worktree`; no checkout/merge happens. |
 | Force merge stash cannot be created or verified | Return `force_merge_stash_failed` / `force_merge_stash_reference_failed` / `force_merge_stash_incomplete`; do not checkout, merge, or cleanup; retain any created stash. |
 | Force merge checkout/merge/abort fails | Attempt to restore the exact retained stash when safe; return the corresponding `force_merge_checkout_failed`, `force_merge_failed`, `force_merge_abort_failed`, or `force_merge_restore_failed`; keep the Worktree. |
@@ -293,6 +306,8 @@ interface FinishRequest {
 - Bad: Returning only the first 300 characters of Git output when checkout progress occupies that prefix; the actual fatal cause becomes invisible and cannot be diagnosed.
 
 ### 6. Tests Required
+
+- Focused creation checks: `node --test scripts/worktreeCreation.test.mjs`, `cargo test --manifest-path src-tauri/Cargo.toml --lib commands::git_worktree::create::tests`, and `npx tsc --noEmit`. Node harness loads actual Store/UI/controller source; cover stable preview/display independence, candidate guard, concurrent same automatic entry vs independent normal/split actions, and guard release on failures. Rust uses temporary repositories for descendant/packed refs, prefix blockers, external creation races, bounded allocation and misleading mixed fatal diagnostics. Failed-add tests must verify blocking refs are preserved.
 
 - Focused finish regression tests use temporary repositories and injected cleanup/journal failures: successful completion, unregister followed by deletion failure/restart/retry, deleted branch with/without trusted receipt, changed source/base/checkout/residual/root, unknown residual refusal, protected paths/links, durable force-restore blockers, root inspection errors and internal `NotFound`.
 - `node --test scripts/worktreeFinishRecovery.test.mjs` covers actual mocked dialog/store callbacks: reopen and late-response isolation, object/language refresh, invalid staging guards, cleanup retry without merge, SQL/refresh failure ordering, shared operation guards and explicit session confirmation/newcomer rejection.

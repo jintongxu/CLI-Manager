@@ -1,5 +1,7 @@
 #[path = "finish.rs"]
 pub mod finish;
+#[path = "worktree_create.rs"]
+mod create;
 
 use git2::Repository;
 use serde::{Deserialize, Serialize};
@@ -309,7 +311,7 @@ fn resolve_worktree_target_path(
         .canonicalize()
         .map_err(|e| format!("canonicalize_worktree_root_failed: {e}"))?;
     let target = root.join(task_name);
-    if target.exists() {
+    if worktree_root_metadata(&target)?.is_some() {
         return Err("worktree_path_exists".to_string());
     }
     if !target.starts_with(&root) {
@@ -577,26 +579,6 @@ fn has_branch_content_diff(
         ["diff", "--name-only", base_branch, worktree_branch],
     )?;
     Ok(output.lines().any(|line| !line.trim().is_empty()))
-}
-
-// 仅允许清理本次添加前不存在且符合 wt/ 规则的分支。
-fn should_cleanup_worktree_branch_after_failed_add(
-    branch: &str,
-    branch_existed_before_add: bool,
-) -> bool {
-    !branch_existed_before_add && validate_worktree_branch(branch).is_ok()
-}
-
-// 工作树添加失败后尽力删除本次新建的合法工作树分支。
-fn cleanup_worktree_branch_after_failed_add(
-    project_path: &Path,
-    branch: &str,
-    branch_existed_before_add: bool,
-) {
-    if !should_cleanup_worktree_branch_after_failed_add(branch, branch_existed_before_add) {
-        return;
-    }
-    let _ = run_git_raw(project_path, ["branch", "-D", branch]);
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1229,50 +1211,8 @@ pub async fn git_worktree_validate(project_path: String) -> Result<bool, String>
 pub async fn git_worktree_create(
     req: GitWorktreeCreateRequest,
 ) -> Result<GitWorktreeCreateResult, String> {
-    let task_name = validate_task_name(&req.task_name)?;
-    tokio::task::spawn_blocking(move || {
-        let repo = open_main_repo(&req.project_path)?;
-        let base_branch = current_branch_name(&repo)?;
-        let project_path = local_path_from_input(&req.project_path)
-            .canonicalize()
-            .map_err(|e| format!("canonicalize_project_path_failed: {e}"))?;
-        let target_path =
-            resolve_worktree_target_path(&project_path, &task_name, req.worktree_root.as_deref())?;
-        let branch = format!("{WORKTREE_BRANCH_PREFIX}{task_name}");
-        validate_worktree_branch(&branch)?;
-        let branch_existed_before_add = branch_exists(&project_path, &branch)?;
-
-        let target_arg = path_to_git_arg(&target_path);
-        let add_output = run_git_raw(
-            &project_path,
-            [
-                "worktree",
-                "add",
-                "-b",
-                branch.as_str(),
-                target_arg.as_str(),
-                "HEAD",
-            ],
-        )?;
-        if !add_output.success {
-            cleanup_worktree_branch_after_failed_add(
-                &project_path,
-                &branch,
-                branch_existed_before_add,
-            );
-            let snippet = git_create_error_snippet(&add_output.combined());
-            return Err(format!("git_failed: {snippet}"));
-        }
-
-        seed_trellis_developer_identity(&project_path, &target_path);
-
-        Ok(GitWorktreeCreateResult {
-            name: task_name,
-            branch,
-            path: path_to_git_arg(&target_path),
-            base_branch,
-        })
-    })
+    validate_task_name(&req.task_name)?;
+    tokio::task::spawn_blocking(move || create::create(req))
     .await
     .map_err(|e| format!("task_failed: {e}"))?
 }

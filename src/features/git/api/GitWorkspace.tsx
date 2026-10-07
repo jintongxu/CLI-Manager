@@ -37,7 +37,7 @@ import { GitLogTable, type GitCommitAction } from "../components/workspace/GitLo
 import { GitRefTree, type GitBranchAction } from "../components/workspace/GitRefTree";
 import { GitCompareDialog } from "../components/workspace/GitCompareDialog";
 import { GitPowerToolsDialog } from "../components/workspace/GitPowerToolsDialog";
-import { useWorktreeStore } from "../../projects/api/worktreeStore";
+import { createDefaultWorktreeTaskName, useWorktreeStore } from "../../projects/api/worktreeStore";
 import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
 import { WorktreeFinishDialog } from "../../projects/api/WorktreeFinishDialog";
 import { Select } from "../../../shared/ui/select";
@@ -154,6 +154,7 @@ export function GitWorkspace({
   const [operationError, setOperationError] = useState<string | null>(null);
   const [worktreeCreateOpen, setWorktreeCreateOpen] = useState(false);
   const [worktreeName, setWorktreeName] = useState("");
+  const [worktreeTaskName, setWorktreeTaskName] = useState("");
   const [worktreeDescription, setWorktreeDescription] = useState("");
   const [finishWorktree, setFinishWorktree] = useState<WorktreeRecord | null>(null);
   const [recentBranches, setRecentBranches] = useState<string[]>([]);
@@ -476,6 +477,15 @@ export function GitWorkspace({
   );
 
   const openOperation = useCallback((operation: PendingOperation, input = "") => {
+    if (operation.operation === "create-worktree") {
+      const taskName = createDefaultWorktreeTaskName();
+      setWorktreeTaskName(taskName);
+      setWorktreeName(input || taskName);
+      setWorktreeDescription("");
+      setOperationError(null);
+      setWorktreeCreateOpen(true);
+      return;
+    }
     setOperationError(null);
     setOperationInput(input);
     setPendingOperation(operation);
@@ -794,7 +804,7 @@ export function GitWorkspace({
         await updateWorktreeMetadata(operation.target, input, worktreeDescription);
       } else if (operation.operation === "create-worktree") {
         if (!project) throw new Error("project_not_found");
-        await createWorktreeForProject(project, { displayName: input || undefined, description: worktreeDescription });
+        await createWorktreeForProject(project, { taskName: worktreeTaskName, displayName: input || undefined, description: worktreeDescription });
       } else if (operation.operation === "push-tag") {
         if (!transport || repositoryId === null || !operation.branch)
           throw new Error("git_operation_context_missing");
@@ -842,6 +852,7 @@ export function GitWorkspace({
     repositoryId,
     updateWorktreeMetadata,
     worktreeDescription,
+    worktreeTaskName,
     t,
     transport,
   ]);
@@ -859,13 +870,16 @@ export function GitWorkspace({
   );
 
   const requestCreateWorktree = useCallback(() => {
-    setWorktreeName("");
+    const taskName = createDefaultWorktreeTaskName();
+    setWorktreeTaskName(taskName);
+    setWorktreeName(taskName);
+    setOperationError(null);
     setWorktreeDescription("");
     setWorktreeCreateOpen(true);
   }, []);
 
   const confirmCreateWorktree = useCallback(async () => {
-    if (!project || !worktreeCreateOpen) return;
+    if (!project || !worktreeCreateOpen || operationBusy) return;
     if (Array.from(worktreeName.trim()).length === 0 || Array.from(worktreeName.trim()).length > 64) {
       setOperationError(t("git.operation.worktreeNameInvalid"));
       return;
@@ -876,7 +890,7 @@ export function GitWorkspace({
     }
     setOperationBusy(true);
     try {
-      await createWorktreeForProject(project, { displayName: worktreeName.trim() || undefined, description: worktreeDescription });
+      await createWorktreeForProject(project, { taskName: worktreeTaskName, displayName: worktreeName.trim() || undefined, description: worktreeDescription });
       setWorktreeCreateOpen(false);
       toast.success(t("git.workspace.worktreeCreated"));
     } catch (reason) {
@@ -891,7 +905,7 @@ export function GitWorkspace({
     } finally {
       setOperationBusy(false);
     }
-  }, [createWorktreeForProject, project, t, worktreeCreateOpen, worktreeDescription, worktreeName]);
+  }, [createWorktreeForProject, project, t, worktreeCreateOpen, worktreeDescription, worktreeName, worktreeTaskName, operationBusy]);
 
   const beginResize = useCallback(
     (side: "left" | "right", event: ReactPointerEvent<HTMLDivElement>) => {
@@ -1435,6 +1449,7 @@ export function GitWorkspace({
               {t("git.operation.worktreeDisplayName")}
             </label>
             <input
+              aria-label={t("git.operation.worktreeDisplayName")}
               value={worktreeName}
               onChange={(event) => setWorktreeName(event.currentTarget.value)}
               placeholder={t("git.operation.worktreeNamePlaceholder")}
@@ -1446,6 +1461,13 @@ export function GitWorkspace({
                 if (event.key === "Escape") setWorktreeCreateOpen(false);
               }}
             />
+            <label className="mt-3 block text-[11px]" style={{ color: TERM.dim }}>
+              {t("git.operation.worktreeInternalName")}
+              <input readOnly value={worktreeTaskName} aria-label={t("git.operation.worktreeInternalName")}
+                className="mt-1 w-full select-text rounded border bg-transparent px-2 py-1.5 text-xs"
+                style={{ color: TERM.fg, borderColor: TERM.dim }} />
+            </label>
+            <p className="mt-1 text-[11px]" style={{ color: TERM.dim }}>{t("git.operation.worktreeInternalNameHelp")}</p>
             <label className="mt-3 block text-[11px]" style={{ color: TERM.dim }}>
               {t("git.operation.worktreeDescription")}
             </label>
