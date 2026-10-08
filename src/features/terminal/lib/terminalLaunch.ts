@@ -24,6 +24,7 @@ import { buildSshConnectionSpec } from "../../remote/api/ssh";
 import { parseStoredSshHookReport, resolveSshToolSource } from "../../remote/api/sshToolIntegration";
 import { getSshClientInstanceId } from "../../remote/api/sshClientIdentity";
 import { isValidGrokSessionId, isValidKimiSessionId } from "../../history/api/resumeCliArgs";
+import { buildPiResumeCommand } from "../../history/api/historyResumeCommand";
 import {
   terminalProcessManager, type TerminalClaudeProviderLaunchConfig,
   type TerminalCodexProviderLaunchConfig, type TerminalGrokProviderLaunchConfig,
@@ -108,9 +109,14 @@ export const KIMI_COMMAND_PATTERN = /(?:^|\s)kimi(?:\.(?:cmd|exe|ps1))?(?:\s|$)/
 
 export function detectCliResumeKind(
   startupCmd: string | undefined,
-  project: Project | undefined
-): "claude" | "codex" | "grok" | "kimi" | null {
+  project: Project | undefined,
+  sessionTool?: string,
+): "claude" | "codex" | "grok" | "kimi" | "pi" | null {
   const cmd = startupCmd?.trim() ?? "";
+  // Persisted tool identity wins over a project's default after manual CLI launch.
+  if (sessionTool?.trim().toLowerCase() === "pi"
+    || /(?:^|\s)pi(?:\.(?:cmd|exe|ps1))?(?:\s|$)/i.test(cmd)
+    || project?.cli_tool?.trim().toLowerCase() === "pi") return "pi";
   const projectKind = project ? getProviderSwitchAppType(project) : null;
   const cliTool = project?.cli_tool?.trim().toLowerCase() ?? "";
   // codex 优先：codex 项目可能带自定义 startupCmd，仍应当 codex resume。
@@ -130,11 +136,12 @@ export function detectCliResumeKind(
 }
 
 export function buildCliResumeStartupCommand(
-  kind: "claude" | "codex" | "grok" | "kimi",
+  kind: "claude" | "codex" | "grok" | "kimi" | "pi",
   cliSessionId: string | undefined,
   project: Project | undefined,
   options: { includeProviderOverrides?: boolean } = {},
 ): string {
+  if (kind === "pi") return buildPiResumeCommand(cliSessionId, project);
   const id = cliSessionId?.trim();
   const hasValidId = !!id && !/\s/.test(id) && !/[\r\n]/.test(id);
   if (kind === "codex") {

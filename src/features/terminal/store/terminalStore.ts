@@ -35,7 +35,7 @@ import {
   type WindowWithPtyOrphanTimer, type ResolvedPtyLaunch,
 } from "../types/terminalStoreTypes";
 import {
-  buildWorkspanMirror, persistWorkspanState, createFileEditorSessionId,
+  buildWorkspanMirror, persistWorkspanState, persistCommittedLaunch, createFileEditorSessionId,
   clearProjectEditorWorkspacesIfUnused, isPersistableSession, hasBackendPty,
   releaseRemoteHistoryConsumer,
 } from "../lib/terminalStoreLayout";
@@ -95,20 +95,6 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
     clearPendingSubagentPanesForParent,
     scheduleSaveActiveId,
   } = createTerminalRuntime(set, get, api);
-  // Once the PTY and live layout are committed, snapshot failures are save
-  // failures, not creation failures. Attempt the remaining keys and report each
-  // error without preventing startup delivery or inviting a duplicate retry.
-  async function persistCommittedLaunch(sessionId: string, steps: Array<() => Promise<void>>) {
-    for (const save of steps) {
-      try {
-        await save();
-      } catch (err) {
-        toast.error(translateCurrent("saveSession.failed"), { description: String(err) });
-        logError("Failed to persist committed terminal launch", { sessionId, err });
-      }
-    }
-  }
-
   const tabLifecycle = createTerminalTabLifecycle(set, get, queueSshSessionPersistence);
   return {
     ...tabLifecycle,
@@ -161,12 +147,13 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       }
     },
 
-    updateSessionTerminalSnapshot: (sessionId, initialTerminalOutput, initialTerminalSize) => set((state) => ({
+    updateSessionTerminalSnapshot: (sessionId, initialTerminalOutput, initialTerminalSize, initialTerminalSequence) => set((state) => ({
       sessions: state.sessions.map((session) => (
         session.id === sessionId && (session.kind ?? "pty") === "pty" && (session.initialTerminalOutput !== initialTerminalOutput
           || session.initialTerminalSize?.cols !== initialTerminalSize?.cols
-          || session.initialTerminalSize?.rows !== initialTerminalSize?.rows)
-          ? { ...session, initialTerminalOutput, initialTerminalSize }
+          || session.initialTerminalSize?.rows !== initialTerminalSize?.rows
+          || session.initialTerminalSequence !== initialTerminalSequence)
+          ? { ...session, initialTerminalOutput, initialTerminalSize, initialTerminalSequence }
           : session
       )),
     })),
@@ -1507,6 +1494,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         const os = await getOsPlatform();
         for (let i = 0; i < persistedSessions.length; i++) {
           const ps = persistedSessions[i];
+          if (ps.kind === "ephemeral-pi") continue;
           if (isCliManagerSyncArtifactText(ps.title ?? "") || isCliManagerSyncArtifactText(ps.startupCmd ?? "")) {
             skippedSessions.push(ps.title ?? `会话 ${i + 1}`);
             continue;
@@ -1560,6 +1548,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
                 // 仅保留给 Tab 厂商识别；daemon attach 不会重新执行该命令。
                 startupCmd: ps.startupCmd,
                 ...getRestoredAgentTerminalMetadata(ps, attachedMeta.projectId),
+                ...(ps.cliTool === "pi" ? { cliTool: "pi", isAgentSession: true } : {}),
                 cliSessionId: ps.cliSessionId,
                 remoteHistoryConsumerId: ps.remoteHistoryConsumerId,
                 remoteHistorySourceInstanceId: ps.remoteHistorySourceInstanceId,
@@ -1617,7 +1606,9 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
 
           // 重建 PTY
           const restoreProject = ps.projectId ? projectMap.get(ps.projectId) : undefined;
-          const cliKind = ps.isAgentSession === false ? null : detectCliResumeKind(ps.startupCmd, restoreProject);
+          const detectedKind = detectCliResumeKind(ps.startupCmd,
+            ps.isAgentSession === false ? undefined : restoreProject, ps.cliTool);
+          const cliKind = ps.isAgentSession === false && detectedKind !== "pi" ? null : detectedKind;
           const restoredStartupCmd = cliKind
             ? buildCliResumeStartupCommand(
               cliKind,
@@ -1695,6 +1686,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
             envVars: ps.envVars,
             startupCmd: restoredStartupCmd === "" ? "" : launch.startupHandledByLaunch ? restoredStartupCmd : launchStartupCmd,
             ...getRestoredAgentTerminalMetadata(ps, ps.projectId),
+            ...(cliKind === "pi" ? { cliTool: "pi", isAgentSession: true } : {}),
             environmentType: launch.environmentType ?? ps.environmentType,
             sshHostId: launch.sshHostId ?? ps.sshHostId,
             remotePath: launch.remotePath ?? ps.remotePath,

@@ -1,3 +1,4 @@
+import { canAcceptTerminalInput, captureTerminalInputPermission } from "../../../shared/lib/terminalContinuation";
 import type { Terminal } from "@xterm/xterm";
 
 export interface OpenCodeTuiClipboardOptions {
@@ -49,6 +50,7 @@ export function attachOpenCodeTuiClipboard({
     // handling. On macOS the generic xterm handler should keep its original
     // Cmd/Ctrl semantics, so this OpenCode listener is inert there.
     if (!isActive() || !isVisible() || !hasInputFocus() || isMac()) return;
+    if (!canAcceptTerminalInput(terminal)) { event.preventDefault(); event.stopImmediatePropagation(); return; }
     const key = event.key.toLowerCase();
 
     if (key === "c" && isPlainWindowsControl(event) && terminal.hasSelection()) {
@@ -74,9 +76,10 @@ export function attachOpenCodeTuiClipboard({
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
+    const permission = captureTerminalInputPermission(terminal);
     void readClipboardText()
       .then((text) => {
-        if (!text) return;
+        if (!text || !permission()) return;
         pasteText(isCtrlShiftWindowsControl(event) ? wrapMultilinePaste(text) : text);
         focusTerminal();
       })

@@ -108,7 +108,7 @@ async function flushSnapshots(force: boolean): Promise<void> {
         }
       }
       if (sources.get(sessionId) !== source) continue;
-      store.updateSessionTerminalSnapshot(sessionId, capture ? capture.text : serialized as string, capture?.size);
+      store.updateSessionTerminalSnapshot(sessionId, capture ? capture.text : serialized as string, capture?.size, capture?.sequence);
       anyUpdated = true;
     } catch (err) {
       // 单个终端序列化失败不应拖垮整轮落盘；标回脏，下轮重试。

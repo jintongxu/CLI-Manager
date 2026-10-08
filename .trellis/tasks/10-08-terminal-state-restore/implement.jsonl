@@ -1,0 +1,4 @@
+{"file":".trellis/spec/frontend/ai-architecture-contracts.md","reason":"层级及2000行限制"}
+{"file":".trellis/spec/frontend/workspace-session-restore-contracts.md","reason":"恢复身份、source geometry与CLI cold分流"}
+{"file":".trellis/spec/frontend/background-task-continuation-contracts.md","reason":"既有exit running策略兼容"}
+{"file":".trellis/spec/backend/terminal-output-scheduling-contracts.md","reason":"输出ACK、replay barrier与协议响应所有权"}

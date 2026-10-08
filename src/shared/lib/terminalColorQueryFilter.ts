@@ -79,6 +79,7 @@ export function createTerminalColorQueryFilter() {
       }
       return output;
     },
+    hasPending(): boolean { return pending.length > 0 || passthrough; },
     reset(): void { pending = ""; passthrough = false; },
   };
 }

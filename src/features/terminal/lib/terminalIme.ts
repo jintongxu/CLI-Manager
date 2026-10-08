@@ -51,6 +51,7 @@ export interface TerminalImeControllerOptions {
     fallbackFontSize: number,
   ) => TerminalCellSize;
   forwardNativeInput: (data: string) => void;
+  captureInputPermission?: () => () => boolean;
   onImeProcessKey?: (at: number) => void;
   onCompositionStarted?: () => void;
   clearSuggestion: () => void;
@@ -72,6 +73,7 @@ export const attachTerminalIme = ({
   fontSize,
   getTerminalRenderedCellSize,
   forwardNativeInput,
+  captureInputPermission = () => () => true,
   onImeProcessKey,
   onCompositionStarted,
   clearSuggestion,
@@ -87,6 +89,20 @@ export const attachTerminalIme = ({
   const viewport = container.querySelector(".xterm-viewport") as HTMLElement | null;
   const listenerOptions = { capture: true } as const;
   let cancelled = false;
+  let compositionPermission: (() => boolean) | null = null;
+  const guardInput = (event: Event) => {
+    if (event.type === "compositionstart") compositionPermission = captureInputPermission();
+    const allowed = compositionPermission ?? captureInputPermission();
+    if (cancelled || !allowed()) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (textarea) textarea.value = "";
+      isComposingRef.current = false;
+    }
+    if (event.type === "compositionend") compositionPermission = null;
+  };
+  const guardedEvents = ["beforeinput", "input", "compositionstart", "compositionupdate", "compositionend"];
+  guardedEvents.forEach(type => container.addEventListener(type, guardInput, listenerOptions));
   let lastImeProcessKeyAt = -1;
   let lastCompositionEndAt = -1;
   let lastNativeTextInputAt = -1;
@@ -266,8 +282,9 @@ export const attachTerminalIme = ({
     return lastImeProcessKeyAt >= 0 && now - lastImeProcessKeyAt <= IME_PROCESS_KEY_RECOVERY_WINDOW_MS;
   };
   const scheduleNativeTextInputRecovery = (data: string) => {
+    const permission = captureInputPermission();
     window.setTimeout(() => {
-      if (cancelled) return;
+      if (cancelled || !permission()) return;
       forwardNativeInput(data);
     }, 0);
   };
@@ -383,6 +400,7 @@ export const attachTerminalIme = ({
 
   return () => {
     cancelled = true;
+    guardedEvents.forEach(type => container.removeEventListener(type, guardInput, listenerOptions));
     container.removeEventListener("keydown", onImeProcessKeyDown, listenerOptions);
     container.removeEventListener("beforeinput", onNativeTextBeforeInput, listenerOptions);
     container.removeEventListener("input", onNativeTextInput, listenerOptions);

@@ -61,9 +61,12 @@
 {"type":"cli","id":"CLI-1791382267913-1","timestamp":"2026-10-07T14:11:07.913Z","command":"load","args":{"type":"spec","category":"coding"}}
 {"type":"cli","id":"CLI-1791382627743-1","timestamp":"2026-10-07T14:17:07.743Z","command":"load","args":{"type":"spec","category":"coding"}}
 {"type":"cli","id":"CLI-1791429044740-1","timestamp":"2026-10-08T03:10:44.740Z","command":"load","args":{"type":"template","id":"arch-tpl-claude-code"}}
+{"type":"cli","id":"CLI-1791444860038-1","timestamp":"2026-10-08T07:34:20.038Z","command":"load","args":{"type":"spec","id":"spec:project:coding-conventions-001"}}
 {"type":"cli","id":"CLI-1791444979224-1","timestamp":"2026-10-08T07:36:19.224Z","command":"load","args":{"type":"spec","category":"coding"}}
 {"type":"cli","id":"CLI-1791444981128-1","timestamp":"2026-10-08T07:36:21.128Z","command":"load","args":{"type":"spec","category":"coding"}}
 {"type":"cli","id":"CLI-1791445057304-1","timestamp":"2026-10-08T07:37:37.304Z","command":"load","args":{"type":"spec","category":"coding"}}
+{"type":"cli","id":"CLI-1791445235292-1","timestamp":"2026-10-08T07:40:35.292Z","command":"load","args":{"type":"spec","id":"spec:project:coding-conventions-001"}}
+{"type":"cli","id":"CLI-1791445561451-1","timestamp":"2026-10-08T07:46:01.451Z","command":"load","args":{"type":"spec","id":"spec:project:coding-conventions-001"}}
 {"type":"cli","id":"CLI-1791446153456-1","timestamp":"2026-10-08T07:55:53.456Z","command":"load","args":{"type":"spec","category":"review"}}
 {"type":"cli","id":"CLI-1791446153875-1","timestamp":"2026-10-08T07:55:53.875Z","command":"load","args":{"type":"spec","category":"coding"}}
 {"type":"cli","id":"CLI-1791446159769-1","timestamp":"2026-10-08T07:55:59.769Z","command":"load","args":{"type":"spec","category":"review"}}

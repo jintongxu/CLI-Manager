@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 import ts from "typescript";
+import { build } from "esbuild";
 
 const tempDir = mkdtempSync(join(tmpdir(), "cli-manager-opencode-tui-"));
 process.on("exit", () => rmSync(tempDir, { recursive: true, force: true }));
@@ -15,10 +16,12 @@ function transpileModule(fileName) {
     compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const outputPath = join(tempDir, fileName.replaceAll("/", "-").replace(/\.ts$/, ".mjs"));
-  writeFileSync(outputPath, output, "utf8");
+  writeFileSync(outputPath, output.replace("../../../shared/lib/terminalContinuation", "./continuation.mjs"), "utf8");
   return import(pathToFileURL(outputPath).href);
 }
 
+await build({entryPoints:["src/shared/lib/terminalContinuation.ts"],bundle:true,platform:"node",format:"esm",outfile:join(tempDir,"continuation.mjs")});
+const continuation=await import(pathToFileURL(join(tempDir,"continuation.mjs")));
 const [{ isOpenCodeTerminalContext }, { attachOpenCodeTuiClipboard }] = await Promise.all([
   transpileModule("features/terminal/browser/TerminalCliContext.ts"),
   transpileModule("features/terminal/browser/OpenCodeTuiClipboard.ts"),
@@ -100,6 +103,8 @@ function attachWithTestDoubles(options = {}) {
     getSelection: () => state.selection,
     clearSelection: () => { state.cleared += 1; state.selection = ""; },
   };
+  continuation.beginTerminalContinuation(terminal);
+  for(const barrier of ["hydrated","output","fitted"])continuation.markTerminalContinuation(terminal,barrier);
   const dispose = attachOpenCodeTuiClipboard({
     container,
     terminal,
@@ -185,4 +190,14 @@ test("macOS Ctrl+C and Cmd+C are not intercepted by the OpenCode module", () => 
   assert.equal(cmdC.defaultPrevented, false);
   assert.deepEqual(state.copied, []);
   dispose();
+});
+
+test("OpenCode asynchronous clipboard belongs to its original readiness epoch",async()=>{
+ const f=attachWithTestDoubles();
+ f.container.dispatchEvent(keyEvent("v",{ctrlKey:true}));
+ continuation.suspendTerminalContinuation(f.terminal);
+ for(const barrier of ["output","fitted"])continuation.markTerminalContinuation(f.terminal,barrier);
+ await new Promise(r=>setImmediate(r));assert.deepEqual(f.state.pasted,[]);
+ continuation.disposeTerminalContinuation(f.terminal);
+ f.container.dispatchEvent(keyEvent("v",{ctrlKey:true}));await new Promise(r=>setImmediate(r));assert.deepEqual(f.state.pasted,[]);f.dispose();
 });
