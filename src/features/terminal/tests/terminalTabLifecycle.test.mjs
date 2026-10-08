@@ -8,7 +8,7 @@ import ts from "typescript";
 function load(path, dependencies = {}) {
   const sourceText = readFileSync(new URL(path, import.meta.url), "utf8");
   const source = ts.createSourceFile(path, sourceText, ts.ScriptTarget.Latest, true);
-  const body = source.statements.filter((node) => !ts.isImportDeclaration(node)).map((node) => node.getText(source)).join("\n");
+  const body = source.statements.filter((node) => !ts.isImportDeclaration(node) && !(ts.isExportDeclaration(node) && node.moduleSpecifier)).map((node) => node.getText(source)).join("\n");
   const output = ts.transpileModule(body, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const exports = {};
   runInNewContext(output, { exports, ...dependencies }, { filename: path });
@@ -520,4 +520,50 @@ test("new-tab and duplicate launch paths preserve an inherited explicit plain cl
   assert.match(newTab, /sourceSession\?\.isAgentSession === false && !sourceSession\.startupCmd\s*\? "" : projectLaunchOptions\?\.startupCmd/);
   const duplicate = controller.slice(controller.indexOf("const handleDuplicateSession ="));
   assert.match(duplicate, /session\.isAgentSession === false && !session\.startupCmd \? "" : normalizeDirectCodexStartupCommand\(session\.startupCmd\)/);
+});
+
+test("project batch hide calls real lifecycle only for live ordinary IDs; split members/processes survive sidebar reopening", async () => {
+  const { hideProjectTerminalSessions } = load("../api/terminalProjectHide.ts", visibility);
+  const sessions = [session("a", { projectId: "p" }), session("b", { projectId: "p" }),
+    session("q", { projectId: "q" }), session("editor", { kind: "file-editor" }),
+    session("transcript", { kind: "subagent-transcript" }), session("temp", { kind: "synced-history" })];
+  const backing = [span("mixed", "pane", "a")];
+  backing[0].paneTree.sessionIds = sessions.map(s => s.id);
+  const { api, calls, settled } = fixture(sessions, backing);
+  const listener = () => calls.push(["listenerDisposed"]);
+  api.setState({ statusListeners: { a: listener, b: listener }, sessionStatuses: { a: "running", b: "running" } });
+  const hidden = [], errors = [];
+  await hideProjectTerminalSessions(["a", "b", "a", "editor", "transcript", "temp", "missing"],
+    () => api.getState().sessions, async id => { hidden.push(id); await api.getState().hideSession(id); },
+    (...args) => errors.push(args));
+  assert.deepEqual(hidden, ["a", "b"]);
+  assert.deepEqual(errors, []);
+  assert.equal(api.getState().workspans, backing);
+  assert.deepEqual(api.getState().sessions.map(s => s.id), sessions.map(s => s.id));
+  assert.deepEqual(api.getState().sessions.filter(s => s.tabHidden).map(s => s.id), ["a", "b"]);
+  assert.equal(api.getState().statusListeners.a, listener);
+  assert.equal(api.getState().statusListeners.b, listener);
+  assert.equal(api.getState().sessionStatuses.a, "running");
+  for (const id of hidden) api.getState().reopenSession(id); // same entry used by sidebar reopen
+  await settled();
+  assert.equal(api.getState().activeSessionId, "b");
+  assert.ok(api.getState().sessions.every(s => !s.tabHidden));
+  assert.ok(!calls.some(([kind]) => ["close", "create", "unlisten", "listenerDisposed"].includes(kind)));
+  assert.deepEqual(plain(api.getState().workspans[0].paneTree.sessionIds), sessions.map(s => s.id));
+  assert.equal(api.getState().workspans[0].id, "mixed");
+});
+
+test("project hide handler revalidates each live kind after awaits, dedupes and continues safely on errors", async () => {
+  const { hideProjectTerminalSessions } = load("../api/terminalProjectHide.ts", visibility);
+  let sessions = [session("a"), session("b"), session("c")];
+  const calls = [], errors = [];
+  await hideProjectTerminalSessions(["a", "a", "b", "c"], () => sessions, async id => {
+    calls.push(id);
+    if (id === "a") {
+      sessions = sessions.map(s => s.id === "b" ? { ...s, kind: "file-editor" } : s);
+      throw new Error("hide failed");
+    }
+  }, (id, err) => errors.push([id, err.message]));
+  assert.deepEqual(calls, ["a", "c"]);
+  assert.deepEqual(errors, [["a", "hide failed"]]);
 });

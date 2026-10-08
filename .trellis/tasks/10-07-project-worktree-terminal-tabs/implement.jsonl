@@ -1,0 +1,4 @@
+{"file":".trellis/tasks/10-07-project-worktree-terminal-tabs/design.md","reason":"Approved decisions, scenario matrix and fallback impact evidence"}
+{"file":".trellis/tasks/10-07-project-worktree-terminal-tabs/implement.md","reason":"Ordered lanes, rich model APIs and UI migration handoff"}
+{"file":".trellis/spec/frontend/ai-architecture-contracts.md","reason":"Layering, length budget and compatibility contracts"}
+{"file":".trellis/spec/frontend/workspace-session-restore-contracts.md","reason":"Preserve terminal identity and persisted session protocol"}

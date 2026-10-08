@@ -1,0 +1,208 @@
+TAP version 13
+# Subtest: real xterm historical protocol producers are suppressed, visual setters survive
+ok 1 - real xterm historical protocol producers are suppressed, visual setters survive
+  ---
+  duration_ms: 12.1533
+  type: 'test'
+  ...
+# Subtest: async parser continuation retains origin but pending input/paste/IME/binary is not gated
+ok 2 - async parser continuation retains origin but pending input/paste/IME/binary is not gated
+  ---
+  duration_ms: 4.9918
+  type: 'test'
+  ...
+# Subtest: FIFO origins, empty writes and nested enqueues use the actual parser execution
+ok 3 - FIFO origins, empty writes and nested enqueues use the actual parser execution
+  ---
+  duration_ms: 14.7385
+  type: 'test'
+  ...
+# Subtest: history ANSI prefix cannot authorize live suffix; subsequent live query still answers
+ok 4 - history ANSI prefix cannot authorize live suffix; subsequent live query still answers
+  ---
+  duration_ms: 61.9791
+  type: 'test'
+  ...
+# Subtest: cold snapshot resets only input-reporting modes, same-process history keeps modes
+ok 5 - cold snapshot resets only input-reporting modes, same-process history keeps modes
+  ---
+  duration_ms: 31.4553
+  type: 'test'
+  ...
+# Subtest: direct ConPTY responder uses same parse-origin predicate, outside input remains allowed
+ok 6 - direct ConPTY responder uses same parse-origin predicate, outside input remains allowed
+  ---
+  duration_ms: 29.9913
+  type: 'test'
+  ...
+# Subtest: incompatible pinned adapter shape fails explicitly
+ok 7 - incompatible pinned adapter shape fails explicitly
+  ---
+  duration_ms: 0.5646
+  type: 'test'
+  ...
+# Subtest: every split through actual OSC/tmux carry preserves history without blocking following live queries
+ok 8 - every split through actual OSC/tmux carry preserves history without blocking following live queries
+  ---
+  duration_ms: 1132.3815
+  type: 'test'
+  ...
+# Subtest: OSC setter+query, actual title setter and byte-stream decoded Unicode retain semantics
+ok 9 - OSC setter+query, actual title setter and byte-stream decoded Unicode retain semantics
+  ---
+  duration_ms: 156.9661
+  type: 'test'
+  ...
+# Subtest: new process startup replay answers once, duplicates remain historical, cold remount reset is once
+ok 10 - new process startup replay answers once, duplicates remain historical, cold remount reset is once
+  ---
+  duration_ms: 31.8249
+  type: 'test'
+  ...
+# Subtest: real addon Kitty async protocol callback is origin-owned, user data pending is preserved
+ok 11 - real addon Kitty async protocol callback is origin-owned, user data pending is preserved
+  ---
+  duration_ms: 16.3305
+  type: 'test'
+  ...
+# Subtest: baseline enumerated DSR query policy still leaks real focus DECSET (root counterexample)
+ok 12 - baseline enumerated DSR query policy still leaks real focus DECSET (root counterexample)
+  ---
+  duration_ms: 14.0911
+  type: 'test'
+  ...
+# Subtest: same-process reconstructed focus mode emits later real blur; cold snapshot does not
+ok 13 - same-process reconstructed focus mode emits later real blur; cold snapshot does not
+  ---
+  duration_ms: 31.4599
+  type: 'test'
+  ...
+# Subtest: historical parser binary producer suppressed while real outside binary input remains
+ok 14 - historical parser binary producer suppressed while real outside binary input remains
+  ---
+  duration_ms: 30.8933
+  type: 'test'
+  ...
+# Subtest: recognizes Pi from registered context without matching pip
+ok 15 - recognizes Pi from registered context without matching pip
+  ---
+  duration_ms: 1.0013
+  type: 'test'
+  ...
+# Subtest: diagnostics detect Pi across daemon frames but stay silent when disabled
+ok 16 - diagnostics detect Pi across daemon frames but stay silent when disabled
+  ---
+  duration_ms: 0.6889
+  type: 'test'
+  ...
+# Subtest: Pi IME resolves the editor input row before its textarea bottom border
+ok 17 - Pi IME resolves the editor input row before its textarea bottom border
+  ---
+  duration_ms: 0.5296
+  type: 'test'
+  ...
+# Subtest: Pi IME prefers the visible inverse cursor over a stale hardware cursor inside the editor
+ok 18 - Pi IME prefers the visible inverse cursor over a stale hardware cursor inside the editor
+  ---
+  duration_ms: 0.1333
+  type: 'test'
+  ...
+# Subtest: Pi IME keeps the live cursor inside the editor when no software cursor is visible
+ok 19 - Pi IME keeps the live cursor inside the editor when no software cursor is visible
+  ---
+  duration_ms: 0.1767
+  type: 'test'
+  ...
+# Subtest: Pi IME rejects a transient fallback outside the editor while composing
+ok 20 - Pi IME rejects a transient fallback outside the editor while composing
+  ---
+  duration_ms: 0.1115
+  type: 'test'
+  ...
+# Subtest: Pi IME ignores a resized status cursor and inverse cells outside paired rules
+ok 21 - Pi IME ignores a resized status cursor and inverse cells outside paired rules
+  ---
+  duration_ms: 0.1804
+  type: 'test'
+  ...
+# Subtest: Pi IME chooses the bottom-most active pair over output separators
+ok 22 - Pi IME chooses the bottom-most active pair over output separators
+  ---
+  duration_ms: 0.1076
+  type: 'test'
+  ...
+# Subtest: Pi IME recognizes a scrolling rule inside the visible viewport
+ok 23 - Pi IME recognizes a scrolling rule inside the visible viewport
+  ---
+  duration_ms: 0.3221
+  type: 'test'
+  ...
+# Subtest: Pi IME preserves fallback anchors without a valid editor
+ok 24 - Pi IME preserves fallback anchors without a valid editor
+  ---
+  duration_ms: 0.3524
+  type: 'test'
+  ...
+# Subtest: matches all built-in Pi RGB tool backgrounds only
+ok 25 - matches all built-in Pi RGB tool backgrounds only
+  ---
+  duration_ms: 0.1644
+  type: 'test'
+  ...
+# Subtest: ANSI transform clears RGB tool backgrounds and preserves other attributes
+ok 26 - ANSI transform clears RGB tool backgrounds and preserves other attributes
+  ---
+  duration_ms: 0.31
+  type: 'test'
+  ...
+# Subtest: ANSI transform applies only unambiguous 256-color fallback values
+ok 27 - ANSI transform applies only unambiguous 256-color fallback values
+  ---
+  duration_ms: 0.084
+  type: 'test'
+  ...
+# Subtest: ANSI transform survives every CSI frame split and reset drops fragments
+ok 28 - ANSI transform survives every CSI frame split and reset drops fragments
+  ---
+  duration_ms: 0.2033
+  type: 'test'
+  ...
+# Subtest: Pi output filter removes the direct-tools advisory across every frame split
+ok 29 - Pi output filter removes the direct-tools advisory across every frame split
+  ---
+  duration_ms: 0.8276
+  type: 'test'
+  ...
+# Subtest: Pi output filter reset drops an incomplete advisory without affecting later output
+ok 30 - Pi output filter reset drops an incomplete advisory without affecting later output
+  ---
+  duration_ms: 0.0816
+  type: 'test'
+  ...
+# Subtest: Pi compatibility reset clears the advisory filter state
+ok 31 - Pi compatibility reset clears the advisory filter state
+  ---
+  duration_ms: 0.103
+  type: 'test'
+  ...
+# Subtest: Pi facade transforms active sessions and leaves non-Pi sessions byte-for-byte
+ok 32 - Pi facade transforms active sessions and leaves non-Pi sessions byte-for-byte
+  ---
+  duration_ms: 0.098
+  type: 'test'
+  ...
+# Subtest: live, replay, reset, and serialized snapshot use the shared transform
+ok 33 - live, replay, reset, and serialized snapshot use the shared transform
+  ---
+  duration_ms: 1.0353
+  type: 'test'
+  ...
+1..33
+# tests 33
+# suites 0
+# pass 33
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3124.1581

@@ -19,7 +19,8 @@ import { App } from '/apps/web/src/App.tsx';
 import { webClient } from '/apps/web/src/webClient.ts';
 import { createTerminalStream } from '/apps/web/src/terminalStream.ts';
 import { batchWebTerminalFrames } from '/src/shared/lib/webTerminalFrames.ts';
-import { installTerminalQueryPolicy, setTerminalQueryReplay, canAnswerTerminalQuery, canAnswerTerminalQueryFrame, createTerminalQuerySession, claimTerminalQueryFrame } from '/src/shared/lib/terminalQueryPolicy.ts';
+import { installTerminalQueryPolicy, canAnswerTerminalQuery, canAnswerTerminalQueryFrame, createTerminalQuerySession, claimTerminalQueryFrame } from '/src/shared/lib/terminalQueryPolicy.ts';
+import { installTerminalHistoricalParser, writeTerminalOutput } from '/src/shared/lib/terminalHistoricalParser.ts';
 import '/apps/web/src/styles.css';
 const result = window.terminalSmoke = { status: 'running', errors: [], rounds: [], payloadBytes: 0, componentRenders: 0 };
 const originalWrite = Terminal.prototype.write;
@@ -334,6 +335,7 @@ async function run() {
 
   // Exercise the real parser with the same ConPTY override and replay gate as desktop.
   const desktop = new Terminal({ cols: 80, rows: 24 });
+  const desktopOrigin = installTerminalHistoricalParser(desktop);
   const desktopReplies = [];
   const desktopData = desktop.onData(data => desktopReplies.push(data));
   const conpty = desktop.parser.registerCsiHandler({ final: 'c' }, params => {
@@ -345,12 +347,11 @@ async function run() {
     return false;
   });
   const desktopPolicy = installTerminalQueryPolicy(desktop, () => canAnswerTerminalQuery(desktop));
-  const desktopWrite = data => new Promise(resolve => desktop.write(data, resolve));
+  const desktopWrite = (data, origin) => new Promise(resolve => writeTerminalOutput(desktop, data, origin, resolve));
   const deliver = async (id, sequence, replay, bytes) => {
-    setTerminalQueryReplay(desktop, !canAnswerTerminalQueryFrame(id, sequence, replay));
-    await desktopWrite(bytes);
+    await desktopWrite(bytes, canAnswerTerminalQueryFrame(id, sequence, replay) ? "live" : "history");
     claimTerminalQueryFrame(id, sequence, replay);
-    setTerminalQueryReplay(desktop, false);
+
   };
   const createdId = 'desktop-created-query';
   createTerminalQuerySession(createdId);
@@ -368,6 +369,7 @@ async function run() {
   desktopPolicy.dispose();
   conpty.dispose();
   desktopData.dispose();
+  desktopOrigin.dispose();
   desktop.dispose();
   result.desktopQueryPolicy = { startupOnce: true, duplicatesSuppressed: true, coldReplaySuppressed: true, liveReplies: true };
 

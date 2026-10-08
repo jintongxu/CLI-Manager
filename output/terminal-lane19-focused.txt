@@ -1,0 +1,756 @@
+TAP version 13
+# Subtest: real xterm historical protocol producers are suppressed, visual setters survive
+ok 1 - real xterm historical protocol producers are suppressed, visual setters survive
+  ---
+  duration_ms: 29.7353
+  type: 'test'
+  ...
+# Subtest: async parser continuation retains origin but pending input/paste/IME/binary is not gated
+ok 2 - async parser continuation retains origin but pending input/paste/IME/binary is not gated
+  ---
+  duration_ms: 14.2581
+  type: 'test'
+  ...
+# Subtest: FIFO origins, empty writes and nested enqueues use the actual parser execution
+ok 3 - FIFO origins, empty writes and nested enqueues use the actual parser execution
+  ---
+  duration_ms: 2.055
+  type: 'test'
+  ...
+# Subtest: history ANSI prefix cannot authorize live suffix; subsequent live query still answers
+ok 4 - history ANSI prefix cannot authorize live suffix; subsequent live query still answers
+  ---
+  duration_ms: 42.7722
+  type: 'test'
+  ...
+# Subtest: cold snapshot resets only input-reporting modes, same-process history keeps modes
+ok 5 - cold snapshot resets only input-reporting modes, same-process history keeps modes
+  ---
+  duration_ms: 16.6007
+  type: 'test'
+  ...
+# Subtest: direct ConPTY responder uses same parse-origin predicate, outside input remains allowed
+ok 6 - direct ConPTY responder uses same parse-origin predicate, outside input remains allowed
+  ---
+  duration_ms: 15.4285
+  type: 'test'
+  ...
+# Subtest: incompatible pinned adapter shape fails explicitly
+ok 7 - incompatible pinned adapter shape fails explicitly
+  ---
+  duration_ms: 0.7825
+  type: 'test'
+  ...
+# Subtest: every split through actual OSC/tmux carry preserves history without blocking following live queries
+ok 8 - every split through actual OSC/tmux carry preserves history without blocking following live queries
+  ---
+  duration_ms: 1117.2303
+  type: 'test'
+  ...
+# Subtest: OSC setter+query, actual title setter and byte-stream decoded Unicode retain semantics
+ok 9 - OSC setter+query, actual title setter and byte-stream decoded Unicode retain semantics
+  ---
+  duration_ms: 155.067
+  type: 'test'
+  ...
+# Subtest: new process startup replay answers once, duplicates remain historical, cold remount reset is once
+ok 10 - new process startup replay answers once, duplicates remain historical, cold remount reset is once
+  ---
+  duration_ms: 46.3824
+  type: 'test'
+  ...
+# Subtest: real addon Kitty async protocol callback is origin-owned, user data pending is preserved
+ok 11 - real addon Kitty async protocol callback is origin-owned, user data pending is preserved
+  ---
+  duration_ms: 12.0323
+  type: 'test'
+  ...
+# Subtest: baseline enumerated DSR query policy still leaks real focus DECSET (root counterexample)
+ok 12 - baseline enumerated DSR query policy still leaks real focus DECSET (root counterexample)
+  ---
+  duration_ms: 1.4016
+  type: 'test'
+  ...
+# Subtest: same-process reconstructed focus mode emits later real blur; cold snapshot does not
+ok 13 - same-process reconstructed focus mode emits later real blur; cold snapshot does not
+  ---
+  duration_ms: 32.0327
+  type: 'test'
+  ...
+# Subtest: historical parser binary producer suppressed while real outside binary input remains
+ok 14 - historical parser binary producer suppressed while real outside binary input remains
+  ---
+  duration_ms: 30.9582
+  type: 'test'
+  ...
+# Subtest: immediate WriteBuffer parsing plus nested multipart enqueue does not desynchronize origins
+ok 15 - immediate WriteBuffer parsing plus nested multipart enqueue does not desynchronize origins
+  ---
+  duration_ms: 30.4932
+  type: 'test'
+  ...
+# Subtest: terminal-owner disposal cancels pending callbacks/protocol without a replacement gate
+ok 16 - terminal-owner disposal cancels pending callbacks/protocol without a replacement gate
+  ---
+  duration_ms: 61.389
+  type: 'test'
+  ...
+# Subtest: cancelled live-origin token cannot emit queries during actual async continuation
+ok 17 - cancelled live-origin token cannot emit queries during actual async continuation
+  ---
+  duration_ms: 2.0876
+  type: 'test'
+  ...
+# Subtest: normalizer and parser reset drop historical OSC carry without corrupting following Unicode
+ok 18 - normalizer and parser reset drop historical OSC carry without corrupting following Unicode
+  ---
+  duration_ms: 15.3485
+  type: 'test'
+  ...
+# Subtest: Tauri CSP permits WebAssembly without enabling general unsafe eval
+ok 19 - Tauri CSP permits WebAssembly without enabling general unsafe eval
+  ---
+  duration_ms: 0.761
+  type: 'test'
+  ...
+# Subtest: terminal image addon probes the actual WebAssembly CSP gate before loading
+ok 20 - terminal image addon probes the actual WebAssembly CSP gate before loading
+  ---
+  duration_ms: 0.2521
+  type: 'test'
+  ...
+# Subtest: cross-source IME input is still forwarded once
+ok 21 - cross-source IME input is still forwarded once
+  ---
+  duration_ms: 0.8215
+  type: 'test'
+  ...
+# Subtest: macOS process-key checkpoint drops a same-source CJK re-emission
+ok 22 - macOS process-key checkpoint drops a same-source CJK re-emission
+  ---
+  duration_ms: 0.2107
+  type: 'test'
+  ...
+# Subtest: process-key checkpoint drops deferred combined CJK payloads
+ok 23 - process-key checkpoint drops deferred combined CJK payloads
+  ---
+  duration_ms: 0.1334
+  type: 'test'
+  ...
+# Subtest: a new composition permits an intentional repeated Chinese commit
+ok 24 - a new composition permits an intentional repeated Chinese commit
+  ---
+  duration_ms: 0.1657
+  type: 'test'
+  ...
+# Subtest: same-source matching requires an enabled, recent process-key checkpoint
+ok 25 - same-source matching requires an enabled, recent process-key checkpoint
+  ---
+  duration_ms: 0.129
+  type: 'test'
+  ...
+# Subtest: terminal IME lifecycle forwards the process-key and composition boundary
+ok 26 - terminal IME lifecycle forwards the process-key and composition boundary
+  ---
+  duration_ms: 0.8136
+  type: 'test'
+  ...
+# Subtest: live OSC color queries are removed without frontend PTY writes
+ok 27 - live OSC color queries are removed without frontend PTY writes
+  ---
+  duration_ms: 1.1853
+  type: 'test'
+  ...
+# Subtest: replay OSC color queries are removed by the same safe filter
+ok 28 - replay OSC color queries are removed by the same safe filter
+  ---
+  duration_ms: 0.1225
+  type: 'test'
+  ...
+# Subtest: Pi OSC 133 user message survives every daemon frame split
+ok 29 - Pi OSC 133 user message survives every daemon frame split
+  ---
+  duration_ms: 1.3265
+  type: 'test'
+  ...
+# Subtest: color queries are filtered without consuming the following Pi message
+ok 30 - color queries are filtered without consuming the following Pi message
+  ---
+  duration_ms: 1.0124
+  type: 'test'
+  ...
+# Subtest: an interrupted managed OSC fails open before Pi output
+ok 31 - an interrupted managed OSC fails open before Pi output
+  ---
+  duration_ms: 0.2622
+  type: 'test'
+  ...
+# Subtest: frontend OSC pipeline does not own color-query replies
+ok 32 - frontend OSC pipeline does not own color-query replies
+  ---
+  duration_ms: 0.7009
+  type: 'test'
+  ...
+# Subtest: parseOsc52Body writes clipboard, primary, and empty selections
+ok 33 - parseOsc52Body writes clipboard, primary, and empty selections
+  ---
+  duration_ms: 1.7357
+  type: 'test'
+  ...
+# Subtest: parseOsc52Body distinguishes query, clear, and invalid payloads
+ok 34 - parseOsc52Body distinguishes query, clear, and invalid payloads
+  ---
+  duration_ms: 0.3197
+  type: 'test'
+  ...
+# Subtest: decodeOsc52Payload accepts wrapped UTF-8 base64 and rejects junk
+ok 35 - decodeOsc52Payload accepts wrapped UTF-8 base64 and rejects junk
+  ---
+  duration_ms: 1.7263
+  type: 'test'
+  ...
+# Subtest: live PTY output enables OSC 52 copies and replay disables them
+ok 36 - live PTY output enables OSC 52 copies and replay disables them
+  ---
+  duration_ms: 1.8014
+  type: 'test'
+  ...
+# Subtest: OSC 52 payload encoding round-trips UTF-8 text
+ok 37 - OSC 52 payload encoding round-trips UTF-8 text
+  ---
+  duration_ms: 0.2871
+  type: 'test'
+  ...
+# Subtest: OSC 52 payload encoding round-trips a large payload
+ok 38 - OSC 52 payload encoding round-trips a large payload
+  ---
+  duration_ms: 8.461
+  type: 'test'
+  ...
+# Subtest: OSC 52 query replies stay inside the protocol payload limit
+ok 39 - OSC 52 query replies stay inside the protocol payload limit
+  ---
+  duration_ms: 65.2429
+  type: 'test'
+  ...
+# Subtest: tmux DCS prefix matching and ESC unwrapping
+ok 40 - tmux DCS prefix matching and ESC unwrapping
+  ---
+  duration_ms: 0.2619
+  type: 'test'
+  ...
+# Subtest: live OSC 52 is stripped and copied for BEL and ST terminators
+ok 41 - live OSC 52 is stripped and copied for BEL and ST terminators
+  ---
+  duration_ms: 1.1217
+  type: 'test'
+  ...
+# Subtest: OSC 52 query and clear do not write the host clipboard
+ok 42 - OSC 52 query and clear do not write the host clipboard
+  ---
+  duration_ms: 0.4725
+  type: 'test'
+  ...
+# Subtest: disabled OSC 52 still strips sequences without writing or answering
+ok 43 - disabled OSC 52 still strips sequences without writing or answering
+  ---
+  duration_ms: 0.2051
+  type: 'test'
+  ...
+# Subtest: invalid OSC 52 is stripped without copying
+ok 44 - invalid OSC 52 is stripped without copying
+  ---
+  duration_ms: 0.1111
+  type: 'test'
+  ...
+# Subtest: tmux DCS-wrapped OSC 52 is unwrapped, stripped, and copied
+ok 45 - tmux DCS-wrapped OSC 52 is unwrapped, stripped, and copied
+  ---
+  duration_ms: 0.2257
+  type: 'test'
+  ...
+# Subtest: OSC 52 copies survive every daemon frame split
+ok 46 - OSC 52 copies survive every daemon frame split
+  ---
+  duration_ms: 0.6447
+  type: 'test'
+  ...
+# Subtest: tmux OSC 52 with an ST terminator survives every daemon frame split
+ok 47 - tmux OSC 52 with an ST terminator survives every daemon frame split
+  ---
+  duration_ms: 0.3918
+  type: 'test'
+  ...
+# Subtest: replay frames strip OSC 52 without writing the clipboard
+ok 48 - replay frames strip OSC 52 without writing the clipboard
+  ---
+  duration_ms: 0.1869
+  type: 'test'
+  ...
+# Subtest: an interrupted OSC 52 fails open before following output
+ok 49 - an interrupted OSC 52 fails open before following output
+  ---
+  duration_ms: 0.2527
+  type: 'test'
+  ...
+# Subtest: OSC 52 does not consume a following Pi integration sequence
+ok 50 - OSC 52 does not consume a following Pi integration sequence
+  ---
+  duration_ms: 0.1227
+  type: 'test'
+  ...
+# Subtest: a long complete OSC 52 copy is accepted in one frame
+ok 51 - a long complete OSC 52 copy is accepted in one frame
+  ---
+  duration_ms: 1.4449
+  type: 'test'
+  ...
+# Subtest: other DCS sequences are left untouched
+ok 52 - other DCS sequences are left untouched
+  ---
+  duration_ms: 0.1214
+  type: 'test'
+  ...
+# Subtest: recognizes Pi from registered context without matching pip
+ok 53 - recognizes Pi from registered context without matching pip
+  ---
+  duration_ms: 1.2902
+  type: 'test'
+  ...
+# Subtest: diagnostics detect Pi across daemon frames but stay silent when disabled
+ok 54 - diagnostics detect Pi across daemon frames but stay silent when disabled
+  ---
+  duration_ms: 0.6791
+  type: 'test'
+  ...
+# Subtest: Pi IME resolves the editor input row before its textarea bottom border
+ok 55 - Pi IME resolves the editor input row before its textarea bottom border
+  ---
+  duration_ms: 0.5257
+  type: 'test'
+  ...
+# Subtest: Pi IME prefers the visible inverse cursor over a stale hardware cursor inside the editor
+ok 56 - Pi IME prefers the visible inverse cursor over a stale hardware cursor inside the editor
+  ---
+  duration_ms: 0.1415
+  type: 'test'
+  ...
+# Subtest: Pi IME keeps the live cursor inside the editor when no software cursor is visible
+ok 57 - Pi IME keeps the live cursor inside the editor when no software cursor is visible
+  ---
+  duration_ms: 0.1679
+  type: 'test'
+  ...
+# Subtest: Pi IME rejects a transient fallback outside the editor while composing
+ok 58 - Pi IME rejects a transient fallback outside the editor while composing
+  ---
+  duration_ms: 0.1064
+  type: 'test'
+  ...
+# Subtest: Pi IME ignores a resized status cursor and inverse cells outside paired rules
+ok 59 - Pi IME ignores a resized status cursor and inverse cells outside paired rules
+  ---
+  duration_ms: 0.1958
+  type: 'test'
+  ...
+# Subtest: Pi IME chooses the bottom-most active pair over output separators
+ok 60 - Pi IME chooses the bottom-most active pair over output separators
+  ---
+  duration_ms: 0.1185
+  type: 'test'
+  ...
+# Subtest: Pi IME recognizes a scrolling rule inside the visible viewport
+ok 61 - Pi IME recognizes a scrolling rule inside the visible viewport
+  ---
+  duration_ms: 0.328
+  type: 'test'
+  ...
+# Subtest: Pi IME preserves fallback anchors without a valid editor
+ok 62 - Pi IME preserves fallback anchors without a valid editor
+  ---
+  duration_ms: 0.3471
+  type: 'test'
+  ...
+# Subtest: matches all built-in Pi RGB tool backgrounds only
+ok 63 - matches all built-in Pi RGB tool backgrounds only
+  ---
+  duration_ms: 0.1427
+  type: 'test'
+  ...
+# Subtest: ANSI transform clears RGB tool backgrounds and preserves other attributes
+ok 64 - ANSI transform clears RGB tool backgrounds and preserves other attributes
+  ---
+  duration_ms: 0.3045
+  type: 'test'
+  ...
+# Subtest: ANSI transform applies only unambiguous 256-color fallback values
+ok 65 - ANSI transform applies only unambiguous 256-color fallback values
+  ---
+  duration_ms: 0.0904
+  type: 'test'
+  ...
+# Subtest: ANSI transform survives every CSI frame split and reset drops fragments
+ok 66 - ANSI transform survives every CSI frame split and reset drops fragments
+  ---
+  duration_ms: 0.2262
+  type: 'test'
+  ...
+# Subtest: Pi output filter removes the direct-tools advisory across every frame split
+ok 67 - Pi output filter removes the direct-tools advisory across every frame split
+  ---
+  duration_ms: 0.8646
+  type: 'test'
+  ...
+# Subtest: Pi output filter reset drops an incomplete advisory without affecting later output
+ok 68 - Pi output filter reset drops an incomplete advisory without affecting later output
+  ---
+  duration_ms: 0.0904
+  type: 'test'
+  ...
+# Subtest: Pi compatibility reset clears the advisory filter state
+ok 69 - Pi compatibility reset clears the advisory filter state
+  ---
+  duration_ms: 0.1125
+  type: 'test'
+  ...
+# Subtest: Pi facade transforms active sessions and leaves non-Pi sessions byte-for-byte
+ok 70 - Pi facade transforms active sessions and leaves non-Pi sessions byte-for-byte
+  ---
+  duration_ms: 0.1083
+  type: 'test'
+  ...
+# Subtest: live, replay, reset, and serialized snapshot use the shared transform
+ok 71 - live, replay, reset, and serialized snapshot use the shared transform
+  ---
+  duration_ms: 0.9609
+  type: 'test'
+  ...
+# Subtest: uncommitted output is redelivered after display remount and ACKed once
+ok 72 - uncommitted output is redelivered after display remount and ACKed once
+  ---
+  duration_ms: 1.4579
+  type: 'test'
+  ...
+# Subtest: committed output is not redelivered after display remount
+ok 73 - committed output is not redelivered after display remount
+  ---
+  duration_ms: 0.1678
+  type: 'test'
+  ...
+# Subtest: out-of-order write callbacks drain and ACK frames in sequence order
+ok 74 - out-of-order write callbacks drain and ACK frames in sequence order
+  ---
+  duration_ms: 0.17
+  type: 'test'
+  ...
+# Subtest: diagnostics track queued bytes and clear them after commit
+ok 75 - diagnostics track queued bytes and clear them after commit
+  ---
+  duration_ms: 0.4835
+  type: 'test'
+  ...
+# Subtest: reset replaces prior diagnostics backlog
+ok 76 - reset replaces prior diagnostics backlog
+  ---
+  duration_ms: 0.1358
+  type: 'test'
+  ...
+# Subtest: backlog warning is deduplicated and can fire again after recovery
+ok 77 - backlog warning is deduplicated and can fire again after recovery
+  ---
+  duration_ms: 0.3396
+  type: 'test'
+  ...
+# Subtest: terminal color updates stay behind the process manager boundary
+ok 78 - terminal color updates stay behind the process manager boundary
+  ---
+  duration_ms: 0.1249
+  type: 'test'
+  ...
+# Subtest: terminal remount snapshots the buffer during layout cleanup
+ok 79 - terminal remount snapshots the buffer during layout cleanup
+  ---
+  duration_ms: 0.9646
+  type: 'test'
+  ...
+# Subtest: PTY output subscription waits for display restore and remains cancellable
+ok 80 - PTY output subscription waits for display restore and remains cancellable
+  ---
+  duration_ms: 0.3751
+  type: 'test'
+  ...
+# Subtest: restored shell snapshots fit the current pane and leave a clean output line
+ok 81 - restored shell snapshots fit the current pane and leave a clean output line
+  ---
+  duration_ms: 0.3355
+  type: 'test'
+  ...
+# Subtest: only restored snapshots repair the cursor after fit before releasing output
+ok 82 - only restored snapshots repair the cursor after fit before releasing output
+  ---
+  duration_ms: 0.2298
+  type: 'test'
+  ...
+# Subtest: immediate fit does not force a viewport refresh when dimensions are unchanged
+ok 83 - immediate fit does not force a viewport refresh when dimensions are unchanged
+  ---
+  duration_ms: 1.9888
+  type: 'test'
+  ...
+# Subtest: explicit viewport refresh repaints the full grid when dimensions are unchanged
+ok 84 - explicit viewport refresh repaints the full grid when dimensions are unchanged
+  ---
+  duration_ms: 0.207
+  type: 'test'
+  ...
+# Subtest: consecutive fit frames keep the live horizontal resize cadence pending
+ok 85 - consecutive fit frames keep the live horizontal resize cadence pending
+  ---
+  duration_ms: 0.3152
+  type: 'test'
+  ...
+# Subtest: horizontal reflow preserves the visible normal-buffer line
+ok 86 - horizontal reflow preserves the visible normal-buffer line
+  ---
+  duration_ms: 0.3109
+  type: 'test'
+  ...
+# Subtest: horizontal reflow restores live-bottom intent after asynchronous viewport drift
+ok 87 - horizontal reflow restores live-bottom intent after asynchronous viewport drift
+  ---
+  duration_ms: 0.2155
+  type: 'test'
+  ...
+# Subtest: vertical resize does not force a live-bottom scroll
+ok 88 - vertical resize does not force a live-bottom scroll
+  ---
+  duration_ms: 0.1278
+  type: 'test'
+  ...
+# Subtest: alternate buffer resize does not force a live-bottom scroll
+ok 89 - alternate buffer resize does not force a live-bottom scroll
+  ---
+  duration_ms: 0.156
+  type: 'test'
+  ...
+# Subtest: cancelling a scheduled fit disposes a pending viewport marker
+ok 90 - cancelling a scheduled fit disposes a pending viewport marker
+  ---
+  duration_ms: 0.1906
+  type: 'test'
+  ...
+# Subtest: cancelling a scheduled fit cancels pending live-bottom restoration
+ok 91 - cancelling a scheduled fit cancels pending live-bottom restoration
+  ---
+  duration_ms: 0.3899
+  type: 'test'
+  ...
+# Subtest: initial replay fits the current container before releasing buffered live output
+ok 92 - initial replay fits the current container before releasing buffered live output
+  ---
+  duration_ms: 1.6563
+  type: 'test'
+  ...
+# Subtest: reconnect replay restores historical sizes serially and fits before live output
+ok 93 - reconnect replay restores historical sizes serially and fits before live output
+  ---
+  duration_ms: 0.3495
+  type: 'test'
+  ...
+# Subtest: resize-only reconnect replay is applied locally before current-size fit
+ok 94 - resize-only reconnect replay is applied locally before current-size fit
+  ---
+  duration_ms: 0.2606
+  type: 'test'
+  ...
+# Subtest: continuous live output yields between bounded xterm writes
+ok 95 - continuous live output yields between bounded xterm writes
+  ---
+  duration_ms: 1.443
+  type: 'test'
+  ...
+# Subtest: hidden document drains pending PTY output with timer fallback
+ok 96 - hidden document drains pending PTY output with timer fallback
+  ---
+  duration_ms: 0.3703
+  type: 'test'
+  ...
+# Subtest: timer watchdog drains output if a visible rAF is stalled
+ok 97 - timer watchdog drains output if a visible rAF is stalled
+  ---
+  duration_ms: 0.1861
+  type: 'test'
+  ...
+# Subtest: multiple terminals start only one xterm write per animation frame
+ok 98 - multiple terminals start only one xterm write per animation frame
+  ---
+  duration_ms: 0.2613
+  type: 'test'
+  ...
+# Subtest: hidden terminal is not starved by continuous visible output
+ok 99 - hidden terminal is not starved by continuous visible output
+  ---
+  duration_ms: 0.5161
+  type: 'test'
+  ...
+# Subtest: display permits first startup replay, consumes on callback, suppresses repeat, then allows live
+ok 100 - display permits first startup replay, consumes on callback, suppresses repeat, then allows live
+  ---
+  duration_ms: 0.2888
+  type: 'test'
+  ...
+# Subtest: display suppresses old-process replay colors while retaining setter order
+ok 101 - display suppresses old-process replay colors while retaining setter order
+  ---
+  duration_ms: 0.1795
+  type: 'test'
+  ...
+# Subtest: attach [] streamed waits for real callbacks and end fit
+ok 102 - attach [] streamed waits for real callbacks and end fit
+  ---
+  duration_ms: 0.3122
+  type: 'test'
+  ...
+# Subtest: attach explicit+stream waits for real callbacks and end fit
+ok 103 - attach explicit+stream waits for real callbacks and end fit
+  ---
+  duration_ms: 0.1481
+  type: 'test'
+  ...
+# Subtest: cancelled explicit completion resolves false before disposed xterm callbacks; replacement owns ACK/claim
+ok 104 - cancelled explicit completion resolves false before disposed xterm callbacks; replacement owns ACK/claim
+  ---
+  duration_ms: 0.225
+  type: 'test'
+  ...
+# Subtest: stream interruption before final callback preserves completion false and cannot ACK a replacement
+ok 105 - stream interruption before final callback preserves completion false and cannot ACK a replacement
+  ---
+  duration_ms: 0.2067
+  type: 'test'
+  ...
+# Subtest: streamed UTF8 carry joins Chinese/emoji but reset abandons partial bytes
+ok 106 - streamed UTF8 carry joins Chinese/emoji but reset abandons partial bytes
+  ---
+  duration_ms: 0.2311
+  type: 'test'
+  ...
+# Subtest: replay end does not complete without current container fit; retry needs no timeout
+ok 107 - replay end does not complete without current container fit; retry needs no timeout
+  ---
+  duration_ms: 0.1749
+  type: 'test'
+  ...
+# Subtest: actual xterm streamed attach barrier waits async parser continuation, commits sequence once and then fits
+ok 108 - actual xterm streamed attach barrier waits async parser continuation, commits sequence once and then fits
+  ---
+  duration_ms: 13.7773
+  type: 'test'
+  ...
+# Subtest: desktop visibility reclaim and every size reader wait for async history and actual current fit
+ok 109 - desktop visibility reclaim and every size reader wait for async history and actual current fit
+  ---
+  duration_ms: 33.5802
+  type: 'test'
+  ...
+# Subtest: actual serialize restore 80x24 at source size then fit 40x8
+ok 110 - actual serialize restore 80x24 at source size then fit 40x8
+  ---
+  duration_ms: 26.636
+  type: 'test'
+  ...
+# Subtest: actual serialize restore 40x8 at source size then fit 100x30
+ok 111 - actual serialize restore 40x8 at source size then fit 100x30
+  ---
+  duration_ms: 15.8989
+  type: 'test'
+  ...
+# Subtest: actual serialize restore 72x10 at source size then fit 45x22
+ok 112 - actual serialize restore 72x10 at source size then fit 45x22
+  ---
+  duration_ms: 8.8725
+  type: 'test'
+  ...
+# Subtest: actual serialize restore 42x30 at source size then fit 95x8
+ok 113 - actual serialize restore 42x30 at source size then fit 95x8
+  ---
+  duration_ms: 5.6407
+  type: 'test'
+  ...
+# Subtest: bounded addon scrollback retains leading SGR cells beyond 2000 lines and full checkpoint is separate
+ok 114 - bounded addon scrollback retains leading SGR cells beyond 2000 lines and full checkpoint is separate
+  ---
+  duration_ms: 297.2947
+  type: 'test'
+  ...
+# Subtest: legacy string without geometry remains compatible and invalid geometry is ignored
+ok 115 - legacy string without geometry remains compatible and invalid geometry is ignored
+  ---
+  duration_ms: 1.6688
+  type: 'test'
+  ...
+# Subtest: persisted optional geometry, source identity, full checkpoint, legacy API and replacement capture fencing
+ok 116 - persisted optional geometry, source identity, full checkpoint, legacy API and replacement capture fencing
+  ---
+  duration_ms: 0.7659
+  type: 'test'
+  ...
+# Subtest: session save retains whole objects; shell restore geometry only accompanies image; CLI resume never gets image
+ok 117 - session save retains whole objects; shell restore geometry only accompanies image; CLI resume never gets image
+  ---
+  duration_ms: 1.349
+  type: 'test'
+  ...
+# Subtest: real lifecycle exit and unmount use bounded committed capture, resize-only geometry, full same-state checkpoint
+ok 118 - real lifecycle exit and unmount use bounded committed capture, resize-only geometry, full same-state checkpoint
+  ---
+  duration_ms: 61.3215
+  type: 'test'
+  ...
+# Subtest: parsed writes are cheap; unmount serializes once, pending parse falls back to whole committed image, cancelled flush cannot publish
+ok 119 - parsed writes are cheap; unmount serializes once, pending parse falls back to whole committed image, cancelled flush cannot publish
+  ---
+  duration_ms: 402.0705
+  type: 'test'
+  ...
+# (node:34864) ExperimentalWarning: The MockTimers API is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: coalesced concurrent exit flushes share bounded/full same-state capture
+ok 120 - coalesced concurrent exit flushes share bounded/full same-state capture
+  ---
+  duration_ms: 14.8337
+  type: 'test'
+  ...
+# Subtest: resize-only dirty state triggers throttled capture; idle round does not serialize
+ok 121 - resize-only dirty state triggers throttled capture; idle round does not serialize
+  ---
+  duration_ms: 61.6885
+  type: 'test'
+  ...
+# Subtest: exit barrier waits actual async parse and captures full checkpoint, not partial initial fallback
+ok 122 - exit barrier waits actual async parse and captures full checkpoint, not partial initial fallback
+  ---
+  duration_ms: 15.6643
+  type: 'test'
+  ...
+# Subtest: visible layout owns size before output subscribe; hidden parser does not
+ok 123 - visible layout owns size before output subscribe; hidden parser does not
+  ---
+  duration_ms: 1.7204
+  type: 'test'
+  ...
+# Subtest: overlapping layout cleanup cannot remove newer viewport or another session
+ok 124 - overlapping layout cleanup cannot remove newer viewport or another session
+  ---
+  duration_ms: 0.1415
+  type: 'test'
+  ...
+1..124
+# tests 124
+# suites 0
+# pass 124
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 8105.9926

@@ -1,0 +1,7 @@
+{"file": ".trellis\\tasks\\10-07-terminal-restore-garbled-input\\design.md", "reason": "Approved boundary, ordered execution, scenarios and unresolved impact"}
+{"file": ".trellis\\tasks\\10-07-terminal-restore-garbled-input\\implement.md", "reason": "Approved boundary, ordered execution, scenarios and unresolved impact"}
+{"file": ".trellis\\tasks\\10-07-terminal-restore-garbled-input\\discovery.md", "reason": "Approved boundary, ordered execution, scenarios and unresolved impact"}
+{"file": ".trellis\\tasks\\10-07-terminal-restore-garbled-input\\scenarios.md", "reason": "Approved boundary, ordered execution, scenarios and unresolved impact"}
+{"file": ".trellis/spec/frontend/workspace-session-restore-contracts.md", "reason": "Source-of-truth restore and protocol contracts"}
+{"file": ".trellis/spec/backend/terminal-output-scheduling-contracts.md", "reason": "Source-of-truth restore and protocol contracts"}
+{"file": ".trellis/spec/frontend/ai-architecture-contracts.md", "reason": "Source-of-truth restore and protocol contracts"}

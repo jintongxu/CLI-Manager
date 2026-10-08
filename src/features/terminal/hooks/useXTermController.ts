@@ -1,10 +1,14 @@
+import { createTerminalSnapshotLifecycle } from "../lib/terminalSnapshotLifecycle";
+import { restoreTerminalSnapshotSize } from "../lib/terminalSnapshotCapture";
 import {
   useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties,
   type WheelEvent as ReactWheelEvent,
 } from "react";
 import { Terminal, type IBufferRange, type ILink, type IViewportRange } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { canAnswerTerminalQuery, installTerminalQueryPolicy } from "../../../shared/lib/terminalQueryPolicy";
+import { canAnswerTerminalQuery, installTerminalQueryPolicy, shouldResetTerminalSnapshotInputModes, markTerminalColdSnapshotRestored } from "../../../shared/lib/terminalQueryPolicy";
+import { installTerminalHistoricalParser, writeTerminalOutput, coldSnapshotInputModeReset } from "../../../shared/lib/terminalHistoricalParser";
+import { installTerminalImageProtocolOrigin } from "../../../shared/lib/terminalImageProtocolOrigin";
 import { ImageAddon } from "@xterm/addon-image";
 import { SearchAddon } from "@xterm/addon-search";
 import { SerializeAddon } from "@xterm/addon-serialize";
@@ -64,7 +68,6 @@ import type { TerminalProcessTraits } from "../transport/PtyHostSocket";
 import { TERMINAL_SCROLLBACK_ROWS_DEFAULT, useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { toast } from "sonner";
 import { logError, logInfo, logWarn } from "../../../shared/platform/logger";
-import { registerTerminalSnapshotSource } from "../api/sessionSnapshotPersistence";
 import {
   type TerminalSubsystemDisposable, type CodexImeDebugState, summarizeTextForDiagnostics,
   disposeTerminalSubsystem, canShowSuggestionAtCurrentInputEnd, withVisibleSelectionTheme,
@@ -105,6 +108,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
   const grokSessionDetectedRef = useRef(false);
   const osc52ClipboardChainRef = useRef(Promise.resolve());
   const osc52ClipboardPendingRef = useRef(0);
+  const resetNormalizerRef = useRef<(() => void) | null>(null);
   const displayNormalizeOutputRef = useRef<(text: string) => string>((text) => text);
   const displayTransformOutputRef = useRef<(text: string) => string>((text) => text);
   const displayAfterWriteRef = useRef<((terminal: Terminal) => void) | null>(null);
@@ -308,7 +312,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
 
   useEffect(() => {
     if (!markdownPreviewOpen) return;
-    const frame = window.requestAnimationFrame(() => fitAddonRef.current?.fit());
+    const frame = window.requestAnimationFrame(() => scheduleFit(true));
     return () => window.cancelAnimationFrame(frame);
   }, [markdownPreviewOpen, markdownPreviewRatio]);
 
@@ -395,6 +399,9 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     markViewportRefreshNeeded,
     enqueueActiveWrite,
     attachPtyOutput,
+    setHistoricalResize,
+    reclaimViewportSize,
+    getPtyViewportSize,
     attachViewport,
     resetOutputState,
     cancelScheduledFit,
@@ -412,6 +419,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     linuxGraphicsDisableWebgl,
     isTransparentRef,
     normalizeOutputRef: displayNormalizeOutputRef,
+    resetNormalizerRef,
     transformOutputRef: displayTransformOutputRef,
     afterTerminalWriteRef: displayAfterWriteRef,
     outputDiagnosticsRef: piTerminalCompatibilityRef,
@@ -459,6 +467,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
 
   const {
     normalizeTerminalOutput,
+    resetTerminalOutput,
     updateSessionCwdIfChanged,
   } = useTerminalOsc({
     sessionId,
@@ -485,6 +494,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     },
   });
   displayNormalizeOutputRef.current = normalizeTerminalOutput;
+  resetNormalizerRef.current = resetTerminalOutput;
 
   const isCodexSession = (
     context = getSessionToolContext(),
@@ -699,34 +709,18 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
   }, [fontSize, effectiveFontFamily, effectiveTerminalScrollbackRows, resolvedTheme, terminalThemeName, terminalTextColor, terminalTuiUserColor, terminalTuiAssistantColor, lightThemePalette, darkThemePalette, isTransparent, background.overlayDarken, lowMemoryMode, disableHardwareAcceleration, linuxGraphicsDisableWebgl, searchOpen, tuiColorSync]);
 
   useLayoutEffect(() => {
-    let restoreFrame: number | null = null;
     const visible = () => isVisible && document.visibilityState !== "hidden";
     const restore = () => {
-      if (!visible()) return;
-      scheduleFit(true);
-      if (restoreFrame !== null) cancelAnimationFrame(restoreFrame);
-      restoreFrame = requestAnimationFrame(() => {
-        restoreFrame = null;
-        const terminal = terminalRef.current;
-        if (terminal && visible()) {
-          // Web may have resized the PTY while this xterm kept its dimensions.
-          void terminalProcessManager.resize(sessionId, terminal.cols, terminal.rows).catch((error) => {
-            logWarn("Failed to reclaim desktop terminal size", error);
-          });
-        }
-      });
+      if (visible()) reclaimViewportSize();
     };
-    const dimensions = () => {
-      const terminal = terminalRef.current;
-      return terminal ? { cols: terminal.cols, rows: terminal.rows } : null;
-    };
+    const dimensions = getPtyViewportSize;
     const unregister = registerDesktopViewport(sessionId, { visible, restore, dimensions });
     document.addEventListener("visibilitychange", restore);
     restore();
     return () => {
       unregister();
       document.removeEventListener("visibilitychange", restore);
-      if (restoreFrame !== null) cancelAnimationFrame(restoreFrame);
+
     };
   }, [sessionId, isVisible]);
 
@@ -939,6 +933,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     const displayDisposables: TerminalSubsystemDisposable[] = [];
     const inputDisposables: TerminalSubsystemDisposable[] = [];
     baseDisposables.push({ dispose: cancelPendingCodexCursorShow });
+    baseDisposables.push(installTerminalHistoricalParser(terminal));
     let processTraitsApplied = false;
     const applyProcessTraits = (traits: TerminalProcessTraits | null | undefined) => {
       if (!traits || processTraitsApplied) return;
@@ -1085,21 +1080,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     linkHoverIcon = createTerminalLinkHoverIcon(terminal, containerRef.current, fontSize);
     baseDisposables.push(linkHoverIcon);
     // 注册定时节流落盘的快照来源：让崩溃/强杀也能恢复到最近一次落盘的画面。
-    const serializeAfterWriteBarrier = () => new Promise<string>((resolve) => {
-      terminal.write("", () => resolve(serializeAddon.serialize()));
-    });
-    const unregisterSnapshotSource = registerTerminalSnapshotSource(
-      sessionId,
-      serializeAfterWriteBarrier,
-      async (serialized) => {
-        await terminalProcessManager.checkpoint(
-          sessionId,
-          terminal.cols,
-          terminal.rows,
-          serialized,
-        );
-      },
-    );
+    const snapshotLifecycle = createTerminalSnapshotLifecycle(sessionId, terminal, serializeAddon);
     baseDisposables.push(searchAddon.onDidChangeResults(handleSearchResults));
 
     const initialWebglReady = syncWebglRenderer(terminal, baseTheme);
@@ -1117,8 +1098,10 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
           sixelSizeLimit: IMAGE_ADDON_SEQUENCE_LIMIT,
           iipSizeLimit: IMAGE_ADDON_SEQUENCE_LIMIT,
         });
+        let imageLoaded = false;
         try {
           terminal.loadAddon(imageAddon);
+          imageLoaded = true;
         } catch (err) {
           imageAddon.dispose();
           logWarn("Failed to load terminal image addon; continuing without terminal image support", {
@@ -1126,6 +1109,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
             err,
           });
         }
+        if (imageLoaded) baseDisposables.push(installTerminalImageProtocolOrigin(terminal, imageAddon));
       }
     }
 
@@ -1156,13 +1140,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
       scheduleFit(true);
       requestAnimationFrame(() => {
         if (terminalRef.current !== terminal) return;
-        snapshotBeforeUnmountRef.current = () => {
-          try {
-            useTerminalStore.getState().updateSessionTerminalSnapshot(sessionId, serializeAddon.serialize());
-          } catch (err) {
-            logError("Failed to snapshot terminal buffer before dispose", { sessionId, err });
-          }
-        };
+        snapshotBeforeUnmountRef.current = snapshotLifecycle.snapshotBeforeUnmount;
         if (!hasSnapshot) {
           markInitialDisplayReady();
           return;
@@ -1188,7 +1166,9 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
       initialDisplayRestoreRaf = window.requestAnimationFrame(() => {
         initialDisplayRestoreRaf = null;
         if (terminalRef.current !== terminal) return;
-        const dimensions = fitAddon.proposeDimensions();
+        setHistoricalResize(true);
+        const restoredSourceSize = restoreTerminalSnapshotSize(terminal, sessionSnapshot?.initialTerminalSize);
+        const dimensions = restoredSourceSize ? undefined : fitAddon.proposeDimensions();
         if (
           dimensions
           && dimensions.cols > 0
@@ -1199,8 +1179,11 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
         }
         const restoredOutput = displayTransformOutputRef.current(initialTerminalOutput);
         const restoredCursor = shouldHideCodexCursor(terminal) ? "\x1b[?25l" : "\x1b[?25h";
-        terminal.write(`${restoredOutput}\x1b[?6l\x1b[r\x1b[0m${restoredCursor}\x1b[999B\r\n`, () => {
+        const inputModeReset = shouldResetTerminalSnapshotInputModes(sessionId) ? coldSnapshotInputModeReset : "";
+        writeTerminalOutput(terminal, `${restoredOutput}\x1b[?6l\x1b[r\x1b[0m${restoredCursor}\x1b[999B\r\n${inputModeReset}`, "history", () => {
           if (terminalRef.current !== terminal) return;
+          setHistoricalResize(false);
+          if (inputModeReset) markTerminalColdSnapshotRestored(sessionId);
           terminal.scrollToBottom();
           refreshTerminalViewport(terminal);
           scheduleViewportRefresh();
@@ -1548,7 +1531,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
         if (terminalRef.current !== terminal) return;
         applyProcessTraits(attach.processTraits);
         const replayCompleted = await output.completeReplay(attach.replay);
-        if (!replayCompleted) return;
+        if (!replayCompleted || !output.isCurrent() || terminalRef.current !== terminal) return;
         useTerminalStore.setState((state) => ({
           daemonAttachPendingSessionIds: new Set(
             [...state.daemonAttachPendingSessionIds].filter((id) => id !== sessionId)
@@ -1559,14 +1542,10 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
         } else if (attach.replayTruncated) {
           toast.warning(t("terminal.backgroundTasks.replayTruncated"));
         }
-      }).catch(async (err) => {
-        const replayCompleted = await output.completeReplay([]);
-        if (!replayCompleted) return;
-        useTerminalStore.setState((state) => ({
-          daemonAttachPendingSessionIds: new Set(
-            [...state.daemonAttachPendingSessionIds].filter((id) => id !== sessionId)
-          ),
-        }));
+      }).catch((err) => {
+        if (!output.isCurrent() || terminalRef.current !== terminal) return;
+        // No replay end was committed: preserve pending so a remount can attach.
+        output.dispose();
         logError("Failed to attach daemon terminal output", { sessionId, err });
         toast.error(t("terminal.backgroundTasks.restoreFailed"), { description: String(err) });
       });
@@ -1647,7 +1626,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
       clearVisibilityRestoreRevealSchedule();
       visibilityRestorePendingRef.current = false;
       resetViewportRefreshState();
-      unregisterSnapshotSource();
+      snapshotLifecycle.dispose();
       disposeTerminalSubsystem(baseDisposables);
       disposeWebglRenderer();
       terminal.dispose();

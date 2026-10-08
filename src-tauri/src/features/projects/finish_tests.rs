@@ -248,3 +248,102 @@ fn finish_symlinks_rejected_without_traversal() {
 
 #[path = "finish_fault_tests.rs"]
 mod faults;
+
+// The ordinary create path starts at base HEAD. No Finish action or receipt is
+// needed for ancestry evidence; dirty content must not become recovery progress.
+fn startup_same_base_fixture() -> (tempfile::TempDir, Context) {
+    let temp = tempfile::tempdir().unwrap();
+    let main = temp.path().join("repo");
+    let wt = temp.path().join("task");
+    fs::create_dir(&main).unwrap();
+    git(&main, &["init", "--initial-branch=main"]);
+    git(&main, &["config", "user.email", "test@example.com"]);
+    git(&main, &["config", "user.name", "Tests"]);
+    git(&main, &["config", "core.autocrlf", "false"]);
+    fs::write(main.join("base"), "base
+").unwrap();
+    git(&main, &["add", "."]);
+    git(&main, &["commit", "-m", "base"]);
+    git(&main, &["worktree", "add", "-b", "wt/task", wt.to_str().unwrap()]);
+    let ctx = context(FinishRequest {
+        worktree_id: "startup-status".into(),
+        project_path: main.to_str().unwrap().into(),
+        worktree_path: wt.to_str().unwrap().into(),
+        branch: "wt/task".into(),
+        base_branch: "main".into(),
+    }).unwrap();
+    (temp, ctx)
+}
+
+#[test]
+fn startup_status_same_base_clean_tracked_untracked_without_receipt() {
+    for dirty in [None, Some("base"), Some("untracked")] {
+        let (_temp, ctx) = startup_same_base_fixture();
+        assert_eq!(git(&ctx.target, &["rev-parse", "HEAD"]), git(&ctx.project, &["rev-parse", "main"]));
+        if let Some(file) = dirty {
+            fs::write(ctx.target.join(file), "unfinished work
+").unwrap();
+        }
+        let before = git(&ctx.target, &["status", "--porcelain"]);
+        let registration = git(&ctx.project, &["worktree", "list", "--porcelain"]);
+        for _ in 0..2 {
+            let restarted = context(ctx.request.clone()).unwrap();
+            let state = inspect(&restarted).unwrap();
+            assert!(state.checkout_valid && state.merged);
+            assert_eq!(state.outcome.as_deref(), Some("merged"));
+            assert!(!state.cleanup_pending && !state.done && !state.unknown);
+            assert_eq!(state.cleanup_ready, dirty.is_none());
+            assert_eq!(state.blocker.as_deref(), dirty.map(|_| "finish_dirty_checkout"));
+            assert!(load(&restarted).unwrap().is_none());
+            assert!(!ctx.common.join("cli-manager-finish").exists());
+        }
+        assert_eq!(git(&ctx.target, &["status", "--porcelain"]), before);
+        assert_eq!(git(&ctx.project, &["worktree", "list", "--porcelain"]), registration);
+        assert_eq!(fs::read_to_string(ctx.target.join(dirty.unwrap_or("base"))).unwrap(),
+            if dirty.is_some() { "unfinished work
+" } else { "base
+" });
+    }
+}
+
+#[test]
+fn startup_status_novel_tip_historical_merge_and_prepared_dirty() {
+    let (_temp, ctx) = fixture();
+    fs::write(ctx.target.join("untracked"), "unfinished
+").unwrap();
+    let novel = inspect(&ctx).unwrap();
+    assert!(novel.checkout_valid && !novel.merged && !novel.cleanup_pending);
+    assert_eq!(novel.blocker.as_deref(), Some("finish_dirty_checkout"));
+    assert!(load(&ctx).unwrap().is_none());
+    // A historical merge is ordinary Git, not a Finish receipt.
+    git(&ctx.project, &["merge", "--no-ff", "--no-edit", "wt/task"]);
+    let historical = inspect(&ctx).unwrap();
+    assert!(historical.checkout_valid && historical.merged && !historical.cleanup_pending);
+    assert_eq!(historical.blocker.as_deref(), Some("finish_dirty_checkout"));
+    assert!(!historical.cleanup_ready && !historical.done);
+    assert!(load(&ctx).unwrap().is_none());
+    let prepared = new_receipt(&ctx, tip(&ctx).unwrap().unwrap());
+    ctx.journal.save(&prepared).unwrap();
+    let state = inspect(&context(ctx.request.clone()).unwrap()).unwrap();
+    assert!(state.checkout_valid && !state.cleanup_pending && !state.done);
+    assert_eq!(state.blocker.as_deref(), Some("finish_dirty_checkout"));
+    assert_eq!(load(&ctx).unwrap().unwrap().phase, "prepared");
+    assert_eq!(fs::read_to_string(ctx.target.join("untracked")).unwrap(), "unfinished
+");
+}
+
+#[test]
+fn startup_status_missing_registration_path_and_branch_without_receipt() {
+    let (_temp, ctx) = fixture(); // Novel tip: no historical completion evidence.
+    unregister(&ctx);
+    let residual = inspect(&ctx).unwrap();
+    assert!(!residual.checkout_valid && residual.unknown && !residual.cleanup_pending);
+    fs::remove_dir_all(&ctx.target).unwrap(); // Temporary fixture only.
+    let absent = inspect(&ctx).unwrap();
+    assert!(!absent.checkout_valid && absent.unknown && !absent.done);
+    git(&ctx.project, &["branch", "-D", "wt/task"]);
+    let no_branch = inspect(&ctx).unwrap();
+    assert!(!no_branch.checkout_valid && no_branch.unknown && !no_branch.cleanup_pending);
+    assert!(no_branch.source_oid.is_none() && no_branch.outcome.is_none());
+    assert!(load(&ctx).unwrap().is_none());
+}

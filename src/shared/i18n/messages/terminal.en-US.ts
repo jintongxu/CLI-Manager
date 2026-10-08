@@ -1,6 +1,7 @@
 import type { zh } from "./terminal.zh-CN";
 
 export const en: Record<keyof typeof zh, string> = {
+  "terminal.context.hideDisplayedProjectTerminals": "Hide all unhidden ordinary terminals in project \"{project}\" matching the current filter (keep sessions and processes; do not delete)",
   "termStats.screenshot": "Copy full statistics as image",
   "termStats.screenshotBusy": "Creating statistics image…",
   "termStats.screenshotCopied": "Statistics image copied to clipboard",
@@ -61,7 +62,15 @@ export const en: Record<keyof typeof zh, string> = {
   "terminal.context.unboundProject": "Unbound project",
   "terminal.context.defaultShell": "Default shell",
   "terminal.context.projectRoot": "Project root",
-  "terminal.context.switcher": "Switch project and Worktree",
+  "terminal.context.switcher": "Switch project",
+  "terminal.context.badgeMain": "Main",
+  "terminal.context.badgeMissing": "Missing",
+  "terminal.context.badgeCross": "Cross",
+  "terminal.context.badgeMixed": "Mixed",
+  "terminal.context.rootDirectory": "Root directory",
+  "terminal.context.crossWorktree": "Cross-Worktree",
+  "terminal.context.mixedWorkspan": "Mixed workspace",
+  "terminal.context.mixedCloseHint": "Contains terminals from other projects; closing uses all members in the current scope.",
   "terminal.context.mixedWorkspace": "Mixed workspace",
   "terminal.status.summary": "Terminal status summary",
   "terminal.status.all": "All",

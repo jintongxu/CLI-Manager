@@ -1,6 +1,6 @@
 import { useRef, type RefObject } from "react";
-import { createTerminalColorQueryFilter } from "../../../shared/lib/terminalColorQueryFilter";
-import { canAnswerTerminalQueryFrame, claimTerminalQueryFrame, setTerminalQueryReplay } from "../../../shared/lib/terminalQueryPolicy";
+import { canAnswerTerminalQueryFrame, claimTerminalQueryFrame } from "../../../shared/lib/terminalQueryPolicy";
+import { writeTerminalOutput, resetTerminalOutputOrigin } from "../../../shared/lib/terminalHistoricalParser";
 import type { IMarker, ITheme, Terminal } from "@xterm/xterm";
 import type { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -210,6 +210,7 @@ interface UseTerminalDisplayOptions {
   transformOutputRef: RefObject<TransformTerminalOutput>;
   afterTerminalWriteRef: RefObject<AfterTerminalWrite | null>;
   outputDiagnosticsRef?: RefObject<TerminalOutputDiagnostics | null>;
+  resetNormalizerRef?: RefObject<(() => void) | null>;
   onPtyOutputListenError: (err: unknown) => void;
   onViewportRefreshNeeded?: () => void;
 }
@@ -226,9 +227,13 @@ export interface UseTerminalDisplayResult {
   enqueueActiveWrite: (text: string, onCommitted?: () => void) => void;
   attachPtyOutput: (options?: { waitForReplay?: boolean }) => {
     ready: Promise<void>;
+    isCurrent: () => boolean;
     completeReplay: (replay: TerminalBinaryFrame[]) => Promise<boolean>;
     dispose: () => void;
   };
+  setHistoricalResize: (historical: boolean) => void;
+  reclaimViewportSize: () => void;
+  getPtyViewportSize: () => { cols: number; rows: number } | null;
   attachViewport: (terminal: Terminal) => () => void;
   resetOutputState: () => void;
   cancelScheduledFit: () => void;
@@ -251,6 +256,7 @@ export function useTerminalDisplay({
   transformOutputRef,
   afterTerminalWriteRef,
   outputDiagnosticsRef,
+  resetNormalizerRef,
   onPtyOutputListenError,
   onViewportRefreshNeeded,
 }: UseTerminalDisplayOptions): UseTerminalDisplayResult {
@@ -272,6 +278,11 @@ export function useTerminalDisplay({
   const viewportRestoreRafRef = useRef<number | null>(null);
   const pendingViewportRestoreRef = useRef<PendingViewportRestore | null>(null);
   const forwardPtyResizeRef = useRef(true);
+  const fittedViewportRef = useRef<Terminal | null>(null);
+  const reclaimViewportRef = useRef(false);
+  const outputOwnerRef = useRef<symbol | null>(null);
+  const disposeOutputRef = useRef<(() => void) | null>(null);
+  const finishReplayFitRef = useRef<(() => void) | null>(null);
 
   const cancelPendingViewportRestore = () => {
     if (viewportRestoreRafRef.current !== null) {
@@ -392,17 +403,35 @@ export function useTerminalDisplay({
   };
 
   const attachPtyOutput = (options: { waitForReplay?: boolean } = {}) => {
-    const textDecoder = new TextDecoder("utf-8");
-    const colorQueries = createTerminalColorQueryFilter();
+    disposeOutputRef.current?.();
+    const owner = Symbol(sessionId);
+    outputOwnerRef.current = owner;
+    const attachedTerminal = terminalRef.current;
+    const ownsOutput = () => !cancelled && outputOwnerRef.current === owner && terminalRef.current === attachedTerminal;
+    let textDecoder = new TextDecoder("utf-8");
     let cancelled = false;
     let waitingForReplay = options.waitForReplay === true;
     const bufferedLivePayloads: TerminalOutputDelivery[] = [];
+    let resolveReplay: ((complete: boolean) => void) | null = null;
+    let streamedReplayComplete = false;
+    let completionStarted = false;
+    let resolveCancellation: (() => void) | null = null;
+    const cancellation = new Promise<void>((resolve) => { resolveCancellation = resolve; });
     const finishReplayBatch = () => {
+      if (!ownsOutput()) return;
       forwardPtyResizeRef.current = true;
+      finishReplayFitRef.current = () => {
+        if (!ownsOutput()) return;
+        finishReplayFitRef.current = null;
+        streamedReplayComplete = true;
+        resolveReplay?.(true);
+        resolveReplay = null;
+        schedulePendingWrite();
+      };
       fitWhenStable(true);
     };
     const schedulePendingWrite = () => {
-      if (cancelled || ptyWriteInProgressRef.current) return;
+      if (!ownsOutput() || ptyWriteInProgressRef.current || finishReplayFitRef.current) return;
       // 拥塞记账：每个 flush 周期结束恰更新一次。队列排空则清零回落 64KB；
       // 仍有积压则计数加一，达阈值后下轮单次写上限放宽到 256KB。
       if (ptyPendingChunksRef.current.length === 0) {
@@ -427,7 +456,7 @@ export function useTerminalDisplay({
       });
     };
     const flushPendingWrites = () => {
-      if (cancelled || ptyWriteInProgressRef.current) return;
+      if (!ownsOutput() || ptyWriteInProgressRef.current || finishReplayFitRef.current) return;
       const terminal = terminalRef.current;
       if (!terminal) return;
       const first = ptyPendingChunksRef.current.shift();
@@ -464,6 +493,7 @@ export function useTerminalDisplay({
         }
       } else {
         forwardPtyResizeRef.current = false;
+        fittedViewportRef.current = null;
         if (
           first.cols > 0
           && first.rows > 0
@@ -478,9 +508,10 @@ export function useTerminalDisplay({
         if (first.replay && first.replayBatchEnd) finishReplayBatch();
       };
       if (first.reset) {
+        resetNormalizerRef?.current?.();
         outputDiagnosticsRef?.current?.reset();
-        colorQueries.reset();
         terminal.reset();
+        resetTerminalOutputOrigin(terminal);
         commitPending();
         schedulePendingWrite();
         return;
@@ -491,34 +522,34 @@ export function useTerminalDisplay({
         return;
       }
       ptyWriteInProgressRef.current = true;
-      setTerminalQueryReplay(terminal, !answerQueries);
-      const transformed = colorQueries.feed(transformOutputRef.current(combined), !answerQueries);
+      let transformed = "";
       // 延迟埋点：本次 flush 若含回车后首帧，记录开始写入与渲染提交时刻。
       const tracksLatency = pending.some((chunk) => chunk.latencyFirstFrame);
       if (tracksLatency) noteTerminalFlushStart(sessionId, performance.now());
-      terminal.write(transformed, () => {
-        setTerminalQueryReplay(terminal, false);
+      writeTerminalOutput(terminal, combined, answerQueries ? "live" : "history", () => {
+        if (!ownsOutput()) return;
         pending.forEach((chunk) => claimTerminalQueryFrame(sessionId, chunk.sequence, chunk.replay));
         ptyWriteInProgressRef.current = false;
-        if (cancelled || terminalRef.current !== terminal) return;
         if (tracksLatency) noteTerminalWriteCommitted(sessionId, performance.now());
         outputDiagnosticsRef?.current?.onWriteCommitted(terminal, transformed);
         handleTerminalWriteCommitted(terminal);
         commitPending();
         schedulePendingWrite();
-      });
+      }, (part, origin) => {
+        const text = transformOutputRef.current(normalizeOutputRef.current(part, { applyOsc52: !first.replay && origin === "live" }));
+        transformed += text;
+        return text;
+      }, ownsOutput);
     };
     const queuePayload = (delivery: TerminalOutputDelivery, markSnapshotDirty: boolean) => {
+      if (!ownsOutput()) return;
       const payload = delivery.frame;
+      if (payload.kind === "reset") textDecoder = new TextDecoder("utf-8");
       const rawText = textDecoder.decode(payload.data, { stream: true });
-      const text = normalizeOutputRef.current(rawText, {
-        applyOsc52: payload.kind !== "replay" && payload.kind !== "reset",
-      });
+      // Normalize at write enqueue, after raw-origin partitioning. Otherwise
+      // a buffered historical ESC/OSC/tmux prefix can gain a live suffix origin.
+      const text = rawText;
       outputDiagnosticsRef?.current?.onFrame(payload, rawText, text);
-      if (!text && payload.kind !== "replay" && payload.kind !== "reset") {
-        delivery.commit(rawText.length);
-        return;
-      }
       if (markSnapshotDirty) {
         markTerminalSnapshotDirty(sessionId);
         useTerminalStore.getState().recordPtyOutputActivity(sessionId);
@@ -542,14 +573,14 @@ export function useTerminalDisplay({
       schedulePendingWrite();
     };
     const ready = terminalProcessManager.subscribeOutput(sessionId, (delivery) => {
-      if (cancelled) return;
+      if (!ownsOutput()) return;
       if (waitingForReplay) {
         bufferedLivePayloads.push(delivery);
         return;
       }
       queuePayload(delivery, true);
     }).then((fn) => {
-      if (cancelled) {
+      if (!ownsOutput()) {
         fn();
       } else {
         ptyUnlistenRef.current = fn;
@@ -558,49 +589,72 @@ export function useTerminalDisplay({
     void ready.catch(onPtyOutputListenError);
 
     const completeReplay = async (replay: TerminalBinaryFrame[]) => {
-      if (cancelled || !waitingForReplay) return false;
-      const terminal = terminalRef.current;
+      if (!ownsOutput() || !waitingForReplay || completionStarted) return false;
+      completionStarted = true;
+      const terminal = attachedTerminal;
       if (!terminal) return false;
       forwardPtyResizeRef.current = false;
-      try {
-        for (const entry of replay) {
-          if (cancelled || terminalRef.current !== terminal) return false;
-          if (entry.cols > 0 && entry.rows > 0 && (terminal.cols !== entry.cols || terminal.rows !== entry.rows)) {
-            terminal.resize(entry.cols, entry.rows);
-          }
-          const rawText = textDecoder.decode(entry.data, { stream: true });
-          const text = normalizeOutputRef.current(rawText, { applyOsc52: false });
-          outputDiagnosticsRef?.current?.onFrame(entry, rawText, text);
-          if (!text) {
-            terminalProcessManager.acknowledgeOutput(sessionId, entry.sequence, 0);
-            continue;
-          }
-          await new Promise<void>((resolve) => {
-            setTerminalQueryReplay(terminal, !canAnswerTerminalQueryFrame(sessionId, entry.sequence, true));
-            const transformed = colorQueries.feed(transformOutputRef.current(text), !canAnswerTerminalQueryFrame(sessionId, entry.sequence, true));
-            terminal.write(transformed, () => {
-              setTerminalQueryReplay(terminal, false);
-              claimTerminalQueryFrame(sessionId, entry.sequence, true);
-              if (terminalRef.current === terminal) {
-                outputDiagnosticsRef?.current?.onWriteCommitted(terminal, transformed);
-                handleTerminalWriteCommitted(terminal);
-                terminalProcessManager.acknowledgeOutput(sessionId, entry.sequence, 0);
-              }
-              resolve();
-            });
-          });
+      fittedViewportRef.current = null;
+      for (const entry of replay) {
+        if (!ownsOutput()) return false;
+        if (entry.kind === "reset") {
+          textDecoder = new TextDecoder("utf-8");
+          resetNormalizerRef?.current?.();
+          terminal.reset();
+          resetTerminalOutputOrigin(terminal);
         }
-      } finally {
-        forwardPtyResizeRef.current = true;
+        if (entry.cols > 0 && entry.rows > 0 && (terminal.cols !== entry.cols || terminal.rows !== entry.rows)) {
+          terminal.resize(entry.cols, entry.rows);
+        }
+        const rawText = textDecoder.decode(entry.data, { stream: true });
+        outputDiagnosticsRef?.current?.onFrame(entry, rawText, rawText);
+        const committed = new Promise<void>((resolve) => {
+          const answerQueries = canAnswerTerminalQueryFrame(sessionId, entry.sequence, true);
+          let transformed = "";
+          writeTerminalOutput(terminal, rawText, answerQueries ? "live" : "history", () => {
+            if (ownsOutput()) {
+              claimTerminalQueryFrame(sessionId, entry.sequence, true);
+              outputDiagnosticsRef?.current?.onWriteCommitted(terminal, transformed);
+              handleTerminalWriteCommitted(terminal);
+              terminalProcessManager.acknowledgeOutput(sessionId, entry.sequence, 0);
+            }
+            resolve();
+          }, (part) => {
+            const normalized = transformOutputRef.current(normalizeOutputRef.current(part, { applyOsc52: false }));
+            transformed += normalized;
+            return normalized;
+          }, ownsOutput);
+        });
+        await Promise.race([committed, cancellation]);
+        if (!ownsOutput()) return false;
       }
-      fitWhenStable(true);
+      // [] attach uses the subscribed reset/replay/end stream, not an empty completion.
+      const hasStream = replay.length === 0 || bufferedLivePayloads.some(({ frame }) => frame.kind === "replay" || frame.kind === "reset");
       waitingForReplay = false;
+      let streamCompletion: Promise<boolean> | null = null;
+      if (hasStream) streamCompletion = new Promise((resolve) => { resolveReplay = resolve; });
       bufferedLivePayloads.splice(0).forEach((delivery) => queuePayload(delivery, true));
+      if (streamCompletion && !streamedReplayComplete) return streamCompletion;
+      if (!ownsOutput()) return false;
+      if (!hasStream) {
+        const fitted = new Promise<boolean>((resolve) => { resolveReplay = resolve; });
+        finishReplayBatch();
+        return fitted;
+      }
       return true;
     };
     const dispose = () => {
+      if (cancelled) return;
+      const wasOwner = outputOwnerRef.current === owner;
       cancelled = true;
+      resolveCancellation?.();
+      resolveReplay?.(false);
+      resolveReplay = null;
       bufferedLivePayloads.length = 0;
+      if (!wasOwner) return;
+      finishReplayFitRef.current = null;
+      outputOwnerRef.current = null;
+      disposeOutputRef.current = null;
       forwardPtyResizeRef.current = true;
       cancelGlobalTerminalWrite(ptyWriteScheduleTokenRef.current);
       ptyPendingChunksRef.current = [];
@@ -608,13 +662,15 @@ export function useTerminalDisplay({
       ptyUnlistenRef.current?.();
       ptyUnlistenRef.current = null;
     };
-    return { ready, completeReplay, dispose };
+    disposeOutputRef.current = dispose;
+    return { ready, isCurrent: ownsOutput, completeReplay, dispose };
   };
 
   const attachViewport = (terminal: Terminal) => {
     const container = containerRef.current;
     if (!container) return () => {};
     const resizeDisposable = terminal.onResize(({ cols, rows }) => {
+      markTerminalSnapshotDirty(sessionId);
       if (!forwardPtyResizeRef.current) return;
       if (!isVisibleRef.current || document.visibilityState === "hidden") return;
       if (cols < MIN_TERMINAL_COLS || rows < MIN_TERMINAL_ROWS) return;
@@ -672,6 +728,8 @@ export function useTerminalDisplay({
   };
 
   const resetOutputState = () => {
+    disposeOutputRef.current?.();
+    resetNormalizerRef?.current?.();
     cancelPendingViewportRestore();
     cancelGlobalTerminalWrite(ptyWriteScheduleTokenRef.current);
     ptyPendingChunksRef.current = [];
@@ -679,6 +737,8 @@ export function useTerminalDisplay({
     ptyWriteCongestedCyclesRef.current = 0;
     clearTerminalLatency(sessionId);
     forwardPtyResizeRef.current = true;
+    fittedViewportRef.current = null;
+    reclaimViewportRef.current = false;
     outputDiagnosticsRef?.current?.reset();
   };
 
@@ -753,16 +813,27 @@ export function useTerminalDisplay({
     const fitAddon = fitAddonRef.current;
     const terminal = terminalRef.current;
     if (!container || !fitAddon || !terminal) return;
+    if (!forwardPtyResizeRef.current) return;
     if (!immediateResize && (!isVisibleRef.current || isComposingRef.current)) return;
     if (container.offsetWidth <= 0 || container.offsetHeight <= 0) return;
 
     const dims = fitAddon.proposeDimensions();
     if (!dims || dims.cols < MIN_TERMINAL_COLS || dims.rows < MIN_TERMINAL_ROWS) return;
     getResizeDebouncer().resize(dims.cols, dims.rows, immediateResize);
+    if (terminal.cols === dims.cols && terminal.rows === dims.rows) {
+      fittedViewportRef.current = terminal;
+      if (reclaimViewportRef.current && isVisibleRef.current && document.visibilityState !== "hidden") {
+        reclaimViewportRef.current = false;
+        void terminalProcessManager.resize(sessionId, terminal.cols, terminal.rows).catch((err) => {
+          logError("Failed to reclaim desktop terminal size", { sessionId, err });
+        });
+      }
+    }
     if (forceViewportRefresh || needsViewportRefreshRef.current) {
       refreshTerminalViewport(terminal);
       needsViewportRefreshRef.current = false;
     }
+    finishReplayFitRef.current?.();
   };
 
   const cancelFitFrame = () => {
@@ -823,6 +894,16 @@ export function useTerminalDisplay({
     markViewportRefreshNeeded,
     enqueueActiveWrite,
     attachPtyOutput,
+    setHistoricalResize: (historical) => {
+      forwardPtyResizeRef.current = !historical;
+      fittedViewportRef.current = null;
+    },
+    reclaimViewportSize: () => { reclaimViewportRef.current = true; scheduleFit(true); },
+    getPtyViewportSize: () => {
+      const terminal = terminalRef.current;
+      return terminal && forwardPtyResizeRef.current && fittedViewportRef.current === terminal
+        ? { cols: terminal.cols, rows: terminal.rows } : null;
+    },
     attachViewport,
     resetOutputState,
     cancelScheduledFit,

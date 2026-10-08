@@ -497,6 +497,8 @@ export interface TerminalSession {
   disconnectReason?: SshDisconnectReason;
   /** 终端首次挂载时写入 xterm scrollback 的本地文本，不发送到 PTY。 */
   initialTerminalOutput?: string;
+  /** Source geometry of the serialized display; absent in legacy snapshots. */
+  initialTerminalSize?: { cols: number; rows: number };
   /** true 时启动命令由 XTermTerminal 在 initialTerminalOutput 写完后再发送。 */
   deferStartupUntilInitialOutput?: boolean;
   cliSessionId?: string;

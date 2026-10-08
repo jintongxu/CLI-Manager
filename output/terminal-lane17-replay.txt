@@ -1,0 +1,181 @@
+TAP version 13
+# Subtest: immediate fit does not force a viewport refresh when dimensions are unchanged
+ok 1 - immediate fit does not force a viewport refresh when dimensions are unchanged
+  ---
+  duration_ms: 1.8822
+  type: 'test'
+  ...
+# Subtest: explicit viewport refresh repaints the full grid when dimensions are unchanged
+ok 2 - explicit viewport refresh repaints the full grid when dimensions are unchanged
+  ---
+  duration_ms: 0.2455
+  type: 'test'
+  ...
+# Subtest: consecutive fit frames keep the live horizontal resize cadence pending
+ok 3 - consecutive fit frames keep the live horizontal resize cadence pending
+  ---
+  duration_ms: 0.4688
+  type: 'test'
+  ...
+# Subtest: horizontal reflow preserves the visible normal-buffer line
+ok 4 - horizontal reflow preserves the visible normal-buffer line
+  ---
+  duration_ms: 0.3299
+  type: 'test'
+  ...
+# Subtest: horizontal reflow restores live-bottom intent after asynchronous viewport drift
+ok 5 - horizontal reflow restores live-bottom intent after asynchronous viewport drift
+  ---
+  duration_ms: 0.2054
+  type: 'test'
+  ...
+# Subtest: vertical resize does not force a live-bottom scroll
+ok 6 - vertical resize does not force a live-bottom scroll
+  ---
+  duration_ms: 0.1253
+  type: 'test'
+  ...
+# Subtest: alternate buffer resize does not force a live-bottom scroll
+ok 7 - alternate buffer resize does not force a live-bottom scroll
+  ---
+  duration_ms: 0.1666
+  type: 'test'
+  ...
+# Subtest: cancelling a scheduled fit disposes a pending viewport marker
+ok 8 - cancelling a scheduled fit disposes a pending viewport marker
+  ---
+  duration_ms: 0.1941
+  type: 'test'
+  ...
+# Subtest: cancelling a scheduled fit cancels pending live-bottom restoration
+ok 9 - cancelling a scheduled fit cancels pending live-bottom restoration
+  ---
+  duration_ms: 0.378
+  type: 'test'
+  ...
+# Subtest: initial replay fits the current container before releasing buffered live output
+ok 10 - initial replay fits the current container before releasing buffered live output
+  ---
+  duration_ms: 1.7549
+  type: 'test'
+  ...
+# Subtest: reconnect replay restores historical sizes serially and fits before live output
+ok 11 - reconnect replay restores historical sizes serially and fits before live output
+  ---
+  duration_ms: 0.3745
+  type: 'test'
+  ...
+# Subtest: resize-only reconnect replay is applied locally before current-size fit
+ok 12 - resize-only reconnect replay is applied locally before current-size fit
+  ---
+  duration_ms: 0.2579
+  type: 'test'
+  ...
+# Subtest: continuous live output yields between bounded xterm writes
+ok 13 - continuous live output yields between bounded xterm writes
+  ---
+  duration_ms: 0.4807
+  type: 'test'
+  ...
+# Subtest: hidden document drains pending PTY output with timer fallback
+ok 14 - hidden document drains pending PTY output with timer fallback
+  ---
+  duration_ms: 0.3408
+  type: 'test'
+  ...
+# Subtest: timer watchdog drains output if a visible rAF is stalled
+ok 15 - timer watchdog drains output if a visible rAF is stalled
+  ---
+  duration_ms: 0.1935
+  type: 'test'
+  ...
+# Subtest: multiple terminals start only one xterm write per animation frame
+ok 16 - multiple terminals start only one xterm write per animation frame
+  ---
+  duration_ms: 0.2875
+  type: 'test'
+  ...
+# Subtest: hidden terminal is not starved by continuous visible output
+ok 17 - hidden terminal is not starved by continuous visible output
+  ---
+  duration_ms: 1.9705
+  type: 'test'
+  ...
+# Subtest: display permits first startup replay, consumes on callback, suppresses repeat, then allows live
+ok 18 - display permits first startup replay, consumes on callback, suppresses repeat, then allows live
+  ---
+  duration_ms: 0.2795
+  type: 'test'
+  ...
+# Subtest: display suppresses old-process replay colors while retaining setter order
+ok 19 - display suppresses old-process replay colors while retaining setter order
+  ---
+  duration_ms: 0.1734
+  type: 'test'
+  ...
+# Subtest: attach [] streamed waits for real callbacks and end fit
+ok 20 - attach [] streamed waits for real callbacks and end fit
+  ---
+  duration_ms: 0.3004
+  type: 'test'
+  ...
+# Subtest: attach explicit+stream waits for real callbacks and end fit
+ok 21 - attach explicit+stream waits for real callbacks and end fit
+  ---
+  duration_ms: 0.1431
+  type: 'test'
+  ...
+# Subtest: cancelled explicit completion resolves false before disposed xterm callbacks; replacement owns ACK/claim
+ok 22 - cancelled explicit completion resolves false before disposed xterm callbacks; replacement owns ACK/claim
+  ---
+  duration_ms: 0.2034
+  type: 'test'
+  ...
+# Subtest: stream interruption before final callback preserves completion false and cannot ACK a replacement
+ok 23 - stream interruption before final callback preserves completion false and cannot ACK a replacement
+  ---
+  duration_ms: 0.2031
+  type: 'test'
+  ...
+# Subtest: streamed UTF8 carry joins Chinese/emoji but reset abandons partial bytes
+ok 24 - streamed UTF8 carry joins Chinese/emoji but reset abandons partial bytes
+  ---
+  duration_ms: 0.1936
+  type: 'test'
+  ...
+# Subtest: replay end does not complete without current container fit; retry needs no timeout
+ok 25 - replay end does not complete without current container fit; retry needs no timeout
+  ---
+  duration_ms: 0.1654
+  type: 'test'
+  ...
+# Subtest: actual xterm streamed attach barrier waits async parser continuation, commits sequence once and then fits
+not ok 26 - actual xterm streamed attach barrier waits async parser continuation, commits sequence once and then fits
+  ---
+  duration_ms: 12.0503
+  type: 'test'
+  location: 'D:\\ai\\cli-manager-worktrees\\task-1007-1111\\scripts\\terminalReplay.test.mjs:978:1'
+  failureType: 'unhandledRejection'
+  error: 'xterm write bypassed historical parser origin FIFO'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    input.parse (file:///C:/Users/xujin/AppData/Local/Temp/cli-manager-terminal-replay-vP2FmN/realOrigin.mjs:239:47)
+    n._action (D:\ai\cli-manager-worktrees\task-1007-1111\node_modules\@xterm\xterm\lib\xterm.js:1:228833)
+    n.flushSync (D:\ai\cli-manager-worktrees\task-1007-1111\node_modules\@xterm\xterm\lib\xterm.js:1:337863)
+    F.resize (D:\ai\cli-manager-worktrees\task-1007-1111\node_modules\@xterm\xterm\lib\xterm.js:1:229294)
+    F.resize (D:\ai\cli-manager-worktrees\task-1007-1111\node_modules\@xterm\xterm\lib\xterm.js:1:33556)
+    v.resize (D:\ai\cli-manager-worktrees\task-1007-1111\node_modules\@xterm\xterm\lib\xterm.js:1:79900)
+    resizeTerminal (file:///C:/Users/xujin/AppData/Local/Temp/cli-manager-terminal-replay-vP2FmN/useTerminalDisplay.mjs:634:18)
+    TerminalResizeDebouncer.terminal [as resizeBoth] (file:///C:/Users/xujin/AppData/Local/Temp/cli-manager-terminal-replay-vP2FmN/useTerminalDisplay.mjs:652:17)
+    TerminalResizeDebouncer.resize (file:///C:/Users/xujin/AppData/Local/Temp/cli-manager-terminal-replay-vP2FmN/resize.mjs:6:29)
+    fitWhenStable (file:///C:/Users/xujin/AppData/Local/Temp/cli-manager-terminal-replay-vP2FmN/useTerminalDisplay.mjs:680:30)
+  ...
+1..26
+# tests 26
+# suites 0
+# pass 25
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1663.0589

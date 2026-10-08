@@ -142,10 +142,12 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       }
     },
 
-    updateSessionTerminalSnapshot: (sessionId, initialTerminalOutput) => set((state) => ({
+    updateSessionTerminalSnapshot: (sessionId, initialTerminalOutput, initialTerminalSize) => set((state) => ({
       sessions: state.sessions.map((session) => (
-        session.id === sessionId && (session.kind ?? "pty") === "pty" && session.initialTerminalOutput !== initialTerminalOutput
-          ? { ...session, initialTerminalOutput }
+        session.id === sessionId && (session.kind ?? "pty") === "pty" && (session.initialTerminalOutput !== initialTerminalOutput
+          || session.initialTerminalSize?.cols !== initialTerminalSize?.cols
+          || session.initialTerminalSize?.rows !== initialTerminalSize?.rows)
+          ? { ...session, initialTerminalOutput, initialTerminalSize }
           : session
       )),
     })),
@@ -330,6 +332,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         extensionLaunchStatus: launch.extensionStatus,
         remoteHandoff: undefined,
         initialTerminalOutput: undefined,
+        initialTerminalSize: undefined,
         deferStartupUntilInitialOutput: false,
       };
       const unlisten = await terminalProcessManager.subscribeStatus(newSessionId, (payload) => {
@@ -1665,6 +1668,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
             remoteHistoryConsumerId: ps.remoteHistoryConsumerId,
             remoteHistorySourceInstanceId: ps.remoteHistorySourceInstanceId,
             initialTerminalOutput,
+            initialTerminalSize: initialTerminalOutput ? ps.initialTerminalSize : undefined,
             deferStartupUntilInitialOutput,
           };
 

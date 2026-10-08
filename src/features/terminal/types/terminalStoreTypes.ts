@@ -226,7 +226,7 @@ export interface TerminalStore {
   mergeWorkspanAtPaneEdge: (sourceId: string, targetId: string, targetPaneId: string, edge: TerminalPaneDropEdge) => void;
   updateSessionCwd: (sessionId: string, cwd: string) => void;
   updateSshConnectionState: (sessionId: string, connectionState: SshConnectionState, disconnectReason?: SshDisconnectReason) => void;
-  updateSessionTerminalSnapshot: (sessionId: string, initialTerminalOutput: string) => void;
+  updateSessionTerminalSnapshot: (sessionId: string, initialTerminalOutput: string, initialTerminalSize?: TerminalSession["initialTerminalSize"]) => void;
   suspendSessionForRemoteHandoff: (sessionId: string, handoff: RemoteHandoffSessionState) => Promise<void>;
   updateSessionRemoteHandoff: (sessionId: string, handoff: RemoteHandoffSessionState) => Promise<void>;
   resumeSessionFromRemoteHandoff: (sessionId: string) => Promise<string>;

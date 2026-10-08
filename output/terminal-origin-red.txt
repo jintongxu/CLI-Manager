@@ -1,0 +1,225 @@
+TAP version 13
+# Subtest: real xterm historical protocol producers are suppressed, visual setters survive
+not ok 1 - real xterm historical protocol producers are suppressed, visual setters survive
+  ---
+  duration_ms: 9.2457
+  type: 'test'
+  location: 'D:\\ai\\cli-manager-worktrees\\task-1007-1111\\scripts\\terminalHistoricalParser.test.mjs:38:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+    + [
+    +   [
+    +     'data',
+    +     '\x1B[1;1R'
+    +   ],
+    +   [
+    +     'data',
+    +     '\x1B[?1;2c'
+    +   ],
+    +   [
+    +     'data',
+    +     '\x1B[>0;276;0c'
+    +   ],
+    +   [
+    +     'data',
+    +     '\x1B[O'
+    +   ],
+    +   [
+    +     'data',
+    +     '\x1B[?1004;1$y'
+    +   ],
+    +   [
+    +     'data',
+    +     '\x1BP1$r0m\x1B\\'
+    +   ]
+    + ]
+    - []
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual:
+    0:
+      0: 'data'
+      1: '\x1B[1;1R'
+    1:
+      0: 'data'
+      1: '\x1B[?1;2c'
+    2:
+      0: 'data'
+      1: '\x1B[>0;276;0c'
+    3:
+      0: 'data'
+      1: '\x1B[O'
+    4:
+      0: 'data'
+      1: '\x1B[?1004;1$y'
+    5:
+      0: 'data'
+      1: '\x1BP1$r0m\x1B\\'
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///D:/ai/cli-manager-worktrees/task-1007-1111/scripts/terminalHistoricalParser.test.mjs:42:12)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# Subtest: async parser continuation retains origin but pending input/paste/IME/binary is not gated
+not ok 2 - async parser continuation retains origin but pending input/paste/IME/binary is not gated
+  ---
+  duration_ms: 1.8397
+  type: 'test'
+  location: 'D:\\ai\\cli-manager-worktrees\\task-1007-1111\\scripts\\terminalHistoricalParser.test.mjs:49:1'
+  failureType: 'testCodeFailure'
+  error: "Cannot set properties of undefined (setting 'value')"
+  code: 'ERR_TEST_FAILURE'
+  name: 'TypeError'
+  stack: |-
+    r (D:\ai\cli-manager-worktrees\task-1007-1111\node_modules\@xterm\xterm\lib\xterm.js:1:10042)
+    F.paste (D:\ai\cli-manager-worktrees\task-1007-1111\node_modules\@xterm\xterm\lib\xterm.js:1:29176)
+    v.paste (D:\ai\cli-manager-worktrees\task-1007-1111\node_modules\@xterm\xterm\lib\xterm.js:1:81323)
+    TestContext.<anonymous> (file:///D:/ai/cli-manager-worktrees/task-1007-1111/scripts/terminalHistoricalParser.test.mjs:59:9)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: FIFO origins, empty writes and nested enqueues use the actual parser execution
+not ok 3 - FIFO origins, empty writes and nested enqueues use the actual parser execution
+  ---
+  duration_ms: 1.7378
+  type: 'test'
+  location: 'D:\\ai\\cli-manager-worktrees\\task-1007-1111\\scripts\\terminalHistoricalParser.test.mjs:70:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    4 !== 2
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 2
+  actual: 4
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///D:/ai/cli-manager-worktrees/task-1007-1111/scripts/terminalHistoricalParser.test.mjs:77:12)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: history ANSI prefix cannot authorize live suffix; subsequent live query still answers
+not ok 4 - history ANSI prefix cannot authorize live suffix; subsequent live query still answers
+  ---
+  duration_ms: 14.1009
+  type: 'test'
+  location: 'D:\\ai\\cli-manager-worktrees\\task-1007-1111\\scripts\\terminalHistoricalParser.test.mjs:80:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    2 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 2
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///D:/ai/cli-manager-worktrees/task-1007-1111/scripts/terminalHistoricalParser.test.mjs:85:12)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: cold snapshot resets only input-reporting modes, same-process history keeps modes
+not ok 5 - cold snapshot resets only input-reporting modes, same-process history keeps modes
+  ---
+  duration_ms: 1.586
+  type: 'test'
+  location: 'D:\\ai\\cli-manager-worktrees\\task-1007-1111\\scripts\\terminalHistoricalParser.test.mjs:92:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+    + [
+    +   [
+    +     'data',
+    +     '\x1B[O'
+    +   ]
+    + ]
+    - []
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual:
+    0:
+      0: 'data'
+      1: '\x1B[O'
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///D:/ai/cli-manager-worktrees/task-1007-1111/scripts/terminalHistoricalParser.test.mjs:97:14)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: direct ConPTY responder uses same parse-origin predicate, outside input remains allowed
+not ok 6 - direct ConPTY responder uses same parse-origin predicate, outside input remains allowed
+  ---
+  duration_ms: 13.953
+  type: 'test'
+  location: 'D:\\ai\\cli-manager-worktrees\\task-1007-1111\\scripts\\terminalHistoricalParser.test.mjs:105:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+    + [
+    +   [
+    +     'direct',
+    +     'DA1'
+    +   ]
+    + ]
+    - []
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual:
+    0:
+      0: 'direct'
+      1: 'DA1'
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///D:/ai/cli-manager-worktrees/task-1007-1111/scripts/terminalHistoricalParser.test.mjs:113:12)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: incompatible pinned adapter shape fails explicitly
+not ok 7 - incompatible pinned adapter shape fails explicitly
+  ---
+  duration_ms: 0.4475
+  type: 'test'
+  location: 'D:\\ai\\cli-manager-worktrees\\task-1007-1111\\scripts\\terminalHistoricalParser.test.mjs:119:1'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected exception.'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  operator: 'throws'
+  stack: |-
+    TestContext.<anonymous> (file:///D:/ai/cli-manager-worktrees/task-1007-1111/scripts/terminalHistoricalParser.test.mjs:120:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# async parser handler taking longer than 5000 ms
+1..7
+# tests 7
+# suites 0
+# pass 0
+# fail 7
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 6254.5162

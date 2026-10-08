@@ -1,0 +1,148 @@
+TAP version 13
+# Subtest: terminal remount snapshots the buffer during layout cleanup
+ok 1 - terminal remount snapshots the buffer during layout cleanup
+  ---
+  duration_ms: 0.7317
+  type: 'test'
+  ...
+# Subtest: PTY output subscription waits for display restore and remains cancellable
+ok 2 - PTY output subscription waits for display restore and remains cancellable
+  ---
+  duration_ms: 0.3261
+  type: 'test'
+  ...
+# Subtest: restored shell snapshots fit the current pane and leave a clean output line
+ok 3 - restored shell snapshots fit the current pane and leave a clean output line
+  ---
+  duration_ms: 0.3171
+  type: 'test'
+  ...
+# Subtest: only restored snapshots repair the cursor after fit before releasing output
+ok 4 - only restored snapshots repair the cursor after fit before releasing output
+  ---
+  duration_ms: 0.2097
+  type: 'test'
+  ...
+# Subtest: immediate fit does not force a viewport refresh when dimensions are unchanged
+ok 5 - immediate fit does not force a viewport refresh when dimensions are unchanged
+  ---
+  duration_ms: 1.9437
+  type: 'test'
+  ...
+# Subtest: explicit viewport refresh repaints the full grid when dimensions are unchanged
+ok 6 - explicit viewport refresh repaints the full grid when dimensions are unchanged
+  ---
+  duration_ms: 0.2088
+  type: 'test'
+  ...
+# Subtest: consecutive fit frames keep the live horizontal resize cadence pending
+ok 7 - consecutive fit frames keep the live horizontal resize cadence pending
+  ---
+  duration_ms: 0.3098
+  type: 'test'
+  ...
+# Subtest: horizontal reflow preserves the visible normal-buffer line
+ok 8 - horizontal reflow preserves the visible normal-buffer line
+  ---
+  duration_ms: 0.2687
+  type: 'test'
+  ...
+# Subtest: horizontal reflow restores live-bottom intent after asynchronous viewport drift
+ok 9 - horizontal reflow restores live-bottom intent after asynchronous viewport drift
+  ---
+  duration_ms: 0.2461
+  type: 'test'
+  ...
+# Subtest: vertical resize does not force a live-bottom scroll
+ok 10 - vertical resize does not force a live-bottom scroll
+  ---
+  duration_ms: 0.2148
+  type: 'test'
+  ...
+# Subtest: alternate buffer resize does not force a live-bottom scroll
+ok 11 - alternate buffer resize does not force a live-bottom scroll
+  ---
+  duration_ms: 0.1399
+  type: 'test'
+  ...
+# Subtest: cancelling a scheduled fit disposes a pending viewport marker
+ok 12 - cancelling a scheduled fit disposes a pending viewport marker
+  ---
+  duration_ms: 0.2085
+  type: 'test'
+  ...
+# Subtest: cancelling a scheduled fit cancels pending live-bottom restoration
+ok 13 - cancelling a scheduled fit cancels pending live-bottom restoration
+  ---
+  duration_ms: 0.4614
+  type: 'test'
+  ...
+# Subtest: initial replay fits the current container before releasing buffered live output
+ok 14 - initial replay fits the current container before releasing buffered live output
+  ---
+  duration_ms: 1.7105
+  type: 'test'
+  ...
+# Subtest: reconnect replay restores historical sizes serially and fits before live output
+ok 15 - reconnect replay restores historical sizes serially and fits before live output
+  ---
+  duration_ms: 0.3437
+  type: 'test'
+  ...
+# Subtest: resize-only reconnect replay is applied locally before current-size fit
+ok 16 - resize-only reconnect replay is applied locally before current-size fit
+  ---
+  duration_ms: 0.2576
+  type: 'test'
+  ...
+# Subtest: continuous live output yields between bounded xterm writes
+ok 17 - continuous live output yields between bounded xterm writes
+  ---
+  duration_ms: 0.498
+  type: 'test'
+  ...
+# Subtest: hidden document drains pending PTY output with timer fallback
+ok 18 - hidden document drains pending PTY output with timer fallback
+  ---
+  duration_ms: 0.3913
+  type: 'test'
+  ...
+# Subtest: timer watchdog drains output if a visible rAF is stalled
+ok 19 - timer watchdog drains output if a visible rAF is stalled
+  ---
+  duration_ms: 0.1875
+  type: 'test'
+  ...
+# Subtest: multiple terminals start only one xterm write per animation frame
+ok 20 - multiple terminals start only one xterm write per animation frame
+  ---
+  duration_ms: 0.267
+  type: 'test'
+  ...
+# Subtest: hidden terminal is not starved by continuous visible output
+ok 21 - hidden terminal is not starved by continuous visible output
+  ---
+  duration_ms: 0.7196
+  type: 'test'
+  ...
+# Subtest: display permits first startup replay, consumes on callback, suppresses repeat, then allows live
+ok 22 - display permits first startup replay, consumes on callback, suppresses repeat, then allows live
+  ---
+  duration_ms: 0.2853
+  type: 'test'
+  ...
+# Subtest: display suppresses old-process replay colors while retaining setter order
+ok 23 - display suppresses old-process replay colors while retaining setter order
+  ---
+  duration_ms: 0.1945
+  type: 'test'
+  ...
+1..23
+# tests 23
+# suites 0
+# pass 23
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1951.8834

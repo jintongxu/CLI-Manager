@@ -1,3 +1,4 @@
+import type { TerminalSnapshotCapture } from "../lib/terminalSnapshotCapture";
 import { useTerminalStore } from "../state";
 import { useSessionStore } from "./sessionStore";
 import { logError } from "../../../shared/platform/logger";
@@ -12,18 +13,18 @@ import { logError } from "../../../shared/platform/logger";
  *
  * 设计要点（对应 PRD R2）：
  * - 脏检测：终端自上次落盘无新 PTY 输出则跳过序列化（serialize 不便宜）。
- * - 尾部限行：单终端只保留最后 SNAPSHOT_MAX_LINES 行，避免快照文件无限膨胀。
+ * - addon 有界序列化：单终端只保留最后 TERMINAL_SNAPSHOT_SCROLLBACK 行，避免快照文件无限膨胀。
  * - 空转防护：仅当存在已注册的真实终端时才让定时器工作。
  */
 
 const SNAPSHOT_THROTTLE_MS = 10_000;
-// 单终端持久化的 scrollback 尾部行数上限（约 2000 行，符合"恢复最近画面"语义）。
-const SNAPSHOT_MAX_LINES = 2000;
+// Legacy string sources remain compatible; production captures bound scrollback in the addon.
+type SnapshotValue = string | TerminalSnapshotCapture;
 
 interface SnapshotSource {
-  /** 返回当前终端画面的完整序列化文本（含 scrollback）。 */
-  serialize: () => string | Promise<string>;
-  checkpoint?: (serialized: string) => Promise<void>;
+  /** 返回同一已提交状态的有界本地快照和完整 checkpoint；兼容旧字符串来源。 */
+  serialize: () => SnapshotValue | Promise<SnapshotValue>;
+  checkpoint?: (serialized: string, capture?: TerminalSnapshotCapture) => Promise<void>;
   /** 自上次落盘后是否收到过新 PTY 输出。 */
   dirty: boolean;
 }
@@ -31,35 +32,20 @@ interface SnapshotSource {
 const sources = new Map<string, SnapshotSource>();
 let timer: ReturnType<typeof setInterval> | null = null;
 
-/** 只保留文本尾部最多 maxLines 行，避免快照无限增长。 */
-function trimToTailLines(text: string, maxLines: number): string {
-  if (!text) return text;
-  let count = 0;
-  // 从尾部往前数换行符，找到第 maxLines 个换行的位置后截断，避免 split 整段大文本。
-  for (let i = text.length - 1; i >= 0; i--) {
-    if (text.charCodeAt(i) === 10 /* \n */) {
-      count++;
-      if (count >= maxLines) {
-        return text.slice(i + 1);
-      }
-    }
-  }
-  return text;
-}
-
 /**
  * 注册一个终端的快照来源。XTermTerminal 挂载时调用，dispose 时须调用返回的注销函数。
  * 注册后若定时器未运行则启动它。
  */
 export function registerTerminalSnapshotSource(
   sessionId: string,
-  serialize: () => string | Promise<string>,
-  checkpoint?: (serialized: string) => Promise<void>,
+  serialize: () => SnapshotValue | Promise<SnapshotValue>,
+  checkpoint?: (serialized: string, capture?: TerminalSnapshotCapture) => Promise<void>,
 ): () => void {
-  sources.set(sessionId, { serialize, checkpoint, dirty: false });
+  const source = { serialize, checkpoint, dirty: false };
+  sources.set(sessionId, source);
   ensureTimerRunning();
   return () => {
-    sources.delete(sessionId);
+    if (sources.get(sessionId) === source) sources.delete(sessionId);
     if (sources.size === 0) stopTimer();
   };
 }
@@ -85,7 +71,7 @@ function stopTimer(): void {
   }
 }
 
-/** 序列化所有脏终端、尾部限行、写回内存，然后统一落盘一次。 */
+/** 序列化所有脏终端、addon 有界序列化、写回内存，然后统一落盘一次。 */
 async function flushDirtySnapshots(): Promise<void> {
   await flushSnapshots(false);
 }
@@ -111,16 +97,18 @@ async function flushSnapshots(force: boolean): Promise<void> {
     source.dirty = false;
     try {
       const serialized = await source.serialize();
+      if (sources.get(sessionId) !== source) continue;
+      const capture = typeof serialized === "string" ? undefined : serialized;
       if (source.checkpoint) {
         try {
-          await source.checkpoint(serialized);
+          await source.checkpoint(capture ? capture.checkpointText : serialized as string, capture);
         } catch (err) {
           source.dirty = true;
           logError("Failed to upload terminal checkpoint", { sessionId, err });
         }
       }
-      const snapshot = trimToTailLines(serialized, SNAPSHOT_MAX_LINES);
-      store.updateSessionTerminalSnapshot(sessionId, snapshot);
+      if (sources.get(sessionId) !== source) continue;
+      store.updateSessionTerminalSnapshot(sessionId, capture ? capture.text : serialized as string, capture?.size);
       anyUpdated = true;
     } catch (err) {
       // 单个终端序列化失败不应拖垮整轮落盘；标回脏，下轮重试。

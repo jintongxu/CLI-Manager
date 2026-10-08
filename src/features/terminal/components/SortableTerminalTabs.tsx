@@ -247,6 +247,7 @@ export function SortableTab({
 
 export function SortableWorkspanTab({
   workspan,
+  worktreeBadge,
   title,
   notification,
   vendor,
@@ -262,6 +263,7 @@ export function SortableWorkspanTab({
   menuStyle,
 }: {
   workspan: TerminalWorkspan;
+  worktreeBadge?: import("../api/terminalWorktreeBadge").TerminalWorktreeBadge;
   title: string;
   notification: TabNotificationState;
   vendor?: VendorKey | null;
@@ -302,12 +304,13 @@ export function SortableWorkspanTab({
     scheduleHoverCard,
   } = useTerminalTabHoverCard(tabElementRef, editing || isDragging || !hoverInfo);
   const horizontalTransform = transform ? { ...transform, y: 0 } : transform;
-  const style: CSSProperties = {
+  const style = {
+    "--worktree-identity-color": worktreeBadge?.color,
     transform: isDragging ? undefined : CSS.Transform.toString(horizontalTransform),
     transition: isDragging ? undefined : transition,
     opacity: isDragging ? 0.45 : 1,
     zIndex: isDragging ? 10 : undefined,
-  };
+  } as CSSProperties;
   const sortableAttributes = { ...attributes, role: "tab" as const, "aria-selected": isActive };
 
   useEffect(() => {
@@ -343,8 +346,9 @@ export function SortableWorkspanTab({
           <div
             ref={setTabNodeRef}
             style={style}
-            className="ui-interactive ui-tab-trigger ui-terminal-tab-item ui-workspan-tab mx-1 flex h-7 min-w-[104px] max-w-[200px] shrink-0 cursor-pointer items-center gap-2 rounded-lg px-3 text-[12px] font-medium"
+            className="ui-interactive ui-tab-trigger ui-terminal-tab-item ui-workspan-tab mx-1 flex h-7 min-w-[104px] shrink-0 cursor-pointer items-center gap-2 rounded-lg px-3 text-[12px] font-medium"
             data-workspan-id={workspan.id}
+            data-worktree-identity={worktreeBadge?.identity}
             data-status={notification}
             data-selected={isActive ? "true" : "false"}
             onClick={() => {
@@ -408,8 +412,9 @@ export function SortableWorkspanTab({
                 aria-label={t("terminal.tab.rename")}
               />
             ) : (
-              <span className="ui-terminal-tab-title min-w-0 flex-1 truncate tracking-[0.01em]">{title}</span>
+              <span className="ui-terminal-tab-title min-w-[64px] max-w-[160px] flex-1 truncate tracking-[0.01em]">{title}</span>
             )}
+            {worktreeBadge && <span className="ui-workspan-worktree-badge">{worktreeBadge.label}</span>}
             <button
               type="button"
               className="ui-terminal-tab-close ml-1 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-on-surface-variant transition-[background-color,color,opacity,box-shadow] hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-focus-ring)]"

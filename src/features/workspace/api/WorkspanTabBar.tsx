@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import type { CliToolIconKey } from "../../../shared/lib/cliTools";
@@ -15,11 +15,16 @@ export type WorkspanContextOption = {
   done?: number;
   failed?: number;
 };
+import type { ProjectWorkspanTabModel } from "../../terminal/api/terminalProjectSelection";
+import { selectProjectTabGroups, resolveStatusWorkspanTarget, countVisibleTabStatuses } from "../../terminal/api/terminalProjectSelection";
+import { displayedProjectTerminalIds } from "../../terminal/api/terminalProjectHide";
+import { buildWorktreeBadges, buildGlobalWorktreeBadges, type TerminalWorktreeBadge } from "../../terminal/api/terminalWorktreeBadge";
+import type { TerminalProjectOption, WorkspanProjectGroup } from "../../terminal/api/terminalProjectTabsModel";
 import type { TabNotificationState } from "../../terminal/state";
 import type { TerminalWorkspan } from "../../terminal/api/terminalWorkspan";
 import { useI18n } from "../../../shared/i18n/index";
 import { PULSING_TAB_STATES, TAB_NOTIFICATION_COLORS } from "../../terminal/api/terminalTabVisuals";
-import { ChevronDown, Plus, Terminal, X } from "../../../shared/ui/icons";
+import { ChevronDown, Terminal, X } from "../../../shared/ui/icons";
 import { VendorIcon, type VendorKey } from "../../../shared/ui/VendorIcon";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../shared/ui/popover";
 
@@ -42,9 +47,15 @@ export interface WorkspanTabOverflowState {
   hiddenIds: string[];
 }
 
+export interface WorkspanTabCloseTargets {
+  leftSessionIds: string[];
+  rightSessionIds: string[];
+  otherSessionIds: string[];
+}
+
 interface WorkspanTabBarProps {
   position: WorkspanTabBarPosition;
-  models: readonly WorkspanTabModel[];
+  models: readonly ProjectWorkspanTabModel[];
   overflow: WorkspanTabOverflowState;
   listOpen: boolean;
   activeWorkspanId: string | null;
@@ -54,12 +65,15 @@ interface WorkspanTabBarProps {
   tabScrollRef: RefObject<HTMLDivElement | null>;
   detachPreview: { left: number; visible: boolean };
   onToggleList: (open: boolean) => void;
-  onActivate: (workspanId: string) => void;
-  onNewTab: (sessionId?: string) => void;
+  onActivate: (workspanId: string, sessionId?: string) => void;
   notifications: Record<string, TabNotificationState>;
   onClose: (model: WorkspanTabModel, anchor?: DOMRect) => void;
-  contextOptions?: readonly WorkspanContextOption[];
-  renderTab: (model: WorkspanTabModel, index: number) => ReactNode;
+  onHideProjectTerminals: (ids: string[]) => void;
+  contextOptions?: readonly TerminalProjectOption[];
+  selectedProjectKey: string | null;
+  onActivateProject: (key: string) => void;
+  onRowChange: (signature: string) => void;
+  renderTab: (model: ProjectWorkspanTabModel, closeTargets: WorkspanTabCloseTargets, badge: TerminalWorktreeBadge, activate: () => void) => ReactNode;
 }
 
 function WorkspanTabbarEndDropTarget({ disabled }: { disabled: boolean }) {
@@ -80,31 +94,44 @@ export function WorkspanTabBar({
   detachPreview,
   onToggleList,
   onActivate,
-  onNewTab,
   notifications,
   onClose,
+  onHideProjectTerminals,
   contextOptions = [],
   renderTab,
+  selectedProjectKey, onActivateProject, onRowChange,
 }: WorkspanTabBarProps) {
   const { t } = useI18n();
-  const activeModel = models.find((model) => model.workspan.id === activeWorkspanId);
-  const activeContextKey = activeModel?.contextKey ?? contextOptions[0]?.key ?? null;
   const [statusFilter, setStatusFilter] = useState<TabNotificationState | "all">("all");
-  const contextModels = activeContextKey ? models.filter((model) => model.contextKey === activeContextKey) : models;
-  const visibleModels = statusFilter === "all"
-    ? contextModels
-    : contextModels.filter((model) => model.sessionIds.some((sessionId) => (notifications[sessionId] ?? "none") === statusFilter));
+  const labels = {
+    root: t("terminal.context.badgeMain"), missing: t("terminal.context.badgeMissing"),
+    cross: t("terminal.context.badgeCross"), mixed: t("terminal.context.badgeMixed"),
+  };
+  const badges = statusFilter === "all" ? buildWorktreeBadges(models, selectedProjectKey, labels)
+    : buildGlobalWorktreeBadges(models, labels);
+  const activateResult = (model: ProjectWorkspanTabModel) => {
+    if (statusFilter === "all") onActivate(model.workspan.id);
+    else {
+      const target = resolveStatusWorkspanTarget(model, statusFilter, notifications);
+      if (target) onActivate(target.workspanId, target.sessionId);
+    }
+  };
+  const groups = selectProjectTabGroups(models, selectedProjectKey, statusFilter, notifications);
+  const visibleModels = groups.flatMap((group) => group.models);
   const hiddenIds = new Set(overflow.hiddenIds);
   const hiddenModels = visibleModels.filter(({ workspan }) => hiddenIds.has(workspan.id));
-  const statusSummary = visibleModels.reduce((summary, model) => {
-    for (const sessionId of model.sessionIds) {
-      const status = notifications[sessionId] ?? "none";
-      if (status === "running") summary.running += 1;
-      if (status === "done") summary.done += 1;
-      if (status === "failed") summary.failed += 1;
-    }
-    return summary;
-  }, { running: 0, done: 0, failed: 0 });
+  const selectedOption = contextOptions.find((option) => option.key === selectedProjectKey);
+  const statusSummary = statusFilter === "all" ? selectedOption ?? { running: 0, done: 0, failed: 0 }
+    : countVisibleTabStatuses(models, notifications);
+  const groupLabel = (group: WorkspanProjectGroup) => group.kind === "worktree"
+    ? group.worktreeName ?? t("terminal.context.worktreeMissing")
+    : group.kind === "missing-worktree" ? t("terminal.context.worktreeMissing")
+    : group.kind === "cross-worktree" ? t("terminal.context.crossWorktree")
+    : group.kind === "mixed-project" ? t("terminal.context.mixedWorkspan")
+    : t("terminal.context.rootDirectory");
+  const rowSignature = JSON.stringify([selectedProjectKey, statusFilter, activeWorkspanId, statusSummary,
+    groups.map(({ group, models: items }) => [group.key, groupLabel(group), items.map((model) => [model.workspan.id, model.title, model.vendor, model.cliToolIcon, model.notification, model.members.map((member) => [member.sessionId, notifications[member.sessionId] ?? "none"]), badges.get(model.workspan.id)?.label])])]);
+  useEffect(() => onRowChange(rowSignature), [onRowChange, rowSignature]);
 
   return (
     <div
@@ -119,26 +146,58 @@ export function WorkspanTabBar({
         aria-hidden="true"
       />
       <div className="ui-workspan-context-row flex h-7 min-h-7 min-w-0 items-center gap-1 overflow-x-auto px-1" role="tablist" aria-label={t("terminal.context.switcher")}>
-        {contextOptions.map((option) => (
-          <button
-            key={option.key}
-            type="button"
-            className="ui-workspan-context-button inline-flex h-6 max-w-[260px] shrink-0 items-center gap-1 rounded-md px-2 text-[11px] font-medium"
-            data-selected={option.key === activeContextKey ? "true" : "false"}
-            title={`${option.project} / ${option.worktree}`}
-            onClick={() => {
-              const target = models.find((model) => model.contextKey === option.key);
-              if (target) onActivate(target.workspan.id);
-            }}
-          >
-            <span className="truncate">{option.project} / {option.worktree}</span>
-            <span className="ui-workspan-context-status inline-flex shrink-0 items-center gap-0.5" title={t("terminal.status.summary")}>
-              {option.running ? <span className="ui-workspan-status-running">●</span> : null}
-              {option.done ? <span className="ui-workspan-status-done">✓</span> : null}
-              {option.failed ? <span className="ui-workspan-status-failed">!</span> : null}
-            </span>
-          </button>
-        ))}
+        <div className="ui-workspan-status-filter inline-flex shrink-0 items-center gap-0.5">
+          {(["all", "running", "done", "failed"] as const).map((filter) => (
+            <button
+              key={filter}
+              type="button"
+              className="ui-workspan-status-filter-button"
+              data-selected={statusFilter === filter ? "true" : "false"}
+              aria-pressed={statusFilter === filter}
+              aria-label={filter === "all" ? t("terminal.status.all") : t(`terminal.status.${filter}` as never)}
+              onClick={() => setStatusFilter(filter)}
+              title={filter === "all" ? t("terminal.status.all") : t(`terminal.status.${filter}` as never)}
+            >
+              {filter === "all" ? t("terminal.status.all") : filter === "running" ? "●" : filter === "done" ? "✓" : "!"}
+            </button>
+          ))}
+        </div>
+        {contextOptions.map((option) => {
+          const hideIds = displayedProjectTerminalIds(models, option.key, statusFilter, notifications);
+          const hideLabel = t("terminal.context.hideDisplayedProjectTerminals", { project: option.project });
+          return (
+            <div key={option.key} className="ui-workspan-project-chip inline-flex h-6 max-w-[286px] shrink-0 items-center rounded-md" data-selected={option.key === selectedProjectKey ? "true" : "false"}>
+              <button
+                type="button"
+                className="ui-workspan-context-button inline-flex h-6 min-w-0 items-center gap-1 rounded-md px-2 text-[11px] font-medium"
+                data-selected={option.key === selectedProjectKey ? "true" : "false"}
+                role="tab"
+                aria-selected={option.key === selectedProjectKey}
+                aria-label={`${option.project}; ${t("terminal.status.running")}: ${option.running}; ${t("terminal.status.done")}: ${option.done}; ${t("terminal.status.failed")}: ${option.failed}; ${t("terminal.status.attention")}: ${option.attention}`}
+                title={option.project}
+                onClick={() => { setStatusFilter("all"); onActivateProject(option.key); }}
+              >
+                <span className="truncate">{option.project}</span>
+                <span className="ui-workspan-context-status inline-flex shrink-0 items-center gap-0.5" title={t("terminal.status.summary")}>
+                  {option.running ? <span className="ui-workspan-status-running">●</span> : null}
+                  {option.done ? <span className="ui-workspan-status-done">✓</span> : null}
+                  {option.failed ? <span className="ui-workspan-status-failed">!</span> : null}
+                  {option.attention ? <span className="ui-workspan-status-attention">◉</span> : null}
+                </span>
+              </button>
+              <button
+                type="button"
+                className="ui-focus-ring ui-workspan-project-hide inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
+                disabled={hideIds.length === 0}
+                onClick={(event) => { event.stopPropagation(); onHideProjectTerminals(hideIds); }}
+                aria-label={hideLabel}
+                title={hideLabel}
+              >
+                <X size={13} strokeWidth={2} aria-hidden="true" />
+              </button>
+            </div>
+          );
+        })}
       </div>
       <div
         ref={tabScrollRef}
@@ -151,35 +210,22 @@ export function WorkspanTabBar({
           event.preventDefault();
         }}
       >
-        <div className="ui-workspan-status-filter inline-flex shrink-0 items-center gap-0.5">
-          {(["all", "running", "done", "failed"] as const).map((filter) => (
-            <button
-              key={filter}
-              type="button"
-              className="ui-workspan-status-filter-button"
-              data-selected={statusFilter === filter ? "true" : "false"}
-              onClick={() => setStatusFilter(filter)}
-              title={filter === "all" ? t("terminal.status.all") : t(`terminal.status.${filter}` as never)}
-            >
-              {filter === "all" ? "All" : filter === "running" ? "●" : filter === "done" ? "✓" : "!"}
-            </button>
-          ))}
-        </div>
-        <SortableContext
-          items={visibleModels.map(({ workspan }) => `${WORKSPAN_DRAG_PREFIX}${workspan.id}`)}
-          strategy={horizontalListSortingStrategy}
-        >
-          {visibleModels.map((model, index) => renderTab(model, index))}
-        </SortableContext>
-        <button
-          type="button"
-          className="ui-workspan-new-tab-button inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md"
-          onClick={() => onNewTab(visibleModels[visibleModels.length - 1]?.singleSession?.id)}
-          aria-label={t("terminal.toolbar.newTerminal")}
-          title={t("terminal.toolbar.newTerminal")}
-        >
-          <Plus size={15} strokeWidth={2} aria-hidden="true" />
-        </button>
+        {groups.map(({ group, models: items }) => (
+          <div key={group.key} className="ui-workspan-project-group" role="group" aria-label={groupLabel(group)}>
+            <SortableContext items={items.map(({ workspan }) => `${WORKSPAN_DRAG_PREFIX}${workspan.id}`)} strategy={horizontalListSortingStrategy}>
+              {items.map((model) => {
+                // Menu targets follow this exact displayed project/global-status row.
+                // Keep each model's close scope, including mixed/scoped Workspans.
+                const index = visibleModels.indexOf(model);
+                return renderTab(model, {
+                  leftSessionIds: visibleModels.slice(0, index).flatMap((item) => item.closeSessionIds),
+                  rightSessionIds: visibleModels.slice(index + 1).flatMap((item) => item.closeSessionIds),
+                  otherSessionIds: visibleModels.filter((item) => item !== model).flatMap((item) => item.closeSessionIds),
+                }, badges.get(model.workspan.id)!, () => activateResult(model));
+              })}
+            </SortableContext>
+          </div>
+        ))}
         {(statusSummary.running > 0 || statusSummary.done > 0 || statusSummary.failed > 0) && (
           <span className="ui-workspan-status-summary inline-flex shrink-0 items-center gap-2 px-2 text-[10px] font-medium" title={t("terminal.status.summary")}>
             {statusSummary.running > 0 && <span className="ui-workspan-status-count ui-workspan-status-running">◉ {statusSummary.running}</span>}
@@ -223,12 +269,16 @@ export function WorkspanTabBar({
                 >
                   <button
                     type="button"
-                    className="ui-focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left"
+                    className="ui-focus-ring ui-workspan-overflow-target flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left"
+                    style={{ "--worktree-identity-color": badges.get(model.workspan.id)?.color } as CSSProperties}
                     onClick={() => {
-                      onActivate(model.workspan.id);
+                      activateResult(model);
                       onToggleList(false);
                     }}
-                    title={model.title}
+                    title={[model.title, badges.get(model.workspan.id)?.label, ...model.members.map((member) =>
+                      [member.project, member.worktreeName ?? t("terminal.context.rootDirectory"), member.branch,
+                        member.worktreePath, member.environmentType, member.sshHostId].filter(Boolean).join(" / ")),
+                      model.mixedProject ? t("terminal.context.mixedCloseHint") : null].filter(Boolean).join("\n")}
                   >
                     <span
                       className="ui-tab-runtime-dot h-2 w-2 shrink-0 rounded-full"
@@ -243,7 +293,12 @@ export function WorkspanTabBar({
                     ) : (
                       <Terminal size={14} strokeWidth={1.8} className="shrink-0" aria-hidden="true" />
                     )}
-                    <span className="min-w-0 flex-1 truncate">{model.title}</span>
+                    <span className="ui-workspan-overflow-text flex min-w-0 flex-1 flex-col items-start overflow-hidden">
+                      <span className="w-full truncate">{model.title}</span>
+                      <span className="ui-workspan-worktree-badge" title={badges.get(model.workspan.id)?.label}>
+                        {badges.get(model.workspan.id)?.label}
+                      </span>
+                    </span>
                   </button>
                   <button
                     type="button"

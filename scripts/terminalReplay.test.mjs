@@ -1,3 +1,6 @@
+import { createRequire } from "node:module";
+globalThis.self = globalThis;
+const {Terminal: RealTerminal} = createRequire(import.meta.url)("@xterm/xterm");
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -147,6 +150,8 @@ const outputListeners = new Map();
 export const resizeCalls = [];
 export const replayAcknowledgments = [];
 export const terminalProcessManager = {
+  hasInteractivePriority() { return false; },
+  consumeInteractivePriority() { return false; },
   async subscribeOutput(sessionId, listener) {
     outputListeners.set(sessionId, listener);
     return () => { if (outputListeners.get(sessionId) === listener) outputListeners.delete(sessionId); };
@@ -164,6 +169,23 @@ export function resetManager() {
 }
 `);
 
+// This scheduling harness deliberately does not parse VT. Real producer/origin
+// safety is covered by terminalHistoricalParser.test.mjs, not wall-clock flags.
+for (const name of ["terminalLatencyDiagnostics", "terminalWriteScheduling"]) {
+  await build({ entryPoints: [fileURLToPath(new URL(`../src/features/terminal/lib/${name}.ts`, import.meta.url))], bundle: true, platform: "node", format: "esm", outfile: join(tempDir, `${name}.mjs`) });
+}
+await build({entryPoints:["src/shared/lib/terminalHistoricalParser.ts"],bundle:true,platform:"node",format:"esm",outfile:join(tempDir,"realOrigin.mjs")});
+const realOrigin = await import(pathToFileURL(join(tempDir,"realOrigin.mjs")));
+writeFileSync(join(tempDir, "terminalHistoricalParser.mjs"), `
+import * as real from "./realOrigin.mjs";
+export function writeTerminalOutput(t, text, origin, cb, normalize, isCurrent) {
+  if (t._core) return real.writeTerminalOutput(t,text,origin,cb,normalize,isCurrent);
+  t.origins ??= [];
+  t.origins.push(origin);
+  t.write(normalize ? normalize(text, origin) : text, cb);
+}
+export function resetTerminalOutputOrigin(t) { if (t._core) real.resetTerminalOutputOrigin(t); }
+`);
 const source = readFileSync(new URL("../src/features/terminal/hooks/useTerminalDisplay.ts", import.meta.url), "utf8");
 const transpiled = ts.transpileModule(source, {
   compilerOptions: {
@@ -172,10 +194,13 @@ const transpiled = ts.transpileModule(source, {
   },
   fileName: "useTerminalDisplay.ts",
 }).outputText
+  .replace('from "../../../shared/lib/terminalHistoricalParser"', 'from "./terminalHistoricalParser.mjs"')
   .replace('from "../../../shared/lib/terminalQueryPolicy"', 'from "./terminalQueryPolicy.mjs"')
   .replace('from "../../../shared/lib/terminalColorQueryFilter"', 'from "./terminalColorQueryFilter.mjs"')
   .replace('from "react"', 'from "./react.mjs"')
   .replace('from "@xterm/addon-webgl"', 'from "./webgl.mjs"')
+  .replace('from "../lib/terminalLatencyDiagnostics"', 'from "./terminalLatencyDiagnostics.mjs"')
+  .replace('from "../lib/terminalWriteScheduling"', 'from "./terminalWriteScheduling.mjs"')
   .replace('from "../lib/terminalVisibility"', 'from "./visibility.mjs"')
   .replace('from "../../../shared/lib/terminalThemes"', 'from "./themes.mjs"')
   .replace('from "../../../shared/platform/logger"', 'from "./logger.mjs"')
@@ -286,6 +311,8 @@ class FakeTerminal {
     // 释放该尺寸监听器。
     return { dispose: () => this.resizeListeners.delete(listener) };
   }
+
+  reset() { this.events.push("reset"); }
 
   // 提供不加载真实插件的占位入口。
   loadAddon() {}
@@ -803,18 +830,18 @@ test("display permits first startup replay, consumes on callback, suppresses rep
   const replay = { ...frame(1, "\x1b[c", 80, 24, true), sessionId };
   const completion = output.completeReplay([replay]);
   await Promise.resolve();
-  assert.equal(queryPolicy.canAnswerTerminalQuery(terminal), true);
+  assert.equal(terminal.origins.at(-1), "live");
   assert.equal(queryPolicy.canAnswerTerminalQueryFrame(sessionId, 1, true), true);
   terminal.finishNextWrite();
   assert.equal(await completion, true);
   assert.equal(queryPolicy.canAnswerTerminalQueryFrame(sessionId, 1, true), false);
   managerStub.emitOutput(delivery(replay, []), sessionId);
   flushAnimationFrames();
-  assert.equal(queryPolicy.canAnswerTerminalQuery(terminal), false);
+  assert.equal(terminal.origins.at(-1), "history");
   terminal.finishNextWrite();
   managerStub.emitOutput(delivery({ ...frame(2, "\x1b[c", 80, 24), kind: "output", sessionId }, []), sessionId);
   flushAnimationFrames();
-  assert.equal(queryPolicy.canAnswerTerminalQuery(terminal), true);
+  assert.equal(terminal.origins.at(-1), "live");
   terminal.finishNextWrite();
   assert.equal(events.filter(value => value === "write:\x1b[c").length, 3);
   output.dispose();
@@ -831,11 +858,172 @@ test("display suppresses old-process replay colors while retaining setter order"
   await output.ready;
   const completion = output.completeReplay([{ ...frame(9, "\x1b]4;1;#ff0000;2;?\x07\x1b[31mRED\x1b[c", 80, 24, true), sessionId }]);
   await Promise.resolve();
-  assert.equal(queryPolicy.canAnswerTerminalQuery(terminal), false);
-  assert.ok(events.includes("write:\x1b]4;1;#ff0000\x07\x1b[31mRED\x1b[c"));
+  assert.equal(terminal.origins.at(-1), "history");
+  assert.ok(events.some(event => event.includes("#ff0000;2;?")), "color policy now runs inside the provenance adapter");
   terminal.finishNextWrite();
   assert.equal(await completion, true);
   output.dispose();
   detachViewport();
   queryPolicy.forgetTerminalQuerySession(sessionId);
+});
+
+for (const explicit of [false, true]) {
+  test(`attach ${explicit ? 'explicit+stream' : '[] streamed'} waits for real callbacks and end fit`, async () => {
+    managerStub.resetManager();
+    const f = createDisplay();
+    const output = f.display.attachPtyOutput({waitForReplay: true});
+    await output.ready;
+    const commits = [];
+    managerStub.emitOutput(delivery({...frame(0, '', 0, 0), kind: 'reset'}, commits));
+    managerStub.emitOutput(delivery(frame(2, '历史😀', 90, 20), commits));
+    managerStub.emitOutput(delivery(frame(0, '', 0, 0, true), commits));
+    managerStub.emitOutput(delivery({...frame(3, 'live', 120, 30), kind: 'output'}, commits));
+    let done = false;
+    const completion = output.completeReplay(explicit ? [frame(1, 'earlier', 80, 24)] : []).then(value => {done = value; return value;});
+    if (explicit) { f.terminal.finishNextWrite(); await Promise.resolve(); await Promise.resolve(); }
+    flushAnimationFrames();
+    assert.equal(done, false);
+    assert.ok(f.events.includes('write:历史😀'));
+    assert.equal(f.events.includes('write:live'), false);
+    f.terminal.finishNextWrite();
+    assert.equal(done, false);
+    flushAnimationFrames();
+    assert.equal(await completion, true);
+    assert.ok(f.events.indexOf('resize:120x30') > f.events.indexOf('write:历史😀'));
+    assert.ok(f.events.indexOf('write:live') > f.events.indexOf('resize:120x30'));
+    f.terminal.finishNextWrite();
+    assert.deepEqual(commits.map(c => c.sequence), [0, 2, 0, 3]);
+    output.dispose(); f.detachViewport();
+  });
+}
+
+test('cancelled explicit completion resolves false before disposed xterm callbacks; replacement owns ACK/claim', async () => {
+  managerStub.resetManager();
+  const sessionId = 'cancel-replay';
+  queryPolicy.createTerminalQuerySession(sessionId);
+  const f = createDisplay(undefined, {sessionId});
+  const old = f.display.attachPtyOutput({waitForReplay: true});
+  await old.ready;
+  const completion = old.completeReplay([frame(1, 'old', 80, 24)]);
+  const replacement = f.display.attachPtyOutput();
+  await replacement.ready;
+  assert.equal(await completion, false);
+  const commits = [];
+  managerStub.emitOutput(delivery({...frame(2, 'replacement', 80, 24), kind:'output'}, commits), sessionId);
+  flushAnimationFrames();
+  f.terminal.finishNextWrite();
+  assert.equal(queryPolicy.canAnswerTerminalQueryFrame(sessionId, 1, true), true);
+  assert.deepEqual(managerStub.replayAcknowledgments, []);
+  managerStub.emitOutput(delivery({...frame(3, 'next', 80, 24), kind:'output'}, commits), sessionId);
+  flushAnimationFrames();
+  assert.equal(f.events.includes('write:next'), false, 'old callback cannot clear replacement write-in-progress');
+  old.dispose();
+  f.terminal.finishNextWrite();
+  flushAnimationFrames();
+  assert.ok(f.events.includes('write:next'));
+  f.terminal.finishNextWrite();
+  assert.deepEqual(commits.map(c=>c.sequence), [2,3]);
+  replacement.dispose(); f.detachViewport(); queryPolicy.forgetTerminalQuerySession(sessionId);
+});
+
+test('stream interruption before final callback preserves completion false and cannot ACK a replacement', async () => {
+  managerStub.resetManager();
+  const f = createDisplay();
+  const old = f.display.attachPtyOutput({waitForReplay:true}); await old.ready;
+  const commits = [];
+  const completion = old.completeReplay([]);
+  managerStub.emitOutput(delivery(frame(1, 'inflight', 90,20,true), commits));
+  flushAnimationFrames(); old.dispose();
+  assert.equal(await completion, false);
+  const replacement = f.display.attachPtyOutput(); await replacement.ready;
+  f.terminal.finishNextWrite();
+  assert.deepEqual(commits, []);
+  assert.equal(f.events.includes('resize:120x30'), false);
+  replacement.dispose(); f.detachViewport();
+});
+
+test('streamed UTF8 carry joins Chinese/emoji but reset abandons partial bytes', async () => {
+  managerStub.resetManager();
+  const f = createDisplay(); const output = f.display.attachPtyOutput(); await output.ready;
+  const bytes = new TextEncoder().encode('中文😀'); const commits = [];
+  managerStub.emitOutput(delivery({...frame(1,'',80,24), data:bytes.slice(0,2)}, commits));
+  managerStub.emitOutput(delivery({...frame(2,'',80,24), data:bytes.slice(2), replayBatchEnd:true}, commits));
+  flushAnimationFrames(); f.terminal.finishNextWrite(); flushAnimationFrames();
+  assert.ok(f.events.includes('write:中文😀'));
+  managerStub.emitOutput(delivery({...frame(3,'',80,24), data:bytes.slice(0,2)}, commits));
+  managerStub.emitOutput(delivery({...frame(0,'',0,0),kind:'reset'}, commits));
+  managerStub.emitOutput(delivery(frame(4,'fresh',80,24,true),commits));
+  flushAnimationFrames(); flushAnimationFrames(); flushAnimationFrames();
+  f.terminal.finishNextWrite(); flushAnimationFrames();
+  assert.ok(f.events.includes('write:fresh'));
+  assert.equal(f.events.some(e=>e.includes('�')),false);
+  output.dispose(); f.detachViewport();
+});
+
+test('replay end does not complete without current container fit; retry needs no timeout',async()=>{
+  managerStub.resetManager();
+  const dims={cols:0,rows:0}; const f=createDisplay(dims);
+  const output=f.display.attachPtyOutput({waitForReplay:true});await output.ready;
+  let done=false;const completion=output.completeReplay([]).then(v=>{done=v;return v;});
+  managerStub.emitOutput(delivery(frame(1,'replay',90,20,true),[]));
+  flushAnimationFrames(); f.terminal.finishNextWrite(); await Promise.resolve();
+  assert.equal(done,false);
+  dims.cols=120; dims.rows=30;
+  f.display.scheduleFit(true);flushAnimationFrames();
+  assert.equal(await completion,true);
+  assert.ok(f.events.includes('resize:120x30'));
+  output.dispose();f.detachViewport();
+});
+
+test('actual xterm streamed attach barrier waits async parser continuation, commits sequence once and then fits',async()=>{
+  managerStub.resetManager();
+  const f=createDisplay();
+  const terminal=new RealTerminal({cols:80,rows:24,allowProposedApi:true});
+  const owner=realOrigin.installTerminalHistoricalParser(terminal);
+  f.terminalRef.current=terminal;
+  let resume;let enteredResolve;
+  const entered=new Promise(resolve=>{enteredResolve=resolve;});
+  terminal.parser.registerCsiHandler({final:'z'},()=>new Promise(resolve=>{resume=resolve;enteredResolve();}));
+  const sink=[];terminal.onData(data=>sink.push(data));
+  const output=f.display.attachPtyOutput({waitForReplay:true});await output.ready;
+  let done=false;const completion=output.completeReplay([]).then(v=>{done=v;return v;});
+  const commits=[];
+  managerStub.emitOutput(delivery(frame(1,'\x1b[z中文😀\x1b[?1004h\x1b[6n',90,20,true),commits));
+  flushAnimationFrames();await entered;
+  assert.equal(done,false);assert.deepEqual(commits,[]);assert.equal(terminal.cols,90);
+  terminal.input('genuine-input',true);assert.deepEqual(sink,['genuine-input']);
+  resume(true);assert.equal(await completion,true);
+  assert.equal(terminal.cols,120);assert.equal(terminal.rows,30);
+  assert.equal(terminal.buffer.active.getLine(0).translateToString(true),'中文😀');
+  assert.deepEqual(sink,['genuine-input']);assert.deepEqual(commits.map(c=>c.sequence),[1]);
+  output.dispose();owner.dispose();terminal.dispose();f.detachViewport();
+});
+
+// Exercise the controller's exact viewport registration block with real display/parser.
+test('desktop visibility reclaim and every size reader wait for async history and actual current fit', async () => {
+  managerStub.resetManager();
+  const dims={cols:0,rows:0}; const f=createDisplay(dims);
+  const terminal=new RealTerminal({cols:80,rows:24,allowProposedApi:true});
+  const owner=realOrigin.installTerminalHistoricalParser(terminal);f.terminalRef.current=terminal;
+  const detach=f.display.attachViewport(terminal);
+  let resume, enteredResolve;const entered=new Promise(r=>{enteredResolve=r;});
+  terminal.parser.registerCsiHandler({final:'z'},()=>new Promise(r=>{resume=r;enteredResolve();}));
+  const source=readFileSync('src/features/terminal/hooks/useXTermController.ts','utf8');
+  const block=source.slice(source.indexOf('    const visible = () => isVisible && document.visibilityState'),source.indexOf('  }, [sessionId, isVisible]);'));
+  let viewport;
+  const cleanup=new Function('isVisible','sessionId','reclaimViewportSize','getPtyViewportSize','registerDesktopViewport',block)(true,'s',f.display.reclaimViewportSize,f.display.getPtyViewportSize,(_id,v)=>{viewport=v;return ()=>{};});
+  const output=f.display.attachPtyOutput({waitForReplay:true});await output.ready;
+  const complete=output.completeReplay([]);
+  managerStub.emitOutput(delivery(frame(1,'[zHISTORY',90,20,true),[]));
+  flushAnimationFrames();await entered;
+  for(let i=0;i<3;i++){setDocumentVisibility('hidden');setDocumentVisibility('visible');viewport.restore();flushAnimationFrames();assert.equal(viewport.dimensions(),null);}
+  assert.deepEqual(managerStub.resizeCalls,[],'no historical geometry reaches PTY sink');
+  resume(true);await new Promise(r=>setTimeout(r,20));
+  assert.equal(viewport.dimensions(),null,'parser completion alone cannot publish historical geometry');
+  assert.deepEqual(managerStub.resizeCalls,[]);
+  dims.cols=120;dims.rows=30;viewport.restore();flushAnimationFrames();assert.equal(await complete,true);
+  assert.deepEqual(viewport.dimensions(),{cols:120,rows:30});
+  assert.ok(managerStub.resizeCalls.length>0);assert.ok(managerStub.resizeCalls.every(c=>c.cols===120&&c.rows===30));
+  assert.equal(timerCallbacks.size,0,'no timer-based historical readiness proof');
+  cleanup();output.dispose();detach();owner.dispose();terminal.dispose();f.detachViewport();
 });

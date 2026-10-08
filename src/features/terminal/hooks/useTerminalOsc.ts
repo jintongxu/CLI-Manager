@@ -35,6 +35,7 @@ export interface NormalizeTerminalOutputOptions {
 }
 
 export interface UseTerminalOscResult {
+  resetTerminalOutput: () => void;
   normalizeTerminalOutput: (text: string, options?: NormalizeTerminalOutputOptions) => string;
   updateSessionCwdIfChanged: (cwd: string | null) => void;
 }
@@ -339,6 +340,12 @@ export function useTerminalOsc({
   };
 
   return {
+    resetTerminalOutput: () => {
+      runtimeOscBufferRef.current = "";
+      specialOscBufferRef.current = "";
+      dcsBufferRef.current = "";
+      sshMarkerBufferRef.current = "";
+    },
     normalizeTerminalOutput,
     updateSessionCwdIfChanged,
   };

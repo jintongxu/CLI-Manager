@@ -1,0 +1,3 @@
+{"file":".trellis/spec/backend/worktree-isolation-contracts.md","reason":"Finish authority, receipts and non-runnable pending safety"}
+{"file":".trellis/spec/frontend/workspace-session-restore-contracts.md","reason":"Restore identity and ask/auto daemon/snapshot invariants"}
+{"file":".trellis/spec/guides/fix-triage-guide.md","reason":"Root cause and impact/scenario fallback requirements"}
