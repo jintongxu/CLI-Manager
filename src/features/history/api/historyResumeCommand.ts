@@ -122,6 +122,19 @@ function normalizeSessionId(sessionId: string): string | null {
   return trimmed && !/[\s\0\r\n]/.test(trimmed) ? trimmed : null;
 }
 
+function normalizePiSessionId(sessionId: string): string | null {
+  const normalized = normalizeSessionId(sessionId);
+  return normalized && /^[A-Za-z0-9_][A-Za-z0-9_-]*$/.test(normalized) ? normalized : null;
+}
+
+export function buildPiResumeCommand(
+  sessionId: string | null | undefined,
+  project?: ResumeProject | null,
+): string {
+  const id = normalizePiSessionId(sessionId ?? "");
+  return appendSessionCliArgs(id ? `pi --session ${id}` : "pi --continue", "pi", project);
+}
+
 function normalizeOpenCodeSessionId(sessionId: string): string | null {
   const normalized = normalizeSessionId(sessionId);
   return normalized && /^ses_[A-Za-z0-9]+$/.test(normalized) ? normalized : null;
@@ -152,7 +165,7 @@ export function buildRemoteHandoffResumeCommand(
 ): string | null {
   const normalizedId = agent === "opencode"
     ? normalizeOpenCodeSessionId(sessionId)
-    : normalizeSessionId(sessionId);
+    : agent === "pi" ? normalizePiSessionId(sessionId) : normalizeSessionId(sessionId);
   if (!normalizedId) return null;
 
   if (agent === "codex") {
@@ -180,7 +193,7 @@ export function buildHistoryResumeCommand(
 ): string | null {
   const sessionId = session.source === "opencode"
     ? normalizeOpenCodeSessionId(session.session_id)
-    : normalizeSessionId(session.session_id);
+    : session.source === "pi" ? normalizePiSessionId(session.session_id) : normalizeSessionId(session.session_id);
   if (!sessionId) return null;
   if (session.source === "kimi" && !isValidKimiSessionId(sessionId)) return null;
   if (session.source === "grok" && !isValidGrokSessionId(sessionId)) return null;
@@ -189,7 +202,7 @@ export function buildHistoryResumeCommand(
     return appendSessionCliArgs(`opencode --session ${sessionId}`, "opencode", project);
   }
   if (session.source === "pi") {
-    return appendSessionCliArgs(`pi --session ${sessionId}`, "pi", project);
+    return buildPiResumeCommand(sessionId, project);
   }
   if (session.source === "claude") {
     return appendResumeCliArgs(`claude --resume ${sessionId}`, "claude", project);

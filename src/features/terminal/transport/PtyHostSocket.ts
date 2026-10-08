@@ -159,6 +159,12 @@ export class PtyHostSocket {
   }>();
   private readonly latestReceivedSequence = new Map<string, number>();
   private readonly latestCommittedSequence = new Map<string, number>();
+  private readonly disconnectListeners = new Set<() => void>();
+  subscribeDisconnect(listener: () => void): () => void {
+    this.disconnectListeners.add(listener);
+    return () => this.disconnectListeners.delete(listener);
+  }
+
   private readonly attachedSessions = new Set<string>();
   private readonly closedSessions = new Set<string>();
   private heartbeatTimer: number | null = null;
@@ -841,6 +847,9 @@ export class PtyHostSocket {
   }
 
   private emitOutputFrame(frame: TerminalBinaryFrame): void {
+    // A daemon reset replaces the renderer checkpoint prefix, not query-answer
+    // history. Reconnect must resume from the reconstructed committed baseline.
+    if (frame.kind === "reset") this.latestCommittedSequence.set(frame.sessionId, 0);
     const listeners = this.outputListeners.get(frame.sessionId);
     if (listeners?.size) listeners.forEach((listener) => listener(frame));
     else this.enqueuePendingOutput(frame.sessionId, [frame]);
@@ -962,6 +971,7 @@ export class PtyHostSocket {
 
   private handleDisconnect(error: Error, socket?: WebSocket, details?: SocketDisconnectDetails): void {
     if (socket && this.socket !== socket) return;
+    this.disconnectListeners.forEach(listener => listener());
     this.stopHeartbeat();
     this.socket = null;
     const connectedFeatures = [...this.connectedFeatures];

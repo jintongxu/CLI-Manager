@@ -457,3 +457,16 @@ test("strict manager close with real transport retains caches and consumer on fa
   assert.equal(manager.hasInteractivePriority(id), false);
   ptyHostSocket.socket?.close();
 });
+test('disconnect notification closes renderer generation but stale socket cannot revoke replacement', {concurrency:false},async()=>{
+ FakeWebSocket.mode='normal';const socket=new PtyHostSocket();await socket.connect();let count=0;
+ const unlisten=socket.subscribeDisconnect(()=>count++);
+ socket.handleDisconnect(new Error('stale'),{}, {cause:'close',authenticated:true});assert.equal(count,0);
+ socket.socket.close();await Promise.resolve();assert.equal(count,1);unlisten();
+ await socket.connect();socket.socket.close();await Promise.resolve();assert.equal(count,1);
+});
+test('authoritative reset replaces transport ACK baseline independently of prior committed sequence',{concurrency:false},async()=>{
+ const socket=new PtyHostSocket();socket.latestCommittedSequence.set('reset-baseline',40);
+ socket.emitOutputFrame({kind:'reset',sessionId:'reset-baseline',sequence:0,cols:80,rows:24,data:new Uint8Array()});
+ assert.equal(socket.getLatestCommittedSequence('reset-baseline'),0);
+ socket.acknowledge('reset-baseline',12,0);assert.equal(socket.getLatestCommittedSequence('reset-baseline'),12);
+});

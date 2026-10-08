@@ -270,3 +270,27 @@ test("Process key synchronously restores the helper textarea before composition 
     globalThis.cancelAnimationFrame = previousCancelAnimationFrame;
   }
 });
+test('native IME rejection and deferred recovery never cross readiness generation',async()=>{
+ const listeners=new Map(),textareaListeners=new Map(),forwarded=[];
+ const textarea={value:'pending',style:{},addEventListener(type,fn){textareaListeners.set(type,fn);},removeEventListener(){}};
+ const container={scrollTop:0,scrollLeft:0,querySelector:s=>s==='.xterm-helper-textarea'?textarea:null,
+  addEventListener(type,fn){if(!listeners.has(type))listeners.set(type,[]);listeners.get(type).push(fn);},removeEventListener(){}};
+ const disposable={dispose(){}};
+ const terminal={cols:80,rows:24,options:{fontSize:14},buffer:{active:{cursorX:0,cursorY:0,viewportY:0,getLine(){}}},onCursorMove:()=>disposable,onRender:()=>disposable,onResize:()=>disposable};
+ const prev={window:globalThis.window,requestAnimationFrame:globalThis.requestAnimationFrame,cancelAnimationFrame:globalThis.cancelAnimationFrame};
+ globalThis.window=globalThis;globalThis.requestAnimationFrame=()=>1;globalThis.cancelAnimationFrame=()=>{};
+ let ready=false,epoch=0;
+ const detach=attachTerminalIme({terminal,container,isActiveRef:{current:true},isComposingRef:{current:false},osPlatformRef:{current:'macos'},fontSize:14,
+  getTerminalRenderedCellSize:()=>({width:8,height:16}),forwardNativeInput:data=>forwarded.push(data),
+  captureInputPermission:()=>{const accepted=ready,owner=epoch;return()=>accepted&&ready&&owner===epoch;},
+  clearSuggestion(){},updateSuggestionPosition(){},scheduleFit(){},onCompositionCommitted(){}});
+ const dispatch=(type,props={})=>{let stopped=false;const e={type,target:textarea,preventDefault(){},stopImmediatePropagation(){stopped=true;},...props};for(const fn of listeners.get(type)||[]){fn(e);if(stopped)break;}return stopped;};
+ try{
+  assert.equal(dispatch('beforeinput',{inputType:'insertText',data:'!'}),true);ready=true;
+  await new Promise(r=>setTimeout(r,5));assert.deepEqual(forwarded,[]);
+  dispatch('beforeinput',{inputType:'insertText',data:'!'});epoch++;await new Promise(r=>setTimeout(r,5));assert.deepEqual(forwarded,[]);
+  assert.equal(dispatch('compositionstart'),false);epoch++;
+  assert.equal(dispatch('compositionend'),true);assert.equal(textarea.value,'');
+  dispatch('beforeinput',{inputType:'insertText',data:'?'});await new Promise(r=>setTimeout(r,5));assert.deepEqual(forwarded,['?']);
+ }finally{detach();Object.assign(globalThis,prev);}
+});

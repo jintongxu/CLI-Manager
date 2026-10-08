@@ -1,37 +1,31 @@
-import test from "node:test";
-import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-
-const source = readFileSync(
-  new URL("../src/features/terminal/hooks/useXTermController.ts", import.meta.url),
-  "utf8",
-);
-
-test("terminal remount snapshots the buffer during layout cleanup", () => {
-  assert.match(source, /useLayoutEffect\(\(\) => \(\) => \{[\s\S]*?snapshotBeforeUnmountRef\.current\?\.\(\);[\s\S]*?snapshotBeforeUnmountRef\.current = null;/);
-  assert.match(source, /snapshotBeforeUnmountRef\.current = snapshotLifecycle\.snapshotBeforeUnmount;/);
-  assert.equal(source.match(/snapshotBeforeUnmountRef\.current = snapshotLifecycle/g)?.length, 1);
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const source=readFileSync('src/features/terminal/hooks/useXTermController.ts','utf8');
+// Wiring checks supplement real xterm/lifecycle/manager/display behavior tests.
+test('layout cleanup always owns snapshot, including interrupted initial hydration',()=>{
+ assert.match(source,/useLayoutEffect\(\(\) => \(\) => \{[\s\S]*?snapshotBeforeUnmountRef\.current\?\.\(\)/);
+ assert.equal(source.match(/snapshotBeforeUnmountRef\.current = snapshotLifecycle\.snapshotBeforeUnmount/g)?.length,1);
+ assert.ok(source.indexOf('snapshotBeforeUnmountRef.current = snapshotLifecycle.snapshotBeforeUnmount')<source.indexOf('const initialTerminalOutput ='));
 });
-
-test("PTY output subscription waits for display restore and remains cancellable", () => {
-  assert.match(source, /const initialDisplayReady = new Promise<void>/);
-  assert.match(source, /terminal\.scrollToBottom\(\);[\s\S]*?refreshTerminalViewport\(terminal\);[\s\S]*?finishInitialDisplayRestore\(true\);/);
-  assert.match(source, /const finishInitialDisplayRestore = \(hasSnapshot: boolean\) => \{[\s\S]*?scheduleFit\(true\);[\s\S]*?markInitialDisplayReady\(\);/);
-  assert.match(source, /initialDisplayReady\.then\(\(\) => \{[\s\S]*?attachOutputTimer = window\.setTimeout\(\(\) => \{[\s\S]*?attachOutput\(\);/);
-  assert.match(source, /if \(attachOutputTimer !== null\) \{[\s\S]*?window\.clearTimeout\(attachOutputTimer\);[\s\S]*?ptyOutput\?\.dispose\(\);/);
+test('same-process hydration has no shell cleanup; authoritative replay bypasses old images',()=>{
+ assert.match(source,/const coldHistory = !previousDisplay && shouldResetTerminalSnapshotInputModes\(sessionId\)/);
+ assert.match(source,/!terminalProcessManager\.canContinueSnapshot\(sessionId, sessionSnapshot\?\.initialTerminalSequence\)/);
+ assert.match(source,/const initialTerminalOutput = authoritativeReplay \? undefined : sessionSnapshot\?\.initialTerminalOutput/);
+ assert.match(source,/const restoredState = coldHistory[\s\S]*?: restoredOutput;\s*writeTerminalOutput\(terminal, restoredState, "history"/);
+ assert.match(source,/if \(!hasSnapshot \|\| !coldHistory\)/);
+ assert.match(source,/terminalProcessManager\.attach\(sessionId, true\)/);
 });
-
-test("restored shell snapshots fit the current pane and leave a clean output line", () => {
-  assert.match(source, /initialDisplayRestoreRaf = window\.requestAnimationFrame\(\(\) => \{[\s\S]*?fitAddon\.proposeDimensions\(\)[\s\S]*?terminal\.resize\(dimensions\.cols, dimensions\.rows\);/);
-  assert.match(source, /const restoredCursor = shouldHideCodexCursor\(terminal\) \? "\\x1b\[\?25l" : "\\x1b\[\?25h";/);
-  assert.match(source, /writeTerminalOutput\(terminal,.*\$\{restoredOutput\}.*\$\{inputModeReset\}`, "history", \(\) => \{/);
-  assert.match(source, /writeTerminalOutput\(terminal,[\s\S]*?writeDeferredStartup\(\);[\s\S]*?finishInitialDisplayRestore\(true\);/);
-  assert.match(source, /if \(initialDisplayRestoreRaf !== null\) \{[\s\S]*?window\.cancelAnimationFrame\(initialDisplayRestoreRaf\);/);
+test('subscription follows parser restore barrier with no speculative timer; generation scopes keyboard and async paste',()=>{
+ assert.match(source,/void initialDisplayReady\.then\(\(\) => \{\s*if \(terminalRef\.current === terminal\) attachOutput\(\)/);
+ assert.doesNotMatch(source,/attachOutputTimer/);
+ assert.match(source,/terminal\.attachCustomKeyEventHandler\(\(e\) => \{\s*if \(!canAcceptTerminalInput\(terminal\)\)/);
+ assert.match(source,/const permission = captureTerminalInputPermission\(terminal\)/);
+ assert.match(source,/if \(!terminal \|\| !canAcceptTerminalInput\(terminal\)\) return;/);
 });
-
-test("only restored snapshots repair the cursor after fit before releasing output", () => {
-  const finish = source.slice(source.indexOf("const finishInitialDisplayRestore ="), source.indexOf("let initialDisplayRestoreRaf:"));
-  assert.match(finish, /if \(!hasSnapshot\) \{\s*markInitialDisplayReady\(\);\s*return;/);
-  assert.match(finish, /terminal\.write\("\\x1b\[999B\\r\\n", \(\) => \{\s*if \(terminalRef\.current !== terminal\) return;\s*terminal\.scrollToBottom\(\);\s*markInitialDisplayReady\(\);/);
-  assert.match(source, /\} else \{\s*writeDeferredStartup\(\);\s*finishInitialDisplayRestore\(false\);/);
+test('pending startup executes after authoritative replay through a session-owned claim, never image hydration',()=>{
+ assert.doesNotMatch(source,/if \(authoritativeReplay \|\| !sessionSnapshot\?\.deferStartup/);
+ assert.match(source,/terminalProcessManager\.writeDeferredStartup\([\s\S]*?\(\) => terminalRef\.current === terminal/);
+ assert.match(source,/const replayCompleted = await output\.completeReplay\(attach\.replay\);[\s\S]*?if \(!replayCompleted \|\| !output\.isCurrent\(\)[\s\S]*?if \(attach\.attached\) writeDeferredStartup\(\)/);
+ assert.doesNotMatch(source,/writeDeferredStartup\(\);\s*finishInitialDisplayRestore/);
 });

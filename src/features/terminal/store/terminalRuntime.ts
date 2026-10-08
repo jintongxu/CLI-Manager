@@ -625,6 +625,8 @@ export function createTerminalRuntime(
             return {
               ...session,
               ...(cliSessionRebind.changed ? { cliSessionId: cliSessionRebind.cliSessionId } : {}),
+              // Persist manual Pi identity so cold restore cannot mistake it for shell history.
+              ...(identitySource === "pi" ? { cliTool: "pi", isAgentSession: true } : {}),
               ...(remoteTranscriptRef && session.remoteTranscriptRef !== remoteTranscriptRef
                 ? { remoteTranscriptRef }
                 : {}),
@@ -641,7 +643,9 @@ export function createTerminalRuntime(
         const boundSession = get().sessions.find((session) => session.id === tabId);
         const persistedSession = useSessionStore.getState().sessions.find((session) => session.id === tabId);
         const persistedCliSessionRebind = resolveCliSessionRebind(persistedSession?.cliSessionId, cliSessionId);
-        if (persistedCliSessionRebind.changed || boundSession?.environmentType === "ssh") {
+        const piIdentityChanged = identitySource === "pi"
+          && (persistedSession?.cliTool !== "pi" || persistedSession?.isAgentSession !== true);
+        if (persistedCliSessionRebind.changed || boundSession?.environmentType === "ssh" || piIdentityChanged) {
           void queueSshSessionPersistence(get().sessions).catch((error) => {
             logWarn("Failed to persist CLI session identity", {
               sessionId: tabId,

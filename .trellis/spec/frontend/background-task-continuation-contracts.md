@@ -28,7 +28,7 @@
   - `background` → daemon 可用时保留 PTY 并退出 UI；不可用时降级到托盘常驻。
   - `minimize` → hide 到托盘，应用与 PTY 均继续运行。
   - `discard` → 完整退出清理并清除工作区恢复快照，不删除 Claude/Codex 原始历史。
-- 无运行任务时走现有完整退出清理；daemon 查询失败时不得把“未知”当作“无后台任务”，只清理可确认的前台 PTY。
+- 无运行任务不等于交互进程已退出：`terminalSessionRestoreEnabled=true` 的普通退出必须复用 daemon background 路径保留全部活 PTY（包括 idle Pi/Shell），daemon 不可用或查询失败则降级托盘，不能误杀。恢复关闭时仍走完整退出清理；该清理分支的 daemon 查询失败仅清理可确认的前台 PTY。
 - 托盘“退出”菜单（`tray-quit-requested`）同样必须经过统一守卫。
 - `RunningTasksExitDialog` 勾选“记住选择”时，必须先 `await updateSetting("exitWithRunningTasksBehavior", choice)` 完成持久化，再执行 background/minimize/discard。写入失败应 `logWarn`，但不得阻止用户已选择的动作。
 - 默认运行判定只信 `running`：`attention`/`done`/`failed`/`none` 不算运行中；shell 源 `command_started` 产生的 `running` 同样计入（普通长命令也是任务）。仅当 `backgroundIncludeFinishedTasks=true` 时，才按本文 Extension 规则额外纳入 Hook 明确标记的 done/failed CLI 会话。hook running 超时回退机制继续生效，避免僵尸 running 永久阻止退出。
@@ -53,7 +53,7 @@
 ### 5. Good/Base/Bad Cases
 
 - Good: claude 任务跑一半点关闭 → 弹窗选"转入后台" → 窗口消失、任务继续 → 完成后 Windows 通知 → 点通知窗口回来，输出连续无重绘。
-- Base: 无任务时点关闭（closeBehavior=exit）→ 直接退出，无新增弹窗。
+- Base: 无任务时点关闭（closeBehavior=exit）且恢复开启 → 无新增弹窗，保存快照并退出 UI，保留 daemon PTY；恢复关闭 → 清理后退出。
 - Base: 后台模式下任务请求权限（PermissionRequest）→ 系统通知提醒用户回来确认。
 - Base: 设置 `background` 后关闭 → 不弹窗直接进后台。
 - Bad: 转入后台却调了 `pty_close_all` → 任务被杀，"后台继续"变谎言。

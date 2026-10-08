@@ -1,6 +1,6 @@
 import type { Terminal } from "@xterm/xterm";
 import type { SerializeAddon } from "@xterm/addon-serialize";
-import { hasPendingTerminalWrites } from "../../../shared/lib/terminalHistoricalParser";
+import { hasPendingTerminalWrites, isTerminalSnapshotParserSafe } from "../../../shared/lib/terminalHistoricalParser";
 import { captureTerminalSnapshot, type TerminalSnapshotCapture } from "./terminalSnapshotCapture";
 import { registerTerminalSnapshotSource, markTerminalSnapshotDirty } from "../api/sessionSnapshotPersistence";
 import { terminalProcessManager } from "../api/TerminalProcessManager";
@@ -11,15 +11,20 @@ import { useTerminalStore } from "../state";
  * Disposal resolves pending captures with the last whole committed image and cannot
  * overwrite a replacement registration. An unfinished async parse is not an image.
  */
-export function createTerminalSnapshotLifecycle(sessionId: string, terminal: Terminal, addon: SerializeAddon) {
+export function createTerminalSnapshotLifecycle(sessionId: string, terminal: Terminal, addon: SerializeAddon, isHydrated: () => boolean = () => true, isNormalizerSafe: () => boolean = () => true) {
   let disposed = false;
   let dirty = false;
   let committed = captureTerminalSnapshot(terminal, addon, false);
   const pending = new Set<(capture: TerminalSnapshotCapture) => void>();
   let barrierQueued = false;
   const captureCommitted = (includeCheckpoint = false) => {
-    if (dirty || (includeCheckpoint && !committed.checkpointText)) {
-      committed = captureTerminalSnapshot(terminal, addon, includeCheckpoint);
+    // A drained FIFO is not a VT boundary. Keep the last safe image/sequence;
+    // daemon replay retains the raw suffix, including unfinished escapes. Never
+    // wait for another frame here: an exit may leave that escape incomplete forever.
+    if (!isTerminalSnapshotParserSafe(terminal) || !isNormalizerSafe()) return committed;
+    if (dirty || committed.sequence !== (isHydrated() ? terminalProcessManager.getCommittedSequence(sessionId) : undefined)
+      || (includeCheckpoint && !committed.checkpointText)) {
+      committed = captureTerminalSnapshot(terminal, addon, includeCheckpoint, isHydrated() ? terminalProcessManager.getCommittedSequence(sessionId) : undefined);
       dirty = false;
     }
     return committed;
@@ -50,16 +55,21 @@ export function createTerminalSnapshotLifecycle(sessionId: string, terminal: Ter
     pending.add(resolve);
     queueBarrier();
   }), async (serialized, capture) => {
-    if (disposed || !capture) return;
-    await terminalProcessManager.checkpoint(sessionId, capture.size.cols, capture.size.rows, serialized);
+    if (disposed || !capture || capture.sequence === undefined || !serialized) return;
+    await terminalProcessManager.checkpoint(sessionId, capture.size.cols, capture.size.rows, serialized, capture.sequence);
   });
   return {
     snapshotBeforeUnmount() {
       if (disposed) return;
       // React unmount is synchronous: never flushSync an async parser. Prefer the
       // current whole state when idle, otherwise the last owned barrier capture.
-      if (!hasPendingTerminalWrites(terminal)) captureCommitted();
-      useTerminalStore.getState().updateSessionTerminalSnapshot(sessionId, committed.text, committed.size);
+      const unfinished = hasPendingTerminalWrites(terminal);
+      if (!unfinished) captureCommitted();
+      // Async parsing may have mutated cells without delivery commit. Invalidate
+      // the continuation baseline: only daemon reset/replay can reconstruct it.
+      useTerminalStore.getState().updateSessionTerminalSnapshot(
+        sessionId, committed.text, committed.size, unfinished || !isHydrated() ? undefined : committed.sequence,
+      );
     },
     dispose() {
       if (disposed) return;

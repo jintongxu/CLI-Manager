@@ -1,3 +1,12 @@
+// Running-task choices take precedence; idle is not proof that a PTY has exited.
+export function resolveTerminalExitAction(
+  runningCount: number,
+  restoreEnabled: boolean,
+  behavior: "ask" | "background" | "minimize" | "discard",
+): "cleanup" | "background" | "minimize" | "discard" | "ask" {
+  return runningCount > 0 ? behavior : restoreEnabled ? "background" : "cleanup";
+}
+
 export interface TerminalExitCleanupOptions {
   closePty: boolean;
   closeAllPty: boolean;

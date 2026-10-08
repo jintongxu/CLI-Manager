@@ -65,7 +65,7 @@ test('legacy string without geometry remains compatible and invalid geometry is 
 });
 
 // Execute production persistence with only its platform/store seams replaced.
-writeFileSync(join(dir,'state.mjs'),`export const updates=[];export const sessions=[{id:'identity',projectId:'project',worktreeId:'wt',cwd:'original',hidden:true}];export const useTerminalStore={getState:()=>({sessions,updateSessionTerminalSnapshot(id,text,size){updates.push({id,text,size});Object.assign(sessions.find(s=>s.id===id),{initialTerminalOutput:text,initialTerminalSize:size});}})};`);
+writeFileSync(join(dir,'state.mjs'),`export const updates=[];export const sessions=[{id:'identity',projectId:'project',worktreeId:'wt',cwd:'original',hidden:true}];export const useTerminalStore={getState:()=>({sessions,updateSessionTerminalSnapshot(id,text,size,sequence){updates.push({id,text,size,sequence});Object.assign(sessions.find(s=>s.id===id),{initialTerminalOutput:text,initialTerminalSize:size,initialTerminalSequence:sequence});}})};`);
 writeFileSync(join(dir,'session.mjs'),`export const saved=[];export const useSessionStore={getState:()=>({async saveSessions(sessions){saved.push(JSON.parse(JSON.stringify(sessions)));}})};`);
 writeFileSync(join(dir,'logger.mjs'),'export function logError() {}');
 await build({entryPoints:['src/features/terminal/api/sessionSnapshotPersistence.ts'],bundle:true,platform:'node',format:'esm',outfile:join(dir,'persistence.mjs'),plugins:[{name:'seams',setup(b){b.onResolve({filter:/^\.\.\/state$/},()=>({path:'./state.mjs',external:true}));b.onResolve({filter:/^\.\/sessionStore$/},()=>({path:'./session.mjs',external:true}));b.onResolve({filter:/logger$/},()=>({path:'./logger.mjs',external:true}));}}]});
@@ -74,11 +74,11 @@ const state=await import(pathToFileURL(join(dir,'state.mjs')));
 const session=await import(pathToFileURL(join(dir,'session.mjs')));
 test('persisted optional geometry, source identity, full checkpoint, legacy API and replacement capture fencing',async()=>{
   const checkpoint=[];
-  const value={text:'\x1b[31mbounded',size:{cols:80,rows:24},checkpointText:'complete'};
+  const value={text:'\x1b[31mbounded',size:{cols:80,rows:24},checkpointText:'complete',sequence:7};
   let dispose=persistence.registerTerminalSnapshotSource('identity',()=>value,async(text,snapshot)=>checkpoint.push({text,size:snapshot.size}));
   await persistence.flushTerminalSnapshotsNow();
   assert.deepEqual(checkpoint,[{text:'complete',size:value.size}]);
-  assert.deepEqual(session.saved.at(-1)[0],{id:'identity',projectId:'project',worktreeId:'wt',cwd:'original',hidden:true,initialTerminalOutput:value.text,initialTerminalSize:value.size});
+  assert.deepEqual(session.saved.at(-1)[0],{id:'identity',projectId:'project',worktreeId:'wt',cwd:'original',hidden:true,initialTerminalOutput:value.text,initialTerminalSize:value.size,initialTerminalSequence:7});
   dispose();
   dispose=persistence.registerTerminalSnapshotSource('identity',()=> 'legacy string');
   await persistence.flushTerminalSnapshotsNow();assert.equal(state.updates.at(-1).text,'legacy string');assert.equal(state.updates.at(-1).size,undefined);dispose();
@@ -98,7 +98,7 @@ test('session save retains whole objects; shell restore geometry only accompanie
   assert.match(sessionStore,/s\.set\("sessions", persistable\)/);
 });
 
-writeFileSync(join(dir,'manager.mjs'),`export const checkpoints=[];export const terminalProcessManager={async checkpoint(id,cols,rows,text){checkpoints.push({id,cols,rows,text});}};`);
+writeFileSync(join(dir,'manager.mjs'),`export const checkpoints=[];export let committed=7;export const setCommitted=n=>{committed=n;};export const terminalProcessManager={getCommittedSequence:()=>committed,async checkpoint(id,cols,rows,text,sequence){checkpoints.push({id,cols,rows,text,sequence});}};`);
 await build({entryPoints:['src/shared/lib/terminalHistoricalParser.ts'],bundle:true,platform:'node',format:'esm',outfile:join(dir,'origin.mjs')});
 const origin=await import(pathToFileURL(join(dir,'origin.mjs')));
 await build({entryPoints:['src/features/terminal/lib/terminalSnapshotLifecycle.ts'],bundle:true,platform:'node',format:'esm',outfile:join(dir,'lifecycle.mjs'),plugins:[{name:'lifecycle-seams',setup(b){
@@ -140,7 +140,7 @@ test('parsed writes are cheap; unmount serializes once, pending parse falls back
     let resume,enteredResolve;const entered=new Promise(r=>{enteredResolve=r;});
     a.t.parser.registerCsiHandler({final:'z'},()=>new Promise(r=>{resume=r;enteredResolve();}));
     a.t.write('PARTIAL[zTAIL');await entered;
-    lifecycle.snapshotBeforeUnmount();assert.deepEqual(state.updates.at(-1),whole,'no half-parsed buffer capture');assert.equal(captures,2);
+    lifecycle.snapshotBeforeUnmount();assert.deepEqual(state.updates.at(-1),{...whole,sequence:undefined},'no half-parsed image or trusted continuation baseline');assert.equal(captures,2);
     const flush=persistence.flushTerminalSnapshotsNow();lifecycle.dispose();await flush;
     const count=state.updates.length;resume(true);await new Promise(r=>setTimeout(r,20));
     assert.equal(state.updates.length,count);assert.equal(captures,2);
@@ -186,4 +186,110 @@ test('exit barrier waits actual async parse and captures full checkpoint, not pa
     assert.ok(saved.text.includes('PREFIXTAIL'));assert.ok(cp.text.includes('PREFIXTAIL'));
     assert.deepEqual(saved.size,{cols:80,rows:24});assert.equal(cp.cols,80);assert.equal(cp.rows,24);
   } finally {lifecycle.dispose();owner.dispose();a.t.dispose();}
+});
+for (const alternate of [false,true]) test(`live continuation modes and incremental drawing (alternate=${alternate})`,async()=>{
+  const a=terminal(80,24),b=terminal(80,24);
+  a.t.options.vtExtensions={kittyKeyboard:true};b.t.options.vtExtensions={kittyKeyboard:true};
+  try {
+    await write(a.t,'\x1b[=3u\x1b[>7u'+(alternate?'\x1b[?1049h\x1b[=9u\x1b[>11u':'')+'\x1b[?1003h\x1b[?1006h\x1b[?2004h\x1b[?25l\x1b[3;18r\x1b[?6h\x1b[5;9H\x1b[31;44;1mHELLO');
+    const snap=capture.captureTerminalSnapshot(a.t,a.addon,true,17);
+    assert.equal(snap.sequence,17);
+    await write(b.t,snap.text);
+    assert.deepEqual(b.t.modes,a.t.modes);
+    assert.equal(b.t._core.mouseStateService.activeEncoding,'SGR');
+    assert.deepEqual(b.t._core.coreService.kittyKeyboard,a.t._core.coreService.kittyKeyboard);
+    assert.equal(b.t._core._bufferService.buffer.scrollTop,a.t._core._bufferService.buffer.scrollTop);
+    assert.equal(b.t._core._bufferService.buffer.scrollBottom,a.t._core._bufferService.buffer.scrollBottom);
+    assert.deepEqual(cells(b.t),cells(a.t));
+    await write(a.t,'\x1b[2C+\r\nNEXT\x1b[<u');await write(b.t,'\x1b[2C+\r\nNEXT\x1b[<u');
+    assert.deepEqual(cells(b.t),cells(a.t));
+    assert.deepEqual(b.t._core.coreService.kittyKeyboard,a.t._core.coreService.kittyKeyboard);
+    a.t.resize(56,16);b.t.resize(56,16);
+    await write(a.t,'\x1b[2A++');await write(b.t,'\x1b[2A++');assert.deepEqual(cells(b.t),cells(a.t));
+  } finally {a.t.dispose();b.t.dispose();}
+});
+test('actual parser commit microtask fences unmount and capture sequence',async()=>{
+ const a=terminal(80,24),owner=origin.installTerminalHistoricalParser(a.t);
+ const lifecycle=createTerminalSnapshotLifecycle('identity',a.t,a.addon);
+ try {
+  manager.setCommitted(7);
+  let observed;
+  // Parser callback commits AFTER xterm returns: layout cleanup in that gap must
+  // reject the image even though xterm's FIFO token was already shifted.
+  const parsed=a.t.onWriteParsed(()=>{lifecycle.snapshotBeforeUnmount();observed=state.updates.at(-1);});
+  await new Promise(resolve=>origin.writeTerminalOutput(a.t,'new-prefix','live',()=>{manager.setCommitted(8);resolve();}));
+  parsed.dispose();assert.equal(observed.sequence,undefined);
+  await persistence.flushTerminalSnapshotsNow();assert.equal(state.updates.at(-1).sequence,8);
+  const cp=manager.checkpoints.at(-1);assert.equal(cp.sequence,8);assert.ok(cp.text.includes('new-prefix'));
+ }finally{manager.setCommitted(7);lifecycle.dispose();owner.dispose();a.t.dispose();}
+});
+test('alternate exit and right-margin incremental output retain normal cursor/style',async()=>{
+ const a=terminal(80,24),b=terminal(80,24);
+ try {
+  await write(a.t,'\x1b[32mnormal\x1b[?1049h\x1b[34mALT');
+  await write(b.t,capture.captureTerminalSnapshot(a.t,a.addon).text);
+  await write(a.t,'\x1b[?1049l+');await write(b.t,'\x1b[?1049l+');assert.deepEqual(cells(b.t),cells(a.t));
+  await write(a.t,'\x1b[1;1H'+'x'.repeat(80));
+  const c=terminal(80,24);try{
+   await write(c.t,capture.captureTerminalSnapshot(a.t,a.addon).text);
+   await write(a.t,'WRAP');await write(c.t,'WRAP');assert.deepEqual(cells(c.t),cells(a.t));
+  }finally{c.t.dispose();}
+ }finally{a.t.dispose();b.t.dispose();}
+});
+
+for (const [prefix,suffix] of [['\x1b[31','mB'],['\x1b]2;title','\x07B'],['\x1bP$q','m\x1b\\B']]) test('incomplete VT carry retains prior safe checkpoint: '+JSON.stringify(prefix),async()=>{
+ const a=terminal(10,8),b=terminal(10,8),owner=origin.installTerminalHistoricalParser(a.t);
+ const lifecycle=createTerminalSnapshotLifecycle('identity',a.t,a.addon);
+ try {
+  manager.setCommitted(20);await write(a.t,'SAFE');await persistence.flushTerminalSnapshotsNow();
+  const safe=state.updates.at(-1),cp=manager.checkpoints.at(-1);
+  manager.setCommitted(21);await write(a.t,'A'+prefix);
+  await persistence.flushTerminalSnapshotsNow();assert.deepEqual(state.updates.at(-1),safe);assert.deepEqual(manager.checkpoints.at(-1),cp);
+  lifecycle.snapshotBeforeUnmount();assert.deepEqual(state.updates.at(-1),safe);
+  await write(b.t,safe.text);await write(b.t,'A'+prefix);await write(b.t,suffix);await write(a.t,suffix);
+  assert.deepEqual(cells(b.t),cells(a.t));
+  manager.setCommitted(22);await persistence.flushTerminalSnapshotsNow();assert.equal(state.updates.at(-1).sequence,22);
+ } finally {manager.setCommitted(7);lifecycle.dispose();owner.dispose();a.t.dispose();b.t.dispose();}
+});
+test('nondefault region plus pending right-margin wrap continues on next row',async()=>{
+ const a=terminal(10,8),b=terminal(10,8);
+ try {await write(a.t,'\x1b[2;6r\x1b[2;1H\x1b[32m'+'x'.repeat(10)+'\x1b[34m');await write(b.t,capture.captureTerminalSnapshot(a.t,a.addon).text);
+ assert.deepEqual(cells(b.t),cells(a.t));await write(a.t,'Y');await write(b.t,'Y');assert.deepEqual(cells(b.t),cells(a.t));
+ }finally{a.t.dispose();b.t.dispose();}
+});
+test('alternate exit retains inactive normal scroll region and saved cursor attributes',async()=>{
+ const a=terminal(10,8),b=terminal(10,8);
+ try {await write(a.t,'\x1b[2;6r\x1b[5;3H\x1b[32;44mnormal\x1b[?1049h\x1b[3;7r\x1b[34mALT');await write(b.t,capture.captureTerminalSnapshot(a.t,a.addon).text);
+ await write(a.t,'\x1b[?1049l+\r\nNEXT');await write(b.t,'\x1b[?1049l+\r\nNEXT');
+ assert.equal(b.t._core._bufferService.buffer.scrollTop,1);assert.equal(b.t._core._bufferService.buffer.scrollBottom,5);assert.deepEqual(cells(b.t),cells(a.t));
+ }finally{a.t.dispose();b.t.dispose();}
+});
+test('nondefault scroll region does not affect serialization of existing normal scrollback',async()=>{
+ const a=terminal(10,8),b=terminal(10,8);
+ try {await write(a.t,Array.from({length:30},(_,i)=>'row'+i).join('\r\n')+'\x1b[2;6r\x1b[2;1H'+'x'.repeat(10));await write(b.t,capture.captureTerminalSnapshot(a.t,a.addon).text);assert.deepEqual(cells(b.t),cells(a.t));}
+ finally{a.t.dispose();b.t.dispose();}
+});
+test('normalizer-held prefix also retains prior baseline even when xterm itself is ground',async()=>{
+ const a=terminal(10,8),owner=origin.installTerminalHistoricalParser(a.t);
+ let normalizerComplete=true;
+ const lifecycle=createTerminalSnapshotLifecycle('identity',a.t,a.addon,()=>true,()=>normalizerComplete);
+ try {
+  manager.setCommitted(30);await write(a.t,'safe');await persistence.flushTerminalSnapshotsNow();const safe=state.updates.at(-1);
+  normalizerComplete=false;manager.setCommitted(31);
+  await new Promise(r=>origin.writeTerminalOutput(a.t,'\x1b]52;c;','live',r,()=>''));
+  assert.equal(a.t._core._inputHandler._parser.currentState,0);
+  await persistence.flushTerminalSnapshotsNow();assert.deepEqual(state.updates.at(-1),safe);
+  lifecycle.snapshotBeforeUnmount();assert.deepEqual(state.updates.at(-1),safe);
+ } finally {manager.setCommitted(7);lifecycle.dispose();owner.dispose();a.t.dispose();}
+});
+for (const alternate of [false,true]) test(`region right-margin wide cell/style/origin continuation (alternate=${alternate})`,async()=>{
+ const a=terminal(10,8),b=terminal(10,8);
+ try {await write(a.t,(alternate?'\x1b[?1049h':'')+'\x1b[2;6r\x1b[?6h\x1b[1;1H\x1b[38;2;15;20;25;44;1;4m'+'x'.repeat(8)+'中\x1b[35;0m');await write(b.t,capture.captureTerminalSnapshot(a.t,a.addon).text);
+ assert.deepEqual(cells(b.t),cells(a.t));await write(a.t,'Y');await write(b.t,'Y');assert.deepEqual(cells(b.t),cells(a.t));
+ }finally{a.t.dispose();b.t.dispose();}
+});
+test('direct capture rejects an unsafe committed VT baseline',async()=>{
+ const a=terminal(10,8),owner=origin.installTerminalHistoricalParser(a.t);
+ try {await write(a.t,'A\x1b[31');assert.throws(()=>capture.captureTerminalSnapshot(a.t,a.addon,true,1),/VT ground/);}
+ finally{owner.dispose();a.t.dispose();}
 });
