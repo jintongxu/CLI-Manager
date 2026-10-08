@@ -18,7 +18,7 @@
 - 每进程一次守护：`App.tsx` 模块级 `sessionRestoreHandled` 变量保证恢复提示/自动恢复只在 `init()` 里触发一次。切换设置页等后续操作禁止再次弹窗——这是历史上功能被移除的根因（提示曾反复弹）。
 - 恢复确认交互：共享 `ConfirmDialog` 提供默认关闭的 `confirmAutoFocus?: boolean` 与 `contentClassName?: string`；恢复弹窗单独启用确认按钮聚焦与响应式专用宽度。
 - 节流落盘：`sessionSnapshotPersistence.ts` — `registerTerminalSnapshotSource(sessionId, serialize)` / `markTerminalSnapshotDirty(id)` / `flushTerminalSnapshotsNow()`。
-- 分流判定：`detectCliResumeKind(startupCmd, project) -> "codex" | "claude" | null`。
+- 分流判定：`detectCliResumeKind(startupCmd, project, sessionTool?) -> "codex" | "claude" | "grok" | "kimi" | "pi" | null`；手动 Pi hook 持久化工具身份，不能仅按项目默认分类。
 - resume 拼接：`buildCliResumeStartupCommand(kind, cliSessionId, project)`，复用 `appendResumeCliArgs`（`projectStartupCommand.ts`）。
 - Hook 身份绑定：`terminalStore.handleCliHookEvent(payload)` 通过 `resolveCliSessionRebind(currentId, payload.sessionId)` 更新运行态 `TerminalSession.cliSessionId`，再用相同规则对账 `sessionStore.sessions` 中的持久化 ID；持久化快照缺失或不同时必须立即调用串行保存入口。
 - 历史继续对话：`HistoryWorkspace.resumeSession(...)` 在创建本地、WSL 或 SSH 终端时必须把当前选中历史记录的明确 Session ID 传给 `terminalStore.createSession(..., cliSessionId)`；不能只把 ID 放进一次性 `startupCmd`。
@@ -45,7 +45,10 @@
 - 开关关闭：启动时必须清理当前环境快照，不得显示恢复弹窗或调用 `terminalStore.restoreSessions`。重新开启后只恢复此后新保存的快照。
 - daemon 会话优先：启动恢复先调用 `pty_daemon_sessions`。daemon 中仍存在的 session 保留原 session id/startup metadata，标记为待 attach；`XTermTerminal` 必须先订阅输出，再通过 `TerminalProcessManager.attach` 应用尺寸化 replay，禁止重跑 `startupCmd`。
 - 待 attach 标记只能在完整 replay 已写入当前 XTerm 后清除；若 Pane 移动/卸载中断回放，标记必须保留，重挂后重新 attach。初始与断线重连 replay 都必须按历史尺寸串行写入，历史 resize 不得写回 live PTY；完成当前容器强制 fit 后才能释放已缓冲的 live 输出。
-- 快照/resume 是最终兜底：只有 daemon 会话不存在或 daemon 不可恢复时，CLI 会话才靠 resume 续**对话上下文**，普通 shell 才贴回静态 scrollback。
+- 快照/resume 是最终兜底：只有 daemon 会话不存在或 daemon 不可恢复时，CLI 会话才靠 resume 续**对话上下文**，普通 shell 才贴回静态 scrollback。Pi 使用合法明确 ID 的 `pi --session <id>`，无 ID 仅以 cwd 下 `pi --continue` 降级，不贴旧 TUI；匿名 Pi 不持久化。原进程已死亡不能恢复内存状态。
+- 同进程 remount 的 continuation 快照必须保留真实 cursor/SGR/scroll-region/alternate 与必要输入模式，不执行 cold Shell 的移底/换行/模式清理。画面、几何、提交序号 S 在同一安全解析边界捕获，checkpoint 必须上传固定 S，禁止上传时重取更新的序号。缺失或旧 S、未完成解析的卸载用 daemon 完整 reset/replay 重建，同时重置 renderer delivery 基线。
+- 完成 xterm write 不代表控制序列完整：VT parser 非 ground、原始来源或 normalizer 仍持有 CSI/OSC/DCS/tmux carry 时保留上一安全 checkpoint及序号，用后续原始帧重放，退出不无限等待未来终止符。SerializeAddon 后补 DECSTBM 时必须保留 pending-wrap；在 alternate 捕获时也需保留 inactive normal 的 scroll-region 与 saved cursor/style。
+- 用户输入需等待 hydration、输出回放和当前容器 fit；keyboard/IME/paste/drop/mouse/binary/快捷键及本地输入缓冲统一拒绝不就绪输入，不延后补发。异步输入绑定当前挂载 generation，实时协议回复与 user 来源分开授权，历史协议不能回写。延迟 startup 的 session-owned 成功认领独立于 display，取消/发送失败可释放，重挂成功只执行一次。
 
 ### 4. Validation & Error Matrix
 

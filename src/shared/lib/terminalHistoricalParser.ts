@@ -25,7 +25,9 @@ interface OriginOwner {
   write(data: string, origin: TerminalOutputOrigin, callback?: () => void, normalize?: NormalizeTerminalOriginOutput, isCurrent?: () => boolean): void;
   canEmit(): boolean;
   hasPendingWrites(): boolean;
+  isSnapshotSafe(): boolean;
   capturePermission(): () => boolean;
+  isProtocolEmission(): boolean;
   reset(): void;
 }
 const owners = new WeakMap<Terminal, OriginOwner>();
@@ -59,8 +61,14 @@ export const coldSnapshotInputModeReset = "\x1b[?9;1000;1002;1003;1004;1005;1006
 export function hasPendingTerminalWrites(terminal: Terminal): boolean {
   return owners.get(terminal)?.hasPendingWrites() ?? false;
 }
+export function isTerminalSnapshotParserSafe(terminal: Terminal): boolean {
+  return owners.get(terminal)?.isSnapshotSafe() ?? checkedCore(terminal)._inputHandler._parser.currentState === 0;
+}
 export function canEmitTerminalProtocol(terminal: Terminal): boolean {
   return owners.get(terminal)?.canEmit() ?? true;
+}
+export function isTerminalProtocolEmission(terminal: Terminal): boolean {
+  return owners.get(terminal)?.isProtocolEmission() ?? false;
 }
 export function captureTerminalProtocolPermission(terminal: Terminal): () => boolean {
   return owners.get(terminal)?.capturePermission() ?? (() => true);
@@ -77,7 +85,7 @@ export function writeTerminalOutput(
   owner.write(data, origin, callback, normalize, isCurrent);
 }
 
-export function installTerminalHistoricalParser(terminal: Terminal): { dispose(): void } {
+export function installTerminalHistoricalParser(terminal: Terminal, canAcceptInput: () => boolean = () => true): { dispose(): void } {
   if (owners.has(terminal)) throw new Error("xterm historical parser adapter already installed");
   const core = checkedCore(terminal);
   const input = core._inputHandler;
@@ -88,6 +96,7 @@ export function installTerminalHistoricalParser(terminal: Terminal): { dispose()
   const binaryEvent = service.triggerBinaryEvent;
   const write = terminal.write;
   const fifo: { origin: TerminalOutputOrigin; data: string | Uint8Array; isCurrent?: () => boolean }[] = [];
+  let protocolEmission = false;
   let executing: TerminalOutputOrigin | undefined;
   let executingIsCurrent: (() => boolean) | undefined;
   let queuedState = parser.currentState;
@@ -97,6 +106,7 @@ export function installTerminalHistoricalParser(terminal: Terminal): { dispose()
   let tmuxEscape = false;
   let disposed = false;
   let submitting = false;
+  let pendingCommits = 0;
   const submissions: (() => void)[] = [];
   const colorQueries = createTerminalColorQueryFilter();
 
@@ -142,7 +152,12 @@ export function installTerminalHistoricalParser(terminal: Terminal): { dispose()
     return result;
   }
   const owner: OriginOwner = {
-    hasPendingWrites: () => fifo.length > 0 || submitting,
+    hasPendingWrites: () => fifo.length > 0 || submitting || pendingCommits > 0,
+    // Raw provenance and the actual VT parser both matter: normalizers/filtering
+    // can hold a prefix that has not reached xterm yet.
+    isSnapshotSafe: () => parser.currentState === 0 && queuedState === 0 && !tmux
+      && !wrapperPrefix && !colorQueries.hasPending(),
+    isProtocolEmission: () => protocolEmission,
     canEmit: () => executing !== "history" && executingIsCurrent?.() !== false,
     capturePermission: () => {
       const historical = executing === "history";
@@ -170,7 +185,13 @@ export function installTerminalHistoricalParser(terminal: Terminal): { dispose()
             // xterm advances WriteBuffer offset AFTER invoking its callback.
             // Consumer fit/resize synchronously flushes that buffer: defer only
             // the external commit to a microtask so it cannot reparse this token.
-            if (index === parts.length - 1) queueMicrotask(() => { if (!disposed) callback?.(); });
+            if (index === parts.length - 1) {
+              pendingCommits++;
+              queueMicrotask(() => {
+                try { if (!disposed) callback?.(); }
+                finally { pendingCommits--; }
+              });
+            }
           });
         });
       });
@@ -192,10 +213,13 @@ export function installTerminalHistoricalParser(terminal: Terminal): { dispose()
     finally { executing = previous; executingIsCurrent = previousIsCurrent; }
   };
   service.triggerDataEvent = function (data, wasUserInput) {
-    if (!disposed && (wasUserInput || owner.canEmit())) dataEvent.call(service, data, wasUserInput);
+    if (disposed || (wasUserInput ? !canAcceptInput() : !owner.canEmit())) return;
+    protocolEmission = !wasUserInput;
+    try { dataEvent.call(service, data, wasUserInput); }
+    finally { protocolEmission = false; }
   };
   service.triggerBinaryEvent = function (data) {
-    if (!disposed && owner.canEmit()) binaryEvent.call(service, data);
+    if (!disposed && canAcceptInput() && owner.canEmit()) binaryEvent.call(service, data);
   };
   // Every ordinary write, including addon/controller writes, receives a live
   // token. Historical callers must use writeTerminalOutput explicitly.

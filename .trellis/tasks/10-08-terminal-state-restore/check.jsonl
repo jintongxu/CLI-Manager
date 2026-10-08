@@ -1,0 +1,4 @@
+{"file":".trellis/spec/frontend/ai-architecture-contracts.md","reason":"架构限制与定向验证"}
+{"file":".trellis/spec/frontend/workspace-session-restore-contracts.md","reason":"cold与live恢复兼容"}
+{"file":".trellis/spec/frontend/background-task-continuation-contracts.md","reason":"明确terminate语义不能回归"}
+{"file":".trellis/spec/backend/terminal-output-scheduling-contracts.md","reason":"历史protocol不能回写和frame提交顺序"}

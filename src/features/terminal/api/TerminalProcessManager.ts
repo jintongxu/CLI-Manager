@@ -130,6 +130,8 @@ export interface TerminalProcessDiagnosticsSnapshot {
  */
 export class TerminalProcessManager {
   private readonly outputStates = new Map<string, TerminalOutputState>();
+  private readonly mountedDisplays = new Set<string>();
+  private readonly deferredStartups = new Map<string, Promise<void>>();
   private readonly processTraits = new Map<string, TerminalProcessTraits>();
   private readonly interactivePriorityAt = new Map<string, number>();
 
@@ -167,6 +169,32 @@ export class TerminalProcessManager {
   }
 
   // 调度器调用：回车后首个可见写优先一次，消费即清除；超时或隐藏终端不命中。
+  /** Session-owned claim survives display disposal. Only a successful transport
+   * write consumes startup; a failed claim is released for the next ready display. */
+  writeDeferredStartup(sessionId: string, data: string, isCurrent: () => boolean): Promise<void> {
+    const claimed = this.deferredStartups.get(sessionId);
+    if (claimed) return claimed.then(() => {
+      // A previous display may have lost ownership before its send microtask.
+      // Its replacement must retry that released claim, not mistake it for success.
+      if (!this.deferredStartups.has(sessionId) && isCurrent()) {
+        return this.writeDeferredStartup(sessionId, data, isCurrent);
+      }
+    });
+    if (!isCurrent()) return Promise.resolve();
+    const pending = Promise.resolve().then(async () => {
+      if (!isCurrent()) {
+        if (this.deferredStartups.get(sessionId) === pending) this.deferredStartups.delete(sessionId);
+        return;
+      }
+      await this.write(sessionId, data);
+    }).catch(error => {
+      if (this.deferredStartups.get(sessionId) === pending) this.deferredStartups.delete(sessionId);
+      throw error;
+    });
+    this.deferredStartups.set(sessionId, pending);
+    return pending;
+  }
+
   hasInteractivePriority(sessionId: string): boolean {
     const markedAt = this.interactivePriorityAt.get(sessionId);
     if (markedAt === undefined) return false;
@@ -208,15 +236,16 @@ export class TerminalProcessManager {
     cols: number,
     rows: number,
     serializedState: string,
+    sequence: number,
   ): Promise<void> {
-    const sequence = this.outputStates.get(sessionId)?.latestCommittedSequence
-      ?? ptyHostSocket.getLatestCommittedSequence(sessionId);
     return ptyHostSocket.checkpoint(sessionId, sequence, cols, rows, serializedState);
   }
 
   close(sessionId: string, requireBackendClose = false): Promise<void> {
     const clear = () => {
       this.clearOutputState(sessionId);
+      this.mountedDisplays.delete(sessionId);
+      this.deferredStartups.delete(sessionId);
       this.processTraits.delete(sessionId);
       this.interactivePriorityAt.delete(sessionId);
       forgetTerminalQuerySession(sessionId);
@@ -228,14 +257,32 @@ export class TerminalProcessManager {
   closeAll(): Promise<void> {
     return ptyHostSocket.closeAll().finally(() => {
       [...this.outputStates.keys()].forEach((sessionId) => this.clearOutputState(sessionId));
+      this.mountedDisplays.clear();
+      this.deferredStartups.clear();
       this.processTraits.clear();
       this.interactivePriorityAt.clear();
       forgetTerminalQuerySession();
     });
   }
 
-  attach(sessionId: string): Promise<TerminalAttachResult> {
-    return ptyHostSocket.attach(sessionId).then((result) => {
+  /** Mount history distinguishes an interrupted first display from cold history. */
+  beginDisplay(sessionId: string): boolean {
+    const previous = this.mountedDisplays.has(sessionId);
+    this.mountedDisplays.add(sessionId);
+    return previous;
+  }
+
+  getCommittedSequence(sessionId: string): number {
+    return this.outputStates.get(sessionId)?.latestCommittedSequence ?? 0;
+  }
+
+  /** Unknown or older images require daemon reconstruction. */
+  canContinueSnapshot(sessionId: string, sequence: number | undefined): boolean {
+    return sequence !== undefined && sequence === this.getCommittedSequence(sessionId);
+  }
+
+  attach(sessionId: string, fromStart = false): Promise<TerminalAttachResult> {
+    return ptyHostSocket.attach(sessionId, fromStart).then((result) => {
       if (result.processTraits) this.processTraits.set(sessionId, result.processTraits);
       return result;
     });
@@ -297,6 +344,10 @@ export class TerminalProcessManager {
       current.consumerGeneration += 1;
       current.deliveredCount = 0;
     };
+  }
+
+  subscribeDisconnect(listener: () => void): UnlistenFn {
+    return ptyHostSocket.subscribeDisconnect(listener);
   }
 
   async subscribeStatus(sessionId: string, listener: (payload: TerminalStatusEvent) => void): Promise<UnlistenFn> {
@@ -367,7 +418,7 @@ export class TerminalProcessManager {
         frame: queued.frame,
         commit: (charCount) => {
           const current = this.outputStates.get(sessionId);
-          if (!current || current.consumerGeneration !== generation || queued.committed) return;
+          if (!current || current.consumerGeneration !== generation || queued.committed || !current.frames.includes(queued)) return;
           queued.committed = true;
           queued.charCount = Math.max(0, charCount);
           this.drainCommittedOutput(sessionId, current);

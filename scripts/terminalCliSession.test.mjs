@@ -52,10 +52,20 @@ test("Hook 对账持久化快照后，恢复时优先使用明确 ID", () => {
 
   assert.match(
     hookBody,
-    /const persistedSession = useSessionStore\.getState\(\)\.sessions\.find[\s\S]*?const persistedCliSessionRebind = resolveCliSessionRebind\(persistedSession\?\.cliSessionId, cliSessionId\);[\s\S]*?if \(persistedCliSessionRebind\.changed \|\| boundSession\?\.environmentType === "ssh"\) \{\s*void queueSshSessionPersistence\(get\(\)\.sessions\)/,
+    /const persistedSession = useSessionStore\.getState\(\)\.sessions\.find[\s\S]*?const persistedCliSessionRebind = resolveCliSessionRebind\(persistedSession\?\.cliSessionId, cliSessionId\);[\s\S]*?if \(persistedCliSessionRebind\.changed \|\| boundSession\?\.environmentType === "ssh" \|\| piIdentityChanged\) \{\s*void queueSshSessionPersistence\(get\(\)\.sessions\)/,
   );
   assert.match(
     terminalLaunchSource,
     /const base = hasValidId \? `codex resume --no-alt-screen \$\{id\}` : "codex resume --no-alt-screen --last";/,
   );
+});
+
+test("manual Pi hook persists tool identity even if its ID already matches disk", () => {
+  assert.match(terminalStoreSource, /identitySource === "pi" \? \{ cliTool: "pi", isAgentSession: true \}/);
+  const start = terminalStoreSource.indexOf('        const piIdentityChanged =');
+  const end = terminalStoreSource.indexOf('\n        if (persistedCliSessionRebind', start);
+  const evaluate = new Function("identitySource", "persistedSession", `${terminalStoreSource.slice(start, end)}; return piIdentityChanged;`);
+  assert.equal(evaluate("pi", { cliSessionId: "same", isAgentSession: false }), true);
+  assert.equal(evaluate("pi", { cliTool: "pi", isAgentSession: true }), false);
+  assert.equal(evaluate("codex", { isAgentSession: false }), false);
 });

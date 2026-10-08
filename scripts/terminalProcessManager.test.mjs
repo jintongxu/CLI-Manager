@@ -34,6 +34,8 @@ writeFileSync(join(tempDir, "ptyHostSocket.mjs"), `
 const listeners = new Map();
 export const acknowledgments = [];
 export const terminalColorUpdates = [];
+export const checkpoints = [];
+export const attaches = [];
 export const ptyHostSocket = {
   async connect() {},
   subscribeOutput(sessionId, listener) {
@@ -49,7 +51,8 @@ export const ptyHostSocket = {
   async write() {},
   async resize() {},
   async setTerminalColors(sessionId, colors) { terminalColorUpdates.push({ sessionId, colors }); },
-  async attach() { return { attached: false, alive: false, replay: [] }; },
+  async checkpoint(...args) { checkpoints.push(args); },
+  async attach(...args) { attaches.push(args); return { attached: false, alive: false, replay: [] }; },
   async create() {},
 };
 export function emitOutput(sessionId, frame) {
@@ -256,4 +259,64 @@ test("terminal color updates stay behind the process manager boundary", async ()
     sessionId: "session-colors",
     colors: { foreground: "#FFFFFF", background: "#101010" },
   }]);
+});
+
+test("checkpoint upload keeps captured S even when newer deliveries commit",async()=>{
+  const manager=new TerminalProcessManager(), deliveries=[];
+  await manager.subscribeOutput("checkpoint-race",d=>deliveries.push(d));
+  socketStub.emitOutput("checkpoint-race",{...frame(11,"old"),sessionId:"checkpoint-race"});deliveries.at(-1).commit(3);
+  const captured=manager.getCommittedSequence("checkpoint-race");
+  socketStub.emitOutput("checkpoint-race",{...frame(12,"new"),sessionId:"checkpoint-race"});deliveries.at(-1).commit(3);
+  await manager.checkpoint("checkpoint-race",80,24,"old-image",captured);
+  assert.deepEqual(socketStub.checkpoints.at(-1),["checkpoint-race",11,80,24,"old-image"]);
+  assert.equal(manager.canContinueSnapshot("checkpoint-race",11),false);
+  assert.equal(manager.canContinueSnapshot("checkpoint-race",undefined),false);
+  assert.equal(manager.canContinueSnapshot("checkpoint-race",12),true);
+});
+test("authoritative reset clears delivery baseline and cancels old parse commits",async()=>{
+  const manager=new TerminalProcessManager(), deliveries=[];
+  await manager.subscribeOutput("reset-prefix",d=>deliveries.push(d));
+  socketStub.emitOutput("reset-prefix",{...frame(20,"old"),sessionId:"reset-prefix"});deliveries.at(-1).commit(3);
+  socketStub.emitOutput("reset-prefix",{...frame(21,"cancelled"),sessionId:"reset-prefix"});const stale=deliveries.at(-1);
+  await manager.attach("reset-prefix",true);assert.deepEqual(socketStub.attaches.at(-1),["reset-prefix",true]);
+  socketStub.emitOutput("reset-prefix",{...frame(0,""),kind:"reset",sessionId:"reset-prefix"});deliveries.at(-1).commit(0);
+  stale.commit(9);assert.equal(manager.getCommittedSequence("reset-prefix"),0);
+  socketStub.emitOutput("reset-prefix",{...frame(10,"checkpoint"),kind:"replay",sessionId:"reset-prefix"});deliveries.at(-1).commit(10);
+  socketStub.emitOutput("reset-prefix",{...frame(11,"tail"),kind:"replay",sessionId:"reset-prefix"});deliveries.at(-1).commit(4);
+  assert.equal(manager.getCommittedSequence("reset-prefix"),11);
+});
+
+test('interrupted hydration startup survives replay/remount; claims are session-owned and released on failure/disposal', async () => {
+  const manager = new TerminalProcessManager();
+  const writes = [];
+  let current = true;
+  manager.write = async (id, data) => { writes.push({id,data}); };
+  manager.beginDisplay('cold-shell');
+  // Initial hydration callback never ran. Remount requires authoritative replay,
+  // but the startup claim is independent of that first display's mount history.
+  assert.equal(manager.beginDisplay('cold-shell'), true);
+  current = false;
+  await manager.writeDeferredStartup('cold-shell', 'startup\r', () => current);
+  assert.equal(writes.length, 0);
+  current = true;
+  await Promise.all([
+    manager.writeDeferredStartup('cold-shell', 'startup\r', () => current),
+    manager.writeDeferredStartup('cold-shell', 'startup\r', () => current),
+  ]);
+  await manager.writeDeferredStartup('cold-shell', 'startup\r', () => true);
+  assert.deepEqual(writes, [{id:'cold-shell',data:'startup\r'}]);
+  let owner = true;
+  const cancelled = manager.writeDeferredStartup('cancel-before-send', 'startup\r', () => owner);
+  owner = false;
+  const replacement = manager.writeDeferredStartup('cancel-before-send', 'startup\r', () => true);
+  await Promise.all([cancelled, replacement]);
+  await manager.writeDeferredStartup('cancel-before-send', 'startup\r', () => true);
+  assert.equal(writes.length, 2);
+  let fail = true;
+  manager.write = async (id,data) => { if (fail) throw new Error('transport failed'); writes.push({id,data}); };
+  await assert.rejects(manager.writeDeferredStartup('failed', 'startup\r', () => true), /transport failed/);
+  fail = false;
+  await manager.writeDeferredStartup('failed', 'startup\r', () => true);
+  await manager.writeDeferredStartup('failed', 'startup\r', () => true);
+  assert.equal(writes.length, 3);
 });

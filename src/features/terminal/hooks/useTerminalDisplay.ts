@@ -1,3 +1,4 @@
+import { invalidateTerminalFit, markTerminalContinuation, suspendTerminalContinuation } from "../../../shared/lib/terminalContinuation";
 import { useRef, type RefObject } from "react";
 import { canAnswerTerminalQueryFrame, claimTerminalQueryFrame } from "../../../shared/lib/terminalQueryPolicy";
 import { writeTerminalOutput, resetTerminalOutputOrigin } from "../../../shared/lib/terminalHistoricalParser";
@@ -279,6 +280,7 @@ export function useTerminalDisplay({
   const pendingViewportRestoreRef = useRef<PendingViewportRestore | null>(null);
   const forwardPtyResizeRef = useRef(true);
   const fittedViewportRef = useRef<Terminal | null>(null);
+  const requestedFitRef = useRef<{ cols: number; rows: number } | null>(null);
   const reclaimViewportRef = useRef(false);
   const outputOwnerRef = useRef<symbol | null>(null);
   const disposeOutputRef = useRef<(() => void) | null>(null);
@@ -408,6 +410,11 @@ export function useTerminalDisplay({
     outputOwnerRef.current = owner;
     const attachedTerminal = terminalRef.current;
     const ownsOutput = () => !cancelled && outputOwnerRef.current === owner && terminalRef.current === attachedTerminal;
+    let recovering = false;
+    let resetGeneration = 0;
+    const disconnect = terminalProcessManager.subscribeDisconnect(() => {
+      if (ownsOutput() && attachedTerminal) { recovering = true; suspendTerminalContinuation(attachedTerminal); }
+    });
     let textDecoder = new TextDecoder("utf-8");
     let cancelled = false;
     let waitingForReplay = options.waitForReplay === true;
@@ -423,6 +430,8 @@ export function useTerminalDisplay({
       finishReplayFitRef.current = () => {
         if (!ownsOutput()) return;
         finishReplayFitRef.current = null;
+        recovering = false;
+        if (attachedTerminal) markTerminalContinuation(attachedTerminal, "output");
         streamedReplayComplete = true;
         resolveReplay?.(true);
         resolveReplay = null;
@@ -435,6 +444,7 @@ export function useTerminalDisplay({
       // 拥塞记账：每个 flush 周期结束恰更新一次。队列排空则清零回落 64KB；
       // 仍有积压则计数加一，达阈值后下轮单次写上限放宽到 256KB。
       if (ptyPendingChunksRef.current.length === 0) {
+        if (!waitingForReplay && !recovering && attachedTerminal) markTerminalContinuation(attachedTerminal, "output");
         ptyWriteCongestedCyclesRef.current = 0;
         return;
       }
@@ -459,6 +469,8 @@ export function useTerminalDisplay({
       if (!ownsOutput() || ptyWriteInProgressRef.current || finishReplayFitRef.current) return;
       const terminal = terminalRef.current;
       if (!terminal) return;
+      const writeGeneration = resetGeneration;
+      const ownsWrite = () => ownsOutput() && resetGeneration === writeGeneration;
       const first = ptyPendingChunksRef.current.shift();
       if (!first) return;
       const pending = [first];
@@ -493,6 +505,7 @@ export function useTerminalDisplay({
         }
       } else {
         forwardPtyResizeRef.current = false;
+        invalidateTerminalFit(terminal);
         fittedViewportRef.current = null;
         if (
           first.cols > 0
@@ -528,6 +541,11 @@ export function useTerminalDisplay({
       if (tracksLatency) noteTerminalFlushStart(sessionId, performance.now());
       writeTerminalOutput(terminal, combined, answerQueries ? "live" : "history", () => {
         if (!ownsOutput()) return;
+        if (!ownsWrite()) {
+          ptyWriteInProgressRef.current = false;
+          schedulePendingWrite();
+          return;
+        }
         pending.forEach((chunk) => claimTerminalQueryFrame(sessionId, chunk.sequence, chunk.replay));
         ptyWriteInProgressRef.current = false;
         if (tracksLatency) noteTerminalWriteCommitted(sessionId, performance.now());
@@ -539,12 +557,17 @@ export function useTerminalDisplay({
         const text = transformOutputRef.current(normalizeOutputRef.current(part, { applyOsc52: !first.replay && origin === "live" }));
         transformed += text;
         return text;
-      }, ownsOutput);
+      }, ownsWrite);
     };
     const queuePayload = (delivery: TerminalOutputDelivery, markSnapshotDirty: boolean) => {
       if (!ownsOutput()) return;
       const payload = delivery.frame;
-      if (payload.kind === "reset") textDecoder = new TextDecoder("utf-8");
+      if (payload.kind === "reset") {
+        resetGeneration++;
+        ptyPendingChunksRef.current = [];
+        suspendTerminalContinuation(attachedTerminal!);
+        textDecoder = new TextDecoder("utf-8");
+      }
       const rawText = textDecoder.decode(payload.data, { stream: true });
       // Normalize at write enqueue, after raw-origin partitioning. Otherwise
       // a buffered historical ESC/OSC/tmux prefix can gain a live suffix origin.
@@ -584,6 +607,7 @@ export function useTerminalDisplay({
         fn();
       } else {
         ptyUnlistenRef.current = fn;
+        schedulePendingWrite();
       }
     });
     void ready.catch(onPtyOutputListenError);
@@ -633,6 +657,9 @@ export function useTerminalDisplay({
       waitingForReplay = false;
       let streamCompletion: Promise<boolean> | null = null;
       if (hasStream) streamCompletion = new Promise((resolve) => { resolveReplay = resolve; });
+      let resetIndex = -1;
+      bufferedLivePayloads.forEach(({ frame }, index) => { if (frame.kind === "reset") resetIndex = index; });
+      if (resetIndex > 0) bufferedLivePayloads.splice(0, resetIndex);
       bufferedLivePayloads.splice(0).forEach((delivery) => queuePayload(delivery, true));
       if (streamCompletion && !streamedReplayComplete) return streamCompletion;
       if (!ownsOutput()) return false;
@@ -647,6 +674,7 @@ export function useTerminalDisplay({
       if (cancelled) return;
       const wasOwner = outputOwnerRef.current === owner;
       cancelled = true;
+      disconnect();
       resolveCancellation?.();
       resolveReplay?.(false);
       resolveReplay = null;
@@ -742,6 +770,15 @@ export function useTerminalDisplay({
     outputDiagnosticsRef?.current?.reset();
   };
 
+  const completeViewportFit = (terminal: Terminal) => {
+    const requested = requestedFitRef.current;
+    if (!forwardPtyResizeRef.current || !requested
+      || terminal.cols !== requested.cols || terminal.rows !== requested.rows) return;
+    fittedViewportRef.current = terminal;
+    markTerminalContinuation(terminal, "fitted");
+    finishReplayFitRef.current?.();
+  };
+
   const resizeTerminal = (terminal: Terminal, cols: number, rows: number) => {
     if (terminal.cols === cols && terminal.rows === rows) return;
     cancelPendingViewportRestore();
@@ -776,6 +813,7 @@ export function useTerminalDisplay({
       : undefined;
     terminal.resize(cols, rows);
     resizeRenderBarrierRef.current?.noteContainerResize();
+    completeViewportFit(terminal);
     if (wasAtLiveBottom) {
       // Reassert xterm's live-follow intent before and after its asynchronous DOM viewport sync.
       terminal.scrollToBottom();
@@ -819,6 +857,7 @@ export function useTerminalDisplay({
 
     const dims = fitAddon.proposeDimensions();
     if (!dims || dims.cols < MIN_TERMINAL_COLS || dims.rows < MIN_TERMINAL_ROWS) return;
+    requestedFitRef.current = dims;
     getResizeDebouncer().resize(dims.cols, dims.rows, immediateResize);
     if (terminal.cols === dims.cols && terminal.rows === dims.rows) {
       fittedViewportRef.current = terminal;
@@ -833,7 +872,7 @@ export function useTerminalDisplay({
       refreshTerminalViewport(terminal);
       needsViewportRefreshRef.current = false;
     }
-    finishReplayFitRef.current?.();
+    completeViewportFit(terminal);
   };
 
   const cancelFitFrame = () => {
@@ -849,6 +888,7 @@ export function useTerminalDisplay({
   };
 
   const cancelScheduledFit = () => {
+    requestedFitRef.current = null;
     cancelFitRequest();
     cancelPendingViewportRestore();
     resizeRenderBarrierRef.current?.cancel();
@@ -858,6 +898,9 @@ export function useTerminalDisplay({
     // Keep the debouncer's leading/trailing horizontal cadence alive across
     // consecutive ResizeObserver frames; only replace the pending fit frame.
     cancelFitFrame();
+    if (terminalRef.current) invalidateTerminalFit(terminalRef.current);
+    fittedViewportRef.current = null;
+    requestedFitRef.current = null;
     fitRafRef.current = requestAnimationFrame(() => {
       fitRafRef.current = null;
       fitWhenStable(immediateResize, forceViewportRefresh);

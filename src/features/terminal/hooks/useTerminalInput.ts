@@ -1,3 +1,5 @@
+import { canAcceptTerminalInput, captureTerminalInputPermission } from "../../../shared/lib/terminalContinuation";
+import { isTerminalProtocolEmission } from "../../../shared/lib/terminalHistoricalParser";
 import {
   useRef,
   type Dispatch,
@@ -411,6 +413,7 @@ export function useTerminalInput({
       stage: string,
       cursorIndex: number = getTextCursorLength(nextInput),
     ) => {
+      if (!canAcceptTerminalInput(terminal)) return;
       const killCurrentInput = buildKillCurrentInputSequence();
       const nextCursorIndex = clampTextCursorIndex(nextInput, cursorIndex);
       const cursorRestore = repeatControlSequence(
@@ -435,6 +438,7 @@ export function useTerminalInput({
     };
 
     const consumeSelectedInputForReplacement = (data: string) => {
+      if (!canAcceptTerminalInput(terminal)) return null;
       if (
         !selectedInputSnapshot
         || selectedInputSnapshot !== inputBufferRef.current
@@ -521,6 +525,7 @@ export function useTerminalInput({
     };
 
     const selectCurrentInputText = () => {
+      if (!canAcceptTerminalInput(terminal)) return false;
       const currentInput = inputBufferRef.current;
       clearKeyboardInputSelection();
       selectedInputSnapshot = currentInput || null;
@@ -576,6 +581,7 @@ export function useTerminalInput({
     };
 
     const extendKeyboardInputSelection = (direction: -1 | 1) => {
+      if (!canAcceptTerminalInput(terminal)) return false;
       const currentInput = inputBufferRef.current;
       const currentCursorIndex = clampTextCursorIndex(currentInput, inputCursorIndexRef.current);
       const targetCursorIndex = clampTextCursorIndex(currentInput, currentCursorIndex + direction);
@@ -609,6 +615,7 @@ export function useTerminalInput({
     };
 
     const collapseKeyboardInputSelection = (direction: -1 | 1) => {
+      if (!canAcceptTerminalInput(terminal)) return false;
       if (!keyboardInputSelection) return false;
       const startIndex = Math.min(keyboardInputSelection.anchorIndex, keyboardInputSelection.focusIndex);
       const endIndex = Math.max(keyboardInputSelection.anchorIndex, keyboardInputSelection.focusIndex);
@@ -638,6 +645,7 @@ export function useTerminalInput({
     };
 
     const removeSelectedInputText = () => {
+      if (!canAcceptTerminalInput(terminal)) return false;
       const selectedText = terminal.getSelection();
       const currentInput = inputBufferRef.current;
       const findSelectedTextRange = (preferredStartIndex?: number) => {
@@ -750,7 +758,7 @@ export function useTerminalInput({
 
     const contextMenuTarget = containerRef.current;
     const clearKeyboardInputSelectionOnMouseDown = (event: MouseEvent) => {
-      if (event.button !== 0) return;
+      if (!canAcceptTerminalInput(terminal) || event.button !== 0) return;
       clearInputSelectionState();
     };
     contextMenuTarget?.addEventListener("mousedown", clearKeyboardInputSelectionOnMouseDown);
@@ -792,6 +800,7 @@ export function useTerminalInput({
       ),
     });
     const forwardTerminalInput = (data: string, source: TerminalInputSource) => {
+      if (!canAcceptTerminalInput(terminal)) return;
       const now = performance.now();
       if (!inputDeduper.shouldForward(data, source, now)) return;
 
@@ -825,9 +834,14 @@ export function useTerminalInput({
       forwardTerminalInput(data, "onData");
     });
     const onDataDisposable = terminal.onData((data) => {
+      if (isTerminalProtocolEmission(terminal)) {
+        terminalProcessManager.write(sessionId, data).catch(err => reportPtyWriteError("protocol", err));
+        return;
+      }
       forwardTerminalInput(data, "onData");
     });
     const onBinaryDisposable = terminal.onBinary((data) => {
+      if (!canAcceptTerminalInput(terminal)) return;
       terminalProcessManager
         .writeBinary(sessionId, data)
         .catch((err) => reportPtyWriteError("onBinary", err));
@@ -868,6 +882,7 @@ export function useTerminalInput({
       osPlatformRef,
       fontSize,
       getTerminalRenderedCellSize,
+      captureInputPermission: () => captureTerminalInputPermission(terminal),
       forwardNativeInput: (data) => forwarding.forwardTerminalInput(data, "nativeTextInput"),
       onImeProcessKey: forwarding.noteImeProcessKey,
       onCompositionStarted: forwarding.resetImeInputDedup,
@@ -1139,6 +1154,7 @@ export function useTerminalInput({
     };
 
     const acceptSuggestion = (visibleSuffix?: string) => {
+      if (!canAcceptTerminalInput(terminal)) return false;
       const suggestion = suggestionRef.current;
       const settings = useSettingsStore.getState();
       const suffix = suggestion?.suffix ?? visibleSuffix;
@@ -1285,12 +1301,18 @@ export function useTerminalInput({
       id: sessionId,
       getRect: () => (isVisibleRef.current ? pasteTarget.getBoundingClientRect() : null),
       paste: (payload) => {
+        if (!canAcceptTerminalInput(terminal)) return;
         markTerminalFileDragPanelSyncSuppression();
         pasteIntoTerminal(appendTerminalFileDragSeparator(resolveTerminalFileDragText(payload)));
       },
       focus: () => terminal.focus(),
     });
     const onPaste = (event: ClipboardEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!canAcceptTerminalInput(terminal)) return;
+      const permission = captureTerminalInputPermission(terminal);
+      const pasteIntoTerminal = (text: string) => { if (permission()) pasteText(terminal, text); };
       const imageFile = getClipboardImageFile(event.clipboardData);
       const context = getCurrentPasteContext();
       if (imageFile) {
@@ -1355,6 +1377,7 @@ export function useTerminalInput({
     };
     const onDrop = (event: DragEvent) => {
       if (!isPointInsidePasteTarget(event.clientX, event.clientY) || !hasTerminalFileDragData(event.dataTransfer)) return;
+      if (!canAcceptTerminalInput(terminal)) { event.preventDefault(); event.stopPropagation(); return; }
       const payload = getTerminalFileDragPayload()
         || parseTerminalFileDragPayload(event.dataTransfer?.getData(TERMINAL_FILE_DRAG_MIME));
       const text = payload
@@ -1376,6 +1399,9 @@ export function useTerminalInput({
     let fileDropCancelled = false;
     let unlistenFileDrop: (() => void) | null = null;
     getCurrentWebview().onDragDropEvent(async (event) => {
+      if (!canAcceptTerminalInput(terminal)) return;
+      const permission = captureTerminalInputPermission(terminal);
+      const pasteIntoTerminal = (text: string) => { if (permission()) pasteText(terminal, text); };
       const payload = event.payload;
       if (payload.type !== "drop" || payload.paths.length === 0 || !isVisibleRef.current) return;
       const scaleFactor = await getCurrentWindow().scaleFactor().catch(() => window.devicePixelRatio || 1);
@@ -1415,6 +1441,7 @@ export function useTerminalInput({
   };
 
   const pasteText = (terminal: Terminal, text: string) => {
+    if (!canAcceptTerminalInput(terminal)) return;
     const normalizedText = trimTerminalPasteBoundaryLineBreaks(text);
     if (!normalizedText) return;
     useTerminalStore.getState().markAttentionInputHandled(sessionId);

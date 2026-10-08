@@ -1,3 +1,4 @@
+import { beginTerminalContinuation, canAcceptTerminalInput, captureTerminalInputPermission, disposeTerminalContinuation, invalidateTerminalFit, isTerminalContinuationHydrated, markTerminalContinuation } from "../../../shared/lib/terminalContinuation";
 import { createTerminalSnapshotLifecycle } from "../lib/terminalSnapshotLifecycle";
 import { restoreTerminalSnapshotSize } from "../lib/terminalSnapshotCapture";
 import {
@@ -468,6 +469,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
   const {
     normalizeTerminalOutput,
     resetTerminalOutput,
+    isTerminalOutputComplete,
     updateSessionCwdIfChanged,
   } = useTerminalOsc({
     sessionId,
@@ -735,6 +737,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
       // A hidden pane has no usable layout geometry. Drop queued fit/resize work
       // so an idle callback cannot apply the previous pane size after a switch.
       cancelScheduledFit();
+      if (terminalRef.current) invalidateTerminalFit(terminalRef.current);
       scheduleHiddenWebglDispose(lowMemoryMode || linuxGraphicsConstrained);
       return;
     }
@@ -933,7 +936,9 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     const displayDisposables: TerminalSubsystemDisposable[] = [];
     const inputDisposables: TerminalSubsystemDisposable[] = [];
     baseDisposables.push({ dispose: cancelPendingCodexCursorShow });
-    baseDisposables.push(installTerminalHistoricalParser(terminal));
+    beginTerminalContinuation(terminal);
+    baseDisposables.push(installTerminalHistoricalParser(terminal, () => canAcceptTerminalInput(terminal)));
+    baseDisposables.push({ dispose: () => disposeTerminalContinuation(terminal) });
     let processTraitsApplied = false;
     const applyProcessTraits = (traits: TerminalProcessTraits | null | undefined) => {
       if (!traits || processTraitsApplied) return;
@@ -1080,7 +1085,8 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     linkHoverIcon = createTerminalLinkHoverIcon(terminal, containerRef.current, fontSize);
     baseDisposables.push(linkHoverIcon);
     // 注册定时节流落盘的快照来源：让崩溃/强杀也能恢复到最近一次落盘的画面。
-    const snapshotLifecycle = createTerminalSnapshotLifecycle(sessionId, terminal, serializeAddon);
+    const snapshotLifecycle = createTerminalSnapshotLifecycle(sessionId, terminal, serializeAddon, () => isTerminalContinuationHydrated(terminal), isTerminalOutputComplete);
+    snapshotBeforeUnmountRef.current = snapshotLifecycle.snapshotBeforeUnmount;
     baseDisposables.push(searchAddon.onDidChangeResults(handleSearchResults));
 
     const initialWebglReady = syncWebglRenderer(terminal, baseTheme);
@@ -1119,12 +1125,20 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     applyCodexCursorVisibility(terminal);
     scheduleFit(true);
     const sessionSnapshot = useTerminalStore.getState().sessions.find((item) => item.id === sessionId);
-    const initialTerminalOutput = sessionSnapshot?.initialTerminalOutput;
+    const previousDisplay = terminalProcessManager.beginDisplay(sessionId);
+    const coldHistory = !previousDisplay && shouldResetTerminalSnapshotInputModes(sessionId);
+    const pendingAttach = useTerminalStore.getState().daemonAttachPendingSessionIds.has(sessionId);
+    const hasLocalImage = sessionSnapshot?.initialTerminalOutput !== undefined
+      || terminalProcessManager.getCommittedSequence(sessionId) > 0;
+    const authoritativeReplay = pendingAttach || (!coldHistory && (hasLocalImage || previousDisplay)
+      && !terminalProcessManager.canContinueSnapshot(sessionId, sessionSnapshot?.initialTerminalSequence));
+    const initialTerminalOutput = authoritativeReplay ? undefined : sessionSnapshot?.initialTerminalOutput;
     const writeDeferredStartup = () => {
       if (!sessionSnapshot?.deferStartupUntilInitialOutput || !sessionSnapshot.startupCmd) return;
-      terminalProcessManager.write(
+      terminalProcessManager.writeDeferredStartup(
         sessionId,
         formatStartupInputForPty(sessionSnapshot.startupCmd, normalizeShellKey(sessionSnapshot.shell) ?? null),
+        () => terminalRef.current === terminal,
       ).catch((err) => reportPtyWriteError("deferredStartup", err));
     };
     let resolveInitialDisplayReady: (() => void) | null = null;
@@ -1132,6 +1146,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
       resolveInitialDisplayReady = resolve;
     });
     const markInitialDisplayReady = () => {
+      markTerminalContinuation(terminal, "hydrated");
       const resolve = resolveInitialDisplayReady;
       resolveInitialDisplayReady = null;
       resolve?.();
@@ -1140,8 +1155,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
       scheduleFit(true);
       requestAnimationFrame(() => {
         if (terminalRef.current !== terminal) return;
-        snapshotBeforeUnmountRef.current = snapshotLifecycle.snapshotBeforeUnmount;
-        if (!hasSnapshot) {
+        if (!hasSnapshot || !coldHistory) {
           markInitialDisplayReady();
           return;
         }
@@ -1179,20 +1193,21 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
         }
         const restoredOutput = displayTransformOutputRef.current(initialTerminalOutput);
         const restoredCursor = shouldHideCodexCursor(terminal) ? "\x1b[?25l" : "\x1b[?25h";
-        const inputModeReset = shouldResetTerminalSnapshotInputModes(sessionId) ? coldSnapshotInputModeReset : "";
-        writeTerminalOutput(terminal, `${restoredOutput}\x1b[?6l\x1b[r\x1b[0m${restoredCursor}\x1b[999B\r\n${inputModeReset}`, "history", () => {
+        const inputModeReset = coldHistory ? coldSnapshotInputModeReset : "";
+        const restoredState = coldHistory
+          ? `${restoredOutput}\x1b[?6l\x1b[r\x1b[0m${restoredCursor}\x1b[999B\r\n${inputModeReset}`
+          : restoredOutput;
+        writeTerminalOutput(terminal, restoredState, "history", () => {
           if (terminalRef.current !== terminal) return;
           setHistoricalResize(false);
           if (inputModeReset) markTerminalColdSnapshotRestored(sessionId);
           terminal.scrollToBottom();
           refreshTerminalViewport(terminal);
           scheduleViewportRefresh();
-          writeDeferredStartup();
           finishInitialDisplayRestore(true);
         });
       });
     } else {
-      writeDeferredStartup();
       finishInitialDisplayRestore(false);
     }
     if (isActive && isVisible) {
@@ -1252,6 +1267,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     contextMenuTarget.addEventListener("contextmenu", onContextMenu);
 
     terminal.attachCustomKeyEventHandler((e) => {
+      if (!canAcceptTerminalInput(terminal)) { e.preventDefault(); return false; }
       const isMacSelectAll = (
         osPlatformRef.current === "macos" ||
         (osPlatformRef.current === "unknown" && navigator.platform.toLowerCase().includes("mac"))
@@ -1404,8 +1420,9 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
       }
       if (e.type === "keydown" && e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === "v") {
         e.preventDefault();
+        const permission = captureTerminalInputPermission(terminal);
         readClipboardPasteText().then((text) => {
-          pasteText(terminal, wrapTerminalPasteTextForCtrlShiftV(text));
+          if (permission()) pasteText(terminal, wrapTerminalPasteTextForCtrlShiftV(text));
         }).catch((err) => {
           logError("Failed to read clipboard text", { sessionId, err });
         });
@@ -1413,8 +1430,9 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
       }
       if (e.type === "keydown" && e.altKey && !e.ctrlKey && !e.shiftKey && !e.metaKey && e.key.toLowerCase() === "v") {
         e.preventDefault();
+        const permission = captureTerminalInputPermission(terminal);
         readClipboardImagePasteText().then((text) => {
-          pasteText(terminal, text);
+          if (permission()) pasteText(terminal, text);
         }).catch((err) => {
           logError("Failed to read clipboard image", { sessionId, err });
         });
@@ -1458,8 +1476,9 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
       }
       if (key === "v") {
         e.preventDefault();
+        const permission = captureTerminalInputPermission(terminal);
         readClipboardPasteText().then((text) => {
-          pasteText(terminal, text);
+          if (permission()) pasteText(terminal, text);
         }).catch((err) => {
           logError("Failed to read clipboard text", { sessionId, err });
         });
@@ -1521,13 +1540,23 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     let ptyOutput: ReturnType<typeof attachPtyOutput> | null = null;
     const attachOutput = () => {
       const output = attachPtyOutput({
-        waitForReplay: useTerminalStore.getState().daemonAttachPendingSessionIds.has(sessionId),
+        waitForReplay: authoritativeReplay,
       });
       ptyOutput = output;
-      if (!useTerminalStore.getState().daemonAttachPendingSessionIds.has(sessionId)) return;
+      if (!authoritativeReplay) {
+        void output.ready.then(() => {
+          if (output.isCurrent() && terminalRef.current === terminal) writeDeferredStartup();
+        }).catch((err) => {
+          if (output.isCurrent()) reportPtyWriteError("deferredStartupReady", err);
+        });
+        return;
+      }
+      useTerminalStore.setState(state => ({
+        daemonAttachPendingSessionIds: new Set([...state.daemonAttachPendingSessionIds, sessionId]),
+      }));
       void output.ready.then(async () => {
         if (terminalRef.current !== terminal) return;
-        const attach = await terminalProcessManager.attach(sessionId);
+        const attach = await terminalProcessManager.attach(sessionId, true);
         if (terminalRef.current !== terminal) return;
         applyProcessTraits(attach.processTraits);
         const replayCompleted = await output.completeReplay(attach.replay);
@@ -1537,6 +1566,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
             [...state.daemonAttachPendingSessionIds].filter((id) => id !== sessionId)
           ),
         }));
+        if (attach.attached) writeDeferredStartup();
         if (!attach.attached) {
           toast.error(t("terminal.backgroundTasks.restoreFailed"));
         } else if (attach.replayTruncated) {
@@ -1550,20 +1580,10 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
         toast.error(t("terminal.backgroundTasks.restoreFailed"), { description: String(err) });
       });
     };
-    // Restore the local display before subscribing so the PTY stream cannot race the snapshot.
-    let attachOutputTimer: number | null = null;
-    if (initialTerminalOutput) {
-      void initialDisplayReady.then(() => {
-        if (terminalRef.current !== terminal) return;
-        attachOutputTimer = window.setTimeout(() => {
-          attachOutputTimer = null;
-          if (terminalRef.current !== terminal) return;
-          attachOutput();
-        }, 0);
-      });
-    } else {
-      attachOutput();
-    }
+    // A parser completion barrier, never a speculative timeout.
+    void initialDisplayReady.then(() => {
+      if (terminalRef.current === terminal) attachOutput();
+    });
     const detachViewport = attachViewport(terminal);
     displayDisposables.push({ dispose: detachViewport });
     displayDisposables.push(terminal.onRender((range) => {
@@ -1608,10 +1628,6 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
       disposeTerminalSubsystem(inputDisposables);
       disposeTerminalSubsystem(displayDisposables);
       cancelScheduledFit();
-      if (attachOutputTimer !== null) {
-        window.clearTimeout(attachOutputTimer);
-        attachOutputTimer = null;
-      }
       if (initialDisplayRestoreRaf !== null) {
         window.cancelAnimationFrame(initialDisplayRestoreRaf);
         initialDisplayRestoreRaf = null;
@@ -1720,8 +1736,10 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     const terminal = terminalRef.current;
     closeContextMenu();
     if (!terminal) return;
+    const permission = captureTerminalInputPermission(terminal);
+    if (!permission()) return;
     readClipboardPasteText().then((text) => {
-      if (text) pasteText(terminal, text);
+      if (text && permission()) pasteText(terminal, text);
       focusTerminalWithCodexCursorPolicy(terminal);
     }).catch((err) => {
       logError("Failed to read clipboard text", { sessionId, err });
@@ -1747,7 +1765,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
   const handleMenuClear = () => {
     const terminal = terminalRef.current;
     closeContextMenu();
-    if (!terminal) return;
+    if (!terminal || !canAcceptTerminalInput(terminal)) return;
     useTerminalStore.getState().markAttentionInputHandled(sessionId);
     enqueueActiveWrite("\x1b[2J\x1b[H");
     terminalProcessManager.write(sessionId, "\x0c").catch((err) => reportPtyWriteError("clear", err));

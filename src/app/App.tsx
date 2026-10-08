@@ -56,7 +56,7 @@ import { translateCurrent, useI18n, type TranslationKey } from "../shared/i18n/i
 import { getOsPlatform } from "../shared/platform/shell";
 import { normalizeFontFamilyStack } from "../shared/platform/systemFonts";
 import { ALL_TERMINALS_SCOPE } from "../features/terminal/api/terminalScope";
-import { cleanupTerminalProcessesForExit } from "../features/terminal/api/terminalExitCleanup";
+import { cleanupTerminalProcessesForExit, resolveTerminalExitAction } from "../features/terminal/api/terminalExitCleanup";
 import { shouldIncludeDaemonExitTask } from "../features/terminal/api/terminalExitTask";
 import { requestSidebarToggle } from "../features/projects/api/sidebarCommands";
 import { startRuntimeDiagnostics } from "../features/terminal/api/runtimeDiagnostics";
@@ -1142,6 +1142,9 @@ function App() {
         (session) => (session.kind ?? "pty") === "pty"
       );
       if (!terminalSessionRestoreEnabled) {
+        await terminalProcessManager.closeAll().catch((err) => {
+          logWarn("Failed to close daemon sessions with restore disabled", err);
+        });
         await useSessionStore.getState().clear().catch((err) => {
           logWarn("Failed to clear disabled terminal session restore snapshot", err);
         });
@@ -1568,8 +1571,8 @@ function App() {
   }, [minimizeToTray, runExitCleanup]);
 
   // 所有"退出应用"入口（closeBehavior=exit、关闭弹窗选退出、托盘退出）必须经此守卫：
-  // 无运行中任务且 daemon 查询成功 → 清理全部空闲 PTY 后退出；有任务 → 按设置分流。
-  // daemon 查询失败 → 仅关闭前台 PTY，不能以“未知”等同“无后台任务”。
+  // restore 开启的普通退出保留全部 PTY（包括 idle）；running 的明确策略优先。
+  // daemon 不可用时 background 降级托盘，不能把“未知/空闲”当成已退出。
   const requestExitGuardedByRunningTasks = useCallback(async (
     source: string,
     prechecked?: { runningIds: string[]; daemonSessionsChecked: boolean },
@@ -1583,11 +1586,12 @@ function App() {
       daemonSessionsChecked,
       behavior: exitTasksBehaviorRef.current,
     });
-    if (runningIds.length === 0) {
+    const behavior = resolveTerminalExitAction(runningIds.length,
+      useSettingsStore.getState().terminalSessionRestoreEnabled, exitTasksBehaviorRef.current);
+    if (behavior === "cleanup") {
       await runExitCleanup(source, { closeAllPty: daemonSessionsChecked });
       return;
     }
-    const behavior = exitTasksBehaviorRef.current;
     if (behavior === "background") {
       await enterBackgroundTaskMode();
       return;

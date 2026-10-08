@@ -96,7 +96,8 @@ export function canSaveSessionToSidebar(
     project?.startup_cmd ?? session.startupCmd,
     project ?? undefined,
   );
-  return kind !== null
+  // Native Pi workspace recovery does not expand the existing sidebar-save contract.
+  return kind !== null && kind !== "pi"
     && (kind !== "kimi" || isValidKimiSessionId(session.cliSessionId?.trim() ?? ""))
     && (kind !== "grok" || isValidGrokSessionId(session.cliSessionId?.trim() ?? ""));
 }
@@ -164,7 +165,7 @@ export function buildSavedSessionProjectInput(args: {
     project?.startup_cmd ?? session.startupCmd,
     project ?? undefined,
   );
-  if (!kind) return { ok: false, reason: "no_kind" };
+  if (!kind || kind === "pi") return { ok: false, reason: "no_kind" };
 
   const normalizedId = normalizeSessionId(session.cliSessionId ?? "");
   if (!normalizedId) return { ok: false, reason: "no_session_id" };
