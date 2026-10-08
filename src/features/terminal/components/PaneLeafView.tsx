@@ -8,6 +8,7 @@ import type { Project, TerminalSession, WorktreeRecord } from "../../../shared/t
 import { resolveTerminalPaneMarker, type TerminalPaneMarkerSettings } from "../../../shared/lib/terminalPaneMarker";
 import { FileEditorPane, SubagentTranscriptView } from "./lazyTerminalPanels";
 import { type SplitPickerAnchor, type PaneDropPreview } from "../lib/terminalTabsModel";
+import type { TerminalWorktreeBadge } from "../api/terminalWorktreeBadge";
 import { PaneTabBar } from "./PaneTabBar";
 import { PaneContentDropZones } from "./PaneContentDropZones";
 import { createTerminalCliContext, isPiTerminalContext } from "../browser/TerminalCliContext";
@@ -15,6 +16,7 @@ import { createTerminalCliContext, isPiTerminalContext } from "../browser/Termin
 export interface PaneLeafViewProps {
   pane: TerminalPaneLeaf;
   sessions: TerminalSession[];
+  sessionWorktreeBadges?: ReadonlyMap<string, TerminalWorktreeBadge>;
   visibleSessionIds?: Set<string> | null;
   projects: Project[];
   worktrees: WorktreeRecord[];
@@ -66,6 +68,7 @@ export interface PaneLeafViewProps {
 export function PaneLeafView({
   pane,
   sessions,
+  sessionWorktreeBadges,
   visibleSessionIds,
   projects,
   worktrees,
@@ -152,6 +155,7 @@ export function PaneLeafView({
         <PaneTabBar
           pane={pane}
           sessions={sessions}
+          sessionWorktreeBadges={sessionWorktreeBadges}
           visibleSessionIds={visibleSessionIds}
           projects={projects}
           worktrees={worktrees}
@@ -368,6 +372,8 @@ export function getPaneSiblingsSignature(panes: TerminalPaneLeaf[]): string {
 }
 
 export function arePaneLeafViewPropsEqual(prevProps: PaneLeafViewProps, nextProps: PaneLeafViewProps): boolean {
+  if (prevProps.sessionWorktreeBadges !== nextProps.sessionWorktreeBadges) return false;
+  if (prevProps.projects !== nextProps.projects) return false;
   if (prevProps.pane.id !== nextProps.pane.id) return false;
   if (!areSessionIdListsEqual(prevProps.pane.sessionIds, nextProps.pane.sessionIds)) return false;
   if (prevProps.pane.activeSessionId !== nextProps.pane.activeSessionId) return false;

@@ -10,20 +10,22 @@ export function useWorkspanTabOverflow(
   const [signature, setSignature] = useState("");
   const frame = useRef<number | null>(null);
   const updateWorkspanTabOverflow = useCallback(() => {
-    if (draggingRef.current) return;
+    if (enabled && draggingRef.current) return;
     const scroller = scrollRef.current;
     const viewport = scroller?.getBoundingClientRect();
-    const isOverflowing = Boolean(scroller && scroller.scrollWidth > scroller.clientWidth + 1);
+    const isOverflowing = Boolean(enabled && scroller && scroller.clientWidth > 0 && scroller.scrollWidth > scroller.clientWidth + 1);
     const hiddenIds = scroller && viewport && isOverflowing
       ? Array.from(scroller.querySelectorAll<HTMLElement>("[data-workspan-id]"))
         .filter((node) => {
           const rect = node.getBoundingClientRect();
-          return rect.left < viewport.left + 1 || rect.right > viewport.right - 1;
+          const left = viewport.left + (scroller.clientLeft ?? 0);
+          return rect.left < left - 1 || rect.right > left + scroller.clientWidth + 1;
         }).map((node) => node.dataset.workspanId!).filter(Boolean)
       : [];
-    setOverflow((current) => current.isOverflowing === isOverflowing && current.hiddenIds.join("|") === hiddenIds.join("|")
-      ? current : { isOverflowing, hiddenIds });
-  }, [draggingRef, scrollRef]);
+    const uniqueHiddenIds = [...new Set(hiddenIds)];
+    setOverflow((current) => current.isOverflowing === isOverflowing && current.hiddenIds.join("|") === uniqueHiddenIds.join("|")
+      ? current : { isOverflowing, hiddenIds: uniqueHiddenIds });
+  }, [draggingRef, enabled, scrollRef]);
   const onWorkspanRowChange = useCallback((next: string) => {
     setSignature(next);
     setWorkspanTabListOpen(false);
@@ -38,8 +40,18 @@ export function useWorkspanTabOverflow(
         updateWorkspanTabOverflow();
       });
     };
-    if (activeId) Array.from(scroller?.querySelectorAll<HTMLElement>("[data-workspan-id]") ?? [])
-      .find((node) => node.dataset.workspanId === activeId)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    if (enabled && !draggingRef.current && activeId && scroller && scroller.clientWidth > 0) {
+      const node = Array.from(scroller.querySelectorAll<HTMLElement>("[data-workspan-id]"))
+        .find((item) => item.dataset.workspanId === activeId);
+      if (node) {
+        const viewport = scroller.getBoundingClientRect();
+        const rect = node.getBoundingClientRect();
+        const left = viewport.left + scroller.clientLeft;
+        const delta = rect.width > scroller.clientWidth || rect.left < left ? rect.left - left
+          : rect.right > left + scroller.clientWidth ? rect.right - left - scroller.clientWidth : 0;
+        scroller.scrollLeft = Math.max(0, Math.min(scroller.scrollWidth - scroller.clientWidth, scroller.scrollLeft + delta));
+      }
+    }
     schedule();
     scroller?.addEventListener("scroll", schedule, { passive: true });
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(schedule);

@@ -160,6 +160,7 @@ export interface SplitState {
 }
 
 export interface SplitTerminalOptions {
+  sshHostId?: string;
   projectId?: string;
   cwd?: string;
   title?: string;

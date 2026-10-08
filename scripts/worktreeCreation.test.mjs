@@ -13,6 +13,12 @@ function load(file, deps, fallback) {
   vm.runInNewContext(code, { exports, console, setTimeout, crypto: { randomUUID },
     require: name => {
       if (name in deps) return deps[name];
+    if (name.endsWith('/worktreeCreationRecovery')) return load('src/features/projects/api/worktreeCreationRecovery.ts', {});
+      if (name.endsWith('/worktreeLabels')) return load('src/features/projects/api/worktreeLabels.ts', {});
+      if (name.endsWith('/WorktreeShortLabelField')) return { ...load('src/features/projects/components/WorktreeShortLabelField.tsx', {
+        react: { useId: () => 'short-label' }, 'react/jsx-runtime': { jsx, jsxs: jsx },
+        '../../../shared/i18n/index': { useI18n: () => ({ t: key => key }) },
+      }), WorktreeShortLabelField: 'WorktreeShortLabelField' };
       if (fallback) return fallback(name);
       throw Error('unexpected dependency ' + name);
     } });
@@ -36,6 +42,11 @@ function harness() {
     } },
     '../../../shared/platform/db': { getDb: async () => ({ execute: async (...args) => {
       if (sqlFail) throw Error('SQL locked'); sql.push(args);
+    }, select: async (query, args) => {
+      if (query.startsWith('SELECT id')) return [];
+      const values = sql.find(([, values]) => values[0] === args[0])[1];
+      const keys = ['id', 'project_id', 'name', 'display_name', 'description', 'branch', 'path', 'base_branch', 'deps_prompt_dismissed', 'provider_overrides', 'status', 'created_at', 'updated_at', 'short_label'];
+      return [{ ...Object.fromEntries(keys.map((key, i) => [key, values[i]])), label_ordinal: sql.length }];
     } }) },
     '../../../shared/platform/logger': { logWarn() {} },
     '../../providers/api/providerSwitching': { hasConfiguredCliTool: () => true },
@@ -130,8 +141,9 @@ test('actual Sidebar prompt editing changes display only; all four button/split 
       updateProject: async () => {}, createAndOpenWorktree: (...args) => calls.push(args),
       createAndSplitWorktree: (...args) => calls.push(args) };
     let tree = component({ ...props, worktreePrompt: prompt });
-    const preview = nodes(tree, 'Input').find(n => n.props.readOnly);
+    const preview = nodes(tree, 'Input').find(n => n.props.readOnly && n.props.value === 'fixed-preview');
     assert.equal(preview.props.value, 'fixed-preview'); assert.equal(preview.props.onChange, undefined);
+    nodes(tree, 'WorktreeShortLabelField').at(-1).props.onChange('任务');
     const nameEvent = { currentTarget: { value: '中文展示' } };
     nodes(tree, 'Input').find(n => n.props['aria-label'] === 'worktree.prompt.taskName').props.onChange(nameEvent);
     const descriptionEvent = { currentTarget: { value: '任务描述' } };
@@ -144,17 +156,17 @@ test('actual Sidebar prompt editing changes display only; all four button/split 
     assert.equal(prompt.description, '任务描述');
     tree = component({ ...props, worktreePrompt: prompt });
     nodes(tree, 'Button').find(n => n.props.children === (auto ? 'worktree.prompt.autoParallel' : 'worktree.prompt.isolate')).props.onClick();
-    await Promise.resolve(); await Promise.resolve();
+    for (let i = 0; i < 8; i++) await Promise.resolve();
     assert.equal(calls.length, 1); assert.equal(calls[0][2], '中文展示');
-    assert.equal(calls[0][3], '任务描述'); assert.equal(calls[0][4], 'fixed-preview');
+    assert.equal(calls[0][3], '任务描述'); assert.equal(calls[0][4], 'fixed-preview'); assert.equal(calls[0][5], '任务'); assert.ok(prompt);
   }
 });
 
 test('actual Git creation initializes once per open, editable display and readonly preview submit separately', async () => {
-  const h = harness(), slots = []; let cursor = 0;
+  const h = harness(), slots = [], refs = []; let cursor = 0, refCursor = 0;
   const react = { useState(value) { const i = cursor++; if (!(i in slots)) slots[i] = value;
     return [slots[i], next => { slots[i] = typeof next === 'function' ? next(slots[i]) : next; }]; },
-    useRef: value => ({ current: value }), useMemo: fn => fn(), useCallback: fn => fn, useEffect() {} };
+    useRef: value => { const i = refCursor++; return refs[i] ??= { current: value }; }, useMemo: fn => fn(), useCallback: fn => fn, useEffect() {} };
   const component = load('src/features/git/api/GitWorkspace.tsx', {
     react, 'react/jsx-runtime': { jsx, jsxs: jsx },
     '../../projects/api/worktreeStore': { ...h.api, useWorktreeStore: selector => selector(h.store) },
@@ -162,17 +174,29 @@ test('actual Git creation initializes once per open, editable display and readon
     '../../../shared/i18n/index': { useI18n: () => ({ t: key => key }) },
     sonner: { toast: { success() {}, error() {} } },
   }, dummyModule).GitWorkspace;
-  const render = () => { cursor = 0; return component({ active: true, project: h.project, projectPath: h.project.path }); };
+  const render = () => { cursor = 0; refCursor = 0; return component({ active: true, project: h.project, projectPath: h.project.path }); };
   let tree = render(); nodes(tree, 'GitRefTree')[0].props.onCreateWorktree(); tree = render();
   const preview = nodes(tree, 'input').find(n => n.props.readOnly), first = preview.props.value;
   const display = nodes(tree, 'input').find(n => n.props['aria-label'] === 'git.operation.worktreeDisplayName');
   assert.equal(display.props.value, first); assert.equal(preview.props.onChange, undefined);
+  nodes(tree, 'WorktreeShortLabelField')[0].props.onChange('  é  ');
   display.props.onChange({ currentTarget: { value: 'Git 中文' } }); tree = render();
   nodes(tree, 'button').find(n => n.props.children === 'git.operation.confirm').props.onClick();
-  for (let i = 0; i < 10; i++) await Promise.resolve();
-  assert.equal(h.calls[0].taskName, first); assert.equal(h.store.worktrees[0].display_name, 'Git 中文');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.calls[0].taskName, first); assert.equal(h.store.worktrees[0].display_name, 'Git 中文'); assert.equal(h.store.worktrees[0].short_label, 'é');
   tree = render(); nodes(tree, 'GitRefTree')[0].props.onCreateWorktree(); tree = render();
   assert.notEqual(nodes(tree, 'input').find(n => n.props.readOnly).props.value, first);
+  h.sqlFail(true);
+  const submit = nodes(tree, 'button').find(n => n.props.children === 'git.operation.confirm').props.onClick;
+  await submit();
+  await new Promise(resolve => setImmediate(resolve));
+  const count = h.calls.length;
+  assert.equal(nodes(render(), 'WorktreeShortLabelField').length, 0);
+  h.sqlFail(false);
+  await submit(); // stale callback must not create a second tree, even with an old Store
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.calls.length, count);
+
 });
 
 test('all isolated launches prompt before creation, with stable names and initialization guards', async () => {
@@ -191,7 +215,7 @@ test('all isolated launches prompt before creation, with stable names and initia
     '../../../shared/preferences/settingsStore': { useSettingsStore: store(settingState) },
     '../api/worktreeStore': { ...h.api, useWorktreeStore: store({
       shouldIsolateNewSession: () => decision, validateProjectGit: async () => validateImpl ? validateImpl() : true,
-      createWorktreeForProject: async (...args) => { creations.push(args); if (createImpl) await createImpl(); return { id: 'w', status: 'active', name: 'result', path: 'D:/result' }; },
+      createWorktreeForProject: async (...args) => { creations.push(args); if (createImpl) return await createImpl(...args); return { id: 'w', status: 'active', name: 'result', path: 'D:/result' }; },
     }) },
     '../../files/api/fileExplorerStore': { useFileExplorerStore: store({}) },
     '../../history/index': { useHistoryStore: store({ closeHistory() {} }) },
@@ -257,13 +281,125 @@ test('all isolated launches prompt before creation, with stable names and initia
   createImpl = () => { throw Error('Git/SQL creation failure'); };
   await render().createAndOpenWorktree(h.project, undefined, '中文', '', 'fixed');
   await render().createAndSplitWorktree(h.project, 'horizontal', '中文', '', 'fixed');
-  assert.equal(errors.length, 2);
+  assert.equal(errors.length, 2); assert.ok(render().worktreePrompt);
   createImpl = undefined;
   terminalImpl = () => { throw Error('terminal open failure'); };
   await render().createAndOpenWorktree(h.project, undefined, '中文', '', 'fixed');
   assert.equal(errors.length, 3);
+  assert.equal(render().worktreePrompt, null);
+  const afterTerminal = creations.length;
   terminalImpl = undefined;
   await render().createAndOpenWorktree(h.project, undefined, '中文', '', 'fixed');
+  assert.equal(creations.length, afterTerminal);
   assert.equal(creations.at(-1)[1].taskName, 'fixed');
   assert.equal(creations.at(-1)[1].displayName, '中文');
+  await render().createAndSplitWorktree(h.project, 'horizontal', '中文', '', 'fixed-split', ' é ');
+  assert.equal(creations.at(-1)[1].shortLabel, 'é');
+  const count = creations.length;
+  await render().createAndOpenWorktree(h.project, undefined, '中文', '', 'fixed', 'W12');
+  assert.equal(creations.length, count);
+
+  // Actual normal/split callbacks: both current typed Store and legacy string failures
+  // close the dialog and retain the same operation after stale/double submissions.
+  for (const split of [false, true]) for (const phase of ['save', 'readback', 'refresh', 'terminal']) {
+    const key = `${split}-${phase}`;
+    let gitCalls = 0;
+    createImpl = async () => {
+      gitCalls++;
+      if (phase !== 'terminal') throw Error(`worktree_record_${phase}_failed: internal; D:/existing; worktree_short_label_conflict`);
+      return { id: 'saved', name: 'internal', path: 'D:/existing', branch: 'wt/internal' };
+    };
+    terminalImpl = () => { throw Error('terminal unavailable'); };
+    controller.setWorktreePrompt({ project: h.project, taskName: key, displayName: 'keep' });
+    const callback = split ? render().createAndSplitWorktree : render().createAndOpenWorktree;
+    await callback(h.project, split ? 'horizontal' : undefined, 'keep', '', key);
+    assert.equal(render().worktreePrompt, null);
+    await callback(h.project, split ? 'horizontal' : undefined, 'changed alias', '', key, 'new');
+    assert.equal(gitCalls, 1);
+  }
+
+});
+
+test('actual Sidebar edit retains failed input and clears alias through fourth metadata parameter', async () => {
+  const slots = []; let cursor = 0, fail = true; const calls = [];
+  const component = load('src/features/projects/components/SidebarView.tsx', {
+    react: { useState(value) { const i = cursor++; if (!(i in slots)) slots[i] = value;
+      return [slots[i], next => { slots[i] = typeof next === 'function' ? next(slots[i]) : next; }]; } },
+    'react/jsx-runtime': { jsx, jsxs: jsx },
+    '../api/worktreeMetadata': { getWorktreeDisplayName: wt => wt.display_name },
+    '../../providers/api/providerSwitching': { getProviderSwitchAppType: () => null },
+  }, dummyModule).SidebarView;
+  const worktree = { id: 'w', name: 'internal', display_name: 'Full name', short_label: 'alias', label_ordinal: 8, description: '' };
+  const props = { projects: [], pinnedProjects: [], openProjectIds: new Set(), treeActions: {},
+    selectedProjectIds: new Set(), selectedGroupIds: new Set(), selectedWorktreeIds: new Set(),
+    sidebarToolbarVisibility: {}, t: key => key, contextMenu: { kind: 'worktree', worktree, project: {} },
+    setContextMenu() {}, updateWorktreeMetadata: async (...args) => { calls.push(args); if (fail) throw Error('worktree_short_label_conflict'); } };
+  const render = () => { cursor = 0; return component(props); };
+  let tree = render(); nodes(tree, 'button').find(n => n.props.children?.includes?.('worktree.menu.rename')).props.onClick(); tree = render();
+  let field = nodes(tree, 'WorktreeShortLabelField')[0]; assert.equal(field.props.value, 'alias'); assert.equal(field.props.defaultLabel, 'W8');
+  field.props.onChange('new'); tree = render(); await nodes(tree, 'Button').find(n => n.props.children === 'common.save').props.onClick();
+  // onClick starts async callback without returning it.
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+  tree = render(); assert.equal(nodes(tree, 'WorktreeShortLabelField')[0].props.value, 'new');
+  assert.ok(nodes(tree, 'p').some(n => n.props.children === 'worktree.shortLabel.conflict'));
+  fail = false; nodes(tree, 'WorktreeShortLabelField')[0].props.onChange(''); tree = render();
+  nodes(tree, 'Button').find(n => n.props.children === 'common.save').props.onClick();
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+  assert.deepEqual(calls.at(-1), ['w', 'Full name', '', '']);
+});
+
+test('actual Git edit submits alias separately, preserves conflict input, clears to default', async () => {
+  const slots = []; let cursor = 0, fail = true; const calls = [];
+  const wt = { id: 'w', project_id: 'p', name: 'internal', display_name: 'Full', description: '', short_label: 'alias', label_ordinal: 4 };
+  const react = { useState(value) { const i = cursor++; if (!(i in slots)) slots[i] = value;
+    return [slots[i], next => { slots[i] = typeof next === 'function' ? next(slots[i]) : next; }]; },
+    useRef: value => ({ current: value }), useMemo: fn => fn(), useCallback: fn => fn, useEffect() {} };
+  const component = load('src/features/git/api/GitWorkspace.tsx', {
+    react, 'react/jsx-runtime': { jsx, jsxs: jsx },
+    '../../projects/api/worktreeStore': { useWorktreeStore: selector => selector({ worktrees: [wt],
+      updateWorktreeMetadata: async (...args) => { calls.push(args); if (fail) throw Error('worktree_short_label_conflict'); } }) },
+    '../../projects/api/worktreeMetadata': { getWorktreeDisplayName: wt => wt.display_name },
+    './useGitTransportLease': { useGitTransportLease: () => ({ lease: { transport: { contextKey: 'repo' } } }) },
+    '../../../shared/i18n/index': { useI18n: () => ({ t: key => key }) },
+    sonner: { toast: { success() {}, error() {} } },
+  }, dummyModule).GitWorkspace;
+  const render = () => { cursor = 0; return component({ active: true, project: { id: 'p' }, projectPath: 'repo' }); };
+  let tree = render(); nodes(tree, 'GitRefTree')[0].props.onRenameWorktree(wt); tree = render();
+  const field = nodes(tree, 'WorktreeShortLabelField')[0]; assert.equal(field.props.defaultLabel, 'W4'); assert.equal(field.props.value, 'alias');
+  field.props.onChange(' e\u0301 '); tree = render(); nodes(tree, 'button').find(n => n.props.children === 'git.operation.confirm').props.onClick();
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+  tree = render(); assert.equal(nodes(tree, 'WorktreeShortLabelField')[0].props.value, ' e\u0301 ');
+  assert.ok(nodes(tree, 'div').some(n => n.props.children === 'worktree.shortLabel.conflict'));
+  assert.equal(calls[0][3], 'é'); fail = false;
+  nodes(tree, 'WorktreeShortLabelField')[0].props.onChange(''); tree = render();
+  nodes(tree, 'button').find(n => n.props.children === 'git.operation.confirm').props.onClick();
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+  assert.deepEqual(calls.at(-1), ['w', 'Full', '', '']);
+});
+
+test('actual short label field exposes bilingual rules and all domain error keys', () => {
+  const api = load('src/features/projects/components/WorktreeShortLabelField.tsx', {
+    react: { useId: () => 'label' }, 'react/jsx-runtime': { jsx, jsxs: jsx },
+    '../../../shared/i18n/index': { useI18n: () => ({ t: key => key }) },
+  });
+  for (const [value, code] of [['W001', 'reserved'], ['a'.repeat(13), 'too_long'], ['bad\u202e', 'invalid'], ['bad\n', 'invalid']]) {
+    const tree = api.WorktreeShortLabelField({ value, onChange() {} });
+    assert.equal(nodes(tree, 'input')[0].props['aria-invalid'], true);
+    assert.equal(nodes(tree, 'p').at(-1).props.children, `worktree.shortLabel.${code}`);
+  }
+  for (const code of ['reserved', 'too_long', 'invalid', 'conflict']) {
+    assert.equal(api.worktreeLabelErrorKey(Error(`wrapped: worktree_short_label_${code}`)), `worktree.shortLabel.${code}`);
+  }
+  assert.equal(api.worktreeLabelErrorKey('worktree_label_ordinal_exhausted'), 'worktree.shortLabel.exhausted');
+  const outer = 'worktree_record_save_failed: internal; D:/created; worktree_short_label_conflict';
+  assert.equal(api.worktreeLabelErrorKey(outer), null);
+  const description = api.worktreeCreationErrorDescription(outer, key => key);
+  assert.ok(description.includes(outer));
+  assert.ok(description.includes('worktree.recovery.save'));
+  assert.ok(description.includes('worktree.shortLabel.conflict'));
+
+  for (const locale of ['en-US', 'zh-CN']) {
+    const messages = readFileSync(`src/shared/i18n/messages/projects.${locale}.ts`, 'utf8');
+    for (const code of ['reserved', 'too_long', 'invalid', 'conflict', 'exhausted', 'createHelp', 'editHelp']) assert.ok(messages.includes(`"worktree.shortLabel.${code}"`));
+  }
 });

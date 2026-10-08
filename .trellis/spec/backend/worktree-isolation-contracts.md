@@ -185,6 +185,15 @@ type TreeNode =
 - All supported normal/split launches that would create a new Worktree, including `autoParallel` and `always`, show the name form first; creation happens only after user confirmation. Existing Worktree terminal creation and ordinary non-isolated terminals do not show this form. UI entrypoints use synchronous per-action guards during asynchronous validation/prompt initialization, released in `finally`; retain the Store candidate guard for confirmed creation.
 - A failed `git_worktree_create` response must preserve the final Git error tail. Checkout progress prefixes may be normalized or truncated only after the terminal `fatal`/`error` text remains available to the frontend.
 
+#### Persistent short labels (migration 50)
+
+- `worktrees.short_label` is independent of display/internal names; empty uses `W${label_ordinal}`. Each tree has an immutable positive ordinal, allocated by SQLite in the INSERT transaction. `projects.worktree_label_high_water` never decreases on deletion, including deletion of all trees; range is 1..2147483647.
+- Old rows of every status receive ordinals per project in `created_at,id` order. Read the inserted row after triggers, not INSERT RETURNING. Do not emulate a connection-bound transaction with separate frontend pool queries.
+- User aliases normalize NFC and trim, allow at most 12 Unicode code points, reject controls/newlines/bidi and W/w followed only by ASCII digits. Nonempty aliases are project-local ASCII NOCASE unique. Metadata update omits alias when undefined; explicit empty clears it without changing its ordinal.
+- Backup preserves both Worktree fields and project high water even without trees. Restore projects first, explicit valid ordinals next, and missing ordinals deterministically last; conflicts roll back the whole transaction. Legacy backups cannot preserve deletion history they never recorded.
+- Post-Git creation errors must retain created name/path/id/branch and stage. The current form operation cannot retry Git creation after SQL/readback/refresh/terminal failure; stop ordinary retry and explain recovery. Pre-Git validation may remain editable. Never translate an outer `worktree_record_*` error into only its inner alias error.
+- Focused checks: `python scripts/worktreeShortLabelsMigration.test.py`; Node `worktreeLabels`, `worktreeCreation`, `worktreeBackupCompatibility` tests; Rust `database_restore` and web-protocol `worktree_short_labels` filters. Use temporary databases only.
+
 #### Dependency prompt
 
 - Dependency install detection is advisory only. It must not block opening the actual task terminal.

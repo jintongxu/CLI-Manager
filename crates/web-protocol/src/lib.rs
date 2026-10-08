@@ -249,6 +249,11 @@ pub struct WorkspaceWorktreeSummary {
     /// User-facing Unicode name; omitted by older desktop clients.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
+    /// Persistent short label and ordinal; never inferred from snapshot order.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub short_label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label_ordinal: Option<i64>,
     /// User-facing description; omitted by older desktop clients.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -768,6 +773,38 @@ mod tests {
         assert_eq!(value["type"], "pairing.updated");
         assert_eq!(value["pairingId"], "pairing-1");
         assert_eq!(value["deviceId"], "device-1");
+    }
+
+    #[test]
+    fn worktree_short_labels_roundtrip_new_and_legacy_frames() {
+        let legacy = serde_json::json!({
+            "type": "history_snapshot", "sequence": 1, "sessions": [],
+            "workspace": { "groups": [], "projects": [], "updatedAt": 1,
+                "worktrees": [{ "id": "w", "projectId": "p", "name": "legacy",
+                    "branch": "task", "status": "active" }] }
+        });
+        let frame: DeviceToServerFrame = serde_json::from_value(legacy.clone()).unwrap();
+        let encoded = serde_json::to_value(frame).unwrap();
+        let old = &encoded["workspace"]["worktrees"][0];
+        assert!(old.get("shortLabel").is_none());
+        assert!(old.get("labelOrdinal").is_none());
+        for label in ["é", ""] {
+            let mut updated = legacy.clone();
+            updated["workspace"]["worktrees"][0]["shortLabel"] = serde_json::json!(label);
+            updated["workspace"]["worktrees"][0]["labelOrdinal"] = serde_json::json!(42);
+            let frame: DeviceToServerFrame = serde_json::from_value(updated).unwrap();
+            let DeviceToServerFrame::HistorySnapshot { workspace: Some(workspace), .. } = frame else {
+                panic!("expected workspace snapshot");
+            };
+            assert_eq!(workspace.worktrees[0].short_label.as_deref(), Some(label));
+            assert_eq!(workspace.worktrees[0].label_ordinal, Some(42));
+            let event = BrowserEventPayload::WorkspaceUpdated { device_id: "d".into(), workspace };
+            let encoded = serde_json::to_value(event).unwrap();
+            assert_eq!(encoded["workspace"]["worktrees"][0]["shortLabel"], label);
+            assert_eq!(encoded["workspace"]["worktrees"][0]["labelOrdinal"], 42);
+            let decoded: BrowserEventPayload = serde_json::from_value(encoded).unwrap();
+            assert!(matches!(decoded, BrowserEventPayload::WorkspaceUpdated { .. }));
+        }
     }
 
     #[test]

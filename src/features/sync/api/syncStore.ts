@@ -17,6 +17,7 @@ import { useProjectStore } from "../../projects/api/projectStore";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { useSshHostStore } from "../../remote/api/sshHostStore";
 import { useWorktreeStore } from "../../projects/api/worktreeStore";
+import { MAX_WORKTREE_LABEL_ORDINAL, normalizeWorktreeShortLabel } from "../../projects/api/worktreeLabels";
 
 export type BackupStatus = "idle" | "backing_up" | "restoring" | "queued" | "success" | "error";
 export type BackupMode = "cloud" | "local";
@@ -131,13 +132,13 @@ interface BackupStore {
 }
 
 const ALL_DOMAINS: BackupDomain[] = ["workspace", "preferences", "model_prices", "notifications", "statusline"];
-const PROJECT_SELECT = "SELECT id, name, path, path_mode, group_id, sort_order, cli_tool, cli_args, startup_cmd, env_vars, shell, provider_overrides, worktree_strategy, worktree_root, worktree_deps_prompt_enabled, environment_type, ssh_host_id, remote_path, cli_config_root, icon, color, created_at, updated_at FROM projects ORDER BY sort_order";
+const PROJECT_SELECT = "SELECT id, name, path, path_mode, group_id, sort_order, cli_tool, cli_args, startup_cmd, env_vars, shell, provider_overrides, worktree_strategy, worktree_root, worktree_deps_prompt_enabled, environment_type, ssh_host_id, remote_path, cli_config_root, icon, color, created_at, updated_at, worktree_label_high_water FROM projects ORDER BY sort_order";
 const GROUP_SELECT = "SELECT id, name, parent_id, sort_order, icon, color, bound_path, created_at FROM groups ORDER BY sort_order";
 const SSH_HOST_GROUP_SELECT = "SELECT id, name, parent_id, sort_order, created_at FROM ssh_host_groups ORDER BY sort_order";
 const SSH_HOST_SELECT = "SELECT id, name, group_name, group_id, host, port, username, config_alias, auth_mode, jump_mode, jump_host_id, proxy_type, proxy_host, proxy_port, connect_timeout_sec, server_alive_interval_sec, server_alive_count_max, terminal_encoding, attachment_root, startup_script, notes, sort_order, created_at, updated_at FROM ssh_hosts ORDER BY sort_order";
 const LOCAL_SSH_HOST_FIELDS_SELECT = "SELECT id, identity_file, credential_ref, config_file, proxy_command FROM ssh_hosts";
 const TEMPLATE_SELECT = "SELECT id, project_id, name, command, description, sort_order FROM command_templates ORDER BY sort_order";
-const WORKTREE_SELECT = "SELECT id, project_id, name, display_name, description, branch, path, base_branch, deps_prompt_dismissed, provider_overrides, status, created_at, updated_at FROM worktrees WHERE status = 'active' ORDER BY created_at DESC";
+const WORKTREE_SELECT = "SELECT id, project_id, name, display_name, description, branch, path, base_branch, deps_prompt_dismissed, provider_overrides, status, created_at, updated_at, short_label, label_ordinal FROM worktrees WHERE status = 'active' ORDER BY created_at DESC";
 const MODEL_PRICE_COLUMNS = ["model", "input_per_1m", "output_per_1m", "cache_read_per_1m", "cache_creation_per_1m", "source", "source_model_id", "raw_json", "updated_at_ms", "synced_at_ms"] as const;
 const MODEL_PRICE_SELECT = `SELECT ${MODEL_PRICE_COLUMNS.join(", ")} FROM model_prices ORDER BY model COLLATE NOCASE`;
 const SSH_HOST_GROUP_COLUMNS = ["id", "name", "parent_id", "sort_order", "created_at"] as const;
@@ -367,6 +368,25 @@ async function applyPreferences(preferences: Record<string, unknown>) {
   await useSettingsStore.getState().load();
 }
 
+// Missing legacy ordinals are allocated by migration 50, only after explicit IDs.
+function restoreLabelNumber(value: unknown, minimum: number, fallback: number | null): number | null {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < minimum || value > MAX_WORKTREE_LABEL_ORDINAL) {
+    throw new Error("backup_worktree_label_number_invalid");
+  }
+  return value;
+}
+
+// SQLite BINARY ordering compares UTF-8, not locale or UTF-16 code units.
+function compareRestoreText(left: unknown, right: unknown): number {
+  const a = new TextEncoder().encode(String(left ?? ""));
+  const b = new TextEncoder().encode(String(right ?? ""));
+  for (let i = 0; i < Math.min(a.length, b.length); i++) {
+    if (a[i] !== b[i]) return a[i] - b[i];
+  }
+  return a.length - b.length;
+}
+
 async function buildWorkspaceRestoreStatements(workspace: WorkspaceBackup): Promise<DatabaseStatement[]> {
   const now = Date.now().toString();
   const os = await getOsPlatform();
@@ -375,8 +395,19 @@ async function buildWorkspaceRestoreStatements(workspace: WorkspaceBackup): Prom
   const sshHostGroups = Array.isArray(workspace.sshHostGroups) ? workspace.sshHostGroups : [];
   const sshHosts = Array.isArray(workspace.sshHosts) ? workspace.sshHosts : [];
   const hasSshHostData = Array.isArray(workspace.sshHostGroups) && Array.isArray(workspace.sshHosts);
-  const projects = Array.isArray(workspace.projects) ? workspace.projects : [];
-  const worktrees = Array.isArray(workspace.worktrees) ? workspace.worktrees : [];
+  const projects = (Array.isArray(workspace.projects) ? workspace.projects : []).map((item) => ({
+    ...item,
+    worktree_label_high_water: restoreLabelNumber(item.worktree_label_high_water, 0, 0),
+  } as Record<string, unknown>));
+  // Validate every alias before generating statements, including orphan rows.
+  const worktrees = (Array.isArray(workspace.worktrees) ? workspace.worktrees : []).map((item) => ({
+    ...item,
+    short_label: normalizeWorktreeShortLabel(item.short_label === undefined ? "" : item.short_label as string),
+    label_ordinal: restoreLabelNumber(item.label_ordinal, 1, null),
+  } as Record<string, unknown>)).sort((a, b) =>
+    Number(a.label_ordinal == null) - Number(b.label_ordinal == null)
+    || compareRestoreText(a.created_at, b.created_at)
+    || compareRestoreText(a.id, b.id));
   const templates = Array.isArray(workspace.commandTemplates) ? workspace.commandTemplates : [];
   const groupIds = new Set(groups.map((item) => String(item.id)));
   const sshHostGroupIds = new Set(sshHostGroups.map((item) => String(item.id)));
@@ -398,7 +429,7 @@ async function buildWorkspaceRestoreStatements(workspace: WorkspaceBackup): Prom
     );
   }
   statements.push({ sql: "DELETE FROM groups", values: [] });
-  // 列清单必须与 src-tauri/src/commands/sync.rs 的 BACKUP_RESTORE_INSERT_COLUMNS 逐字一致，
+  // 列清单必须与 src-tauri/src/features/sync/commands.rs 的 BACKUP_RESTORE_INSERT_COLUMNS 逐字一致，
   // 否则恢复会被 validate_backup_database_statement 整批拒绝并回滚。
   statements.push(...buildBatchInsertStatements("groups", ["id", "name", "parent_id", "sort_order", "icon", "color", "bound_path", "created_at"], groups, (item) => [
     item.id, item.name, typeof item.parent_id === "string" && groupIds.has(item.parent_id) ? item.parent_id : null,
@@ -443,7 +474,7 @@ async function buildWorkspaceRestoreStatements(workspace: WorkspaceBackup): Prom
   }
   statements.push(...buildBatchInsertStatements(
     "projects",
-    ["id", "name", "path", "path_mode", "group_id", "sort_order", "cli_tool", "cli_args", "startup_cmd", "env_vars", "shell", "provider_overrides", "worktree_strategy", "worktree_root", "worktree_deps_prompt_enabled", "environment_type", "ssh_host_id", "remote_path", "cli_config_root", "icon", "color", "created_at", "updated_at"],
+    ["id", "name", "path", "path_mode", "group_id", "sort_order", "cli_tool", "cli_args", "startup_cmd", "env_vars", "shell", "provider_overrides", "worktree_strategy", "worktree_root", "worktree_deps_prompt_enabled", "environment_type", "ssh_host_id", "remote_path", "cli_config_root", "icon", "color", "created_at", "updated_at", "worktree_label_high_water"],
     projects,
     (item) => {
       const environmentType = item.environment_type === "ssh" ? "ssh" : item.environment_type === "wsl" ? "wsl" : "local";
@@ -472,16 +503,17 @@ async function buildWorkspaceRestoreStatements(workspace: WorkspaceBackup): Prom
         isSshProject && typeof item.remote_path === "string" ? item.remote_path : "",
         cliConfigRoot,
         normalizeNodeIcon(item.icon), normalizeNodeAccentToken(item.color),
-        item.created_at ?? now, item.updated_at ?? now,
+        item.created_at ?? now, item.updated_at ?? now, item.worktree_label_high_water,
       ];
     },
   ));
-  statements.push(...buildBatchInsertStatements("worktrees", ["id", "project_id", "name", "display_name", "description", "branch", "path", "base_branch", "deps_prompt_dismissed", "provider_overrides", "status", "created_at", "updated_at"], worktrees.filter((item) => typeof item.project_id === "string" && projectIds.has(item.project_id)), (item) => [
+  statements.push(...buildBatchInsertStatements("worktrees", ["id", "project_id", "name", "display_name", "description", "branch", "path", "base_branch", "deps_prompt_dismissed", "provider_overrides", "status", "created_at", "updated_at", "short_label", "label_ordinal"], worktrees.filter((item) => typeof item.project_id === "string" && projectIds.has(item.project_id)), (item) => [
     item.id, item.project_id, item.name,
     typeof item.display_name === "string" && item.display_name.trim() ? item.display_name.trim() : item.name,
     typeof item.description === "string" ? item.description.trim() : "",
     item.branch, item.path, item.base_branch ?? "", integerOr(item.deps_prompt_dismissed, 0),
     item.provider_overrides ?? "{}", item.status === "missing" ? "missing" : "active", item.created_at ?? now, item.updated_at ?? now,
+    item.short_label, item.label_ordinal,
   ]));
   statements.push(...buildBatchInsertStatements("command_templates", ["id", "project_id", "name", "command", "description", "sort_order"], templates, (item) => [
     item.id, typeof item.project_id === "string" && projectIds.has(item.project_id) ? item.project_id : null,
@@ -505,7 +537,7 @@ function buildModelPriceRestoreStatements(prices: Record<string, unknown>[]): Da
   ];
 }
 
-async function applySnapshot(snapshot: BackupSnapshotV3, domains: BackupDomain[]) {
+async function applySnapshot(snapshot: BackupSnapshotV3, domains: BackupDomain[], onApplied?: () => void) {
   if (snapshot.version !== 3 || !isRecord(snapshot.data)) throw new Error("backup_invalid_v3");
   const selected = new Set(domains);
   const databaseStatements: DatabaseStatement[] = [];
@@ -518,6 +550,8 @@ async function applySnapshot(snapshot: BackupSnapshotV3, domains: BackupDomain[]
   if (databaseStatements.length > 0) {
     await invoke("backup_restore_database", { statements: databaseStatements });
   }
+  // A validation/transaction failure has changed nothing; do not replay the safety snapshot.
+  onApplied?.();
   // 先刷新项目缓存，再应用包含 pinnedProjectIds 的偏好，避免恢复期间把新项目误判为悬挂记录。
   if (selected.has("workspace")) {
     await useSshHostStore.getState().fetchHosts();
@@ -663,15 +697,16 @@ export const useSyncStore = create<BackupStore>((set, get) => ({
     });
     set({ status: "restoring" });
     let safety: BackupSnapshotV3 | null = null;
+    let applied = false;
     try {
       safety = await createSnapshot(state.deviceId, state.deviceName);
       await invoke("backup_restore_safety_save", { snapshot: safety });
       const raw = await invoke<unknown>("backup_download", { config: webdavConfig(state), remotePath, remoteDir: state.remoteDir || undefined });
       const snapshot = await normalizeImportedSnapshot(raw, state.deviceId, state.deviceName);
-      await applySnapshot(snapshot, domains); set({ status: "success", lastBackupAt: snapshot.manifest.createdAt });
+      await applySnapshot(snapshot, domains, () => { applied = true; }); set({ status: "success", lastBackupAt: snapshot.manifest.createdAt });
       useBackgroundOperationStore.getState().succeed(operationId);
     } catch (error) {
-      if (safety) await applySnapshot(safety, ALL_DOMAINS).catch((rollbackError) => console.error("Restore rollback failed", rollbackError));
+      if (safety && applied) await applySnapshot(safety, ALL_DOMAINS).catch((rollbackError) => console.error("Restore rollback failed", rollbackError));
       useBackgroundOperationStore.getState().fail(operationId, error);
       set({ status: "error" });
       throw error;
@@ -679,6 +714,7 @@ export const useSyncStore = create<BackupStore>((set, get) => ({
   },
   importLegacyCloud: async (domains) => {
     const state = get(); set({ status: "restoring" });
+    let applied = false;
     const safety = await createSnapshot(state.deviceId, state.deviceName);
     await invoke("backup_restore_safety_save", { snapshot: safety });
     try {
@@ -686,9 +722,9 @@ export const useSyncStore = create<BackupStore>((set, get) => ({
         config: webdavConfig(state), deviceName: state.deviceName, remoteDir: state.remoteDir || undefined,
       });
       const snapshot = await normalizeImportedSnapshot(raw, state.deviceId, state.deviceName);
-      await applySnapshot(snapshot, domains); set({ status: "success" });
+      await applySnapshot(snapshot, domains, () => { applied = true; }); set({ status: "success" });
     } catch (error) {
-      await applySnapshot(safety, ALL_DOMAINS).catch((rollbackError) => console.error("Legacy restore rollback failed", rollbackError));
+      if (applied) await applySnapshot(safety, ALL_DOMAINS).catch((rollbackError) => console.error("Legacy restore rollback failed", rollbackError));
       set({ status: "error" }); throw error;
     }
   },
@@ -709,15 +745,16 @@ export const useSyncStore = create<BackupStore>((set, get) => ({
     });
     set({ status: "restoring" });
     let safety: BackupSnapshotV3 | null = null;
+    let applied = false;
     try {
       safety = await createSnapshot(state.deviceId, state.deviceName);
       await invoke("backup_restore_safety_save", { snapshot: safety });
       const raw = await invoke<unknown>("backup_local_import", { zipPath });
       const snapshot = await normalizeImportedSnapshot(raw, state.deviceId, state.deviceName);
-      await applySnapshot(snapshot, domains); set({ status: "success" });
+      await applySnapshot(snapshot, domains, () => { applied = true; }); set({ status: "success" });
       useBackgroundOperationStore.getState().succeed(operationId);
     } catch (error) {
-      if (safety) await applySnapshot(safety, ALL_DOMAINS).catch((rollbackError) => console.error("Import rollback failed", rollbackError));
+      if (safety && applied) await applySnapshot(safety, ALL_DOMAINS).catch((rollbackError) => console.error("Import rollback failed", rollbackError));
       useBackgroundOperationStore.getState().fail(operationId, error);
       set({ status: "error" });
       throw error;

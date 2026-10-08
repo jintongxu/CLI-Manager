@@ -1,10 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
+import { translateCurrent } from "../../../shared/i18n/index";
 import { executeWebGitRead, validateWebGitRead, WEB_GIT_READ_KINDS } from "./webGitRead";
 import { useProjectStore } from "../../projects/api/projectStore";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { useSshHostStore } from "../../remote/api/sshHostStore";
 import { useTerminalStore } from "../state";
 import { useWorktreeStore } from "../../projects/api/worktreeStore";
+import { normalizeWorktreeShortLabel } from "../../projects/api/worktreeLabels";
 import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
 import type { CreateSshHostInput, Project, SshAuthMode, UpdateSshHostInput, WorktreeRecord } from "../../../shared/types/index";
 import { buildSshConnectionSpec } from "../../remote/api/ssh";
@@ -130,12 +132,22 @@ function optionalWorktreeText(
   return value;
 }
 
-function worktreeCreateMetadata(payload: Payload): { displayName: string; description: string } {
+function worktreeCreateMetadata(payload: Payload): { displayName: string; description: string; shortLabel?: string } {
+  let shortLabel: string | undefined;
+  if (payload.shortLabel !== undefined) {
+    if (typeof payload.shortLabel !== "string") managementError("invalid_operation_payload", "shortLabel is invalid");
+    try {
+      shortLabel = normalizeWorktreeShortLabel(payload.shortLabel);
+    } catch {
+      managementError("invalid_operation_payload", "shortLabel is invalid");
+    }
+  }
   const displayName = optionalWorktreeText(payload, "displayName", 64)
     ?? optionalWorktreeText(payload, "taskName", 64);
   if (!displayName) managementError("invalid_operation_payload", "displayName is invalid");
   return {
     displayName,
+    ...(shortLabel === undefined ? {} : { shortLabel }),
     description: optionalWorktreeText(payload, "description", 2000, true) ?? "",
   };
 }
@@ -348,7 +360,6 @@ async function executeProjectStart(payload: Payload): Promise<unknown> {
     const sessionId = await useTerminalStore.getState().splitTerminal(activeSessionId, direction, {
       projectId: launch.project.id,
       cwd: launch.cwd,
-      title: launch.title,
       startupCmd: launch.startupCmd,
       envVars: launch.envVars,
       shell: launch.shell,
@@ -363,7 +374,7 @@ async function executeProjectStart(payload: Payload): Promise<unknown> {
     sessionIds.push(await useTerminalStore.getState().createSession(
       launch.project.id,
       launch.cwd,
-      launch.title,
+      undefined,
       launch.startupCmd,
       launch.envVars,
       launch.shell,
@@ -420,7 +431,9 @@ async function executeProjectAction(payload: Payload): Promise<unknown> {
     const deps = await useWorktreeStore.getState().checkDeps(context.worktree!);
     if (!deps.needsInstall || !deps.command) return { started: false, reason: deps.reason };
     const sessionId = await useTerminalStore.getState().createSession(
-      launch.project.id, launch.cwd, launch.title, deps.command, launch.envVars, launch.shell,
+      launch.project.id, launch.cwd,
+      translateCurrent("worktree.deps.installTitle", { name: getWorktreeDisplayName(context.worktree!) }),
+      deps.command, launch.envVars, launch.shell,
       undefined, context.worktree!.id,
     );
     await useWorktreeStore.getState().dismissDepsPrompt(context.worktree!.id);
@@ -664,6 +677,8 @@ function publicWorktree(worktree: WorktreeRecord) {
     id: worktree.id,
     name: worktree.name,
     displayName: getWorktreeDisplayName(worktree),
+    shortLabel: worktree.short_label ?? undefined,
+    labelOrdinal: worktree.label_ordinal ?? undefined,
     description: worktree.description ?? "",
     branch: worktree.branch,
     baseBranch: worktree.base_branch,

@@ -30,13 +30,16 @@ export function jsx(type, props, key) { return { type, props, key }; }
 export const jsxs = jsx;
 export const Fragment = "Fragment";
 `);
-compile("../src/features/projects/api/worktreeMetadata.ts", "metadata.mjs");
-compile("../src/features/terminal/api/terminalWorktreeBadge.ts", "badge.mjs", code =>
-  code.replace('"../../projects/api/worktreeMetadata"', '"./metadata.mjs"'));
+compile("../src/features/projects/api/worktreeLabels.ts", "labels.mjs", code => code.replace(/import[^;]*;/g, ""));
+compile("../src/features/terminal/api/terminalProjectTabsModel.ts", "model.mjs", code =>
+  code.replace('"../../projects/api/worktreeLabels"', '"./labels.mjs"')
+    .replace(/import \{ findWorktreeForSession, resolveProjectForSession \}[^;]*;/, "const resolveProjectForSession = () => null; const findWorktreeForSession = () => null;"));
+compile("../src/features/terminal/api/terminalWorktreeBadge.ts", "badge.mjs", code => code.replace('"./terminalProjectTabsModel"', '"./model.mjs"'));
 const { buildWorktreeBadges, buildGlobalWorktreeBadges } = await import(pathToFileURL(join(temp, "badge.mjs")));
-const { getCompactWorktreeLabel } = await import(pathToFileURL(join(temp, "metadata.mjs")));
-compile("../src/features/terminal/api/terminalProjectTabsModel.ts", "model.mjs", (code) =>
-  code.replace(/import[^;]*;\n/g, "const resolveProjectForSession = () => null; const findWorktreeForSession = () => null;\n"));
+compile("../src/features/terminal/components/TerminalCurrentContext.tsx", "current.mjs", code =>
+  code.replace('"react/jsx-runtime"', '"./react.mjs"').replace('"../api/terminalProjectTabsModel"', '"./model.mjs"')
+    .replace(/import \{ useI18n \}[^;]*;/, 'const useI18n = () => ({ t: key => key });'));
+const { TerminalCurrentContext } = await import(pathToFileURL(join(temp, "current.mjs")));
 compile("../src/features/terminal/lib/terminalTabVisibility.ts", "visibility.mjs", code => code.replace(/import[^;]*;\n/g, ""));
 compile("../src/features/terminal/api/terminalProjectHide.ts", "hide.mjs", code =>
   code.replace('"../lib/terminalTabVisibility"', '"./visibility.mjs"'));
@@ -50,6 +53,7 @@ compile("../src/features/workspace/api/WorkspanTabBar.tsx", "bar.mjs", (code) =>
 import { selectProjectTabGroups, resolveStatusWorkspanTarget, countVisibleTabStatuses } from "./selection.mjs";
 import { buildWorktreeBadges, buildGlobalWorktreeBadges } from "./badge.mjs";
 import { displayedProjectTerminalIds } from "./hide.mjs";
+import { describeWorkspanTabGroup, formatWorkspanGroupTitle } from "./model.mjs";
 const useI18n = () => ({ t: (key, params) => params?.project ? key + ": " + params.project : key });
 const useDroppable = () => ({ setNodeRef() {} });
 const SortableContext = "SortableContext", horizontalListSortingStrategy = "horizontal";
@@ -63,6 +67,7 @@ compile("../src/features/terminal/components/TerminalTabsView.tsx", "view.mjs", 
   const stubs = [];
   const body = code.replace(/import\s*\{([^}]+)\}\s*from "([^"]+)";\n/g, (_, names, path) => {
     if (path === "react/jsx-runtime") return `import { ${names} } from "./react.mjs";\n`;
+    if (path.endsWith("/TerminalCurrentContext")) return 'import { TerminalCurrentContext } from "./current.mjs";';
     if (path.endsWith("/WorkspanTabBar")) return 'import { WorkspanTabBar } from "./bar.mjs";\n';
     for (const name of names.split(",").map(name => name.trim()).filter(Boolean)) {
       stubs.push(`const ${name} = ${JSON.stringify(name)};`);
@@ -91,8 +96,9 @@ const { reset, render } = await import(pathToFileURL(join(temp, "react.mjs")));
 const { useTerminalProjectSelection } = await import(pathToFileURL(join(temp, "hook.mjs")));
 const { resolveNewTabSource, selectProjectTabGroups } = await import(pathToFileURL(join(temp, "selection.mjs")));
 const { WorkspanTabBar } = await import(pathToFileURL(join(temp, "bar.mjs")));
-const member = (id, projectKey, extra = {}) => ({ sessionId: id, projectKey, project: projectKey, ...extra });
+const member = (id, projectKey, extra = {}) => ({ sessionId: id, projectKey, project: projectKey, worktreeKind: "root", worktreeId: null, worktreeName: null, worktreeLabel: "", ...extra });
 function model(id, members, group = "root", closeIds = members.map(item => item.sessionId)) {
+  if (group === "worktree") members = members.map(item => ({ ...item, worktreeKind: "worktree", worktreeId: item.worktreeId ?? "fixture-tree" }));
   const keys = [...new Set(members.map(item => item.projectKey))];
   return { workspan: { id }, members, memberSessions: members.map(item => ({ id: item.sessionId })), projectKeys: keys, sessionIds: members.map(item => item.sessionId),
     closeSessionIds: closeIds, title: id, mixedProject: keys.length > 1,
@@ -236,7 +242,8 @@ test("overflow is driven by rendered row signature and clears stale menu; backin
   assert.match(view, /handleCloseSessions\(model.closeSessionIds/);
   const controller = readFileSync(new URL("../src/features/terminal/hooks/useTerminalTabsController.tsx", import.meta.url), "utf8");
   assert.match(controller, /resolveNewTabSource\(sessions, sourceSessionId \?\? activeSessionId\)/);
-  assert.match(controller, /sourceSession\?\.shell \?\? projectLaunchOptions\?\.shell/);
+  // Creation option inheritance is verified by the independently owned naming lane.
+  assert.match(controller, /clearDragState[\s\S]*requestAnimationFrame[\s\S]*updateWorkspanTabOverflow\(\)/);
 });
 
 test("actual Workspan menu callbacks close only displayed grouped/project/status row targets", () => {
@@ -273,6 +280,7 @@ test("actual Workspan menu callbacks close only displayed grouped/project/status
   bar.props.models = [a, b, q, c];
   let tree = run(), row = tabs(tree);
   assert.deepEqual(row.map(tab => tab.props.workspan.id), ["A", "C", "B"]);
+  assert.ok(row.every(tab => tab.props.showWorktreeBadge === true));
   assert.ok(row.every(tab => tab.props.worktreeBadge?.label));
   assert.ok(row.every(tab => tab.props.worktreeBadge?.color));
   close(row[1], "closeLeft", ["a"]);
@@ -321,42 +329,37 @@ const { zh } = await import(pathToFileURL(join(temp, "zh.mjs")));
 const { en } = await import(pathToFileURL(join(temp, "en.mjs")));
 
 const badgeLabels = { root: "Main", missing: "Missing", cross: "Cross", mixed: "Mixed" };
-function badgeModel(id, kind, wtId, name, extraMembers = []) {
+function badgeModel(id, kind, wtId, name, extraMembers = [], token = wtId ?? "") {
   const m = model(id, [member(id, "p", { worktreeId: wtId }), ...extraMembers], kind);
-  m.projectMemberships[0].group = { key: JSON.stringify(["p", kind, wtId]), kind, worktreeId: wtId, worktreeName: name };
+  m.members[0] = { ...m.members[0], worktreeKind: kind, worktreeId: wtId, worktreeName: name, worktreeLabel: token };
+  m.projectMemberships[0].group = { key: JSON.stringify(["p", kind, wtId]), kind, worktreeId: wtId, worktreeName: name, worktreeLabel: token };
   return m;
 }
 
-test("compiled shared compact helper and badge model distinguish same tails, long/identical names and reserved/fallback collisions", () => {
-  const pairs = ["task-1007-1048", "task-1007-1111", "alpha-very-long-identical-tail", "beta-very-long-identical-tail",
-    "same", "same", "Main", "Missing", "Cross", "Mixed", "same · w4"];
-  const items = pairs.map((name, i) => badgeModel(`t${i}`, "worktree", `w${i}`, name));
-  const all = [badgeModel("root", "root", null, null), ...items,
-    badgeModel("gone1", "missing-worktree", "gone1", "Missing"), badgeModel("gone2", "missing-worktree", "gone2", "Missing")];
-  const badges = buildWorktreeBadges(all, "p", badgeLabels);
-  assert.equal(new Set([...badges.values()].map(item => item.label.toLowerCase())).size, all.length);
-  assert.equal(badges.get("t0").label, "1048");
-  assert.equal(badges.get("t1").label, "1111");
-  assert.notEqual(badges.get("t2").label, badges.get("t3").label);
-  assert.ok(!badges.get("t2").label.includes("…"));
-  assert.match(badges.get("gone1").label, /Missing/);
-  assert.equal(badges.get("root").label, "Main");
-  const reversed = buildWorktreeBadges([...all].reverse(), "p", badgeLabels);
-  for (const [id, badge] of badges) assert.deepEqual(reversed.get(id), badge);
-  const paths = [{ id: "a", name: "alpha\same" }, { id: "b", name: "beta/same" }];
-  assert.notEqual(getCompactWorktreeLabel(paths[0], paths), getCompactWorktreeLabel(paths[1], paths));
+test("persistent alias/Wn tokens survive name collisions, filtering and reordering", () => {
+  const items = [badgeModel("a", "worktree", "tree-a", "same-full-name-1048", [], "W17"),
+    badgeModel("b", "worktree", "tree-b", "same-full-name-1048", [], "release"),
+    badgeModel("gone", "missing-worktree", "gone-id", null, [], "W23"),
+    badgeModel("absent", "missing-worktree", "absent-id", null), badgeModel("root", "root", null, null)];
+  const badges = buildWorktreeBadges(items, "p", badgeLabels);
+  assert.deepEqual([...badges.values()].map(b => b.label), ["W17", "release", "Missing · W23", "Missing · absent-id", "Main"]);
+  for (const item of items) {
+    assert.deepEqual(buildWorktreeBadges([item], "p", badgeLabels).get(item.workspan.id), badges.get(item.workspan.id));
+    assert.deepEqual(buildWorktreeBadges([...items].reverse(), "p", badgeLabels).get(item.workspan.id), badges.get(item.workspan.id));
+  }
+  assert.equal(buildGlobalWorktreeBadges(items, badgeLabels).get("a").label, "p / W17");
 });
 
 test("split/scoped badges use membership semantics; identity survives labels, notification, rename, member order and project selection", () => {
   const root = badgeModel("root", "root", null, null);
   const wt = badgeModel("wt", "worktree", "stable-id", "task-1048");
-  const split = badgeModel("split", "cross-worktree", null, null, [member("s2", "p", { worktreeId: "stable-id" })]);
-  const mixedTab = model("mx", [member("m1", "p", { worktreeId: "stable-id" }), member("m2", "q")], "mixed-project", ["m1"]);
+  const split = model("split", [member("s1", "p"), member("s2", "p", { worktreeKind: "worktree", worktreeId: "stable-id", worktreeLabel: "W17" })], "cross-worktree");
+  const mixedTab = model("mx", [member("m1", "p", { worktreeKind: "worktree", worktreeId: "stable-id", worktreeLabel: "W17" }), member("m2", "q")], "mixed-project", ["m1"]);
   const all = [root, wt, split, mixedTab];
   const before = JSON.stringify(all);
   const badges = buildWorktreeBadges(all, "p", badgeLabels);
-  assert.equal(badges.get("split").label, "Cross");
-  assert.equal(badges.get("mx").label, "Mixed");
+  assert.match(badges.get("split").label, /p \/ Main[\s\S]*p \/ W17/);
+  assert.match(badges.get("mx").label, /p \/ W17[\s\S]*q \/ Main/);
   assert.deepEqual(buildWorktreeBadges([wt], "p", badgeLabels).get("wt"), badges.get("wt"));
   assert.deepEqual(buildWorktreeBadges(all, "q", badgeLabels).get("mx"), badges.get("mx"));
   const changed = structuredClone(all);
@@ -369,7 +372,7 @@ test("split/scoped badges use membership semantics; identity survives labels, no
   assert.deepEqual(mixedTab.closeSessionIds, ["m1"]);
 });
 
-test("compiled bar/view/sortable render no standalone labels or duplicated identity metadata, keeping title/icon, hover and status independent", () => {
+test("compiled bar/view/sortable render persistent badges without group headers, keeping title/icon, hover and status independent", () => {
   reset();
   const wt = badgeModel("wt", "worktree", "stable-id", "task-1048");
   const props = { position: "top", models: [badgeModel("root", "root", null, null), wt], selectedProjectKey: "p",
@@ -377,6 +380,7 @@ test("compiled bar/view/sortable render no standalone labels or duplicated ident
     notifications: {}, detachPreview: {}, onRowChange() {}, renderTab: (m, targets, badge) => ({ type: "test-tab", props: { badge } }) };
   const tree = render(() => WorkspanTabBar(props));
   assert.equal(nodes(tree).filter(n => n.props?.className === "ui-workspan-group-label").length, 0);
+  assert.ok(nodes(tree).some(n => n.type === "test-tab" && n.props.badge.label === "stable-id"));
   assert.equal(nodes(tree).filter(n => n.type === "test-tab").length, 2);
   assert.equal(nodes(tree).find(n => n.props?.role === "tab").props.title, "Project only");
   const badge = buildWorktreeBadges([wt], "p", badgeLabels).get("wt");
@@ -388,7 +392,7 @@ test("compiled bar/view/sortable render no standalone labels or duplicated ident
   const find = cls => nodes(rendered).find(n => n.props?.className?.split(" ").includes(cls));
   assert.equal(find("ui-terminal-tab-title").props.children, "Terminal purpose");
   assert.ok(nodes(rendered).some(n => n.type === "Terminal"));
-  assert.equal(find("ui-workspan-worktree-badge").props.children, "1048");
+  assert.equal(find("ui-workspan-worktree-badge").props.children, "stable-id");
   assert.equal(nodes(rendered).filter(n => n.props?.className?.includes("ui-terminal-tab-context")).length, 0);
   const line = find("ui-workspan-tab").props.style["--worktree-identity-color"];
   const statusColor = find("ui-tab-runtime-dot").props.style.backgroundColor;
@@ -400,6 +404,10 @@ test("compiled bar/view/sortable render no standalone labels or duplicated ident
   const css = readFileSync(new URL("../src/styles/components/focus-controls.css", import.meta.url), "utf8");
   assert.match(css, /height: 2px;[\s\S]*background: var\(--worktree-identity-color/);
   assert.ok(!css.includes(".ui-workspan-group-label"));
+  tabProps.showWorktreeBadge = false;
+  rendered = render(() => SortableWorkspanTab(tabProps));
+  assert.equal(find("ui-workspan-worktree-badge"), undefined);
+  assert.equal(find("ui-workspan-tab").props.style["--worktree-identity-color"], line);
   assert.ok(find("ui-workspan-tab").props.className.includes("h-7"));
 });
 
@@ -413,20 +421,17 @@ test("both locales supply short root, missing and split badges without changing 
   const chinese = localized(zh), english = localized(en);
   assert.equal(chinese.get("root").label, "主");
   assert.equal(english.get("root").label, "Main");
-  assert.equal(english.get("gone").label, "Missing");
+  assert.equal(english.get("gone").label, "Missing · gone");
   for (const [id, badge] of chinese) {
     assert.ok(badge.label.length > 0);
     assert.equal(badge.color, english.get(id).color);
   }
 });
 
-test("long identical-name overflow badges remain contained below title with full unique hover and scoped close", () => {
+test("overflow groups show persistent badges without group headers; scoped close is unchanged", () => {
   reset();
   const name = "very-long-identical-worktree-name-".repeat(12);
-  const items = [badgeModel("one", "worktree", "stable-identity-one-".repeat(8), name),
-    badgeModel("two", "worktree", "stable-identity-two-".repeat(8), name)];
-  items[0].title = "Primary terminal one";
-  items[1].title = "Primary terminal two";
+  const items = [badgeModel("one", "worktree", "tree-one", name), badgeModel("two", "worktree", "tree-two", name)];
   items[0].closeSessionIds = ["scoped-only"];
   const activated = [], closed = [], toggled = [];
   const tree = render(() => WorkspanTabBar({ position: "top", models: items, selectedProjectKey: "p",
@@ -434,39 +439,20 @@ test("long identical-name overflow badges remain contained below title with full
     notifications: {}, detachPreview: {}, onRowChange() {}, renderTab: () => null,
     onActivate: id => activated.push(id), onClose: m => closed.push(m.closeSessionIds), onToggleList: value => toggled.push(value) }));
   const hasClass = (n, cls) => n.props?.className?.split(" ").includes(cls);
-  const rows = nodes(tree).filter(n => hasClass(n, "ui-terminal-tab-list-item"));
-  const labels = [];
-  rows.forEach((row, i) => {
-    const target = nodes(row).find(n => hasClass(n, "ui-workspan-overflow-target"));
-    const column = nodes(target).find(n => hasClass(n, "ui-workspan-overflow-text"));
-    assert.ok(column.props.className.includes("min-w-0"));
-    assert.ok(column.props.className.includes("flex-1"));
-    assert.ok(column.props.className.includes("flex-col"));
-    assert.ok(column.props.className.includes("overflow-hidden"));
-    const [title, badge] = column.props.children;
-    assert.equal(title.props.children, items[i].title);
-    assert.ok(title.props.className.includes("w-full truncate"));
-    const label = badge.props.children;
-    assert.ok(label.length > 200);
-    assert.equal(badge.props.title, label); // full ID fallback remains available on hover
-    assert.ok(target.props.title.includes(label));
-    labels.push(label);
-    const close = nodes(row).find(n => hasClass(n, "ui-terminal-tab-close"));
-    assert.ok(close.props.className.includes("shrink-0"));
-    assert.ok(!nodes(target).includes(close)); // separate sibling, not inside clipped content
+  const groups = nodes(tree).filter(n => hasClass(n, "ui-workspan-overflow-group"));
+  assert.equal(groups.length, 2);
+  groups.forEach((group, i) => {
+    assert.equal(nodes(group).some(n => hasClass(n, "ui-workspan-group-label")), false);
+    assert.equal(nodes(group).find(n => hasClass(n, "ui-workspan-worktree-badge")).props.children, `tree-${i ? "two" : "one"}`);
+    const target = nodes(group).find(n => hasClass(n, "ui-workspan-overflow-target"));
+    const close = nodes(group).find(n => hasClass(n, "ui-terminal-tab-close"));
+    assert.ok(!nodes(target).includes(close));
     target.props.onClick();
     close.props.onClick({ stopPropagation() {}, currentTarget: { getBoundingClientRect: () => ({}) } });
   });
-  assert.notEqual(labels[0], labels[1]);
   assert.deepEqual(activated, ["one", "two"]);
   assert.deepEqual(closed, [["scoped-only"], ["two"]]);
   assert.deepEqual(toggled, [false, false, false, false]);
-  const css = readFileSync(new URL("../src/styles/components/focus-controls.css", import.meta.url), "utf8");
-  const rule = css.match(/\.ui-workspan-overflow-text > \.ui-workspan-worktree-badge\s*\{([^}]+)\}/)?.[1];
-  assert.ok(rule);
-  for (const declaration of ["min-width: 0", "max-width: 100%", "box-sizing: border-box", "overflow: hidden", "text-overflow: ellipsis"]) {
-    assert.ok(rule.includes(declaration), declaration);
-  }
 });
 
 
@@ -491,7 +477,7 @@ test("global status first-row navigation, mixed matching callbacks/overflow, upd
   nodes(tree).find(n => n.props?.["aria-label"] === "terminal.status.running").props.onClick();
   tree = run();
   assert.deepEqual(tabs(tree).map(n => n.props.id), ["MX", "B"]);
-  assert.match(tabs(tree)[0].props.badge.label, /p.*Main.*q.*Main/);
+  assert.match(tabs(tree)[0].props.badge.label, /p[\s\S]*Main[\s\S]*q[\s\S]*Main/);
   tabs(tree)[0].props.activate();
   assert.deepEqual(calls.at(-1), ["MX", "mb"]);
   assert.deepEqual(tabs(tree)[0].props.targets.rightSessionIds, ["b"]);
@@ -543,7 +529,7 @@ test("global target overrides remembered unrelated member; side scope and count 
 
 
 function globalBadgeModel(id, projectKey, project, wtId = null, name = null, kind = "worktree") {
-  return model(id, [member(id, projectKey, { project, worktreeId: wtId, worktreeName: name, worktreeKind: kind })]);
+  return model(id, [member(id, projectKey, { project, worktreeId: wtId, worktreeName: name, worktreeLabel: wtId ? name ?? wtId : "", worktreeKind: wtId ? kind : "root" })]);
 }
 function assertStableUniqueGlobalBadges(items) {
   const before = JSON.stringify(items);
@@ -571,7 +557,7 @@ test("RV-GLOBAL-001: generated ID fallbacks and literal names stay unique and re
     globalBadgeModel("ordinal-blocker", "p", "P", "bb", 'foo · a · ["p","c"]')];
   const badges = assertStableUniqueGlobalBadges(items);
   assert.notEqual(badges.get("a").label, badges.get("c").label);
-  assert.match(badges.get("c").label, / · 2$/);
+  assert.ok(badges.get("c").label.includes("foo · a")); // literal alias stays visible, not runtime numbering
   assert.deepEqual(badges.get("a"), badges.get("repeat"));
 });
 
@@ -695,4 +681,152 @@ test("project hide target selector never expands scoped visible members to close
   assert.deepEqual(displayedProjectTerminalIds([scoped, scoped], "p", "all", {}), ["visible"]);
   assert.deepEqual(displayedProjectTerminalIds([scoped], "p", "running", { "out-of-scope": "running" }), []);
   assert.equal(JSON.stringify(scoped), before);
+});
+
+test("global A-B-A segments preserve first unique backing order, full visible contexts and close references", () => {
+  const a = globalBadgeModel("A", "p", "P", "a", "Full-worktree-A");
+  const b = globalBadgeModel("B", "p", "P", "b", "Full-worktree-B");
+  const again = globalBadgeModel("A2", "p", "P", "a", "Full-worktree-A");
+  const all = [a, b, again, a];
+  const groups = selectProjectTabGroups(all, null, "running", { A: "running", B: "running", A2: "running" });
+  assert.deepEqual(groups.map(g => g.models.map(m => m.workspan.id)), [["A"], ["B"], ["A2"]]);
+  assert.equal(new Set(groups.map(g => g.group.key)).size, 3);
+  assert.deepEqual(groups.flatMap(g => g.models), [a, b, again]);
+  groups.flatMap(g => g.models).forEach((m, i) => assert.strictEqual(m.closeSessionIds, all[i].closeSessionIds));
+  assert.deepEqual(selectProjectTabGroups(all, "p", "all", {}).map(g => g.models.map(m => m.workspan.id)), [["A", "A2"], ["B"]]);
+  const mx = model("mx", [member("hit", "p", { worktreeKind: "worktree", worktreeId: "a", worktreeName: "Full-worktree-A" }),
+    member("not-matching", "q", { worktreeKind: "worktree", worktreeId: "b", worktreeName: "Full-worktree-B" })]);
+  const selected = selectProjectTabGroups([mx, mx], null, "done", { hit: "done" });
+  assert.equal(selected.length, 1);
+  assert.equal(selected[0].group.contexts.length, 2);
+  assert.deepEqual(selected[0].group.contexts.map(c => c.worktreeName), ["Full-worktree-A", "Full-worktree-B"]);
+});
+
+test("compiled current context renders full active metadata and deduplicated scoped contexts above either docking position", () => {
+  const long = "full-worktree-name-".repeat(30);
+  const active = member("active", "p", { project: "Full project", worktreeKind: "worktree", worktreeId: "tree", worktreeLabel: "W17", worktreeName: long, branch: "feature/full", worktreePath: "/full/path" });
+  const m = model("split", [member("other", "q"), active, { ...active, sessionId: "duplicate" }]);
+  const tree = TerminalCurrentContext({ models: [m], workspanId: "split", sessionId: "active" });
+  assert.equal(tree.props.children.length, 2);
+  assert.equal(tree.props.children[0].props["data-current"], "true");
+  assert.equal(tree.props.children[1].props["data-current"], "false");
+  assert.equal(tree.props.children[0].props.children[1].props.children, `Full project / W17 / ${long} / feature/full / /full/path`);
+  assert.equal(tree.props.children[1].props.children[1].props.children, "q / terminal.context.rootDirectory");
+  assert.equal(TerminalCurrentContext({ models: [m], workspanId: "split", sessionId: "out-of-scope" }), null);
+  assert.equal(TerminalCurrentContext({ models: [m], workspanId: "absent", sessionId: "active" }), null);
+  for (const position of ["top", "bottom"]) for (const visible of [true, false]) {
+    const view = TerminalTabsView({ t: key => key, mountedWorkspanLayouts: [{ workspan: { id: "split" } }],
+      workspanEnabled: true, workspanTabModels: [m], effectiveActiveWorkspanId: "split", currentContextSessionId: "active",
+      workspanTabBarPosition: position, workspanTabBarVisible: visible, renderToolbarActions: () => null, visibleSessions: [] });
+    const contexts = nodes(view).filter(n => n.type === TerminalCurrentContext);
+    assert.equal(contexts.length, 1);
+    assert.deepEqual(contexts[0].props, { models: [m], workspanId: "split", sessionId: "active" });
+    const parent = nodes(view).find(n => Array.isArray(n.props?.children) && n.props.children.includes(contexts[0]));
+    const layout = parent.props.children.find(n => n?.type === "WorkspanTerminalLayout");
+    assert.ok(parent.props.children.indexOf(contexts[0]) < parent.props.children.indexOf(layout));
+    assert.equal(layout.props.position, position);
+    assert.equal(layout.props.tabBarVisible, visible);
+  }
+});
+
+test("overflow observes only tab geometry, uses client viewport/scrollLeft only, pauses dragging and clears disabled/zero width", () => {
+  reset();
+  const frames = [], observed = [];
+  globalThis.requestAnimationFrame = fn => { frames.push(fn); return frames.length; };
+  globalThis.cancelAnimationFrame = () => {};
+  const flush = () => frames.splice(0).forEach(fn => fn());
+  let resize;
+  globalThis.ResizeObserver = class { constructor(fn) { resize = fn; } observe(node) { observed.push(node); } disconnect() {} };
+  const title = { title: true }, group = { group: true };
+  const tab = { dataset: { workspanId: "active" }, getBoundingClientRect: () => ({ left: 170, right: 220 }),
+    scrollIntoView() { assert.fail("ancestor scrolling forbidden"); } };
+  const clipped = { dataset: { workspanId: "clipped" }, getBoundingClientRect: () => ({ left: 90, right: 130 }) };
+  const scroller = { clientWidth: 100, clientLeft: 2, scrollWidth: 400, scrollLeft: 10,
+    getBoundingClientRect: () => ({ left: 0, right: 130 }),
+    querySelectorAll: selector => selector.includes("group") ? [title, group, tab, clipped] : [tab, clipped, clipped],
+    addEventListener() {}, removeEventListener() {} };
+  let enabled = true;
+  const dragging = { current: null }, bar = { current: {} }, scroll = { current: scroller };
+  const run = () => render(() => useWorkspanTabOverflow(bar, scroll, dragging, enabled, "active"));
+  let hook = run();
+  assert.equal(scroller.scrollLeft, 128);
+  assert.ok(!observed.includes(title) && !observed.includes(group));
+  assert.ok(observed.includes(tab) && observed.includes(clipped));
+  flush(); hook = run();
+  assert.deepEqual(hook.workspanTabOverflow.hiddenIds, ["active", "clipped"]);
+  dragging.current = "drag"; scroller.scrollWidth = 100;
+  resize(); flush(); hook = run();
+  assert.equal(hook.workspanTabOverflow.isOverflowing, true);
+  dragging.current = null; hook.updateWorkspanTabOverflow(); hook = run();
+  assert.equal(hook.workspanTabOverflow.isOverflowing, false);
+  scroller.scrollWidth = 400; scroller.clientWidth = 0;
+  hook.updateWorkspanTabOverflow(); hook = run();
+  assert.deepEqual(hook.workspanTabOverflow, { isOverflowing: false, hiddenIds: [] });
+  scroller.clientWidth = 100; hook.updateWorkspanTabOverflow(); hook = run();
+  hook.setWorkspanTabListOpen(true); hook = run();
+  enabled = false; hook = run(); flush(); hook = run();
+  assert.deepEqual(hook.workspanTabOverflow, { isOverflowing: false, hiddenIds: [] });
+  assert.equal(hook.workspanTabListOpen, false);
+  delete globalThis.ResizeObserver;
+});
+
+test("oversized active tabs align their left edge within the scroller, never an ancestor", () => {
+  for (const geometry of [{ left: 170, right: 420, width: 250, expected: 178 },
+    { left: -20, right: 230, width: 250, expected: 0 }]) {
+    reset();
+    const frames = [];
+    globalThis.requestAnimationFrame = fn => { frames.push(fn); return frames.length; };
+    globalThis.cancelAnimationFrame = () => {};
+    const selectors = [];
+    const tab = { dataset: { workspanId: "wide" }, getBoundingClientRect: () => geometry,
+      scrollIntoView() { assert.fail("must not scroll ancestors"); } };
+    const scroller = { clientWidth: 100, clientLeft: 2, scrollWidth: 600, scrollLeft: 10,
+      getBoundingClientRect: () => ({ left: 0, right: 130 }),
+      querySelectorAll(selector) { selectors.push(selector); return [tab]; },
+      addEventListener() {}, removeEventListener() {} };
+    render(() => useWorkspanTabOverflow({ current: null }, { current: scroller }, { current: null }, true, "wide"));
+    assert.equal(scroller.scrollLeft, geometry.expected);
+    assert.ok(selectors.every(selector => selector === "[data-workspan-id]"));
+    frames.splice(0).forEach(fn => fn());
+  }
+});
+
+test("current/mixed context maps existing aliases and Wn to full names without renumbering", () => {
+  const a = member("a", "p", { project: "Same", projectId: "p", worktreeKind: "worktree", worktreeId: "a", worktreeLabel: "审查", worktreeName: "Full alias name" });
+  const b = member("b", "q", { project: "Same", projectId: "q", worktreeKind: "missing-worktree", worktreeId: "b", worktreeLabel: "W2147483647", worktreeName: "Full missing name" });
+  const m = model("mixed", [a, b, { ...a, sessionId: "duplicate" }]);
+  const before = JSON.stringify(m);
+  for (const sessionId of ["a", "b"]) {
+    const rows = TerminalCurrentContext({ models: [m], workspanId: "mixed", sessionId }).props.children;
+    assert.equal(rows.length, 2);
+    const text = rows.map(row => row.props.children[1].props.children);
+    assert.ok(text.includes("Same · p / 审查 / Full alias name"));
+    assert.ok(text.includes("Same · q / W2147483647 / Full missing name / terminal.context.worktreeMissing"));
+    assert.ok(text[0].includes(sessionId === "a" ? "审查" : "W2147483647"));
+    assert.equal(rows[0].props.children[0].props.children[0], "terminal.context.current");
+    assert.equal(rows[1].props.children[0].props.children[0], "terminal.context.otherVisible");
+  }
+  assert.equal(JSON.stringify(m), before);
+});
+
+test("top overflow complete mixed tokens remain inside the bounded text column", async () => {
+  reset();
+  const hasClass = (n, cls) => n.props?.className?.split(" ").includes(cls);
+  const project = "SameVeryLongProjectName".repeat(8);
+  const members = [member("a", "p", { project, projectId: "duplicate-project-id-p", worktreeKind: "worktree", worktreeId: "a", worktreeLabel: "W2147483647" }),
+    member("b", "q", { project, projectId: "duplicate-project-id-q", worktreeKind: "worktree", worktreeId: "b", worktreeLabel: "十二字符别名审查" })];
+  const m = model("mixed", members);
+  const tree = render(() => WorkspanTabBar({ position: "top", models: [m], selectedProjectKey: "p",
+    contextOptions: [], overflow: { isOverflowing: true, hiddenIds: ["mixed"] }, listOpen: true,
+    notifications: {}, detachPreview: { left: 0, visible: false }, onRowChange() {}, renderTab: () => null }));
+  const token = nodes(tree).find(n => hasClass(n, "ui-workspan-worktree-badge"));
+  assert.ok(token.props.children.includes("W2147483647"));
+  assert.ok(token.props.children.includes("十二字符别名审查"));
+  assert.ok(token.props.children.includes("duplicate-project-id-p"));
+  assert.ok(token.props.children.includes("duplicate-project-id-q"));
+  assert.ok(nodes(tree).some(n => hasClass(n, "ui-workspan-overflow-text") && nodes(n).includes(token)));
+  if (process.env.TERMINAL_GEOMETRY_DIR) {
+    const { saveOverflowFixture } = await import("./terminalOverflowGeometry.fixture.mjs");
+    await saveOverflowFixture("top-overflow", nodes(tree).find(n => hasClass(n, "ui-terminal-tab-list-popover")));
+  }
 });

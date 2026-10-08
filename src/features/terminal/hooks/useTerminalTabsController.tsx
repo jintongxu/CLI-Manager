@@ -1,3 +1,4 @@
+import { resolveTerminalCreationContext, withoutTerminalTitle } from "../api/terminalCreationContext";
 import { buildAgentTaskNotifications } from "../lib/terminalTaskPresentation";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useShallow } from "zustand/shallow";
@@ -61,6 +62,7 @@ import { useScopedTerminalEmptyState } from "./useScopedTerminalEmptyState";
 import { useTerminalVisibleLayouts } from "./useTerminalVisibleLayouts";
 import { isHideableTerminalSession } from "../lib/terminalTabVisibility";
 import { buildWorkspanTabModels } from "../lib/workspanTabModel";
+import { buildGlobalWorktreeBadges } from "../api/terminalWorktreeBadge";
 import { hideProjectTerminalSessions } from "../api/terminalProjectHide";
 import { resolveNewTabSource } from "../api/terminalProjectSelection";
 import { buildTerminalProjectOptions } from "../api/terminalProjectTabsModel";
@@ -328,6 +330,14 @@ export function useTerminalTabsController({
     () => buildWorkspanTabModels(visibleWorkspanLayouts, sessions, projectById, tabNotifications, t, worktrees),
     [projectById, sessions, t, tabNotifications, visibleWorkspanLayouts, worktrees]
   );
+  const sessionWorktreeBadges = useMemo(() => buildGlobalWorktreeBadges(
+    workspanTabModels.flatMap((model) => model.members.map((member) => ({
+      ...model, workspan: { ...model.workspan, id: member.sessionId }, members: [member],
+    }))), {
+      root: t("terminal.context.badgeMain"), missing: t("terminal.context.badgeMissing"),
+      cross: t("terminal.context.badgeCross"), mixed: t("terminal.context.badgeMixed"),
+    },
+  ), [workspanTabModels, t]);
   const activateProjectTarget = useCallback((workspanId: string, sessionId?: string) => {
     setActiveWorkspaceTab("terminal");
     setActiveWorkspan(workspanId);
@@ -541,41 +551,21 @@ export function useTerminalTabsController({
   const handleNewTab = useCallback(async (sourceSessionId?: string) => {
     const sourceSession = resolveNewTabSource(sessions, sourceSessionId ?? activeSessionId);
     if (rejectMissingSessionWorktree(sourceSession)) return;
-    const newTerminalContext =
-      sourceSession?.kind === "subagent-transcript"
-        ? { cwd: undefined, title: "Terminal" }
-        : sourceSession?.kind === "file-editor"
-          ? { cwd: sourceSession.fileEditor?.projectPath, title: "Terminal" }
-          : { cwd: sourceSession?.cwd, title: sourceSession?.title ?? "Terminal" };
+    const context = resolveTerminalCreationContext(sourceSession, sessions, projects, worktrees, groups);
+    if (!context) return;
     const activeProject = sourceSession ? resolveProjectForSession(sourceSession, sessions, projects, projectById) : null;
-    const sourceWorktree = findWorktreeForSession(sourceSession, sessions, worktrees);
-    const projectLaunchOptions = activeProject ? buildProjectSplitOptions(activeProject, groups) : null;
-    const launchCwd = sourceWorktree?.path.trim() || newTerminalContext.cwd;
-    const launchStartupCmd = sourceSession?.isAgentSession === false && !sourceSession.startupCmd
-      ? "" : projectLaunchOptions?.startupCmd;
-    const launchEnvVars = projectLaunchOptions?.envVars;
-    const launchShell = sourceSession?.shell ?? projectLaunchOptions?.shell;
     if (useExternalTerminal) {
       if (rejectUnsupportedCapability(activeProject, "externalTerminal")) return;
       await openWindowsTerminal([{
-        title: newTerminalContext.title, cwd: launchCwd ?? undefined,
-        shell: launchShell ?? (activeProject ? activeProject.shell || useSettingsStore.getState().defaultShell : sourceSession?.shell ?? undefined),
+        title: sourceSession?.title ?? "Terminal", cwd: context.cwd,
+        shell: context.shell ?? useSettingsStore.getState().defaultShell,
       }]);
       closeHistory();
       setActiveWorkspaceTab("terminal");
       return;
     }
-    await createSession(
-      activeProject?.id,
-      launchCwd ?? undefined,
-      newTerminalContext.title,
-      launchStartupCmd,
-      launchEnvVars,
-      launchShell,
-      undefined,
-      sourceSession?.worktreeId ?? sourceWorktree?.id,
-      sourceSession?.sshHostId,
-    );
+    await createSession(context.projectId, context.cwd, undefined, context.startupCmd, context.envVars,
+      context.shell, undefined, context.worktreeId, context.sshHostId);
     closeHistory();
     setActiveWorkspaceTab("terminal");
   }, [activeSessionId, closeHistory, createSession, groups, projectById, projects, rejectMissingSessionWorktree, rejectUnsupportedCapability, sessions, useExternalTerminal, worktrees]);
@@ -593,7 +583,7 @@ export function useTerminalTabsController({
       await createSession(
         options.projectId,
         scopedWorktree.path,
-        getWorktreeDisplayName(scopedWorktree),
+        undefined,
         options.startupCmd,
         options.envVars,
         options.shell,
@@ -607,7 +597,7 @@ export function useTerminalTabsController({
 
     if (terminalScopeValue.kind !== "project") return;
     const options = buildProjectSplitOptions(scopedProject, groups);
-    await createSession(options.projectId, options.cwd, options.title, options.startupCmd, options.envVars, options.shell);
+    await createSession(options.projectId, options.cwd, undefined, options.startupCmd, options.envVars, options.shell);
     closeHistory();
     setActiveWorkspaceTab("terminal");
   }, [closeHistory, createSession, groups, rejectMissingWorktree, scopedProject, scopedWorktree, terminalScopeValue, useExternalTerminal]);
@@ -665,7 +655,7 @@ export function useTerminalTabsController({
     await createSession(
       options.projectId,
       worktree.path,
-      getWorktreeDisplayName(worktree),
+      undefined,
       options.startupCmd,
       options.envVars,
       options.shell,
@@ -710,12 +700,13 @@ export function useTerminalTabsController({
     void createSession(
       session.projectId,
       session.cwd,
-      session.title,
+      undefined,
       session.isAgentSession === false && !session.startupCmd ? "" : normalizeDirectCodexStartupCommand(session.startupCmd),
       session.envVars ? { ...session.envVars } : undefined,
       session.shell ?? undefined,
       undefined,
       session.worktreeId,
+      session.sshHostId,
     ).then(() => {
       closeHistory();
       setActiveWorkspaceTab("terminal");
@@ -1301,15 +1292,18 @@ export function useTerminalTabsController({
 
   const handleSplitEmpty = useCallback(() => {
     if (!splitPicker) return;
-    void splitTerminal(splitPicker.sessionId, splitPicker.direction, { title: "Terminal" });
+    const source = resolveNewTabSource(sessions, splitPicker.sessionId);
+    const context = resolveTerminalCreationContext(source, sessions, projects, worktrees, groups);
+    if (!context) return;
+    void splitTerminal(splitPicker.sessionId, splitPicker.direction, { ...context, startupCmd: "" });
     handleCloseSplitPicker();
     closeHistory();
     setActiveWorkspaceTab("terminal");
-  }, [closeHistory, handleCloseSplitPicker, splitPicker, splitTerminal]);
+  }, [closeHistory, groups, handleCloseSplitPicker, projects, sessions, splitPicker, splitTerminal, worktrees]);
 
   const handleSplitProject = useCallback((project: Project) => {
     if (!splitPicker) return;
-    void splitTerminal(splitPicker.sessionId, splitPicker.direction, buildProjectSplitOptions(project, groups));
+    void splitTerminal(splitPicker.sessionId, splitPicker.direction, withoutTerminalTitle(buildProjectSplitOptions(project, groups)));
     handleCloseSplitPicker();
     closeHistory();
     setActiveWorkspaceTab("terminal");
@@ -1648,6 +1642,7 @@ export function useTerminalTabsController({
         pane={pane}
         sessions={sessions}
         visibleSessionIds={visibleSessionIds}
+        sessionWorktreeBadges={sessionWorktreeBadges}
         projects={projects}
         worktrees={worktrees}
         allPanes={layoutPanes}
@@ -1730,6 +1725,7 @@ export function useTerminalTabsController({
     resolvedTheme,
     detachSessionToWorkspan,
     visibleSessionIds,
+    sessionWorktreeBadges,
     sessions,
     worktrees,
     workspanEnabled,
@@ -1844,6 +1840,7 @@ export function useTerminalTabsController({
     handleRestoreWorkspanToSinglePane,
     handleSaveSessionToSidebar,
     mountedWorkspanLayouts,
+    currentContextSessionId: activeSessionId && visibleSessionIds.has(activeSessionId) ? activeSessionId : null,
     effectiveActiveSessionId,
     renderWorkspanLeaf,
     activeFullscreenPaneId,

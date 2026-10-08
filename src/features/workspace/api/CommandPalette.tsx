@@ -1,3 +1,5 @@
+import { useWorktreeStore } from "../../projects/api/worktreeStore";
+import { resolveTerminalCreationContext } from "../../terminal/api/terminalCreationContext";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { create } from "zustand";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
@@ -74,8 +76,6 @@ export function CommandPalette() {
 
   const activeSession = activeSessionId ? sessions.find((item) => item.id === activeSessionId) ?? null : null;
   const activeProjectId = activeSession?.projectId ?? null;
-  const newTerminalCwd = activeSession?.kind === "subagent-transcript" ? undefined : activeSession?.cwd;
-  const newTerminalTitle = activeSession?.kind === "subagent-transcript" ? "Terminal" : activeSession?.title ?? "Terminal";
   const templates = getTemplatesForContext(activeProjectId, activeSessionId);
 
   useEffect(() => {
@@ -95,7 +95,13 @@ export function CommandPalette() {
         label: "新建终端",
         description: "打开新的终端标签",
         category: "操作",
-        action: () => createSession(undefined, newTerminalCwd ?? undefined, newTerminalTitle),
+        action: () => {
+          const projectState = useProjectStore.getState();
+          const context = resolveTerminalCreationContext(activeSession, useTerminalStore.getState().sessions,
+            projectState.projects, useWorktreeStore.getState().worktrees, projectState.groups);
+          if (context) void createSession(context.projectId, context.cwd, undefined, context.startupCmd, context.envVars,
+            context.shell, undefined, context.worktreeId, context.sshHostId);
+        },
       });
     }
 
@@ -117,7 +123,10 @@ export function CommandPalette() {
         description: "在当前 Pane 右侧创建空终端",
         category: "操作",
         action: () => {
-          void splitTerminal(activeSessionId, "horizontal", { title: "Terminal" });
+          const projectState = useProjectStore.getState();
+          const context = resolveTerminalCreationContext(activeSession, useTerminalStore.getState().sessions,
+            projectState.projects, useWorktreeStore.getState().worktrees, projectState.groups);
+          if (context) void splitTerminal(activeSessionId, "horizontal", { ...context, startupCmd: "" });
         },
       });
       result.push({
@@ -126,7 +135,10 @@ export function CommandPalette() {
         description: "在当前 Pane 下方创建空终端",
         category: "操作",
         action: () => {
-          void splitTerminal(activeSessionId, "vertical", { title: "Terminal" });
+          const projectState = useProjectStore.getState();
+          const context = resolveTerminalCreationContext(activeSession, useTerminalStore.getState().sessions,
+            projectState.projects, useWorktreeStore.getState().worktrees, projectState.groups);
+          if (context) void splitTerminal(activeSessionId, "vertical", { ...context, startupCmd: "" });
         },
       });
       result.push({
@@ -167,7 +179,7 @@ export function CommandPalette() {
           const envVars = parseProjectEnvVars(p);
           createSession(
             p.id, resolveProjectPath(p, groups),
-            p.name,
+            undefined,
             resolveProjectStartupCommand(p), envVars, shell,
           );
         },
@@ -199,7 +211,7 @@ export function CommandPalette() {
     }
 
     return result;
-  }, [projects, groups, templates, activeSessionId, newTerminalCwd, newTerminalTitle, resolvedTheme, createSession, splitTerminal, unsplitTerminal, setTheme, viewMode, sessionHistoryShortcut]);
+  }, [projects, groups, templates, activeSessionId, activeSession, resolvedTheme, createSession, splitTerminal, unsplitTerminal, setTheme, viewMode, sessionHistoryShortcut]);
 
   const queryLower = useMemo(() => query.trim().toLowerCase(), [query]);
 

@@ -8,12 +8,16 @@ import { VendorIcon, type VendorKey } from "../../../shared/ui/VendorIcon";
 import { CliToolIcon } from "../../../shared/ui/CliToolIcon";
 import { Portal } from "../../../shared/ui/Portal";
 
+import type { TerminalWorktreeBadge } from "../api/terminalWorktreeBadge";
+
 export function DragOverlayTab({
   title,
   notification,
   vendor,
   cliToolIcon,
+  worktreeBadge,
 }: {
+  worktreeBadge?: TerminalWorktreeBadge;
   title: string;
   notification: TabNotificationState;
   vendor?: VendorKey | null;
@@ -23,8 +27,10 @@ export function DragOverlayTab({
 
   return (
     <div
-      className={`ui-tab-trigger ui-terminal-tab-item ui-terminal-drag-overlay-tab mx-1 flex h-7 ${tabMinWidthClass} max-w-[180px] items-center gap-2 rounded-lg px-3 text-[12px] font-medium`}
+      className={`ui-tab-trigger ui-terminal-tab-item ui-terminal-drag-overlay-tab mx-1 flex h-7 ${tabMinWidthClass} shrink-0 items-center gap-2 rounded-lg px-3 text-[12px] font-medium`}
       data-selected="true"
+      data-worktree-identity={worktreeBadge?.identity}
+      style={{ "--worktree-identity-color": worktreeBadge?.color } as CSSProperties}
     >
       <span
         className="ui-tab-runtime-dot w-2 h-2 rounded-full shrink-0"
@@ -41,7 +47,8 @@ export function DragOverlayTab({
           <CliToolIcon icon={cliToolIcon} size={14} className="text-current" />
         </span>
       ) : null}
-      <span className="ui-terminal-tab-title min-w-0 flex-1 truncate tracking-[0.01em]">{title}</span>
+      <span className="ui-terminal-tab-title min-w-0 max-w-[180px] flex-1 truncate tracking-[0.01em]">{title}</span>
+      {worktreeBadge && <span className="ui-workspan-worktree-badge shrink-0 whitespace-nowrap">{worktreeBadge.label}</span>}
       <span
         className="ui-terminal-tab-close ml-1 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-on-surface-variant"
         aria-hidden="true"
@@ -55,6 +62,7 @@ export function DragOverlayTab({
 export interface TerminalDragOverlayData {
   type: "session" | "workspan";
   overlay: {
+    worktreeBadge?: TerminalWorktreeBadge;
     title: string;
     notification: TabNotificationState;
     vendor?: VendorKey | null;
@@ -85,6 +93,7 @@ export function TerminalTabDragOverlay({
             <div className="ui-terminal-pane-chrome ui-terminal-drag-overlay-chrome">
               <DragOverlayTab
                 title={overlay.title}
+                worktreeBadge={overlay.worktreeBadge}
                 notification={overlay.notification}
                 vendor={overlay.vendor}
                 cliToolIcon={overlay.cliToolIcon}

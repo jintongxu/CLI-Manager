@@ -1,3 +1,4 @@
+import { getWorktreeShortLabel } from "../api/worktreeLabels";
 import { findNodeById } from "../lib/treeNodeLookup";
 import { DndContext, DragOverlay, PointerSensor, closestCenter, useSensor, useSensors, type CollisionDetection, type DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -103,7 +104,7 @@ function filterTreeNodes(nodes: TNode[], query: string): TNode[] {
         continue;
       }
       const worktrees = (node.worktrees ?? []).filter((worktree) =>
-        [getWorktreeDisplayName(worktree), worktree.name, worktree.branch, worktree.description].some((value) => value.toLowerCase().includes(normalizedQuery))
+        [getWorktreeShortLabel(worktree), getWorktreeShortLabel({ label_ordinal: worktree.label_ordinal }), getWorktreeDisplayName(worktree), worktree.name, worktree.branch, worktree.description].some((value) => value.toLowerCase().includes(normalizedQuery))
       );
       if (worktrees.length > 0) {
         result.push({ ...node, worktrees });
@@ -112,7 +113,7 @@ function filterTreeNodes(nodes: TNode[], query: string): TNode[] {
     }
 
     if (node.type === "worktree") {
-      if ([getWorktreeDisplayName(node.worktree), node.worktree.name, node.worktree.branch, node.worktree.description].some((value) => value.toLowerCase().includes(normalizedQuery))) {
+      if ([getWorktreeShortLabel(node.worktree), getWorktreeShortLabel({ label_ordinal: node.worktree.label_ordinal }), getWorktreeDisplayName(node.worktree), node.worktree.name, node.worktree.branch, node.worktree.description].some((value) => value.toLowerCase().includes(normalizedQuery))) {
         result.push(node);
       }
       continue;
@@ -1098,7 +1099,7 @@ function renderFlyoutNodes(nodes: TNode[], depth: number, actions: TreeActions, 
           </span>
           <span className="worktree-terminal-heading">
             <span className="worktree-terminal-title-line">
-              <span className="worktree-terminal-title truncate">{getWorktreeDisplayName(child.worktree)}</span>
+              <span className="worktree-terminal-title truncate">{getWorktreeShortLabel(child.worktree)} · {getWorktreeDisplayName(child.worktree)}</span>
             </span>
             <WorktreeTerminalSummary projectId={child.project.id} worktreeId={child.worktree.id} compact />
           </span>
@@ -1155,7 +1156,7 @@ function renderFlyoutNodes(nodes: TNode[], depth: number, actions: TreeActions, 
 function DragGhost({ activeId, tree }: { activeId: string; tree: TNode[] }) {
   const node = findNodeById(tree, activeId);
   if (!node) return null;
-  const label = node.type === "group" ? node.group.name : node.type === "worktree" ? getWorktreeDisplayName(node.worktree) : node.project.name;
+  const label = node.type === "group" ? node.group.name : node.type === "worktree" ? `${getWorktreeShortLabel(node.worktree)} · ${getWorktreeDisplayName(node.worktree)}` : node.project.name;
   const icon = node.type === "group" ? <Folder size={14} strokeWidth={1.5} /> : node.type === "worktree" ? <WorktreeIcon className="h-3.5 w-3.5" /> : <Terminal size={14} strokeWidth={1.5} />;
   return (
     <div className="ui-tree-drag-ghost flex items-center gap-2 rounded-xl border border-border bg-surface-container-high px-3 py-1.5 text-[12px] font-medium shadow-lg">

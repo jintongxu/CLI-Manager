@@ -100,7 +100,7 @@ export function resolveAttachedDaemonSession(
   return {
     projectId: persisted?.projectId ?? project?.id,
     worktreeId: persisted?.worktreeId ?? worktree?.id,
-    title: isGenericDaemonSessionTitle(persisted?.title) ? fallbackTitle : persisted!.title,
+    title: persisted?.title !== undefined ? persisted.title : fallbackTitle,
     cwd,
     shell: persisted?.shell ?? attach.shell,
     environmentType: persisted?.environmentType ?? (attach.environmentType === "ssh" ? "ssh" : undefined),

@@ -1,3 +1,4 @@
+import { getWorktreeShortLabel } from "./worktreeLabels";
 import { orderProjectWorktrees } from "../../../shared/lib/worktreeOrder";
 import { create } from "zustand";
 import { toast } from "sonner";
@@ -87,7 +88,7 @@ function buildTree(groups: Group[], projects: Project[], search: string, worktre
           p.cli_tool.toLowerCase().includes(lowerSearch) ||
           worktrees.some((worktree) =>
             worktree.project_id === p.id &&
-            ([worktree.display_name?.trim() || worktree.name, worktree.name, worktree.branch, worktree.description].some((value) => value.toLowerCase().includes(lowerSearch)))
+            ([worktree.display_name?.trim() || worktree.name, worktree.name, worktree.branch, worktree.description, getWorktreeShortLabel(worktree), getWorktreeShortLabel({ label_ordinal: worktree.label_ordinal })].some((value) => value.toLowerCase().includes(lowerSearch)))
           )
       )
     : projects;
@@ -354,6 +355,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       worktree_strategy: isSshProject ? "disabled" : input.worktree_strategy ?? "disabled",
       worktree_root: isSshProject ? "" : input.worktree_root ?? "",
       worktree_deps_prompt_enabled: isSshProject ? 0 : input.worktree_deps_prompt_enabled ?? 0,
+      worktree_label_high_water: 0,
       environment_type: input.environment_type ?? "local",
       ssh_host_id: isSshProject ? input.ssh_host_id ?? null : null,
       remote_path: isSshProject ? input.remote_path?.trim() ?? "" : "",

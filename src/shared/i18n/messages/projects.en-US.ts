@@ -1,6 +1,17 @@
 import type { zh } from "./projects.zh-CN";
 
 export const en: Record<keyof typeof zh, string> = {
+  "worktree.recovery.save": "Git worktree created; saving its record failed (persistence is unconfirmed). Creation stopped: do not recreate. Keep the identity/path below; inspect with git worktree list and open that path as a project. Refresh to check for an existing record before manual recovery. Nothing was deleted.",
+  "worktree.recovery.saved": "Git worktree and record created. Creation stopped: do not recreate. Refresh/reopen the workspace, then open the existing worktree from the project sidebar (retry terminal launch there). Identity, failed stage and cause follow. Nothing was deleted.",
+  "worktree.shortLabel.label": "Short label (optional)",
+  "worktree.shortLabel.createHelp": "Leave empty for an automatic label. Up to 12 Unicode characters; W + digits is reserved.",
+  "worktree.shortLabel.editHelp": "Default: {label}. Clear to restore this label.",
+  "worktree.shortLabel.too_long": "Use at most 12 Unicode characters.",
+  "worktree.shortLabel.reserved": "W followed by digits is reserved for automatic labels.",
+  "worktree.shortLabel.invalid": "Control characters and bidirectional formatting are not allowed.",
+  "worktree.shortLabel.conflict": "This short label is already used in this project.",
+  "worktree.shortLabel.exhausted": "Automatic label numbers are exhausted for this project.",
+
   "worktree.finish.plan.title": "Confirm entire Worktree cleanup scope",
   "worktree.finish.plan.stage": "Current stage",
   "worktree.finish.plan.cleanupPending": "Integrated / no diff; cleanup pending, merge will not be repeated",

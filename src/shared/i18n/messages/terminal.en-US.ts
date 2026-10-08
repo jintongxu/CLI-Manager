@@ -1,6 +1,8 @@
 import type { zh } from "./terminal.zh-CN";
 
 export const en: Record<keyof typeof zh, string> = {
+  "terminal.context.current": "Current",
+  "terminal.context.otherVisible": "Also visible",
   "terminal.context.hideDisplayedProjectTerminals": "Hide all unhidden ordinary terminals in project \"{project}\" matching the current filter (keep sessions and processes; do not delete)",
   "termStats.screenshot": "Copy full statistics as image",
   "termStats.screenshotBusy": "Creating statistics image…",

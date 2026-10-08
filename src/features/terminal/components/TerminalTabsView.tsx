@@ -22,6 +22,7 @@ import {
   HistoryWorkspace, GitChangesPanel, GitWorkspace, TerminalStatsPanel, SessionReplayPanel,
 } from "./lazyTerminalPanels";
 import { buildTerminalTabHoverInfo, terminalTabCollisionDetection } from "../lib/terminalTabsModel";
+import { TerminalCurrentContext } from "./TerminalCurrentContext";
 import { SortableWorkspanTab } from "./SortableTerminalTabs";
 import { TerminalTabDragOverlay } from "./TerminalTabDragOverlay";
 import { SplitProjectPicker, TerminalCloseConfirmBubble } from "./TerminalTabDialogs";
@@ -116,6 +117,7 @@ export function TerminalTabsView({
   handleRestoreWorkspanToSinglePane,
   handleSaveSessionToSidebar,
   mountedWorkspanLayouts,
+  currentContextSessionId,
   effectiveActiveSessionId,
   renderWorkspanLeaf,
   activeFullscreenPaneId,
@@ -334,6 +336,7 @@ export function TerminalTabsView({
                 onDragCancel={clearDragState}
                 onDragEnd={handleDragEnd}
               >
+                <TerminalCurrentContext models={workspanTabModels} workspanId={effectiveActiveWorkspanId} sessionId={currentContextSessionId} />
                 <WorkspanTerminalLayout
                   position={workspanTabBarPosition}
                   tabBarVisible={workspanTabBarVisible}
@@ -367,6 +370,7 @@ export function TerminalTabsView({
                       <SortableWorkspanTab
                         workspan={model.workspan}
                         worktreeBadge={badge}
+                        showWorktreeBadge={true}
                         title={model.title}
                         notification={model.notification}
                         vendor={model.vendor}

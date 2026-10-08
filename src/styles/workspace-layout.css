@@ -46,8 +46,8 @@
 
 .ui-workspan-tabbar-slot {
   display: block;
-  flex: 0 0 78px;
-  min-height: 78px;
+  flex: 0 0 auto;
+  min-height: 0;
 }
 
 /* Keep panel content mounted while letting the title-bar control reclaim the

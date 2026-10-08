@@ -941,6 +941,12 @@ pub(crate) const MIGRATION_ADD_PROJECT_IDEA_PLANNING_SQL: &str = "
     CREATE INDEX IF NOT EXISTS idx_project_idea_delete_snapshots_project
         ON project_idea_delete_snapshots(project_id, deleted_at DESC);
 ";
+pub(crate) const MIGRATION_ADD_WORKTREE_SHORT_LABELS_VERSION: i64 = 50;
+pub(crate) const MIGRATION_ADD_WORKTREE_SHORT_LABELS_DESCRIPTION: &str =
+    "add_worktree_persistent_short_labels";
+pub(crate) const MIGRATION_ADD_WORKTREE_SHORT_LABELS_SQL: &str =
+    include_str!("migrations/worktree_short_labels.sql");
+
 // 按既定版本顺序返回向上迁移注册表，由 SQL 插件在初始化时应用；此函数本身不执行 SQL。
 pub(crate) fn migrations() -> Vec<Migration> {
     vec![
@@ -1340,6 +1346,12 @@ pub(crate) fn migrations() -> Vec<Migration> {
             version: MIGRATION_ADD_PROJECT_IDEA_SORT_ORDER_VERSION,
             description: MIGRATION_ADD_PROJECT_IDEA_SORT_ORDER_DESCRIPTION,
             sql: MIGRATION_ADD_PROJECT_IDEA_SORT_ORDER_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: MIGRATION_ADD_WORKTREE_SHORT_LABELS_VERSION,
+            description: MIGRATION_ADD_WORKTREE_SHORT_LABELS_DESCRIPTION,
+            sql: MIGRATION_ADD_WORKTREE_SHORT_LABELS_SQL,
             kind: MigrationKind::Up,
         },
     ]

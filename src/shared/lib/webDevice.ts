@@ -65,6 +65,8 @@ export interface WebWorkspaceSnapshot {
     projectId: string;
     name: string;
     displayName?: string;
+    shortLabel?: string;
+    labelOrdinal?: number;
     description?: string;
     branch: string;
     cwd?: string | null;

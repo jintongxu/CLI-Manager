@@ -1,3 +1,4 @@
+import { getWorktreeShortLabel } from "../../../projects/api/worktreeLabels";
 import {
   ChevronDown,
   ChevronRight,
@@ -523,7 +524,7 @@ export function GitRefTree({
               <div key={worktree.id} className="group flex min-w-0 items-center gap-1.5 px-3 py-1.5 pl-8 text-[10px]" title={`${getWorktreeDisplayName(worktree)}\n${worktree.description}\n${worktree.branch}\n${worktree.path}`}>
                 <GitBranch size={11} className="shrink-0" style={{ color: TERM.yellow }} />
                 <button type="button" className="ui-focus-ring min-w-0 flex-1 truncate text-left" style={{ color: TERM.fg }} onClick={() => onOpenWorktree?.(worktree)}>
-                  {getWorktreeDisplayName(worktree)}
+                  {getWorktreeShortLabel(worktree)} · {getWorktreeDisplayName(worktree)}
                 </button>
                 <button type="button" className="ui-focus-ring rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100" style={{ color: TERM.cyan }} onClick={() => onFinishWorktree?.(worktree)} title={t("git.workspace.finishWorktree")} aria-label={t("git.workspace.finishWorktree")}>
                   <GitMerge size={11} />

@@ -76,6 +76,7 @@ export const useSessionStore = create<SessionStore>(() => ({
     // 伪会话和匿名 Pi 是临时视图，绝不持久化/恢复。
     const persistable = sessions.filter(isPersistableSession);
     await s.set("sessions", persistable);
+    await s.save();
     useSessionStore.setState({ sessions: persistable });
   },
 

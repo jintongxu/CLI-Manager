@@ -11,7 +11,7 @@ function load(file, dependencies = {}) {
   } }).outputText;
   const exports = {};
   vm.runInNewContext(code, { exports, console, setTimeout, crypto: { randomUUID: () => 'new-id' },
-    require(name) { if (name in dependencies) return dependencies[name]; throw new Error('unexpected import ' + name); } });
+    require(name) { if (name === './worktreeLabels') return load('src/features/projects/api/worktreeLabels.ts'); if (name in dependencies) return dependencies[name]; throw new Error('unexpected import ' + name); } });
   return exports;
 }
 const force = load('src/features/projects/api/worktreeForceDelete.ts', { '@tauri-apps/api/core': { invoke: (...args) => forceInvoke(...args) } });

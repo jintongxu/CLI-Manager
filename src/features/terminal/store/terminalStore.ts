@@ -36,7 +36,7 @@ import {
 } from "../types/terminalStoreTypes";
 import {
   buildWorkspanMirror, persistWorkspanState, createFileEditorSessionId,
-  clearProjectEditorWorkspacesIfUnused, isPersistableSession, hasBackendPty, createSplitSessionTitle,
+  clearProjectEditorWorkspacesIfUnused, isPersistableSession, hasBackendPty,
   releaseRemoteHistoryConsumer,
 } from "../lib/terminalStoreLayout";
 import { normalizeRemotePathForCompare } from "../lib/subagentTranscriptModel";
@@ -61,7 +61,10 @@ import { createTerminalRuntime } from "./terminalRuntime";
 
 import { reserveWorktreeLaunch } from "../../../shared/lib/worktreeLaunchAdmission";
 
+import { assignTerminalTitle, terminalPurpose, validTitleNaming } from "../lib/terminalSessionNaming";
+
 let restoreInProgress = false;
+let pendingNamingSessions: TerminalSession[] = [];
 
 function startPtyOrphanReconcileHeartbeat() {
   if (!TERMINAL_STORE_IN_TAURI || typeof window === "undefined") return;
@@ -92,6 +95,20 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
     clearPendingSubagentPanesForParent,
     scheduleSaveActiveId,
   } = createTerminalRuntime(set, get, api);
+  // Once the PTY and live layout are committed, snapshot failures are save
+  // failures, not creation failures. Attempt the remaining keys and report each
+  // error without preventing startup delivery or inviting a duplicate retry.
+  async function persistCommittedLaunch(sessionId: string, steps: Array<() => Promise<void>>) {
+    for (const save of steps) {
+      try {
+        await save();
+      } catch (err) {
+        toast.error(translateCurrent("saveSession.failed"), { description: String(err) });
+        logError("Failed to persist committed terminal launch", { sessionId, err });
+      }
+    }
+  }
+
   const tabLifecycle = createTerminalTabLifecycle(set, get, queueSshSessionPersistence);
   return {
     ...tabLifecycle,
@@ -586,6 +603,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         }
 
         const state = get();
+        assignTerminalTitle(session, title, terminalPurpose(resolvedShell, startupCmd === "" ? "" : launchStartupCmd, launch.environmentType), [...pendingNamingSessions, ...useSessionStore.getState().sessions, ...state.sessions]);
         const newSessions = [...state.sessions, session];
         let workspans: TerminalWorkspan[];
         let activeWorkspanId: string;
@@ -621,9 +639,11 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
 
         // 临时 Pi 会话只存在于当前运行，不写入会话恢复数据。
         if (sessionKind !== "ephemeral-pi") {
-          await queueSshSessionPersistence(newSessions);
-          await useSessionStore.getState().saveActiveSessionId(sessionId);
-          await useSessionStore.getState().saveWorkspans(workspans, activeWorkspanId, newSessions);
+          await persistCommittedLaunch(sessionId, [
+            () => queueSshSessionPersistence(newSessions),
+            () => useSessionStore.getState().saveActiveSessionId(sessionId),
+            () => useSessionStore.getState().saveWorkspans(workspans, activeWorkspanId, newSessions),
+          ]);
         }
 
         if (launch.extensionStatus === "error") {
@@ -953,9 +973,9 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       let changed = false;
       const nextSessions = get().sessions.map((session) => {
         if (session.id !== id) return session;
-        if (session.title === trimmed) return session;
+        if (session.title === trimmed && session.titleNaming?.source === "custom") return session;
         changed = true;
-        return { ...session, title: trimmed };
+        return { ...session, title: trimmed, titleNaming: { ...validTitleNaming(session.titleNaming), source: "custom" as const } };
       });
       if (!changed) return;
       set({ sessions: nextSessions });
@@ -994,6 +1014,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
           startupCmd: options?.startupCmd,
           envVars: options?.envVars,
           shell: options?.shell,
+          sshHostId: options?.sshHostId,
         }, os);
         recordCrashActivity("terminal.split_create", {
           sourceSessionId: sessionId,
@@ -1027,7 +1048,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         createdAtMs: Date.now(),
         projectId: options?.projectId,
         worktreeId: options?.worktreeId,
-        title: createSplitSessionTitle(options),
+        title: options?.title ?? "",
         cwd: options?.cwd,
         shell: resolvedShell,
         envVars: options?.envVars,
@@ -1076,6 +1097,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       }
 
       const paneResult = splitPaneLeaf(currentOwner.paneTree, currentTargetPane.id, direction, splitSessionId, createPaneId);
+      assignTerminalTitle(splitSession, options?.title, terminalPurpose(resolvedShell, options?.startupCmd === "" ? "" : launchStartupCmd, launch.environmentType), [...pendingNamingSessions, ...useSessionStore.getState().sessions, ...currentState.sessions]);
       const newSessions = [...currentState.sessions, splitSession];
       const workspans = updateTerminalWorkspan(currentState.workspans, currentOwner.id, (workspan) => (
         syncTerminalWorkspanLayout(workspan, paneResult.tree, paneResult.activePaneId, splitSessionId)
@@ -1088,10 +1110,12 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         statusListeners: { ...state.statusListeners, [splitSessionId]: unlisten },
       }));
 
-      await queueSshSessionPersistence(newSessions);
-      await useSessionStore.getState().saveActiveSessionId(splitSessionId);
-      await useSessionStore.getState().saveSplits([]);
-      await useSessionStore.getState().saveWorkspans(workspans, currentOwner.id, newSessions);
+      await persistCommittedLaunch(splitSessionId, [
+        () => queueSshSessionPersistence(newSessions),
+        () => useSessionStore.getState().saveActiveSessionId(splitSessionId),
+        () => useSessionStore.getState().saveSplits([]),
+        () => useSessionStore.getState().saveWorkspans(workspans, currentOwner.id, newSessions),
+      ]);
 
       if (launch.extensionStatus === "error") {
         toast.warning(translateCurrent("extensions.project.startupFallbackWarning"));
@@ -1444,6 +1468,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       try {
         const sessionStore = useSessionStore.getState();
         const persistedSessions = sessionStore.sessions;
+        pendingNamingSessions = persistedSessions;
         const persistedActiveId = sessionStore.activeSessionId;
         const persistedWorkspans = sessionStore.workspans;
         const persistedActiveWorkspanId = sessionStore.activeWorkspanId;
@@ -1519,6 +1544,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
                 projectId: attachedMeta.projectId,
                 worktreeId: attachedMeta.worktreeId,
                 title: attachedMeta.title,
+                titleNaming: validTitleNaming(ps.titleNaming),
                 cwd: attachedMeta.cwd,
                 shell: attachedMeta.shell,
                 environmentType: attachedMeta.environmentType,
@@ -1663,6 +1689,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
             projectId: ps.projectId,
             worktreeId: ps.worktreeId,
             title: ps.title,
+            titleNaming: validTitleNaming(ps.titleNaming),
             cwd: ps.cwd,
             shell: resolvedShell,
             envVars: ps.envVars,
@@ -1796,6 +1823,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         }
       } finally {
         restoreInProgress = false;
+        pendingNamingSessions = [];
       }
     },
 
@@ -1820,6 +1848,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         projectId: attachedMeta.projectId,
         worktreeId: attachedMeta.worktreeId,
         title: attachedMeta.title,
+        titleNaming: validTitleNaming(persisted?.titleNaming),
         cwd: attachedMeta.cwd,
         shell: attachedMeta.shell,
         environmentType: attachedMeta.environmentType,

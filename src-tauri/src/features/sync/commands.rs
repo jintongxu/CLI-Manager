@@ -29,7 +29,7 @@ const BACKUP_RESTORE_DELETE_STATEMENTS: [&str; 7] = [
 ];
 // 当前列清单必须与 src/stores/syncStore.ts 的 buildBatchInsertStatements 调用逐字一致（含顺序）。
 // 旧列清单继续放行，以便恢复新增绑定字段前生成的备份；缺失列由数据库默认值补齐。
-const BACKUP_RESTORE_INSERT_COLUMNS: [(&str, &str); 11] = [
+const BACKUP_RESTORE_INSERT_COLUMNS: [(&str, &str); 13] = [
     ("groups", "id,name,parent_id,sort_order,icon,color,bound_path,created_at"),
     ("groups", "id,name,parent_id,sort_order,icon,color,created_at"),
     (
@@ -46,11 +46,19 @@ const BACKUP_RESTORE_INSERT_COLUMNS: [(&str, &str); 11] = [
     ),
     (
         "projects",
+        "id,name,path,path_mode,group_id,sort_order,cli_tool,cli_args,startup_cmd,env_vars,shell,provider_overrides,worktree_strategy,worktree_root,worktree_deps_prompt_enabled,environment_type,ssh_host_id,remote_path,cli_config_root,icon,color,created_at,updated_at,worktree_label_high_water",
+    ),
+    (
+        "projects",
         "id,name,path,path_mode,group_id,sort_order,cli_tool,cli_args,startup_cmd,env_vars,shell,provider_overrides,worktree_strategy,worktree_root,worktree_deps_prompt_enabled,environment_type,ssh_host_id,remote_path,cli_config_root,icon,color,created_at,updated_at",
     ),
     (
         "projects",
         "id,name,path,group_id,sort_order,cli_tool,cli_args,startup_cmd,env_vars,shell,provider_overrides,worktree_strategy,worktree_root,worktree_deps_prompt_enabled,environment_type,ssh_host_id,remote_path,cli_config_root,icon,color,created_at,updated_at",
+    ),
+    (
+        "worktrees",
+        "id,project_id,name,display_name,description,branch,path,base_branch,deps_prompt_dismissed,provider_overrides,status,created_at,updated_at,short_label,label_ordinal",
     ),
     (
         "worktrees",
@@ -119,7 +127,7 @@ fn validate_backup_database_statement(statement: &BackupDatabaseStatement) -> Re
 }
 
 // 预检语句数量及白名单后，在同一连接执行 BEGIN IMMEDIATE、参数绑定和提交；执行失败尝试回滚。
-// JSON 复合值和越界整数在事务内拒绝；回滚错误被忽略，COMMIT 失败不会在此另行回滚。
+// JSON 复合值和越界整数在事务内拒绝；执行或 COMMIT 失败均尝试回滚。
 async fn execute_backup_database_restore(
     conn: &mut SqliteConnection,
     statements: &[BackupDatabaseStatement],
@@ -167,16 +175,15 @@ async fn execute_backup_database_restore(
                 .await
                 .map_err(|error| format!("backup_restore_database_execute_failed: {error}"))?;
         }
-        Ok(())
-    }
-    .await;
-
-    if result.is_ok() {
         sqlx::query("COMMIT")
             .execute(&mut *conn)
             .await
             .map_err(|error| format!("backup_restore_database_commit_failed: {error}"))?;
-    } else {
+        Ok(())
+    }
+    .await;
+
+    if result.is_err() {
         let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
     }
     result
@@ -585,6 +592,271 @@ pub async fn sync_delete_password() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn label_insert(
+        table: &str,
+        modern: bool,
+        id: &str,
+        ordinal: Option<i64>,
+        alias: &str,
+        created: &str,
+    ) -> BackupDatabaseStatement {
+        let columns = BACKUP_RESTORE_INSERT_COLUMNS
+            .iter()
+            .find(|(t, c)| *t == table && c.contains("label_") == modern)
+            .unwrap()
+            .1;
+        let values = columns
+            .split(',')
+            .map(|column| match column {
+                "id" => Value::from(id),
+                "project_id" => Value::from("p"),
+                "sort_order" | "deps_prompt_dismissed" | "worktree_deps_prompt_enabled" => {
+                    Value::from(0)
+                }
+                "group_id" | "ssh_host_id" => Value::Null,
+                "worktree_label_high_water" => Value::from(ordinal.unwrap_or(0)),
+                "label_ordinal" => ordinal.map(Value::from).unwrap_or(Value::Null),
+                "short_label" => Value::from(alias),
+                "created_at" => Value::from(created),
+                _ => Value::from(""),
+            })
+            .collect::<Vec<_>>();
+        let placeholders = (1..=values.len())
+            .map(|n| format!("${n}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        BackupDatabaseStatement {
+            sql: format!("INSERT INTO {table} ({columns}) VALUES ({placeholders})"),
+            values,
+        }
+    }
+
+    async fn migration50_connection() -> SqliteConnection {
+        let mut conn = SqliteConnection::connect("sqlite::memory:").await.unwrap();
+        // Minimal pre-50 schema; execute the production migration, not copied triggers.
+        for table in ["projects", "worktrees"] {
+            let columns = BACKUP_RESTORE_INSERT_COLUMNS
+                .iter()
+                .find(|(t, c)| *t == table && !c.contains("label_"))
+                .unwrap()
+                .1;
+            let definitions = columns
+                .split(',')
+                .map(|c| match c {
+                    "id" => "id TEXT PRIMARY KEY".to_string(),
+                    "project_id" => "project_id TEXT REFERENCES projects(id)".to_string(),
+                    _ => format!("{c} TEXT"),
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            sqlx::query(&format!("CREATE TABLE {table} ({definitions})"))
+                .execute(&mut conn)
+                .await
+                .unwrap();
+        }
+        sqlx::raw_sql(include_str!(
+            "../../app/migrations/worktree_short_labels.sql"
+        ))
+        .execute(&mut conn)
+        .await
+        .unwrap();
+        conn
+    }
+
+    async fn label_rows(conn: &mut SqliteConnection) -> Vec<(String, String, i64)> {
+        sqlx::query_as(
+            "SELECT id, short_label, label_ordinal FROM worktrees ORDER BY label_ordinal",
+        )
+        .fetch_all(conn)
+        .await
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn database_restore_migration50_explicit_labels_and_empty_high_water() {
+        let mut conn = migration50_connection().await;
+        execute_backup_database_restore(
+            &mut conn,
+            &[
+                label_insert("projects", true, "p", Some(40), "", ""),
+                label_insert("projects", true, "empty", Some(99), "", ""),
+                label_insert("worktrees", true, "a", Some(7), "café", "2"),
+                label_insert("worktrees", true, "b", Some(24), "Fix", "1"),
+            ],
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            label_rows(&mut conn).await,
+            vec![
+                ("a".into(), "café".into(), 7),
+                ("b".into(), "Fix".into(), 24)
+            ]
+        );
+        let waters: Vec<(String, i64)> =
+            sqlx::query_as("SELECT id, worktree_label_high_water FROM projects ORDER BY id")
+                .fetch_all(&mut conn)
+                .await
+                .unwrap();
+        assert_eq!(waters, vec![("empty".into(), 99), ("p".into(), 40)]);
+        execute_backup_database_restore(
+            &mut conn,
+            &[label_insert("worktrees", false, "next", None, "", "3")],
+        )
+        .await
+        .unwrap();
+        assert_eq!(label_rows(&mut conn).await.last().unwrap().2, 41);
+    }
+
+    #[tokio::test]
+    async fn database_restore_migration50_old_and_mixed_frontend_order() {
+        // Frontend normalizes aliases and supplies explicit ordinals first, then
+        // missing ordinals sorted by (created_at, id). Rust preserves that order.
+        for mixed in [false, true] {
+            let mut conn = migration50_connection().await;
+            let mut statements = vec![label_insert("projects", false, "p", None, "", "")];
+            if mixed {
+                statements.push(label_insert(
+                    "worktrees",
+                    true,
+                    "explicit",
+                    Some(8),
+                    "Ready",
+                    "9",
+                ));
+            }
+            statements.extend([
+                label_insert("worktrees", false, "oldest", None, "", "1"),
+                label_insert("worktrees", mixed, "a", None, "", "2"),
+                label_insert("worktrees", false, "b", None, "", "2"),
+            ]);
+            execute_backup_database_restore(&mut conn, &statements)
+                .await
+                .unwrap();
+            let base = if mixed { 8 } else { 0 };
+            let mut expected = vec![];
+            if mixed {
+                expected.push(("explicit".into(), "Ready".into(), 8));
+            }
+            expected.extend([
+                ("oldest".into(), "".into(), base + 1),
+                ("a".into(), "".into(), base + 2),
+                ("b".into(), "".into(), base + 3),
+            ]);
+            assert_eq!(label_rows(&mut conn).await, expected);
+        }
+    }
+
+    #[tokio::test]
+    async fn database_restore_migration50_conflicts_roll_back_rows_and_high_water() {
+        for (alias, ordinal) in [("fix", 8), ("Other", 7), ("W12", 8)] {
+            let mut conn = migration50_connection().await;
+            execute_backup_database_restore(
+                &mut conn,
+                &[
+                    label_insert("projects", true, "p", Some(20), "", ""),
+                    label_insert("worktrees", true, "original", Some(3), "Saved", "1"),
+                ],
+            )
+            .await
+            .unwrap();
+            let error = execute_backup_database_restore(
+                &mut conn,
+                &[
+                    BackupDatabaseStatement {
+                        sql: "DELETE FROM worktrees".into(),
+                        values: vec![],
+                    },
+                    BackupDatabaseStatement {
+                        sql: "DELETE FROM projects".into(),
+                        values: vec![],
+                    },
+                    label_insert("projects", true, "p", Some(100), "", ""),
+                    label_insert("worktrees", true, "first", Some(7), "Fix", "1"),
+                    label_insert("worktrees", true, "conflict", Some(ordinal), alias, "2"),
+                ],
+            )
+            .await
+            .unwrap_err();
+            assert!(
+                error.starts_with("backup_restore_database_execute_failed:"),
+                "{error}"
+            );
+            assert_eq!(
+                label_rows(&mut conn).await,
+                vec![("original".into(), "Saved".into(), 3)]
+            );
+            let water: i64 =
+                sqlx::query_scalar("SELECT worktree_label_high_water FROM projects WHERE id = 'p'")
+                    .fetch_one(&mut conn)
+                    .await
+                    .unwrap();
+            assert_eq!(water, 20);
+        }
+    }
+
+    #[tokio::test]
+    async fn database_restore_commit_failure_rolls_back_and_releases_transaction() {
+        let mut conn = restore_test_connection().await;
+        sqlx::raw_sql("PRAGMA foreign_keys = ON;
+            CREATE TABLE deferred_check (group_id TEXT REFERENCES groups(id) DEFERRABLE INITIALLY DEFERRED);
+            INSERT INTO deferred_check VALUES ('old');")
+            .execute(&mut conn).await.unwrap();
+        let error = execute_backup_database_restore(&mut conn, &[delete_groups_statement()])
+            .await
+            .unwrap_err();
+        assert!(
+            error.starts_with("backup_restore_database_commit_failed:"),
+            "{error}"
+        );
+        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM groups WHERE id = 'old'")
+            .fetch_one(&mut conn)
+            .await
+            .unwrap();
+        assert_eq!(count, 1);
+        sqlx::query("BEGIN IMMEDIATE")
+            .execute(&mut conn)
+            .await
+            .unwrap();
+        sqlx::query("ROLLBACK").execute(&mut conn).await.unwrap();
+    }
+
+    #[test]
+    fn database_restore_label_whitelist_rejects_replacement_reordering_and_sql() {
+        let valid = label_insert("worktrees", true, "a", Some(1), "Fix", "1");
+        assert_eq!(valid.sql, "INSERT INTO worktrees (id,project_id,name,display_name,description,branch,path,base_branch,deps_prompt_dismissed,provider_overrides,status,created_at,updated_at,short_label,label_ordinal) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)");
+        let project = label_insert("projects", true, "p", Some(9), "", "1");
+        assert_eq!(project.sql, "INSERT INTO projects (id,name,path,path_mode,group_id,sort_order,cli_tool,cli_args,startup_cmd,env_vars,shell,provider_overrides,worktree_strategy,worktree_root,worktree_deps_prompt_enabled,environment_type,ssh_host_id,remote_path,cli_config_root,icon,color,created_at,updated_at,worktree_label_high_water) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)");
+        assert!(validate_backup_database_statement(&project).is_ok());
+        assert!(
+            validate_backup_database_statement(&BackupDatabaseStatement {
+                sql: project.sql.replace(
+                    "updated_at,worktree_label_high_water",
+                    "worktree_label_high_water,updated_at"
+                ),
+                values: project.values,
+            })
+            .is_err()
+        );
+        assert!(validate_backup_database_statement(&valid).is_ok());
+        for sql in [
+            valid.sql.replace("INSERT INTO", "INSERT OR REPLACE INTO"),
+            valid
+                .sql
+                .replace("short_label,label_ordinal", "label_ordinal,short_label"),
+            format!("{}; DELETE FROM projects", valid.sql),
+            valid.sql.replace("$15", "(SELECT 1)"),
+        ] {
+            assert!(
+                validate_backup_database_statement(&BackupDatabaseStatement {
+                    sql,
+                    values: valid.values.clone()
+                })
+                .is_err()
+            );
+        }
+    }
 
     // 创建含旧分组记录的独立内存数据库，供恢复事务测试复用。
     async fn restore_test_connection() -> SqliteConnection {
