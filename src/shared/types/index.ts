@@ -293,6 +293,10 @@ export interface SshConfigImportPreview {
 export type WorktreeStatus = "active" | "missing" | "pending";
 
 export interface WorktreeRecord {
+  /** Independent alias; empty selects the immutable default Wn. */
+  short_label: string;
+  /** Project-local positive number allocated by SQLite, never by UI ordering. */
+  label_ordinal: number;
   id: string;
   project_id: string;
   /** Safe ASCII task slug used for the Worktree directory and Git branch. */
@@ -330,6 +334,8 @@ export interface Project {
   worktree_strategy: WorktreeIsolationStrategy;
   worktree_root: string;
   worktree_deps_prompt_enabled: number;
+  /** Durable allocation ceiling; deleting Worktrees never lowers it. */
+  worktree_label_high_water: number;
   environment_type: ProjectEnvironmentType;
   ssh_host_id: string | null;
   remote_path: string;
@@ -481,6 +487,8 @@ export interface TerminalSession {
   projectId?: string;
   worktreeId?: string;
   title: string;
+  /** Missing metadata is legacy; never infer provenance from titles. */
+  titleNaming?: { source: "auto" | "custom" | "task"; base?: string; ordinal?: number };
   // 重建 PTY 必需参数
   cwd?: string;
   shell?: string | null;

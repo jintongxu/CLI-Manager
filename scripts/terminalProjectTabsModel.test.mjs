@@ -16,10 +16,12 @@ function compile(path, name, transform = (code) => code) {
   writeFileSync(join(temp, name), transform(code));
 }
 compile("../src/features/projects/api/worktreeMetadata.ts", "worktreeMetadata.mjs");
+compile("../src/features/projects/api/worktreeLabels.ts", "worktreeLabels.mjs");
 compile("../src/features/terminal/api/terminalProject.ts", "terminalProject.mjs", (code) =>
   code.replace('"../../projects/api/worktreeMetadata"', '"./worktreeMetadata.mjs"'));
 compile("../src/features/terminal/api/terminalProjectTabsModel.ts", "projectTabs.mjs", (code) =>
-  code.replace('"./terminalProject"', '"./terminalProject.mjs"'));
+  code.replace('"./terminalProject"', '"./terminalProject.mjs"')
+    .replace('"../../projects/api/worktreeLabels"', '"./worktreeLabels.mjs"'));
 // Isolate the pure functions from existing UI/store dependencies, not their logic.
 compile("../src/features/terminal/lib/terminalTabsModel.ts", "tabs.mjs", (code) =>
   'import { getCompactWorktreeLabel, getWorktreeDisplayName } from "./worktreeMetadata.mjs";\n'
@@ -32,7 +34,7 @@ compile("../src/features/terminal/lib/workspanTabModel.ts", "workspan.mjs", (cod
     .replace('import { inferVendor } from "../../../shared/ui/VendorIcon";', 'const inferVendor = () => null;')
     .replace('"../api/terminalProjectTabsModel"', '"./projectTabs.mjs"'));
 const { buildTerminalProjectOptions, getTerminalProjectKey, resolveTerminalProjectMembership,
-  resolveProjectWorkspanTarget, groupProjectWorkspanModels } = await import(pathToFileURL(join(temp, "projectTabs.mjs")));
+  resolveProjectWorkspanTarget, groupProjectWorkspanModels, describeWorkspanTabGroup, formatWorkspanGroupTitle } = await import(pathToFileURL(join(temp, "projectTabs.mjs")));
 const { buildWorkspanTabModels } = await import(pathToFileURL(join(temp, "workspan.mjs")));
 const { buildTerminalContextOptions, getTerminalTabScopeKey } = await import(pathToFileURL(join(temp, "tabs.mjs")));
 const labels = { unboundProject: "Unbound", missingWorktree: "Missing", defaultShell: "Shell" };
@@ -74,7 +76,10 @@ test("root differs from absent, inactive and wrong-project worktree metadata", (
     session("gone", "p", { worktreeId: "gone" }), session("wrong", "q", { worktreeId: "wt" })];
   const members = sessions.map((s) => resolveTerminalProjectMembership(s, sessions, projects, worktrees, labels));
   assert.deepEqual(members.map((m) => m.worktreeKind), ["root", "missing-worktree", "missing-worktree", "missing-worktree"]);
-  assert.equal(members[1].worktreeName, "Missing");
+  assert.equal(members[1].worktreeName, "absent");
+  assert.equal(members[2].worktreeName, "gone");
+  assert.equal(members[2].worktreePath, "C:/gone");
+  assert.equal(members[0].worktreePath, "C:/repo");
   assert.notEqual(models([layout("root", ["root"]), layout("absent", ["absent"])], sessions)[0].projectMemberships[0].group.key,
     models([layout("absent", ["absent"])], sessions)[0].projectMemberships[0].group.key);
 });
@@ -139,4 +144,92 @@ test("legacy scope keys remain unchanged and legacy context notifications are de
   const legacy = buildWorkspanTabModels([layout("single", ["a"])], [s], projects, {}, (key) => key);
   assert.equal(legacy[0].contextKey, "p:wt:ssh:host");
   assert.strictEqual(legacy[0].singleSession, s);
+});
+
+
+test("display contexts are scope-bounded, unique and stable under member order; full localized names retain missing IDs", () => {
+  const sessions = [session("a", "p", { worktreeId: "wt" }), session("repeat", "p", { worktreeId: "wt" }),
+    session("missing", "p", { worktreeId: "absent" }), session("q", "q")];
+  const result = models([layout("mx", sessions.map(s => s.id), "q", ["a"])], sessions)[0];
+  const before = JSON.stringify(result);
+  const descriptor = describeWorkspanTabGroup([...result.members, result.members[0]]);
+  assert.equal(descriptor.contexts.length, 3);
+  assert.deepEqual(describeWorkspanTabGroup([...result.members].reverse()), descriptor);
+  assert.equal(descriptor.kind, "mixed-project");
+  for (const locale of [{ root: "主目录", missing: "Worktree 已丢失", cross: "跨 Worktree", mixed: "混合项目" },
+    { root: "Main directory", missing: "Worktree missing", cross: "Cross Worktree", mixed: "Mixed projects" }]) {
+    const title = formatWorkspanGroupTitle(descriptor, descriptor.contexts, locale, true);
+    assert.ok(title.includes("Task"));
+    assert.ok(title.includes(`${locale.missing} · absent`));
+    assert.ok(title.includes(locale.root));
+    assert.ok(title.includes('Same name · p'));
+    assert.ok(title.includes('Same name · q'));
+  }
+  const scoped = models([layout("scoped", ["a"], "q", ["a"])], sessions)[0];
+  assert.equal(describeWorkspanTabGroup(scoped.members).contexts.length, 1);
+  assert.equal(JSON.stringify(result), before);
+});
+
+const headerLabels = { root: "Main", missing: "Missing", cross: "Cross", mixed: "Mixed" };
+const headerContext = (id, name, projectKey = "p", project = "P", worktreeKind = "worktree") => ({
+  projectKey, project, worktreeKind, worktreeId: worktreeKind === "root" ? null : id, worktreeName: name,
+});
+const headerGroup = contexts => describeWorkspanTabGroup(contexts);
+const headerTitle = (contexts, universe, showProject = false) =>
+  formatWorkspanGroupTitle(headerGroup(contexts), universe, headerLabels, showProject);
+function assertUniqueHeaders(groups, universe, showProject = false) {
+  const before = JSON.stringify(universe);
+  const titles = groups.map(group => headerTitle(group, universe, showProject));
+  assert.equal(new Set(titles.map(title => title.toLowerCase())).size, groups.length, titles.join("\n---\n"));
+  groups.forEach((group, index) => {
+    assert.equal(headerTitle([...group].reverse(), [...universe].reverse(), showProject), titles[index]);
+    group.forEach(context => {
+      if (context.worktreeKind === "worktree") assert.ok(titles[index].includes(context.worktreeName));
+    });
+    assert.ok(!titles[index].includes("…"));
+  });
+  assert.equal(JSON.stringify(universe), before);
+  return titles;
+}
+
+test("RV-LAYOUT-001: actual header formatter reserves generated/literal fallback labels across the unfiltered universe", () => {
+  const a = headerContext("a", "foo"), b = headerContext("b", "foo"), c = headerContext("c", "foo · a");
+  const fallback = 'foo · a · ["p","worktree","a"]';
+  const blocker = headerContext("d", fallback), ordinal = headerContext("e", `${fallback} · 2`);
+  const universe = [a, b, c, blocker, ordinal, { ...a }];
+  const titles = assertUniqueHeaders([a, b, c, blocker, ordinal].map(context => [context]), universe);
+  assert.equal(titles[0], `${fallback} · 3`);
+  assert.equal(titles[1], "foo · b");
+  assert.equal(headerTitle([a], universe), titles[0]); // filtered/overflow subset retains full-universe label
+  assertUniqueHeaders([[a, b], [a, c], [b, c]], universe);
+});
+
+test("headers retain full root/missing/project names and resolve composed project separator collisions", () => {
+  const universe = [headerContext(null, null, "p", "Same", "root"),
+    headerContext("root-literal", "Main", "p", "Same"),
+    headerContext("gone", null, "p", "Same", "missing-worktree"),
+    headerContext("literal-missing", "Missing · gone", "p", "Same"),
+    headerContext("long-a", "complete-name-".repeat(30), "p", "Same"),
+    headerContext("long-b", "complete-name-".repeat(30), "p", "Same"),
+    headerContext(null, null, "q", "Same", "root"),
+    headerContext(null, null, "r", "Same · p", "root"),
+    headerContext("separator", "B / C", "s", "A"),
+    headerContext("separator", "C", "t", "A / B")];
+  assertUniqueHeaders(universe.map(context => [context]), universe, true);
+  assertUniqueHeaders(universe.map(context => [context]), universe);
+  assertUniqueHeaders([[universe[0], universe[6]], [universe[1], universe[6]],
+    [universe[0], universe[1]]], universe);
+});
+
+test("entire cross/mixed headers cannot alias multiline literal names or group identity fallback literals", () => {
+  const a = headerContext("a", "A"), b = headerContext("b", "B"), q = headerContext("q", "Q", "q", "Other");
+  const crossLiteral = headerContext("literal", "Cross\nA\nB");
+  const crossIdentity = JSON.stringify(headerGroup([a, b]).contexts.map(context =>
+    JSON.stringify([context.projectKey, context.worktreeKind, context.worktreeId])));
+  const blocker = headerContext("blocker", `${crossLiteral.worktreeName}\n · ${crossIdentity}`);
+  const mixedLiteral = headerContext("mixed-literal", "Mixed\nP / A\nOther / Q");
+  const universe = [a, b, q, crossLiteral, blocker, mixedLiteral];
+  const titles = assertUniqueHeaders([[a, b], [a, q], [crossLiteral], [blocker], [mixedLiteral]], universe);
+  assert.equal(titles[0], `${blocker.worktreeName} · 2`);
+  assertUniqueHeaders([[a, b], [a, q], [crossLiteral], [blocker], [mixedLiteral]], universe, true);
 });

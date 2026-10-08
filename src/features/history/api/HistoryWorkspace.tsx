@@ -901,7 +901,7 @@ export function HistoryWorkspace({ active = true, onOpenSettings }: HistoryWorks
 
   const resumeSession = useCallback(async (
     session: HistorySessionView | HistorySessionDetail,
-    title: string,
+    _title: string,
     project: Project | null,
     worktree: WorktreeRecord | null,
     unscopedShell?: string
@@ -945,7 +945,7 @@ export function HistoryWorkspace({ active = true, onOpenSettings }: HistoryWorks
         await createSession(
           project?.id,
           preflight.remoteCwd,
-          worktree?.name ?? (project?.name.trim() || title),
+          undefined,
           preflight.resumeCommand,
           env,
           undefined,
@@ -1002,7 +1002,7 @@ export function HistoryWorkspace({ active = true, onOpenSettings }: HistoryWorks
       await createSession(
         project?.id,
         cwd,
-        worktree?.name ?? (project?.name.trim() || title),
+        undefined,
         command,
         Object.keys(env).length ? env : undefined,
         shell,

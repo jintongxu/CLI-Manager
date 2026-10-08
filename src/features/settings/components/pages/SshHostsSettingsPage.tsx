@@ -490,8 +490,8 @@ export function SshHostsSettingsPage({ searchValue, onTerminalOpened }: Props) {
       await createSession(
         undefined,
         undefined,
-        host.name,
         undefined,
+        "",
         undefined,
         undefined,
         undefined,

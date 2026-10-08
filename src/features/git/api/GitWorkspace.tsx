@@ -1,3 +1,6 @@
+import { WorktreeCreationAttempts, worktreeCreationPhase } from "../../projects/api/worktreeCreationRecovery";
+import { WorktreeShortLabelField, worktreeLabelErrorKey, worktreeCreationErrorDescription } from "../../projects/api/WorktreeShortLabelField";
+import { getWorktreeShortLabel, normalizeWorktreeShortLabel } from "../../projects/api/worktreeLabels";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import {
@@ -155,12 +158,14 @@ export function GitWorkspace({
   const [worktreeCreateOpen, setWorktreeCreateOpen] = useState(false);
   const [worktreeName, setWorktreeName] = useState("");
   const [worktreeTaskName, setWorktreeTaskName] = useState("");
+  const [worktreeShortLabel, setWorktreeShortLabel] = useState("");
   const [worktreeDescription, setWorktreeDescription] = useState("");
   const [finishWorktree, setFinishWorktree] = useState<WorktreeRecord | null>(null);
   const [recentBranches, setRecentBranches] = useState<string[]>([]);
   const [favoriteBranches, setFavoriteBranches] = useState<string[]>([]);
   const [leftWidth, setLeftWidth] = useState(230);
   const [rightWidth, setRightWidth] = useState(330);
+  const creationAttempts = useRef(new WorktreeCreationAttempts());
   const workspaceGridRef = useRef<HTMLDivElement | null>(null);
   const repositoryGenerationRef = useRef(0);
   const refGenerationRef = useRef(0);
@@ -482,6 +487,7 @@ export function GitWorkspace({
       setWorktreeTaskName(taskName);
       setWorktreeName(input || taskName);
       setWorktreeDescription("");
+    setWorktreeShortLabel("");
       setOperationError(null);
       setWorktreeCreateOpen(true);
       return;
@@ -801,10 +807,10 @@ export function GitWorkspace({
         if (!operation.target) throw new Error("worktree_not_found");
         if (Array.from(input).length > 64) throw new Error("display_name_invalid");
         if (Array.from(worktreeDescription.trim()).length > 2000) throw new Error("description_too_long");
-        await updateWorktreeMetadata(operation.target, input, worktreeDescription);
+        await updateWorktreeMetadata(operation.target, input, worktreeDescription, normalizeWorktreeShortLabel(worktreeShortLabel));
       } else if (operation.operation === "create-worktree") {
         if (!project) throw new Error("project_not_found");
-        await createWorktreeForProject(project, { taskName: worktreeTaskName, displayName: input || undefined, description: worktreeDescription });
+        await creationAttempts.current.run(`${project.id}:${worktreeTaskName}`, () => createWorktreeForProject(project, { taskName: worktreeTaskName, displayName: input || undefined, description: worktreeDescription, shortLabel: normalizeWorktreeShortLabel(worktreeShortLabel) }));
       } else if (operation.operation === "push-tag") {
         if (!transport || repositoryId === null || !operation.branch)
           throw new Error("git_operation_context_missing");
@@ -829,8 +835,12 @@ export function GitWorkspace({
       toast.success(t("git.workspace.operationDone"));
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : String(reason);
+      if (operation.operation === "create-worktree" && worktreeCreationPhase(reason)) {
+        setPendingOperation(null);
+        toast.error(t("git.workspace.operationFailed"), { description: worktreeCreationErrorDescription(reason, t), duration: Infinity });
+      }
       setOperationError(
-        workspaceError(
+        worktreeLabelErrorKey(message) ? t(worktreeLabelErrorKey(message)!) : workspaceError(
           message,
           t("git.workspace.operationFailed"),
           t("git.history.sshUpgradeRequired"),
@@ -852,6 +862,7 @@ export function GitWorkspace({
     repositoryId,
     updateWorktreeMetadata,
     worktreeDescription,
+    worktreeShortLabel,
     worktreeTaskName,
     t,
     transport,
@@ -875,6 +886,7 @@ export function GitWorkspace({
     setWorktreeName(taskName);
     setOperationError(null);
     setWorktreeDescription("");
+    setWorktreeShortLabel("");
     setWorktreeCreateOpen(true);
   }, []);
 
@@ -890,12 +902,16 @@ export function GitWorkspace({
     }
     setOperationBusy(true);
     try {
-      await createWorktreeForProject(project, { taskName: worktreeTaskName, displayName: worktreeName.trim() || undefined, description: worktreeDescription });
+      await creationAttempts.current.run(`${project.id}:${worktreeTaskName}`, () => createWorktreeForProject(project, { taskName: worktreeTaskName, displayName: worktreeName.trim() || undefined, description: worktreeDescription, shortLabel: normalizeWorktreeShortLabel(worktreeShortLabel) }));
       setWorktreeCreateOpen(false);
       toast.success(t("git.workspace.worktreeCreated"));
     } catch (reason) {
+      if (worktreeCreationPhase(reason)) {
+        setWorktreeCreateOpen(false);
+        toast.error(t("git.workspace.operationFailed"), { description: worktreeCreationErrorDescription(reason, t), duration: Infinity });
+      }
       setOperationError(
-        workspaceError(
+        worktreeLabelErrorKey(reason) ? t(worktreeLabelErrorKey(reason)!) : workspaceError(
           reason,
           t("git.workspace.operationFailed"),
           t("git.history.sshUpgradeRequired"),
@@ -905,7 +921,7 @@ export function GitWorkspace({
     } finally {
       setOperationBusy(false);
     }
-  }, [createWorktreeForProject, project, t, worktreeCreateOpen, worktreeDescription, worktreeName, worktreeTaskName, operationBusy]);
+  }, [createWorktreeForProject, project, t, worktreeCreateOpen, worktreeDescription, worktreeShortLabel, worktreeName, worktreeTaskName, operationBusy]);
 
   const beginResize = useCallback(
     (side: "left" | "right", event: ReactPointerEvent<HTMLDivElement>) => {
@@ -1329,6 +1345,7 @@ export function GitWorkspace({
                 onFinishWorktree={(worktree) => setFinishWorktree(worktree)}
                 onRenameWorktree={(worktree) => {
                   setWorktreeDescription(worktree.description ?? "");
+                  setWorktreeShortLabel(worktree.short_label ?? "");
                   openOperation(
                     {
                       operation: "rename-worktree",
@@ -1461,6 +1478,7 @@ export function GitWorkspace({
                 if (event.key === "Escape") setWorktreeCreateOpen(false);
               }}
             />
+            <WorktreeShortLabelField value={worktreeShortLabel} onChange={setWorktreeShortLabel} />
             <label className="mt-3 block text-[11px]" style={{ color: TERM.dim }}>
               {t("git.operation.worktreeInternalName")}
               <input readOnly value={worktreeTaskName} aria-label={t("git.operation.worktreeInternalName")}
@@ -1556,6 +1574,11 @@ export function GitWorkspace({
                 />
               </label>
             ) : null}
+            {pendingOperation.operation === "rename-worktree" && <>
+              <WorktreeShortLabelField value={worktreeShortLabel} onChange={setWorktreeShortLabel}
+                defaultLabel={getWorktreeShortLabel({ label_ordinal: projectWorktrees.find((row) => row.id === pendingOperation.target)?.label_ordinal })} />
+              <input readOnly value={projectWorktrees.find((row) => row.id === pendingOperation.target)?.name ?? ""} aria-label={t("git.operation.worktreeInternalName")} />
+            </>}
             {pendingOperation.operation === "rename-worktree" && (
               <label className="mt-3 block text-[11px]" style={{ color: TERM.dim }}>
                 {t("git.operation.worktreeDescription")}

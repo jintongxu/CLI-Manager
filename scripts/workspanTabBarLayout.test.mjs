@@ -64,3 +64,29 @@ test("pane-level terminal tab ownership remains outside the top-level docking sl
   assert.match(paneTabBarSource, /function PaneTabBar\(/);
   assert.doesNotMatch(tabBarSource, /SplitTerminalView|PaneTabBar/);
 });
+
+test("full current context wraps and scrolls above fixed badge rows without group headers", () => {
+  const css = readFileSync(new URL("../src/styles/components/focus-controls.css", import.meta.url), "utf8");
+  const context = css.match(/\.ui-terminal-current-context\s*\{([^}]+)\}/)?.[1];
+  assert.ok(context);
+  for (const declaration of ["white-space: normal", "overflow-wrap: anywhere", "max-height: 30%", "overflow-y: auto"]) assert.ok(context.includes(declaration));
+  assert.doesNotMatch(context, /ellipsis|line-clamp|overflow:\s*hidden/);
+  assert.doesNotMatch(css, /\.ui-workspan-group-label/);
+  assert.doesNotMatch(tabBarSource, /ui-workspan-group-label/);
+  assert.match(css, /\.ui-workspan-project-group\s*\{[^}]*height: 36px/);
+  assert.match(css, /\.ui-workspan-groups-row\s*\{[^}]*height: 36px;[^}]*flex: 0 0 36px/);
+  assert.match(css, /\.ui-workspan-overflow-control\s*\{[^}]*flex: 0 0 28px/);
+  assert.match(tabBarSource, /ui-workspan-group-tabs/);
+  assert.match(tabsSource, /showWorktreeBadge=\{true\}/);
+  assert.equal((tabsSource.match(/<TerminalCurrentContext/g) ?? []).length, 1);
+  assert.match(tabsSource, /<TerminalCurrentContext[^>]+\/>\s*<WorkspanTerminalLayout/);
+});
+
+test("bar, document-flow slot and aurora override have natural height; insertion line anchors to purpose row", () => {
+  const chrome = readFileSync(new URL("../src/styles/components/workspace-chrome.css", import.meta.url), "utf8");
+  assert.match(stylesSource, /\.ui-workspan-tabbar-slot\s*\{[^}]*flex: 0 0 auto;[^}]*min-height: 0;/);
+  assert.match(chrome, /\[data-dark-palette="midnight-aurora"\] \.ui-terminal-pane-chrome\.ui-workspan-tabbar\s*\{[^}]*height: auto;/);
+  assert.doesNotMatch(chrome, /78px/);
+  assert.match(chrome, /\.ui-workspan-detach-insertion\s*\{[^}]*bottom: 8px;/);
+  assert.doesNotMatch(tabBarSource, /translate3d\([^`]*-50%/);
+});

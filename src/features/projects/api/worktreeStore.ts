@@ -1,3 +1,4 @@
+import { WorktreeCreationError } from "./worktreeCreationRecovery";
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import { getDb } from "../../../shared/platform/db";
@@ -6,6 +7,7 @@ import { hasConfiguredCliTool } from "../../providers/api/providerSwitching";
 import { projectSupportsCapability } from "./projectCapabilities";
 import type { Project, TerminalSession, WorktreeIsolationStrategy, WorktreeRecord } from "../../../shared/types/index";
 import { useProjectStore } from "./projectStore";
+import { normalizeWorktreeShortLabel } from "./worktreeLabels";
 import { finalizeFinish, finishRequest, finishStatus, withFinishLock, type FinishState, type CleanupPlan, type CleanupConfirmation } from "./worktreeFinish";
 import { inspectForceDelete, finalizeForceDelete, type ForceDeleteConfirmation } from "./worktreeForceDelete";
 import { acquireWorktreeLaunchBarrier, isWithinWorktree } from "../../../shared/lib/worktreeLaunchAdmission";
@@ -19,6 +21,8 @@ export interface GitWorktreeCreateResult {
 }
 
 export interface WorktreeCreateInput {
+  /** Optional independent alias; empty uses the database-allocated Wn. */
+  shortLabel?: string;
   /** User-facing task name. It may contain Unicode text. */
   displayName?: string;
   /** Optional user-facing task description. */
@@ -73,7 +77,7 @@ interface WorktreeStore {
   loadWorktrees: () => Promise<void>;
   createWorktreeForProject: (project: Project, input?: WorktreeCreateInput | string) => Promise<WorktreeRecord>;
   renameWorktree: (worktreeId: string, displayName: string) => Promise<void>;
-  updateWorktreeMetadata: (worktreeId: string, displayName: string, description: string) => Promise<void>;
+  updateWorktreeMetadata: (worktreeId: string, displayName: string, description: string, shortLabel?: string) => Promise<void>;
   shouldIsolateNewSession: (
     project: Project,
     sessions: TerminalSession[]
@@ -163,7 +167,8 @@ function mapCreateResultToRecord(
   result: GitWorktreeCreateResult,
   displayName: string,
   description: string,
-): WorktreeRecord {
+  shortLabel: string,
+): Omit<WorktreeRecord, "label_ordinal"> {
   const ts = Date.now().toString();
   return {
     id: crypto.randomUUID(),
@@ -171,6 +176,7 @@ function mapCreateResultToRecord(
     name: result.name,
     display_name: displayName,
     description,
+    short_label: shortLabel,
     branch: result.branch,
     path: result.path,
     base_branch: result.baseBranch,
@@ -182,11 +188,11 @@ function mapCreateResultToRecord(
   };
 }
 
-async function saveWorktreeRecord(record: WorktreeRecord): Promise<void> {
+async function saveWorktreeRecord(record: Omit<WorktreeRecord, "label_ordinal">): Promise<void> {
   const db = await getDb();
   await db.execute(
-    `INSERT INTO worktrees (id, project_id, name, display_name, description, branch, path, base_branch, deps_prompt_dismissed, provider_overrides, status, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+    `INSERT INTO worktrees (id, project_id, name, display_name, description, branch, path, base_branch, deps_prompt_dismissed, provider_overrides, status, created_at, updated_at, short_label)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
     [
       record.id,
       record.project_id,
@@ -201,8 +207,25 @@ async function saveWorktreeRecord(record: WorktreeRecord): Promise<void> {
       record.status,
       record.created_at,
       record.updated_at,
+      record.short_label,
     ]
   );
+}
+
+/** Advisory preflight only: the SQLite unique index arbitrates cross-window races. */
+async function preflightShortLabel(projectId: string, shortLabel: string, exceptId = ""): Promise<void> {
+  if (!shortLabel) return;
+  const db = await getDb();
+  const conflicts = await db.select<{ id: string }[]>(
+    "SELECT id FROM worktrees WHERE project_id = $1 AND short_label = $2 COLLATE NOCASE AND id <> $3 LIMIT 1",
+    [projectId, shortLabel, exceptId],
+  );
+  if (conflicts.length) throw new Error("worktree_short_label_conflict");
+}
+
+function metadataWriteError(error: unknown): unknown {
+  return /UNIQUE constraint failed: worktrees.project_id, worktrees.short_label/i.test(String(error))
+    ? new Error(`worktree_short_label_conflict: ${String(error)}`) : error;
 }
 
 export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
@@ -351,6 +374,7 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
       throw new Error("remote_project_capability_unsupported:worktree");
     }
     const requested = typeof input === "string" ? { displayName: input } : (input ?? {});
+    const shortLabel = normalizeWorktreeShortLabel(requested.shortLabel ?? "");
     const fallbackDisplayName = requested.taskName || createDefaultWorktreeTaskName();
     const displayName = normalizeWorktreeDisplayName(requested.displayName?.trim() || requested.taskName || fallbackDisplayName);
     if (!validateWorktreeDisplayName(displayName)) {
@@ -370,6 +394,7 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
     }
     inFlightWorktreeCreates.add(creationKey);
     try {
+      await preflightShortLabel(project.id, shortLabel);
       const result = await invoke<GitWorktreeCreateResult>("git_worktree_create", {
         req: {
           projectPath: project.path,
@@ -377,14 +402,24 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
           worktreeRoot: project.worktree_root.trim() || null,
         },
       });
-      const record = mapCreateResultToRecord(project.id, result, displayName, description);
-      try { await saveWorktreeRecord(record); }
+      const pendingRecord = mapCreateResultToRecord(project.id, result, displayName, description, shortLabel);
+      try { await saveWorktreeRecord(pendingRecord); }
       catch (error) {
         // Git succeeded: retain all objects; do not attempt unsafe rollback.
-        throw new Error(`worktree_record_save_failed: ${result.name}; ${result.path}; ${String(error)}`);
+        throw new WorktreeCreationError("save", pendingRecord, metadataWriteError(error));
+      }
+      let record: WorktreeRecord;
+      try {
+        const db = await getDb();
+        const rows = await db.select<WorktreeRecord[]>("SELECT * FROM worktrees WHERE id = $1", [pendingRecord.id]);
+        if (!rows[0]) throw new Error("worktree_not_found_after_insert");
+        record = rows[0];
+      } catch (error) {
+        throw new WorktreeCreationError("readback", pendingRecord, error);
       }
       set((state) => ({ worktrees: [record, ...state.worktrees] }));
-      await useProjectStore.getState().fetchAll("interactive");
+      try { await useProjectStore.getState().fetchAll("interactive"); }
+      catch (error) { throw new WorktreeCreationError("refresh", record, error); }
       return record;
     } finally {
       inFlightWorktreeCreates.delete(creationKey);
@@ -397,7 +432,7 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
     await get().updateWorktreeMetadata(worktreeId, displayName, current.description);
   },
 
-  updateWorktreeMetadata: async (worktreeId, displayName, description) => {
+  updateWorktreeMetadata: async (worktreeId, displayName, description, shortLabel) => {
     const current = get().worktrees.find((worktree) => worktree.id === worktreeId);
     if (!current) throw new Error("worktree_not_found");
     const normalizedDisplayName = normalizeWorktreeDisplayName(displayName);
@@ -406,16 +441,21 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
     if (!validateWorktreeDescription(normalizedDescription)) throw new Error("description_too_long");
     const ts = Date.now().toString();
     const db = await getDb();
-    await db.execute(
-      "UPDATE worktrees SET display_name = $1, description = $2, updated_at = $3 WHERE id = $4",
-      [normalizedDisplayName, normalizedDescription, ts, worktreeId]
-    );
+    const normalizedLabel = shortLabel === undefined ? undefined : normalizeWorktreeShortLabel(shortLabel);
+    if (normalizedLabel !== undefined) await preflightShortLabel(current.project_id, normalizedLabel, worktreeId);
+    try {
+      await db.execute(
+        `UPDATE worktrees SET display_name = $1, description = $2, updated_at = $3${normalizedLabel === undefined ? "" : ", short_label = $5"} WHERE id = $4`,
+        [normalizedDisplayName, normalizedDescription, ts, worktreeId, ...(normalizedLabel === undefined ? [] : [normalizedLabel])]
+      );
+    } catch (error) { throw metadataWriteError(error); }
     set((state) => ({
       worktrees: state.worktrees.map((worktree) => worktree.id === worktreeId
-        ? { ...worktree, display_name: normalizedDisplayName, description: normalizedDescription, updated_at: ts }
+        ? { ...worktree, display_name: normalizedDisplayName, description: normalizedDescription, updated_at: ts, ...(normalizedLabel === undefined ? {} : { short_label: normalizedLabel }) }
         : worktree),
     }));
-    await useProjectStore.getState().fetchAll("interactive");
+    try { await useProjectStore.getState().fetchAll("interactive"); }
+    catch (error) { throw new Error(`worktree_metadata_refresh_failed: ${worktreeId}; ${String(error)}`); }
   },
 
   shouldIsolateNewSession: (project, sessions) => {

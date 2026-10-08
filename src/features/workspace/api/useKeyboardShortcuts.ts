@@ -1,3 +1,6 @@
+import { useProjectStore } from "../../projects/api/projectStore";
+import { useWorktreeStore } from "../../projects/api/worktreeStore";
+import { resolveTerminalCreationContext } from "../../terminal/api/terminalCreationContext";
 import { useEffect, useRef } from "react";
 import { useTerminalStore } from "../../terminal/state";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
@@ -124,8 +127,6 @@ export function useKeyboardShortcuts(options: KeyboardShortcutOptions = {}) {
       const terminalState = useTerminalStore.getState();
       const { sessions, activeSessionId, setActive, createSession } = terminalState;
       const activeSession = activeSessionId ? sessions.find((session) => session.id === activeSessionId) : null;
-      const newTerminalCwd = activeSession?.kind === "subagent-transcript" ? undefined : activeSession?.cwd;
-      const newTerminalTitle = activeSession?.kind === "subagent-transcript" ? "Terminal" : activeSession?.title ?? "Terminal";
 
       if (isShortcutMatch(combo, shortcuts.nextTab) || isShortcutMatch(combo, shortcuts.prevTab)) {
         if (viewMode === "compact" || (isEditingTarget && !isXtermTarget)) return;
@@ -157,7 +158,11 @@ export function useKeyboardShortcuts(options: KeyboardShortcutOptions = {}) {
       if (isShortcutMatch(combo, shortcuts.newTerminal)) {
         if (viewMode === "compact") return;
         e.preventDefault();
-        createSession(undefined, newTerminalCwd ?? undefined, newTerminalTitle);
+        const projectState = useProjectStore.getState();
+        const context = resolveTerminalCreationContext(activeSession, terminalState.sessions,
+          projectState.projects, useWorktreeStore.getState().worktrees, projectState.groups);
+        if (context) void createSession(context.projectId, context.cwd, undefined, context.startupCmd, context.envVars,
+          context.shell, undefined, context.worktreeId, context.sshHostId);
         return;
       }
     };

@@ -617,6 +617,8 @@ async function publishWorkspace(workspaceOnly = false) {
         projectId: worktree.project_id,
         name: worktree.name,
         displayName: getWorktreeDisplayName(worktree),
+        shortLabel: worktree.short_label ?? undefined,
+        labelOrdinal: worktree.label_ordinal ?? undefined,
         description: worktree.description ?? "",
         branch: worktree.branch,
         cwd: worktree.path,

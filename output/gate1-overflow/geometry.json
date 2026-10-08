@@ -1,0 +1,14 @@
+{
+  "method": "Headless Chromium, component test output + @tailwindcss/node compiled real src/styles/components.css cascade; SVG icon stand-ins; no app server",
+  "viewport": [640, 1000],
+  "assertions": ["menu.scrollWidth <= menu.clientWidth + 1", "token.right <= column.right + 1", "top token.right < close.left", "all text Range rects within token right edge", "white-space normal", "text-overflow not ellipsis"],
+  "results": [
+    {"name":"top-overflow","zoom":1,"tokenWidth":188,"tokenHeight":258,"tokenRight":259,"closeLeft":269,"menuClient":288,"menuScroll":288,"pass":true},
+    {"name":"top-overflow","zoom":1.5,"tokenWidth":283,"tokenHeight":386,"tokenRight":389,"closeLeft":404,"menuClient":288,"menuScroll":288,"pass":true},
+    {"name":"top-overflow","zoom":2,"tokenWidth":376,"tokenHeight":516,"tokenRight":518,"closeLeft":538,"menuClient":288,"menuScroll":288,"pass":true},
+    {"name":"pane-overflow","zoom":1,"tokenWidth":206,"tokenHeight":130,"tokenRight":255,"menuClient":256,"menuScroll":256,"pass":true},
+    {"name":"pane-overflow","zoom":1.5,"tokenWidth":310,"tokenHeight":170,"tokenRight":383,"menuClient":256,"menuScroll":256,"pass":true},
+    {"name":"pane-overflow","zoom":2,"tokenWidth":412,"tokenHeight":260,"tokenRight":510,"menuClient":256,"menuScroll":256,"pass":true}
+  ],
+  "limitations": "Standalone fixture only; i18n/hooks/popovers use test stubs, icons are SVG size stand-ins. CSS zoom is not OS DPI/browser toolbar zoom. Pane overflow has no per-row close button. No full application/manual interaction test."
+}

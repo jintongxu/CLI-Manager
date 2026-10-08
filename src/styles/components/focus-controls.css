@@ -595,12 +595,70 @@
   pointer-events: none;
 }
 
+.ui-workspan-groups-row {
+  display: flex;
+  min-width: 0;
+  align-items: stretch;
+}
+
 .ui-workspan-project-group {
   display: flex;
   flex: 0 0 auto;
+  height: 36px;
+  gap: 2px;
+}
+
+.ui-terminal-current-context {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 30%;
+  overflow-y: auto;
+  padding: 4px 8px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--on-surface-variant);
+}
+
+.ui-terminal-current-context-kind {
+  font-weight: 600;
+}
+
+.ui-workspan-tabbar {
+  height: 68px;
+}
+
+.ui-workspan-groups-row {
+  height: 36px;
+  flex: 0 0 36px;
+}
+
+.ui-workspan-group-tabs {
+  display: flex;
   align-items: center;
   gap: 2px;
-  height: 100%;
+  min-height: 36px;
+}
+
+.ui-workspan-overflow-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  align-self: flex-end;
+  min-height: 36px;
+  position: relative;
+}
+
+.ui-workspan-overflow-control .ui-terminal-tab-list-button {
+  margin-left: 0;
+}
+
+.ui-workspan-end-drop,
+.ui-workspan-status-summary {
+  align-self: flex-end;
+  min-height: 36px;
 }
 
 /* Worktree identity stays inside the existing h-7 tab, independent of status/selection. */
@@ -633,14 +691,12 @@
   white-space: nowrap;
 }
 
-/* Fixed-width overflow rows keep the title above the secondary badge.
-   Bound the badge to the shrinkable text column, never the sibling close button. */
+/* Overflow menus have bounded text columns; only these tokens may wrap. */
 .ui-workspan-overflow-text > .ui-workspan-worktree-badge {
   min-width: 0;
   max-width: 100%;
-  box-sizing: border-box;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .ui-workspan-context-button:focus-visible,

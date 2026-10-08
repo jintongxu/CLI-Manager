@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { toast } from "sonner";
+import { translateCurrent } from "../../../shared/i18n/index";
 import type { Project, TerminalSession } from "../../../shared/types/index";
 import { logError } from "../../../shared/platform/logger";
 import { useSessionStore } from "../api/sessionStore";
@@ -33,6 +35,18 @@ export function persistWorkspanState(
   void useSessionStore.getState().saveWorkspans(workspans, activeWorkspanId, sessions).catch((err) => {
     logError("Failed to persist terminal workspans", err);
   });
+}
+
+// Committed PTYs must finish startup even when snapshot persistence fails.
+export async function persistCommittedLaunch(sessionId: string, steps: Array<() => Promise<void>>) {
+  for (const save of steps) {
+    try {
+      await save();
+    } catch (err) {
+      toast.error(translateCurrent("saveSession.failed"), { description: String(err) });
+      logError("Failed to persist committed terminal launch", { sessionId, err });
+    }
+  }
 }
 
 export function createFileEditorSessionId(projectId: string): string {

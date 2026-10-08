@@ -565,17 +565,18 @@
   background: transparent;
 }
 
-.ui-workspan-tabbar {
-  flex: 0 0 78px;
+.ui-workspan-tabbar,
+[data-theme="dark"][data-dark-palette="midnight-aurora"] .ui-terminal-pane-chrome.ui-workspan-tabbar {
+  flex: 0 0 auto;
   box-sizing: border-box;
-  height: 78px;
-  min-height: 78px;
+  height: auto;
+  min-height: 0;
   border-color: color-mix(in srgb, var(--terminal-tab-border) 38%, transparent);
 }
 
 .ui-workspan-detach-insertion {
   position: absolute;
-  top: 50%;
+  bottom: 8px;
   left: 0;
   z-index: 20;
   width: 2px;
@@ -614,7 +615,7 @@
 .ui-workspan-tabbar .ui-workspan-tab {
   height: 30px;
   min-width: 112px;
-  max-width: 220px;
+  max-width: none;
   margin-inline: 2px;
   border-width: 1px;
   border-radius: 7px;

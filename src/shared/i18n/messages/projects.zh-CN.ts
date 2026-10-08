@@ -1,4 +1,15 @@
 export const zh = {
+  "worktree.recovery.save": "Git 工作树已创建，但记录保存失败（持久化结果未确认）。本次创建已停止，请勿重新创建。保留下方身份和路径，通过 git worktree list 检查，可将该路径作为项目打开；先刷新检查记录是否存在，再人工恢复。未删除任何对象。",
+  "worktree.recovery.saved": "Git 工作树及记录已创建。本次创建已停止，请勿重新创建。刷新或重新打开工作区后，从项目侧栏现有工作树入口打开（可在那里重试启动终端）。下方保留身份、失败阶段和原因。未删除任何对象。",
+  "worktree.shortLabel.label": "短标识（可选）",
+  "worktree.shortLabel.createHelp": "留空自动分配，最多12个Unicode字符；W加数字为系统保留。",
+  "worktree.shortLabel.editHelp": "默认编号：{label}。清空恢复此编号。",
+  "worktree.shortLabel.too_long": "短标识最多12个Unicode字符。",
+  "worktree.shortLabel.reserved": "W加数字为系统保留编号。",
+  "worktree.shortLabel.invalid": "短标识不能包含控制字符或双向文本格式字符。",
+  "worktree.shortLabel.conflict": "此项目中已有相同短标识。",
+  "worktree.shortLabel.exhausted": "此项目的自动编号已耗尽。",
+
   "worktree.finish.plan.title": "确认整个 Worktree 清理范围",
   "worktree.finish.plan.stage": "当前阶段",
   "worktree.finish.plan.cleanupPending": "已整合 / 无差异，等待清理；不会再次合并",

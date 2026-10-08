@@ -178,12 +178,16 @@ const coldJs = ts.transpileModule(`async function restore(ps, deps) {
  for (let i = 0; i < 1; i++) { ${coldBody} }
  return restoredSessions;
 }`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-const restoreCold = new Function(`${coldJs}; return restore;`)();
+const namingSource = readFileSync(new URL("../src/features/terminal/lib/terminalSessionNaming.ts", import.meta.url), "utf8");
+const namingFunction = namingSource.slice(namingSource.indexOf("export function validTitleNaming"), namingSource.indexOf("/** Call after"));
+const namingJs = ts.transpileModule(namingFunction, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText.replaceAll("export ", "");
+const validTitleNaming = new Function(`${namingJs}; return validTitleNaming;`)();
+const restoreCold = new Function("validTitleNaming", `${coldJs}; return restore;`)(validTitleNaming);
 for (const environment of ["local", "wsl", "ssh"]) {
   for (const id of ["pi-target", undefined]) {
     test(`Pi cold restore ${environment}, identity=${id ?? "cwd continue"}: no old TUI/geometry, startup exactly once`, async () => {
       const launches = [], writes = [];
-      const sessions = await restoreCold({ id: "old", projectId: "p", cwd: "cwd", cliTool: "pi", isAgentSession: false, cliSessionId: id, initialTerminalOutput: "OLD TUI", initialTerminalSize: { cols: 80, rows: 24 } }, {
+      const sessions = await restoreCold({ id: "old", projectId: "p", cwd: "cwd", cliTool: "pi", isAgentSession: false, cliSessionId: id, title: "Pi · 3", titleNaming: { source: "auto", base: "Pi", ordinal: 3 }, initialTerminalOutput: "OLD TUI", initialTerminalSize: { cols: 80, rows: 24 } }, {
         detectCliResumeKind, buildCliResumeStartupCommand, projectMap: new Map([["p", { ...piProject, cli_tool: "codex" }]]),
         resolvePtyLaunch: async options => { launches.push(options); return { startupCmd: options.startupCmd, startupHandledByLaunch: environment === "ssh", environmentType: environment, invokeArgs: {} }; },
         terminalProcessManager: { create: async () => "new", subscribeStatus: async () => () => {}, write: async (...args) => writes.push(args) },
@@ -196,6 +200,8 @@ for (const environment of ["local", "wsl", "ssh"]) {
       assert.equal(sessions[0].initialTerminalSize, undefined);
       assert.equal(sessions[0].deferStartupUntilInitialOutput, false);
       assert.equal(sessions[0].cliSessionId, id);
+      assert.equal(sessions[0].title, "Pi · 3");
+      assert.deepEqual(sessions[0].titleNaming, { source: "auto", base: "Pi", ordinal: 3 });
       assert.equal(sessions[0].cliTool, "pi");
       assert.equal(sessions[0].isAgentSession, true);
       assert.deepEqual(writes, environment === "ssh" ? [] : [["new", expected + "\r"]]);

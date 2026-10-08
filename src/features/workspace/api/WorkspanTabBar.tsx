@@ -19,7 +19,8 @@ import type { ProjectWorkspanTabModel } from "../../terminal/api/terminalProject
 import { selectProjectTabGroups, resolveStatusWorkspanTarget, countVisibleTabStatuses } from "../../terminal/api/terminalProjectSelection";
 import { displayedProjectTerminalIds } from "../../terminal/api/terminalProjectHide";
 import { buildWorktreeBadges, buildGlobalWorktreeBadges, type TerminalWorktreeBadge } from "../../terminal/api/terminalWorktreeBadge";
-import type { TerminalProjectOption, WorkspanProjectGroup } from "../../terminal/api/terminalProjectTabsModel";
+import type { TerminalProjectOption, WorkspanTabGroupDescriptor } from "../../terminal/api/terminalProjectTabsModel";
+import { describeWorkspanTabGroup, formatWorkspanGroupTitle } from "../../terminal/api/terminalProjectTabsModel";
 import type { TabNotificationState } from "../../terminal/state";
 import type { TerminalWorkspan } from "../../terminal/api/terminalWorkspan";
 import { useI18n } from "../../../shared/i18n/index";
@@ -78,7 +79,7 @@ interface WorkspanTabBarProps {
 
 function WorkspanTabbarEndDropTarget({ disabled }: { disabled: boolean }) {
   const { setNodeRef } = useDroppable({ id: WORKSPAN_TABBAR_END_DROP_ID, disabled });
-  return <div ref={setNodeRef} className="h-full min-w-0 flex-1" aria-hidden="true" />;
+  return <div ref={setNodeRef} className="ui-workspan-end-drop min-w-0 flex-1" aria-hidden="true" />;
 }
 
 export function WorkspanTabBar({
@@ -119,16 +120,16 @@ export function WorkspanTabBar({
   const groups = selectProjectTabGroups(models, selectedProjectKey, statusFilter, notifications);
   const visibleModels = groups.flatMap((group) => group.models);
   const hiddenIds = new Set(overflow.hiddenIds);
-  const hiddenModels = visibleModels.filter(({ workspan }) => hiddenIds.has(workspan.id));
+  const hiddenGroups = groups.map(({ group, models: items }) => ({ group,
+    models: items.filter(({ workspan }) => hiddenIds.has(workspan.id)) })).filter(({ models: items }) => items.length);
   const selectedOption = contextOptions.find((option) => option.key === selectedProjectKey);
   const statusSummary = statusFilter === "all" ? selectedOption ?? { running: 0, done: 0, failed: 0 }
     : countVisibleTabStatuses(models, notifications);
-  const groupLabel = (group: WorkspanProjectGroup) => group.kind === "worktree"
-    ? group.worktreeName ?? t("terminal.context.worktreeMissing")
-    : group.kind === "missing-worktree" ? t("terminal.context.worktreeMissing")
-    : group.kind === "cross-worktree" ? t("terminal.context.crossWorktree")
-    : group.kind === "mixed-project" ? t("terminal.context.mixedWorkspan")
-    : t("terminal.context.rootDirectory");
+  const universe = models.flatMap((model) => describeWorkspanTabGroup(model.members).contexts);
+  const groupLabel = (group: WorkspanTabGroupDescriptor) => formatWorkspanGroupTitle(group, universe, {
+    root: t("terminal.context.rootDirectory"), missing: t("terminal.context.worktreeMissing"),
+    cross: t("terminal.context.crossWorktree"), mixed: t("terminal.context.mixedWorkspan"),
+  }, statusFilter !== "all");
   const rowSignature = JSON.stringify([selectedProjectKey, statusFilter, activeWorkspanId, statusSummary,
     groups.map(({ group, models: items }) => [group.key, groupLabel(group), items.map((model) => [model.workspan.id, model.title, model.vendor, model.cliToolIcon, model.notification, model.members.map((member) => [member.sessionId, notifications[member.sessionId] ?? "none"]), badges.get(model.workspan.id)?.label])])]);
   useEffect(() => onRowChange(rowSignature), [onRowChange, rowSignature]);
@@ -142,7 +143,7 @@ export function WorkspanTabBar({
       <div
         className="ui-workspan-detach-insertion"
         data-visible={detachPreview.visible ? "true" : "false"}
-        style={{ transform: `translate3d(${detachPreview.left}px, -50%, 0)` }}
+        style={{ transform: `translate3d(${detachPreview.left}px, 0, 0)` }}
         aria-hidden="true"
       />
       <div className="ui-workspan-context-row flex h-7 min-h-7 min-w-0 items-center gap-1 overflow-x-auto px-1" role="tablist" aria-label={t("terminal.context.switcher")}>
@@ -163,6 +164,9 @@ export function WorkspanTabBar({
           ))}
         </div>
         {contextOptions.map((option) => {
+          const projectLabel = contextOptions.some((other) => other.key !== option.key
+            && other.project.toLocaleLowerCase() === option.project.toLocaleLowerCase())
+            ? `${option.project} · ${option.projectId ?? option.key}` : option.project;
           const hideIds = displayedProjectTerminalIds(models, option.key, statusFilter, notifications);
           const hideLabel = t("terminal.context.hideDisplayedProjectTerminals", { project: option.project });
           return (
@@ -173,11 +177,11 @@ export function WorkspanTabBar({
                 data-selected={option.key === selectedProjectKey ? "true" : "false"}
                 role="tab"
                 aria-selected={option.key === selectedProjectKey}
-                aria-label={`${option.project}; ${t("terminal.status.running")}: ${option.running}; ${t("terminal.status.done")}: ${option.done}; ${t("terminal.status.failed")}: ${option.failed}; ${t("terminal.status.attention")}: ${option.attention}`}
-                title={option.project}
+                aria-label={`${projectLabel}; ${t("terminal.status.running")}: ${option.running}; ${t("terminal.status.done")}: ${option.done}; ${t("terminal.status.failed")}: ${option.failed}; ${t("terminal.status.attention")}: ${option.attention}`}
+                title={projectLabel}
                 onClick={() => { setStatusFilter("all"); onActivateProject(option.key); }}
               >
-                <span className="truncate">{option.project}</span>
+                <span className="truncate">{projectLabel}</span>
                 <span className="ui-workspan-context-status inline-flex shrink-0 items-center gap-0.5" title={t("terminal.status.summary")}>
                   {option.running ? <span className="ui-workspan-status-running">●</span> : null}
                   {option.done ? <span className="ui-workspan-status-done">✓</span> : null}
@@ -199,126 +203,134 @@ export function WorkspanTabBar({
           );
         })}
       </div>
-      <div
-        ref={tabScrollRef}
-        className="ui-workspan-tab-scroll flex h-9 min-h-9 min-w-0 flex-1 items-center gap-0.5 overflow-x-auto px-1"
-        role="tablist"
-        aria-label={t("terminal.workspan.tabList")}
-        onWheel={(event) => {
-          if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-          event.currentTarget.scrollLeft += event.deltaY;
-          event.preventDefault();
-        }}
-      >
-        {groups.map(({ group, models: items }) => (
-          <div key={group.key} className="ui-workspan-project-group" role="group" aria-label={groupLabel(group)}>
-            <SortableContext items={items.map(({ workspan }) => `${WORKSPAN_DRAG_PREFIX}${workspan.id}`)} strategy={horizontalListSortingStrategy}>
-              {items.map((model) => {
-                // Menu targets follow this exact displayed project/global-status row.
-                // Keep each model's close scope, including mixed/scoped Workspans.
-                const index = visibleModels.indexOf(model);
-                return renderTab(model, {
-                  leftSessionIds: visibleModels.slice(0, index).flatMap((item) => item.closeSessionIds),
-                  rightSessionIds: visibleModels.slice(index + 1).flatMap((item) => item.closeSessionIds),
-                  otherSessionIds: visibleModels.filter((item) => item !== model).flatMap((item) => item.closeSessionIds),
-                }, badges.get(model.workspan.id)!, () => activateResult(model));
-              })}
-            </SortableContext>
-          </div>
-        ))}
-        {(statusSummary.running > 0 || statusSummary.done > 0 || statusSummary.failed > 0) && (
-          <span className="ui-workspan-status-summary inline-flex shrink-0 items-center gap-2 px-2 text-[10px] font-medium" title={t("terminal.status.summary")}>
-            {statusSummary.running > 0 && <span className="ui-workspan-status-count ui-workspan-status-running">◉ {statusSummary.running}</span>}
-            {statusSummary.done > 0 && <span className="ui-workspan-status-count ui-workspan-status-done">✓ {statusSummary.done}</span>}
-            {statusSummary.failed > 0 && <span className="ui-workspan-status-count ui-workspan-status-failed">! {statusSummary.failed}</span>}
-          </span>
-        )}
-        <WorkspanTabbarEndDropTarget disabled={hasScopedTerminalFilter} />
-      </div>
-      {overflow.isOverflowing && (
-        <Popover open={listOpen} onOpenChange={onToggleList}>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              className="ui-terminal-tab-list-button"
-              aria-label={t("terminal.workspan.openList")}
-              aria-expanded={listOpen}
-              title={t("terminal.workspan.list")}
-            >
-              <ChevronDown size={14} strokeWidth={1.8} aria-hidden="true" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent
-            side={position === "bottom" ? "top" : "bottom"}
-            align="end"
-            collisionPadding={8}
-            className="terminal-skin ui-terminal-tab-list-popover w-72 p-1.5"
-            style={menuStyle}
-            onOpenAutoFocus={(event) => event.preventDefault()}
-            onCloseAutoFocus={(event) => event.preventDefault()}
-          >
-            <div className="ui-terminal-tab-list-title px-2 py-1 text-[11px] font-semibold">
-              {t("terminal.workspan.tabs")}
+      <div className="ui-workspan-groups-row">
+        <div
+          ref={tabScrollRef}
+          className="ui-workspan-tab-scroll flex min-h-9 min-w-0 flex-1 items-stretch gap-0.5 overflow-x-auto px-1"
+          role="tablist"
+          aria-label={t("terminal.workspan.tabList")}
+          onWheel={(event) => {
+            if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+            event.currentTarget.scrollLeft += event.deltaY;
+            event.preventDefault();
+          }}
+        >
+          {groups.map(({ group, models: items }) => (
+            <div key={group.key} className="ui-workspan-project-group" role="group" aria-label={groupLabel(group)}>
+              <div className="ui-workspan-group-tabs">
+                <SortableContext items={items.map(({ workspan }) => `${WORKSPAN_DRAG_PREFIX}${workspan.id}`)} strategy={horizontalListSortingStrategy}>
+                  {items.map((model) => {
+                    // Menu targets follow this exact displayed project/global-status row.
+                    // Keep each model's close scope, including mixed/scoped Workspans.
+                    const index = visibleModels.indexOf(model);
+                    return renderTab(model, {
+                      leftSessionIds: visibleModels.slice(0, index).flatMap((item) => item.closeSessionIds),
+                      rightSessionIds: visibleModels.slice(index + 1).flatMap((item) => item.closeSessionIds),
+                      otherSessionIds: visibleModels.filter((item) => item !== model).flatMap((item) => item.closeSessionIds),
+                    }, badges.get(model.workspan.id)!, () => activateResult(model));
+                  })}
+                </SortableContext>
+              </div>
             </div>
-            <div className="max-h-72 overflow-y-auto">
-              {hiddenModels.map((model) => (
-                <div
-                  key={model.workspan.id}
-                  className="ui-interactive ui-terminal-tab-list-item flex w-full items-center gap-1 rounded-lg px-1 py-1 text-xs text-on-surface-variant"
-                  data-selected={model.workspan.id === activeWorkspanId ? "true" : "false"}
+          ))}
+          {(statusSummary.running > 0 || statusSummary.done > 0 || statusSummary.failed > 0) && (
+            <span className="ui-workspan-status-summary inline-flex shrink-0 items-center gap-2 px-2 text-[10px] font-medium" title={t("terminal.status.summary")}>
+              {statusSummary.running > 0 && <span className="ui-workspan-status-count ui-workspan-status-running">◉ {statusSummary.running}</span>}
+              {statusSummary.done > 0 && <span className="ui-workspan-status-count ui-workspan-status-done">✓ {statusSummary.done}</span>}
+              {statusSummary.failed > 0 && <span className="ui-workspan-status-count ui-workspan-status-failed">! {statusSummary.failed}</span>}
+            </span>
+          )}
+          <WorkspanTabbarEndDropTarget disabled={hasScopedTerminalFilter} />
+        </div>
+        <div className="ui-workspan-overflow-control">
+          {overflow.isOverflowing && (
+            <Popover open={listOpen} onOpenChange={onToggleList}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="ui-terminal-tab-list-button"
+                  aria-label={t("terminal.workspan.openList")}
+                  aria-expanded={listOpen}
+                  title={t("terminal.workspan.list")}
                 >
-                  <button
-                    type="button"
-                    className="ui-focus-ring ui-workspan-overflow-target flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left"
-                    style={{ "--worktree-identity-color": badges.get(model.workspan.id)?.color } as CSSProperties}
-                    onClick={() => {
-                      activateResult(model);
-                      onToggleList(false);
-                    }}
-                    title={[model.title, badges.get(model.workspan.id)?.label, ...model.members.map((member) =>
-                      [member.project, member.worktreeName ?? t("terminal.context.rootDirectory"), member.branch,
-                        member.worktreePath, member.environmentType, member.sshHostId].filter(Boolean).join(" / ")),
-                      model.mixedProject ? t("terminal.context.mixedCloseHint") : null].filter(Boolean).join("\n")}
-                  >
-                    <span
-                      className="ui-tab-runtime-dot h-2 w-2 shrink-0 rounded-full"
-                      data-pulsing={PULSING_TAB_STATES.has(model.notification) ? "true" : "false"}
-                      style={{ backgroundColor: TAB_NOTIFICATION_COLORS[model.notification], color: TAB_NOTIFICATION_COLORS[model.notification] }}
-                      aria-hidden="true"
-                    />
-                    {model.vendor ? (
-                      <span className="inline-flex shrink-0 items-center" aria-hidden="true">
-                        <VendorIcon vendor={model.vendor} size={14} />
-                      </span>
-                    ) : (
-                      <Terminal size={14} strokeWidth={1.8} className="shrink-0" aria-hidden="true" />
-                    )}
-                    <span className="ui-workspan-overflow-text flex min-w-0 flex-1 flex-col items-start overflow-hidden">
-                      <span className="w-full truncate">{model.title}</span>
-                      <span className="ui-workspan-worktree-badge" title={badges.get(model.workspan.id)?.label}>
-                        {badges.get(model.workspan.id)?.label}
-                      </span>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className="ui-focus-ring ui-terminal-tab-close inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onToggleList(false);
-                      onClose(model, event.currentTarget.getBoundingClientRect());
-                    }}
-                    aria-label={t("terminal.workspan.close", { title: model.title })}
-                    title={t("terminal.workspan.close", { title: model.title })}
-                  >
-                    <X size={13} strokeWidth={2} aria-hidden="true" />
-                  </button>
+                  <ChevronDown size={14} strokeWidth={1.8} aria-hidden="true" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                side={position === "bottom" ? "top" : "bottom"}
+                align="end"
+                collisionPadding={8}
+                className="terminal-skin ui-terminal-tab-list-popover w-72 p-1.5"
+                style={menuStyle}
+                onOpenAutoFocus={(event) => event.preventDefault()}
+                onCloseAutoFocus={(event) => event.preventDefault()}
+              >
+                <div className="ui-terminal-tab-list-title px-2 py-1 text-[11px] font-semibold">
+                  {t("terminal.workspan.tabs")}
                 </div>
-              ))}
-            </div>
-          </PopoverContent>
-        </Popover>
-      )}
+                <div className="max-h-72 overflow-y-auto">
+                  {hiddenGroups.map(({ group, models: items }) => (
+                    <div key={group.key} className="ui-workspan-overflow-group">
+                      {items.map((model) => (
+                    <div
+                      key={model.workspan.id}
+                      className="ui-interactive ui-terminal-tab-list-item flex w-full items-center gap-1 rounded-lg px-1 py-1 text-xs text-on-surface-variant"
+                      data-selected={model.workspan.id === activeWorkspanId ? "true" : "false"}
+                    >
+                      <button
+                        type="button"
+                        className="ui-focus-ring ui-workspan-overflow-target flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left"
+                        style={{ "--worktree-identity-color": badges.get(model.workspan.id)?.color } as CSSProperties}
+                        onClick={() => {
+                          activateResult(model);
+                          onToggleList(false);
+                        }}
+                        title={[model.title, badges.get(model.workspan.id)?.label, ...model.members.map((member) =>
+                          [member.project, member.worktreeName ?? t("terminal.context.rootDirectory"), member.branch,
+                            member.worktreePath, member.environmentType, member.sshHostId].filter(Boolean).join(" / ")),
+                          model.mixedProject ? t("terminal.context.mixedCloseHint") : null].filter(Boolean).join("\n")}
+                      >
+                        <span
+                          className="ui-tab-runtime-dot h-2 w-2 shrink-0 rounded-full"
+                          data-pulsing={PULSING_TAB_STATES.has(model.notification) ? "true" : "false"}
+                          style={{ backgroundColor: TAB_NOTIFICATION_COLORS[model.notification], color: TAB_NOTIFICATION_COLORS[model.notification] }}
+                          aria-hidden="true"
+                        />
+                        {model.vendor ? (
+                          <span className="inline-flex shrink-0 items-center" aria-hidden="true">
+                            <VendorIcon vendor={model.vendor} size={14} />
+                          </span>
+                        ) : (
+                          <Terminal size={14} strokeWidth={1.8} className="shrink-0" aria-hidden="true" />
+                        )}
+                        <span className="ui-workspan-overflow-text flex min-w-0 flex-1 flex-col items-start">
+                          <span className="ui-workspan-worktree-badge">{badges.get(model.workspan.id)?.label}</span>
+                          <span className="w-full truncate">{model.title}</span>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="ui-focus-ring ui-terminal-tab-close inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onToggleList(false);
+                          onClose(model, event.currentTarget.getBoundingClientRect());
+                        }}
+                        aria-label={t("terminal.workspan.close", { title: model.title })}
+                        title={t("terminal.workspan.close", { title: model.title })}
+                      >
+                        <X size={13} strokeWidth={2} aria-hidden="true" />
+                      </button>
+                    </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

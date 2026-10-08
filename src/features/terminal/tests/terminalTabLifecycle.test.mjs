@@ -23,9 +23,13 @@ const visibility = load("../lib/terminalTabVisibility.ts", pane);
 const layout = load("../lib/terminalStoreLayout.ts", visibility);
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
+const naming = load("../lib/terminalSessionNaming.ts", {
+  CLI_TOOL_DESCRIPTORS: [{ id: "pi", command: "pi", label: "Pi" }, { id: "claude", command: "claude", label: "Claude" }, { id: "codex", command: "codex", label: "Codex" }],
+  normalizeShellKey: (shell) => shell,
+});
 const agent = load("../../agents/api/agentTerminal.ts");
 
-function fixture(sessions = [], workspans = [], daemon = [], projects = [], worktrees = []) {
+function fixture(sessions = [], workspans = [], daemon = [], projects = [], worktrees = [], launchOverrides = {}) {
   const calls = [];
   const persisted = {
     sessions, workspans, activeSessionId: sessions[0]?.id ?? null, activeWorkspanId: workspans[0]?.id ?? null, splits: [],
@@ -35,7 +39,7 @@ function fixture(sessions = [], workspans = [], daemon = [], projects = [], work
     async saveSplits(value) { this.splits = value; },
   };
   const dependencies = {
-    ...metadata, ...pane, ...workspan, ...visibility, ...layout,
+    ...metadata, ...pane, ...workspan, ...visibility, ...layout, ...naming,
     resolveNextSessionIdForShortcut: pane.getNextSessionIdForShortcut,
     unsplitPaneLeaf: pane.unsplitPaneLeaf,
     terminalProcessManager: {
@@ -48,6 +52,7 @@ function fixture(sessions = [], workspans = [], daemon = [], projects = [], work
     useSessionStore: { getState: () => persisted },
     useSettingsStore: { getState: () => ({ workspanEnabled: true, unsplitBehavior: "merge" }) },
     TERMINAL_STORE_IN_TAURI: false,
+    reserveWorktreeLaunch: () => () => {},
     async getOsPlatform() { return "windows"; },
     async garbageCollectProviderSnapshots() {}, async garbageCollectProjectExtensionSnapshots() {},
     isCliManagerSyncArtifactText: () => false,
@@ -59,13 +64,15 @@ function fixture(sessions = [], workspans = [], daemon = [], projects = [], work
     buildTabStatusUpdate: status.buildTabStatusUpdate,
     detectCliResumeKind: () => null,
     normalizeDirectCodexStartupCommand: (value) => value,
+    isDirectCodexStartupCommand: (value) => /^codex(?:\s|$)/.test(value),
     async resolvePtyLaunch() { return { shell: "bash", invokeArgs: {} }; },
     normalizeShellKey: () => "bash",
-    logError() {}, logInfo() {}, logWarn() {}, logTerminalExitStatus() {},
+    logError(...args) { calls.push(["logError", ...args]); }, logInfo() {}, logWarn() {}, logTerminalExitStatus() {},
     releaseRemoteHistoryConsumer() {}, releaseProviderSnapshot() {}, releaseProjectExtensionSnapshot() {},
     clearProjectEditorWorkspacesIfUnused() {},
     applyPtyStatusToSessions: (items) => items,
-    toast: { info() {}, success() {}, warning() {} },
+    toast: { error(...args) { calls.push(["toastError", ...args]); }, info() {}, success() {}, warning() {} },
+    setTimeout(callback) { calls.push(["startupTimer", callback]); },
     translateCurrent: (key) => key,
   };
   Object.assign(dependencies, load("../lib/terminalLaunch.ts", dependencies));
@@ -73,7 +80,8 @@ function fixture(sessions = [], workspans = [], daemon = [], projects = [], work
   dependencies.resolvePtyLaunch = async (options) => {
     calls.push(["launch", plain(options)]);
     return { shell: "powershell", invokeArgs: {}, startupHandledByLaunch: true,
-      startupCmd: options.startupCmd === "" ? undefined : options.startupCmd ?? projects.find((p) => p.id === options.projectId)?.cli_tool };
+      startupCmd: options.startupCmd === "" ? undefined : options.startupCmd ?? projects.find((p) => p.id === options.projectId)?.cli_tool,
+      ...launchOverrides };
   };
   Object.assign(dependencies, load("../lib/terminalStoreLayout.ts", dependencies));
   const callbacks = new Map();
@@ -85,7 +93,7 @@ function fixture(sessions = [], workspans = [], daemon = [], projects = [], work
     actions: {},
     createWorkspanId: () => "attached-workspan", createPaneId: () => "attached-pane",
     queueSshSessionPersistence(value) {
-      persistenceQueue = persistenceQueue.then(() => persisted.saveSessions(value));
+      persistenceQueue = persistenceQueue.catch(() => {}).then(() => persisted.saveSessions(value));
       return persistenceQueue;
     },
     scheduleSaveActiveId: (id) => calls.push(["scheduleActive", id]),
@@ -517,7 +525,8 @@ for (const startupCmd of ["", undefined]) {
 test("new-tab and duplicate launch paths preserve an inherited explicit plain classification", () => {
   const controller = readFileSync(new URL("../hooks/useTerminalTabsController.tsx", import.meta.url), "utf8");
   const newTab = controller.slice(controller.indexOf("const handleNewTab ="), controller.indexOf("const handleNewAnonymousPiSession"));
-  assert.match(newTab, /sourceSession\?\.isAgentSession === false && !sourceSession\.startupCmd\s*\? "" : projectLaunchOptions\?\.startupCmd/);
+  assert.match(newTab, /resolveTerminalCreationContext/);
+  assert.match(newTab, /undefined, context\.startupCmd/);
   const duplicate = controller.slice(controller.indexOf("const handleDuplicateSession ="));
   assert.match(duplicate, /session\.isAgentSession === false && !session\.startupCmd \? "" : normalizeDirectCodexStartupCommand\(session\.startupCmd\)/);
 });
@@ -566,4 +575,139 @@ test("project hide handler revalidates each live kind after awaits, dedupes and 
   }, (id, err) => errors.push([id, err.message]));
   assert.deepEqual(calls, ["a", "c"]);
   assert.deepEqual(errors, [["a", "hide failed"]]);
+});
+
+
+test("naming concurrent creates and split uses synchronous successful commit and project/worktree scopes", async () => {
+  const f = fixture([session("a")], [span("w", "p", "a")]);
+  let id = 0;
+  f.dependencies.terminalProcessManager.create = async () => `new-${++id}`;
+  await Promise.all([
+    f.api.getState().createSession("project", "/repo", undefined, "pi"),
+    f.api.getState().createSession("project", "/repo", undefined, "pi"),
+    f.api.getState().splitTerminal("a", "horizontal", { projectId: "project", startupCmd: "pi" }),
+  ]);
+  assert.deepEqual(plain(f.api.getState().sessions.filter(s => s.id !== "a").map(s => s.title).sort()), ["Pi · 1", "Pi · 2", "Pi · 3"]);
+  await f.api.getState().createSession("other", "/other", undefined, "pi");
+  assert.equal(f.api.getState().sessions.at(-1).title, "Pi · 1");
+  const first = f.api.getState().sessions.find(s => s.title === "Pi · 1" && s.projectId === "project");
+  f.api.getState().renameSession(first.id, first.title);
+  assert.equal(f.api.getState().sessions.find(s => s.id === first.id).titleNaming.source, "custom");
+});
+
+test("failed subscription and abandoned split do not consume numbering; pending restore metadata reserves ordinals", async () => {
+  const pending = { ...session("pending"), projectId: "project", title: "custom", titleNaming: { source: "custom", base: "Pi", ordinal: 7 } };
+  const f = fixture([], []);
+  f.persisted.sessions = [pending];
+  const subscribe = f.dependencies.terminalProcessManager.subscribeStatus;
+  f.dependencies.terminalProcessManager.subscribeStatus = async () => { throw new Error("subscription"); };
+  await assert.rejects(f.api.getState().createSession("project", "/repo", undefined, "pi"));
+  assert.equal(f.api.getState().sessions.length, 0);
+  f.dependencies.terminalProcessManager.subscribeStatus = subscribe;
+  await f.api.getState().createSession("project", "/repo", undefined, "pi");
+  assert.equal(f.api.getState().sessions[0].title, "Pi · 8");
+});
+
+for (const daemon of [false, true]) test(`restore naming and CLI identity unchanged (${daemon ? "attach" : "recreate"})`, async () => {
+  for (const title of ["Terminal", "project", "Pi · 1", "task"]) {
+    const original = { ...session("a"), title, cliSessionId: "conversation", titleNaming: title === "task" ? { source: "task" } : undefined };
+    const f = fixture([original], [span("w", "p", "a")], daemon ? [{ sessionId: "a", alive: true }] : []);
+    await f.api.getState().restoreSessions(new Map(), {});
+    assert.equal(f.api.getState().sessions[0].title, title);
+    assert.deepEqual(plain(f.api.getState().sessions[0].titleNaming ?? null), original.titleNaming ?? null);
+    assert.equal(f.api.getState().sessions[0].cliSessionId, "conversation");
+  }
+});
+
+
+test("abandoned split and failed persistence retain only successfully committed numbering", async () => {
+  const f = fixture([session("a")], [span("w", "p", "a")]);
+  const subscribe = f.dependencies.terminalProcessManager.subscribeStatus;
+  f.dependencies.terminalProcessManager.subscribeStatus = async (id, callback) => {
+    const unlisten = await subscribe(id, callback);
+    f.api.setState({ sessions: [], workspans: [] });
+    return unlisten;
+  };
+  assert.equal(await f.api.getState().splitTerminal("a", "horizontal", { startupCmd: "pi" }), null);
+  assert.equal(f.api.getState().sessions.length, 0);
+  f.dependencies.terminalProcessManager.subscribeStatus = subscribe;
+  let count = 0;
+  f.dependencies.terminalProcessManager.create = async () => `committed-${++count}`;
+  f.persisted.saveSessions = async () => { throw new Error("disk"); };
+  await f.api.getState().createSession(undefined, "/repo", undefined, "pi");
+  assert.equal(f.api.getState().sessions[0].title, "Pi · 1");
+  await f.api.getState().createSession(undefined, "/repo", undefined, "pi");
+  assert.equal(f.api.getState().sessions[1].title, "Pi · 2");
+});
+
+for (const action of ["create", "split"]) {
+  for (const failure of ["saveSessions", "saveActiveSessionId", "saveWorkspans", ...(action === "split" ? ["saveSplits"] : [])]) {
+    test(`actual ${action} callback delivers startup and returns committed ID after ${failure} disk failure`, async () => {
+      const f = fixture([session("a")], [span("w", "p", "a")], [], [], [], { startupHandledByLaunch: false });
+      // Reject the persistence boundary at the same point as Store.save(), with
+      // the PTY/layout already committed. Other snapshot steps must still run.
+      if (failure === "saveSessions") {
+        // Use the real sessionStore.set -> Store.save chain for the newly
+        // introduced disk-flush rejection, not only a rejected action stub.
+        const { useSessionStore: diskStore } = load("../api/sessionStore.ts", {
+          create(initialize) {
+            let state = initialize();
+            return { getState: () => state, setState: update => { state = { ...state, ...update }; } };
+          },
+          Store: { load: async () => ({
+            async set(key) { f.calls.push(["diskSet", key]); },
+            async save() { f.calls.push(["diskFailure", "save"]); throw new Error("disk unavailable"); },
+          }) },
+          getCliManagerDataPaths: async () => ({ sessionsStorePath: "sessions.dev.json" }),
+          singleFlight: fn => fn,
+        });
+        f.persisted.saveSessions = diskStore.getState().saveSessions;
+      } else {
+        f.persisted[failure] = async () => { f.calls.push(["diskFailure", failure]); throw new Error("disk unavailable"); };
+      }
+      const id = action === "create"
+        ? await f.api.getState().createSession(undefined, "/repo", undefined, "codex")
+        : await f.api.getState().splitTerminal("a", "horizontal", { cwd: "/repo", startupCmd: "codex" });
+      assert.equal(id, "recreated", "a live terminal is not returned as a failed creation");
+      assert.equal(f.api.getState().sessions.filter(s => s.id === id).length, 1);
+      if (action === "split") {
+        const timer = f.calls.find(([kind]) => kind === "startupTimer");
+        assert.ok(timer, "startup dispatch scheduled despite snapshot rejection");
+        timer[1]();
+        await Promise.resolve();
+      }
+      assert.ok(f.calls.some(([kind, target, text]) => kind === "write" && target === id && text.includes("codex")));
+      assert.ok(f.calls.some(([kind, key]) => kind === "toastError" && key === "saveSession.failed"));
+      assert.ok(f.calls.some(([kind, message, detail]) => kind === "logError" && message === "Failed to persist committed terminal launch"
+        && detail.sessionId === id && String(detail.err).includes("disk unavailable")));
+      assert.ok(!f.calls.some(([kind, key]) => kind === "toastError" && /createFailed|splitCreateFailed/.test(key)));
+      if (failure !== "saveActiveSessionId") assert.ok(f.calls.some(([kind]) => kind === "saveActive"));
+      if (failure !== "saveWorkspans") assert.ok(f.calls.some(([kind]) => kind === "saveWorkspans"));
+    });
+  }
+}
+
+test("ordinary new context reaches actual create action as fresh project CLI, while explicit plain stays shell", async () => {
+  const contextApi = load("../api/terminalCreationContext.ts", {
+    ...load("../api/terminalProject.ts"),
+    resolveProjectPath: project => project.path,
+    parseProjectEnvVars: () => ({ PROJECT: "yes" }),
+  });
+  const project = { id: "project", path: "/repo", cli_tool: "codex", shell: "powershell" };
+  const worktree = { id: "wt", project_id: "project", path: "/repo-wt", status: "active" };
+  for (const plainShell of [false, true]) {
+    const source = session("a", { projectId: project.id, worktreeId: worktree.id, cwd: "/repo-wt/sub", title: "Custom",
+      cliSessionId: "old", startupCmd: plainShell ? "" : "codex resume old", isAgentSession: !plainShell });
+    const context = contextApi.resolveTerminalCreationContext(source, [source], [project], [worktree], []);
+    const f = fixture([source], [span("w", "p", "a")], [], [project], [worktree], { startupHandledByLaunch: false });
+    await f.api.getState().createSession(context.projectId, context.cwd, undefined, context.startupCmd,
+      context.envVars, context.shell, undefined, context.worktreeId, context.sshHostId);
+    const created = f.api.getState().sessions.find(s => s.id === "recreated");
+    assert.equal(created.cliSessionId, undefined);
+    assert.equal(created.isAgentSession, !plainShell);
+    assert.equal(created.title, plainShell ? "PowerShell · 1" : "Codex · 1");
+    const write = f.calls.find(([kind]) => kind === "write");
+    assert.equal(Boolean(write), !plainShell);
+    if (write) { assert.ok(write[2].includes("codex")); assert.ok(!write[2].includes("resume")); }
+  }
 });

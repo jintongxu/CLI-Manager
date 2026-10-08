@@ -1,3 +1,7 @@
+import { WorktreeCreationAttempts, worktreeCreationPhase } from "../api/worktreeCreationRecovery";
+import { worktreeCreationErrorDescription } from "../components/WorktreeShortLabelField";
+import { normalizeWorktreeShortLabel } from "../api/worktreeLabels";
+import { withoutTerminalTitle } from "../../terminal/api/terminalCreationContext";
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, type MouseEvent as ReactMouseEvent } from "react";
 import { useShallow } from "zustand/shallow";
 import { useSidebarTreeDrag } from "./useSidebarTreeDrag";
@@ -103,7 +107,6 @@ export function useSidebarController({
   const createSession = useTerminalStore((s) => s.createSession);
   const splitTerminal = useTerminalStore((s) => s.splitTerminal);
   const closeSession = useTerminalStore((s) => s.closeSession);
-  const renameSession = useTerminalStore((s) => s.renameSession);
   const sessions = useTerminalStore((s) => s.sessions);
   const activeSessionId = useTerminalStore((s) => s.activeSessionId);
   const setActiveSession = useTerminalStore((s) => s.setActive);
@@ -185,6 +188,7 @@ export function useSidebarController({
     direction?: TerminalPaneSplitDirection;
     taskName: string;
     displayName: string;
+    shortLabel?: string;
     description: string;
   } | null>(null);
   const [depsPrompt, setDepsPrompt] = useState<{
@@ -660,7 +664,7 @@ export function useSidebarController({
     await createSession(
       options.projectId,
       options.cwd,
-      options.title,
+      undefined,
       options.startupCmd,
       options.envVars,
       options.shell,
@@ -682,7 +686,7 @@ export function useSidebarController({
     await createSession(
       options.projectId,
       worktree.path,
-      title ?? getWorktreeDisplayName(worktree),
+      title,
       startupCmd ?? options.startupCmd,
       options.envVars,
       options.shell,
@@ -736,39 +740,46 @@ export function useSidebarController({
   };
 
   // Serialize prompt initialization, while allowing independent normal/split actions.
+  const worktreeCreationAttempts = useRef(new WorktreeCreationAttempts());
   const worktreePromptActionsRef = useRef(new Set<string>());
 
-  const createAndOpenWorktree = async (project: Project, targetPaneId?: string, displayName?: string, description = "", taskName?: string) => {
+  const createAndOpenWorktree = async (project: Project, targetPaneId?: string, displayName?: string, description = "", taskName?: string, shortLabel = "") => {
     try {
-      const worktree = await createWorktreeForProject(project, { taskName, displayName, description });
-      await openWorktreeSession(project, worktree, targetPaneId);
+      const worktree = await worktreeCreationAttempts.current.run(`${project.id}:${taskName}`,
+        () => createWorktreeForProject(project, { taskName, displayName, description, shortLabel: normalizeWorktreeShortLabel(shortLabel) }),
+        worktree => openWorktreeSession(project, worktree, targetPaneId));
       toast.success(t("worktree.toast.created"), { description: worktree.path });
       void maybePromptWorktreeDeps(project, worktree);
+      setWorktreePrompt(null);
     } catch (err) {
       if (isWorktreeCreateInProgressError(err)) return;
       logError("Failed to create worktree", err);
-      toast.error(t("worktree.toast.createFailed"), { description: String(err) });
+      if (worktreeCreationPhase(err)) setWorktreePrompt(null);
+      toast.error(t("worktree.toast.createFailed"), { description: worktreeCreationErrorDescription(err, t), duration: Infinity });
     }
   };
 
-  const createAndSplitWorktree = async (project: Project, direction: TerminalPaneSplitDirection, displayName?: string, description = "", taskName?: string) => {
+  const createAndSplitWorktree = async (project: Project, direction: TerminalPaneSplitDirection, displayName?: string, description = "", taskName?: string, shortLabel = "") => {
     if (!activeSessionId) return;
     try {
-      const worktree = await createWorktreeForProject(project, { taskName, displayName, description });
-      const options = buildProjectSplitOptions(project);
-      await splitTerminal(activeSessionId, direction, {
-        ...options,
-        cwd: worktree.path,
-        title: getWorktreeDisplayName(worktree),
-        worktreeId: worktree.id,
+      const worktree = await worktreeCreationAttempts.current.run(`${project.id}:${taskName}`,
+        () => createWorktreeForProject(project, { taskName, displayName, description, shortLabel: normalizeWorktreeShortLabel(shortLabel) }), async worktree => {
+          const options = buildProjectSplitOptions(project);
+          await splitTerminal(activeSessionId, direction, {
+            ...withoutTerminalTitle(options),
+            cwd: worktree.path,
+            worktreeId: worktree.id,
+          });
+          closeHistory();
       });
-      closeHistory();
       toast.success(t("worktree.toast.created"), { description: worktree.path });
       void maybePromptWorktreeDeps(project, worktree);
+      setWorktreePrompt(null);
     } catch (err) {
       if (isWorktreeCreateInProgressError(err)) return;
       logError("Failed to create worktree split", err);
-      toast.error(t("worktree.toast.createFailed"), { description: String(err) });
+      if (worktreeCreationPhase(err)) setWorktreePrompt(null);
+      toast.error(t("worktree.toast.createFailed"), { description: worktreeCreationErrorDescription(err, t), duration: Infinity });
     }
   };
 
@@ -823,7 +834,7 @@ export function useSidebarController({
         await openWindowsTerminal([{ title: project.name, cwd: resolveProjectPath(project, groups), shell: project.shell || useSettingsStore.getState().defaultShell }]);
       } else {
         // 空字符串表示显式创建普通 Shell；undefined 会继承项目的 CLI/启动命令。
-        await createSession(project.id, resolveProjectPath(project, groups), project.name, "", undefined, project.shell || undefined);
+        await createSession(project.id, resolveProjectPath(project, groups), undefined, "", buildProjectSplitOptions(project).envVars, project.shell || undefined);
       }
       if (projectScopedTerminalViewEnabled) {
         onTerminalScopeChange?.({ kind: "project", projectId: project.id });
@@ -840,7 +851,7 @@ export function useSidebarController({
         await openWindowsTerminal([{ title, cwd: worktree.path, shell: project.shell || useSettingsStore.getState().defaultShell }]);
       } else {
         // Worktree 右键新建终端同样必须绕过项目启动配置。
-        await createSession(project.id, worktree.path, title, "", undefined, project.shell || undefined, undefined, worktree.id);
+        await createSession(project.id, worktree.path, undefined, "", buildProjectSplitOptions(project).envVars, project.shell || undefined, undefined, worktree.id);
       }
       if (projectScopedTerminalViewEnabled) {
         onTerminalScopeChange?.({ kind: "worktree", projectId: worktree.project_id, worktreeId: worktree.id });
@@ -853,7 +864,7 @@ export function useSidebarController({
     async (project: Project, direction: TerminalPaneSplitDirection) => {
       if (!activeSessionId || compactMode || useExternalTerminal) return;
       const splitDirect = async () => {
-        await splitTerminal(activeSessionId, direction, buildProjectSplitOptions(project));
+        await splitTerminal(activeSessionId, direction, withoutTerminalTitle(buildProjectSplitOptions(project)));
         closeHistory();
       };
 
@@ -1248,15 +1259,6 @@ export function useSidebarController({
     [renameGroup]
   );
 
-  const renameOpenProjectTabs = useCallback(
-    (projectId: string, title: string) => {
-      sessions
-        .filter((session) => session.projectId === projectId && !session.worktreeId && (session.kind ?? "pty") === "pty")
-        .forEach((session) => renameSession(session.id, title));
-    },
-    [renameSession, sessions]
-  );
-
   const handleProjectRenameConfirm = useCallback(
     async (id: string, newName: string) => {
       const trimmed = newName.trim();
@@ -1267,13 +1269,12 @@ export function useSidebarController({
 
       try {
         await updateProject(id, { name: trimmed });
-        renameOpenProjectTabs(id, trimmed);
         setRenamingProjectId(null);
       } catch (err) {
         toast.error(t("sidebar.toast.projectRenameFailed"), { description: String(err) });
       }
     },
-    [renameOpenProjectTabs, t, updateProject]
+    [t, updateProject]
   );
 
   const handleCreateGroup = useCallback(

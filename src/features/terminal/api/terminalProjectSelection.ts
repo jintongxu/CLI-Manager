@@ -1,7 +1,7 @@
 import type { TerminalSession } from "../../../shared/types/index";
 import type { ProjectWorkspanTabModel } from "../lib/workspanTabModel";
 import type { TabNotificationState } from "../state";
-import { groupProjectWorkspanModels } from "../api/terminalProjectTabsModel";
+import { describeWorkspanTabGroup, groupProjectWorkspanModels, type WorkspanTabGroupDescriptor } from "../api/terminalProjectTabsModel";
 
 export function resolveActiveProjectTarget(models: readonly ProjectWorkspanTabModel[], sessionId: string | null) {
   for (const model of models) {
@@ -25,9 +25,16 @@ export function selectProjectTabGroups(
       seen.add(model.workspan.id);
       return Boolean(resolveStatusWorkspanTarget(model, status, notifications));
     });
-    // One global row in backing Workspan order; never duplicate mixed projects.
-    return items.length ? [{ group: { key: "global-status", kind: "mixed-project" as const,
-      worktreeId: null, worktreeName: null }, models: items }] : [];
+    // Adjacent equal contexts form segments; merging A-B-A would reorder close targets.
+    const groups: Array<{ group: WorkspanTabGroupDescriptor; models: ProjectWorkspanTabModel[] }> = [];
+    let previousSignature: string | null = null;
+    for (const model of items) {
+      const descriptor = describeWorkspanTabGroup(model.members);
+      if (descriptor.key === previousSignature) groups[groups.length - 1].models.push(model);
+      else groups.push({ group: { ...descriptor, key: JSON.stringify([descriptor.key, model.workspan.id]) }, models: [model] });
+      previousSignature = descriptor.key;
+    }
+    return groups;
   }
   if (!projectKey) return [];
   return groupProjectWorkspanModels(models, projectKey);

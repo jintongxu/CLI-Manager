@@ -86,6 +86,8 @@ export type WorkspaceWorktree = {
   projectId: string;
   name: string;
   displayName?: string;
+  shortLabel?: string;
+  labelOrdinal?: number;
   description?: string;
   branch: string;
   cwd: null;

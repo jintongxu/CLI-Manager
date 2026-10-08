@@ -288,19 +288,11 @@ export function buildTerminalContextOptions(
 
 export function buildTerminalTabDisplayTitle(
   session: TerminalSession,
-  project?: Project,
-  ordinal = 1,
-  siblingCount = 1,
+  _project?: Project,
+  _ordinal = 1,
+  _siblingCount = 1,
 ): string {
-  const title = session.title.trim();
-  const projectName = project?.name.trim();
-  const isGeneric = !title
-    || /^(terminal|shell|cmd|powershell|pwsh)$/i.test(title)
-    || (Boolean(projectName) && title === projectName);
-  const purpose = isGeneric
-    ? formatCliToolLabel(session.cliTool ?? project?.cli_tool ?? session.startupCmd)
-    : title;
-  return siblingCount > 1 ? `${purpose} · ${ordinal}` : purpose;
+  return session.title;
 }
 
 function resolveProjectColor(projectKey: string): string {

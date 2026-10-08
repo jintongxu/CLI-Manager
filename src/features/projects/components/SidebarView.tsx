@@ -1,3 +1,6 @@
+import { WorktreeShortLabelField, worktreeLabelErrorKey } from "./WorktreeShortLabelField";
+import { getWorktreeShortLabel, normalizeWorktreeShortLabel } from "../api/worktreeLabels";
+import { withoutTerminalTitle } from "../../terminal/api/terminalCreationContext";
 import { useState } from "react";
 import type { useSidebarController } from "../hooks/useSidebarController";
 import { ConfigModal } from "./ConfigModal";
@@ -167,6 +170,7 @@ export function SidebarView({
   } | null>(null);
   const [renameTarget, setRenameTarget] = useState<WorktreeRecord | null>(null);
   const [renameDisplayName, setRenameDisplayName] = useState("");
+  const [renameShortLabel, setRenameShortLabel] = useState("");
   const [renameDescription, setRenameDescription] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
   const [renameSaving, setRenameSaving] = useState(false);
@@ -186,10 +190,10 @@ export function SidebarView({
     setRenameSaving(true);
     setRenameError(null);
     try {
-      await updateWorktreeMetadata(renameTarget.id, displayName, description);
+      await updateWorktreeMetadata(renameTarget.id, displayName, description, normalizeWorktreeShortLabel(renameShortLabel));
       setRenameTarget(null);
     } catch (error) {
-      setRenameError(String(error));
+      setRenameError(worktreeLabelErrorKey(error) ? t(worktreeLabelErrorKey(error)!) : String(error));
     } finally {
       setRenameSaving(false);
     }
@@ -592,6 +596,7 @@ export function SidebarView({
                   role="menuitem"
                   onClick={() => {
                     setRenameDisplayName(getWorktreeDisplayName(contextMenu.worktree));
+                    setRenameShortLabel(contextMenu.worktree.short_label ?? "");
                     setRenameDescription(contextMenu.worktree.description ?? "");
                     setRenameError(null);
                     setRenameTarget(contextMenu.worktree);
@@ -916,6 +921,8 @@ export function SidebarView({
           <DialogTitle>{t("worktree.rename.title")}</DialogTitle>
           <DialogDescription className="mt-2">{t("worktree.rename.description")}</DialogDescription>
           <div className="mt-4 space-y-3">
+            <WorktreeShortLabelField value={renameShortLabel} onChange={setRenameShortLabel} defaultLabel={getWorktreeShortLabel({ label_ordinal: renameTarget?.label_ordinal })} />
+            <Input readOnly value={renameTarget?.name ?? ""} aria-label={t("worktree.prompt.internalName")} />
             <div>
               <label className="mb-1 block text-xs text-text-muted">{t("worktree.prompt.taskName")}</label>
               <Input value={renameDisplayName} onChange={(event) => setRenameDisplayName(event.currentTarget.value)} autoFocus />
@@ -960,6 +967,7 @@ export function SidebarView({
               }}
               className="text-sm"
             />
+            <WorktreeShortLabelField value={worktreePrompt?.shortLabel ?? ""} onChange={(shortLabel) => setWorktreePrompt((current) => current ? { ...current, shortLabel } : current)} />
             <label className="mb-1 mt-3 block text-xs text-text-muted">{t("worktree.prompt.internalName")}</label>
             <Input readOnly value={worktreePrompt?.taskName ?? ""} aria-label={t("worktree.prompt.internalName")} className="select-text text-sm" />
             <p className="mt-1 text-xs text-text-muted">{t("worktree.prompt.internalNameHelp")}</p>
@@ -985,7 +993,7 @@ export function SidebarView({
               className="ui-worktree-prompt-action ui-worktree-prompt-action-neutral"
               onClick={() => {
                 if (worktreePrompt?.direction && activeSessionId) {
-                  void splitTerminal(activeSessionId, worktreePrompt.direction!, buildProjectSplitOptions(worktreePrompt.project))
+                  void splitTerminal(activeSessionId, worktreePrompt.direction!, withoutTerminalTitle(buildProjectSplitOptions(worktreePrompt.project)))
                     .then(() => closeHistory());
                 } else if (worktreePrompt) {
                   void openProjectDirect(worktreePrompt.project, worktreePrompt.targetPaneId);
@@ -1000,17 +1008,19 @@ export function SidebarView({
               className="ui-worktree-prompt-action ui-worktree-prompt-action-accent"
               onClick={() => {
                 if (worktreePrompt) {
-                  void updateProject(worktreePrompt.project.id, { worktree_strategy: "autoParallel" }).then(() => {
+                  void Promise.resolve().then(() => {
+                    normalizeWorktreeShortLabel(worktreePrompt.shortLabel ?? "");
+                    return updateProject(worktreePrompt.project.id, { worktree_strategy: "autoParallel" });
+                  }).then(() => {
                     if (worktreePrompt.direction) {
-                      return createAndSplitWorktree(worktreePrompt.project, worktreePrompt.direction, worktreePrompt.displayName, worktreePrompt.description, worktreePrompt.taskName);
+                      return createAndSplitWorktree(worktreePrompt.project, worktreePrompt.direction, worktreePrompt.displayName, worktreePrompt.description, worktreePrompt.taskName, worktreePrompt.shortLabel);
                     }
-                    return createAndOpenWorktree(worktreePrompt.project, worktreePrompt.targetPaneId, worktreePrompt.displayName, worktreePrompt.description, worktreePrompt.taskName);
+                    return createAndOpenWorktree(worktreePrompt.project, worktreePrompt.targetPaneId, worktreePrompt.displayName, worktreePrompt.description, worktreePrompt.taskName, worktreePrompt.shortLabel);
                   }).catch((err) => {
                     logError("Failed to enable automatic worktree isolation", err);
-                    toast.error(t("worktree.toast.createFailed"), { description: String(err) });
+                    toast.error(t("worktree.toast.createFailed"), { description: worktreeLabelErrorKey(err) ? t(worktreeLabelErrorKey(err)!) : String(err) });
                   });
                 }
-                setWorktreePrompt(null);
               }}
               disabled={!worktreePrompt || !worktreePrompt.displayName.trim() || Array.from(worktreePrompt.displayName.trim()).length > 64 || Array.from(worktreePrompt.description).length > 2000}
             >
@@ -1020,11 +1030,10 @@ export function SidebarView({
               className="ui-worktree-prompt-action ui-worktree-prompt-action-primary"
               onClick={() => {
                 if (worktreePrompt?.direction) {
-                  void createAndSplitWorktree(worktreePrompt.project, worktreePrompt.direction, worktreePrompt.displayName, worktreePrompt.description, worktreePrompt.taskName);
+                  void createAndSplitWorktree(worktreePrompt.project, worktreePrompt.direction, worktreePrompt.displayName, worktreePrompt.description, worktreePrompt.taskName, worktreePrompt.shortLabel);
                 } else if (worktreePrompt) {
-                  void createAndOpenWorktree(worktreePrompt.project, worktreePrompt.targetPaneId, worktreePrompt.displayName, worktreePrompt.description, worktreePrompt.taskName);
+                  void createAndOpenWorktree(worktreePrompt.project, worktreePrompt.targetPaneId, worktreePrompt.displayName, worktreePrompt.description, worktreePrompt.taskName, worktreePrompt.shortLabel);
                 }
-                setWorktreePrompt(null);
               }}
               disabled={!worktreePrompt || !worktreePrompt.displayName.trim() || Array.from(worktreePrompt.displayName.trim()).length > 64 || Array.from(worktreePrompt.description).length > 2000}
             >

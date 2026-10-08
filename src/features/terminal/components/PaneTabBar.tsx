@@ -18,14 +18,16 @@ import { getTerminalTheme } from "../../../shared/lib/terminalThemes";
 import {
   normalizeTabMenuHex, tabMenuHexToRgba, PANE_DROP_PREFIX, type SplitPickerAnchor,
   buildTerminalTabDisplayTitle, buildTerminalTabHoverInfo,
-  getTerminalTabScopeKey, inferSessionVendor, inferSessionCliToolIcon,
+  inferSessionVendor, inferSessionCliToolIcon,
 } from "../lib/terminalTabsModel";
+import type { TerminalWorktreeBadge } from "../api/terminalWorktreeBadge";
 import { SortableTab } from "./SortableTerminalTabs";
 
 
 export interface PaneTabBarProps {
   pane: TerminalPaneLeaf;
   sessions: TerminalSession[];
+  sessionWorktreeBadges?: ReadonlyMap<string, TerminalWorktreeBadge>;
   visibleSessionIds?: Set<string> | null;
   projects: Project[];
   worktrees: WorktreeRecord[];
@@ -68,11 +70,11 @@ export interface PaneTabBarProps {
 export function PaneTabBar({
   pane,
   sessions,
+  sessionWorktreeBadges,
   visibleSessionIds,
   projects,
   worktrees,
   allPanes,
-  activeSessionId,
   editingSessionId,
   tabNotifications,
   terminalBackgroundEnabled,
@@ -142,28 +144,9 @@ export function PaneTabBar({
     .filter((session) => !visibleSessionIds || (session && visibleSessionIds.has(session.id)))
     .filter((session): session is TerminalSession => Boolean(session));
   const paneSessionIds = paneSessions.map((session) => session.id);
-  const tabScopeCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const session of sessions) {
-      const key = getTerminalTabScopeKey(session);
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-    return counts;
-  }, [sessions]);
-  const tabScopeOrdinals = useMemo(() => {
-    const ordinals = new Map<string, number>();
-    const seen = new Map<string, number>();
-    for (const session of sessions) {
-      const key = getTerminalTabScopeKey(session);
-      const next = (seen.get(key) ?? 0) + 1;
-      seen.set(key, next);
-      ordinals.set(session.id, next);
-    }
-    return ordinals;
-  }, [sessions]);
   const activePaneTabId =
-    activeSessionId && paneSessionIds.includes(activeSessionId)
-      ? activeSessionId
+    pane.activeSessionId && paneSessionIds.includes(pane.activeSessionId)
+      ? pane.activeSessionId
       : paneSessionIds[0] ?? null;
   const activePaneSession = activePaneTabId
     ? paneSessions.find((session) => session.id === activePaneTabId) ?? null
@@ -174,7 +157,7 @@ export function PaneTabBar({
     ? t("terminal.toolbar.exitTerminalFullscreen")
     : t("terminal.toolbar.enterTerminalFullscreen");
   const tabScrollSignature = paneSessions
-    .map((session) => `${session.id}:${session.title}:${tabNotifications[session.id] ?? "none"}`)
+    .map((session) => `${session.id}:${session.title}:${sessionWorktreeBadges?.get(session.id)?.label ?? ""}:${tabNotifications[session.id] ?? "none"}`)
     .join("|");
 
   const updateTabScrollState = useCallback(() => {
@@ -238,7 +221,8 @@ export function PaneTabBar({
     const activeRect = activeTab.getBoundingClientRect();
     let nextScrollLeft = element.scrollLeft;
 
-    if (activeRect.left < containerRect.left) {
+    const isOversized = activeRect.width > containerRect.width;
+    if (isOversized || activeRect.left < containerRect.left) {
       nextScrollLeft -= containerRect.left - activeRect.left;
     } else if (activeRect.right > containerRect.right) {
       nextScrollLeft += activeRect.right - containerRect.right;
@@ -247,7 +231,7 @@ export function PaneTabBar({
     const maxScrollLeft = Math.max(0, element.scrollWidth - element.clientWidth);
     const isLastTab = paneSessionIds[paneSessionIds.length - 1] === activePaneTabId;
     // 末尾标签吸附到最右，避免容器 padding / 标签 margin 残留导致右滚按钮仍可点
-    const clampedScrollLeft = isLastTab
+    const clampedScrollLeft = isLastTab && !isOversized
       ? maxScrollLeft
       : Math.min(maxScrollLeft, Math.max(0, nextScrollLeft));
     if (Math.abs(clampedScrollLeft - element.scrollLeft) > 0.5) {
@@ -381,14 +365,10 @@ export function PaneTabBar({
               id={session.id}
               paneId={pane.id}
               title={session.title}
-              displayTitle={buildTerminalTabDisplayTitle(
-                session,
-                session.projectId ? projectById.get(session.projectId) : undefined,
-                tabScopeOrdinals.get(session.id) ?? 1,
-                tabScopeCounts.get(getTerminalTabScopeKey(session)) ?? 1,
-              )}
+              displayTitle={buildTerminalTabDisplayTitle(session)}
+              worktreeBadge={sessionWorktreeBadges?.get(session.id)}
               sessionKind={session.kind}
-              isActive={session.id === activeSessionId}
+              isActive={session.id === activePaneTabId}
               isEditing={editingSessionId === session.id}
               notification={tabNotifications[session.id] ?? "none"}
               vendor={inferVendor(projectById.get(session.projectId!)?.cli_tool) ?? inferSessionVendor(session)}
@@ -527,7 +507,7 @@ export function PaneTabBar({
                       key={session.id}
                       type="button"
                       className="ui-interactive ui-terminal-tab-list-item flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-on-surface-variant"
-                      data-selected={session.id === pane.activeSessionId ? "true" : "false"}
+                      data-selected={session.id === activePaneTabId ? "true" : "false"}
                       onClick={() => {
                         activatePaneSessionAt(index);
                         setTabListOpen(false);
@@ -540,7 +520,12 @@ export function PaneTabBar({
                         style={{ backgroundColor: TAB_NOTIFICATION_COLORS[notification], color: TAB_NOTIFICATION_COLORS[notification] }}
                         aria-hidden="true"
                       />
-                      <span className="min-w-0 flex-1 truncate">{session.title}</span>
+                      <span className="ui-workspan-overflow-text flex min-w-0 flex-1 flex-col items-start">
+                        {sessionWorktreeBadges?.get(session.id) && (
+                          <span className="ui-workspan-worktree-badge">{sessionWorktreeBadges.get(session.id)!.label}</span>
+                        )}
+                        <span className="w-full truncate">{session.title}</span>
+                      </span>
                     </button>
                   );
                 })}
