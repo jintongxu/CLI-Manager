@@ -63,7 +63,9 @@ fn finish_dirty_main_retry_and_changed_ignored_artifact() {
     // Use the repository exclude file, not a tracked checkout mutation.
     fs::write(ctx.common.join("info/exclude"), "artifact\n").unwrap();
     fs::write(ctx.target.join("artifact"), "new ignored content").unwrap();
-    assert_eq!(cleanup(&ctx, true).unwrap_err(), "finish_residual_changed");
+    assert!(cleanup(&ctx, true)
+        .unwrap_err()
+        .starts_with("finish_unknown_content_preserved:"));
     assert!(ctx.target.join("artifact").exists());
 }
 

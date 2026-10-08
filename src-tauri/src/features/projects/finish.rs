@@ -1,10 +1,16 @@
 //! Rust-owned finish authority. Inspect is read-only; merge, cleanup and ack are journaled.
 use super::*;
-#[path = "finish_receipt.rs"]
-mod receipt;
 #[path = "force_delete.rs"]
 pub mod force_delete;
+#[path = "finish_receipt.rs"]
+mod receipt;
 use receipt::{Journal, Receipt};
+#[path = "finish_artifact_classify.rs"]
+mod artifact_classify;
+#[path = "finish_artifact_manifest.rs"]
+mod artifact_manifest;
+#[path = "finish_cleanup_plan.rs"]
+pub mod cleanup_plan;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -30,6 +36,8 @@ pub struct FinishState {
     pub done: bool,
     pub stash_reference: Option<String>,
     pub merge_result: Option<GitWorktreeMergeResult>,
+    pub phase: String,
+    pub cleanup_plan_required: bool,
 }
 
 struct Context {
@@ -271,6 +279,13 @@ fn historical_outcome(ctx: &Context, oid: &str) -> Result<Option<String>, String
 
 // 每次删除前复核 source/base、恢复阻塞和目录归属；旧凭据不能授权新内容。
 fn cleanup_gate(ctx: &Context, r: &Receipt, valid: bool) -> Result<(), String> {
+    if worktree_root_metadata(&ctx.target)?.is_some() {
+        if let Some(identity) = &r.checkout_identity {
+            if receipt::root_identity(&ctx.target)? != *identity {
+                return Err("finish_root_replaced".into());
+            }
+        }
+    }
     if r.blocker.is_some() {
         return Err(r.blocker.clone().unwrap());
     }
@@ -309,14 +324,29 @@ fn cleanup_gate(ctx: &Context, r: &Receipt, valid: bool) -> Result<(), String> {
             return Err("finish_base_changed".into());
         }
     }
-    if valid {
+    if valid
+        && !matches!(
+            r.phase.as_str(),
+            "cleanup_intent" | "branch_intent" | "done"
+        )
+    {
         clean_source(ctx, &r.source_oid)?;
+    }
+    if valid && r.phase == "merged" {
+        return Ok(());
     }
     if worktree_root_metadata(&ctx.target)?.is_some() {
         let Some(owned) = &r.ownership else {
+            if valid && r.phase == "merged" {
+                return Ok(());
+            }
             return Err("finish_legacy_residual_manual_review".into());
         };
-        receipt::verify_subset(&ctx.target, owned)?;
+        let roots = r.artifacts.as_ref().map_or(&[][..], |m| m.roots.as_slice());
+        receipt::verify_subset_excluding(&ctx.target, owned, roots)?;
+        if let Some(m) = &r.artifacts {
+            artifact_manifest::verify(ctx, m)?;
+        }
     }
     Ok(())
 }
@@ -358,8 +388,14 @@ fn inspect(ctx: &Context) -> Result<FinishState, String> {
         done: false,
         stash_reference: r.as_ref().and_then(|r| r.stash_reference.clone()),
         merge_result: None,
+        phase: r
+            .as_ref()
+            .map_or("awaiting_merge", |r| r.phase.as_str())
+            .into(),
+        cleanup_plan_required: false,
     };
     if let Some(r) = &r {
+        state.cleanup_plan_required = valid && r.outcome.is_some() && r.phase == "merged";
         state.cleanup_pending = r.outcome.is_some() || r.phase != "prepared";
         if refreshable_preparation(r) {
             state.unknown = !valid;
@@ -405,7 +441,7 @@ fn inspect(ctx: &Context) -> Result<FinishState, String> {
 
 fn new_receipt(ctx: &Context, oid: String) -> Receipt {
     Receipt {
-        version: 1,
+        version: 2,
         request: ctx.request.clone(),
         repo: path_to_git_arg(&ctx.common),
         source_oid: oid,
@@ -417,6 +453,8 @@ fn new_receipt(ctx: &Context, oid: String) -> Receipt {
         ownership: None,
         delete_branch: None,
         acknowledged: false,
+        artifacts: None,
+        checkout_identity: None,
     }
 }
 
@@ -444,7 +482,8 @@ where
     // No merge/stash/cleanup intent exists for a refreshable preparation. Rebind
     // its source and ownership only after validating the current clean checkout.
     let mut r = new_receipt(ctx, oid);
-    r.ownership = Some(receipt::snapshot(&ctx.target)?);
+    r.checkout_identity = Some(receipt::root_identity(&ctx.target)?);
+    // Merge authority is independent of destructive checkout ownership.
     save(&r)?;
     // A normal conflict result is refreshable only after proving abort restored
     // the original clean base checkout. The engine's best-effort abort alone
@@ -617,6 +656,19 @@ fn cleanup_with_remover<F>(
 where
     F: FnMut(&Context) -> Result<(), String>,
 {
+    cleanup_guarded(ctx, delete_branch, &mut remove, || Ok(()))
+}
+fn cleanup_guarded<F, G>(
+    ctx: &Context,
+    delete_branch: bool,
+    mut remove: F,
+    mut guard: G,
+) -> Result<FinishState, String>
+where
+    F: FnMut(&Context) -> Result<(), String>,
+    G: FnMut() -> Result<(), String>,
+{
+    guard()?;
     let valid = checkout_valid(ctx)?;
     let mut r = match load(ctx)? {
         Some(r) => r,
@@ -638,6 +690,16 @@ where
             );
             if valid {
                 clean_source(ctx, &r.source_oid)?;
+                let classification = artifact_classify::classify(ctx)?;
+                if !classification.preserved.is_empty() {
+                    return Err(format!(
+                        "finish_unknown_content_preserved: {}",
+                        classification.preserved[0].path
+                    ));
+                }
+                if !classification.candidates.is_empty() {
+                    return Err("finish_cleanup_confirmation_required".into());
+                }
                 r.ownership = Some(receipt::snapshot(&ctx.target)?);
             } else if worktree_root_metadata(&ctx.target)?.is_some() {
                 return Err("finish_legacy_residual_manual_review".into());
@@ -645,16 +707,45 @@ where
             r
         }
     };
+    // Legacy callers retain ordinary cleanup, but never gain implicit cache authorization.
+    if valid && r.phase == "merged" {
+        cleanup_gate(ctx, &r, valid)?;
+        let classification = artifact_classify::classify(ctx)?;
+        if !classification.preserved.is_empty() {
+            return Err(format!(
+                "finish_unknown_content_preserved: {}",
+                classification.preserved[0].path
+            ));
+        }
+        if !classification.candidates.is_empty() {
+            return Err("finish_cleanup_confirmation_required".into());
+        }
+        r.ownership = Some(receipt::snapshot(&ctx.target)?);
+    }
     cleanup_gate(ctx, &r, valid)?;
     if let Some(previous) = r.delete_branch {
         if previous != delete_branch {
             return Err("finish_cleanup_request_changed".into());
         }
     }
+    force_delete::ensure_scoped_prune(ctx)?;
     r.delete_branch = Some(delete_branch);
     r.phase = "cleanup_intent".into();
     // Critical intent and ownership must be durable BEFORE any Git/FS removal.
     ctx.journal.save(&r)?;
+    if let Some(m) = &r.artifacts {
+        if worktree_root_metadata(&ctx.target)?.is_some() {
+            // Complete ordinary + artifact ownership and cleanup intent were published first.
+            artifact_manifest::remove_guarded(ctx, m, &mut guard)?;
+            receipt::verify_subset(
+                &ctx.target,
+                r.ownership
+                    .as_ref()
+                    .ok_or("finish_legacy_residual_manual_review")?,
+            )?;
+        }
+    }
+    guard()?;
     if valid {
         let result = remove(ctx);
         // Git failure may have partially removed and unregistered the checkout. Preserve journal.
@@ -674,6 +765,8 @@ where
                 .as_ref()
                 .ok_or("finish_legacy_residual_manual_review")?,
         )?;
+        guard()?;
+        force_delete::ensure_scoped_prune(ctx)?;
         // Missing .git is allowed only as a subset of our own pre-removal snapshot.
         if !valid
             && worktree_registration(&ctx.project, &ctx.target, &ctx.request.branch)?
@@ -685,6 +778,7 @@ where
         }
     }
     ensure_worktree_root_absent(&ctx.target)?;
+    force_delete::ensure_scoped_prune(ctx)?;
     run_git_checked(&ctx.project, ["worktree", "prune"])?;
     if worktree_path_registered(&ctx.project, &ctx.target)? {
         return Err("worktree_remove_incomplete".into());
@@ -763,10 +857,17 @@ pub async fn git_worktree_finish_merge(
 pub async fn git_worktree_finish_cleanup(
     req: FinishRequest,
     delete_branch: bool,
+    daemon_bridge: tauri::State<'_, crate::daemon::client::DaemonBridge>,
 ) -> Result<FinishState, String> {
+    let bridge = daemon_bridge.get();
     tokio::task::spawn_blocking(move || {
         let _lock = acquire_worktree_merge_lock()?;
-        cleanup(&context(req)?, delete_branch)
+        let ctx = context(req)?;
+        if worktree_root_metadata(&ctx.target)?.is_none() {
+            return cleanup(&ctx, delete_branch);
+        }
+        let client = bridge.ok_or("finish_admission_daemon_unavailable")?;
+        cleanup_plan::legacy_cleanup(&ctx, delete_branch, &client)
     })
     .await
     .map_err(|e| format!("task_failed: {e}"))?

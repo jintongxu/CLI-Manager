@@ -1,0 +1,2 @@
+{"file":".trellis/spec/backend/worktree-isolation-contracts.md","reason":"Owned deletion/merge and restore blockers/session/unknown safety review"}
+{"file":".trellis/spec/frontend/ai-architecture-contracts.md","reason":"Zero architecture exemptions and preserving IPC"}

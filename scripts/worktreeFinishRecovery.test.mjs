@@ -17,17 +17,24 @@ function load(file, dependencies = {}) {
 const force = load('src/features/projects/api/worktreeForceDelete.ts', { '@tauri-apps/api/core': { invoke: (...args) => forceInvoke(...args) } });
 let forceInvoke;
 const finish = load('src/features/projects/api/worktreeFinish.ts');
-const initial = (patch = {}) => ({ checkoutValid: true, merged: false, outcome: null, sourceOid: 'abc',
+const admission = load('src/shared/lib/worktreeLaunchAdmission.ts');
+export const initial = (patch = {}) => ({ checkoutValid: true, merged: false, outcome: null, sourceOid: 'abc',
   cleanupReady: false, cleanupPending: false, blocker: null, unknown: false, done: false,
   stashReference: null, mergeResult: null, ...patch });
-const pending = (patch = {}) => initial({ merged: true, outcome: 'merged', cleanupReady: true, cleanupPending: true, ...patch });
+export const pending = (patch = {}) => initial({ merged: true, outcome: 'merged', cleanupReady: true, cleanupPending: true, ...patch });
 const record = { id: 'w1', project_id: 'p1', path: 'D:/tasks/one', branch: 'wt/one', base_branch: 'master', name: 'one', status: 'active' };
+export const plan = (patch = {}) => ({ token: 'original', ruleVersion: 1, request: finish.finishRequest(record, 'D:/main'),
+  deleteBranch: true, sourceOid: 'abc', baseOid: 'base', phase: 'merged', candidates: [], preserved: [], blocker: null,
+  provenanceNotice: 'finish_self_temp_provenance_missing', expiresInSeconds: 600, admissionScope: 'daemon', sessionIds: [], admissionAcquired: false, ...patch });
+export const confirmation = sessionIds => ({ plan: plan(), sessionIds });
 const flush = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); };
 function deferred() { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; }
 
-function cleanupHarness(state = pending()) {
+export function cleanupHarness(state = pending()) {
   const calls = [], sessions = ['s1'];
   const deps = {
+    validate: async () => { calls.push('validate'); return plan({ admissionAcquired: true }); },
+    releasePlan: async () => calls.push('releasePlan'),
     inspect: async () => { calls.push('inspect'); return state; }, sessionIds: () => [...sessions],
     closeSession: async id => { calls.push('close:' + id); sessions.splice(sessions.indexOf(id), 1); },
     releaseSessions: async () => calls.push('release'), cleanup: async () => { calls.push('cleanup'); return pending({ done: true }); },
@@ -53,34 +60,34 @@ test('invalid/unknown/pending never read changes; historical dirty valid checkou
 test('missing branch without completion evidence stays unknown; receipt done enables SQL-only finalization', async () => {
   assert.equal(finish.finishStatus(initial({ checkoutValid: false, unknown: true })), 'missing');
   const h = cleanupHarness(pending({ checkoutValid: false, done: true, cleanupReady: false }));
-  await finish.finalizeFinish(h.deps, ['s1']);
+  await finish.finalizeFinish(h.deps, confirmation(['s1']));
   assert.equal(h.calls.includes('cleanup'), false);
-  assert.equal(h.calls.join(','), 'inspect,close:s1,release,sql,remove,ack,refresh');
+  assert.equal(h.calls.join(','), 'inspect,close:s1,release,releasePlan,sql,remove,ack,refresh');
 });
 test('blocked inspect has no session side effects; new sessions require another confirmation', async () => {
   const blocked = cleanupHarness(pending({ blocker: 'finish_legacy_residual_manual_review' }));
-  await assert.rejects(finish.finalizeFinish(blocked.deps, ['s1']), /manual_review/);
+  await assert.rejects(finish.finalizeFinish(blocked.deps, confirmation(['s1'])), /manual_review/);
   assert.equal(blocked.calls.join(','), 'inspect');
   const h = cleanupHarness(); h.sessions.push('newcomer');
-  await assert.rejects(finish.finalizeFinish(h.deps, ['s1']), /sessions_changed/);
-  assert.equal(h.calls.join(','), 'inspect');
+  await assert.rejects(finish.finalizeFinish(h.deps, confirmation(['s1'])), /sessions_changed/);
+  assert.equal(h.calls.join(','), 'inspect,releasePlan');
 });
 test('SQL failure retains record and receipt; refresh/ack failure after SQL does not retry Git', async () => {
   const h = cleanupHarness();
   h.deps.deleteRecord = async () => { h.calls.push('sql'); throw new Error('database locked'); };
-  await assert.rejects(finish.finalizeFinish(h.deps, ['s1']), /finish_database_failed/);
+  await assert.rejects(finish.finalizeFinish(h.deps, confirmation(['s1'])), /finish_database_failed/);
   assert.equal(h.calls.includes('ack'), false); assert.equal(h.calls.includes('remove'), false);
   const success = cleanupHarness(pending({ done: true }));
   success.deps.refresh = async () => { throw new Error('sidebar'); };
   success.deps.ack = async () => { throw new Error('ack'); };
-  await finish.finalizeFinish(success.deps, ['s1']);
+  await finish.finalizeFinish(success.deps, confirmation(['s1']));
   assert.equal(success.calls.includes('cleanup'), false);
   assert.equal(success.calls.filter(x => x === 'warn').length, 2);
   assert.equal(success.calls.includes('remove'), true);
 });
 test('cleanup failure does not delete SQL or ack; same-worktree process guard releases after rejection', async () => {
   const h = cleanupHarness(); h.deps.cleanup = async () => { throw new Error('os error 32'); };
-  await assert.rejects(finish.finalizeFinish(h.deps, ['s1']), /os error 32/);
+  await assert.rejects(finish.finalizeFinish(h.deps, confirmation(['s1'])), /os error 32/);
   assert.equal(h.calls.includes('sql'), false);
   const hold = deferred(); const operation = finish.withFinishLock('w1', () => hold.promise);
   await assert.rejects(finish.withFinishLock('w1', async () => {}), /finish_in_progress/);
@@ -95,7 +102,9 @@ function dialogHarness(flow = false) {
   const deps = {
     inspectFinish: async wt => { calls.push('inspect:' + wt.id); return inspectOverride ? inspectOverride(wt) : state; },
     finishMerge: async () => { calls.push('merge'); state = pending(); return state; },
-    finishCleanup: async (_wt, _deleteBranch, confirmed) => { calls.push('cleanup:' + confirmed.join(',')); },
+    planFinishCleanup: async () => { calls.push('plan'); return plan(); },
+    releaseFinishCleanup: async () => calls.push('releasePlan'),
+    finishCleanup: async (_wt, _deleteBranch, confirmed) => { calls.push('cleanup:' + confirmed.sessionIds.join(',')); },
   };
   const react = {
     useState(initialValue) {
@@ -121,9 +130,11 @@ function dialogHarness(flow = false) {
       return 'oid';
     } },
     sonner: { toast: { success: () => {} } },
+    '../../../shared/platform/logger': { logWarn: () => calls.push('warnRelease') },
     '../../../shared/i18n/index': { useI18n: () => ({ t: (key, params) => language + ':' + key + (params ? ':' + JSON.stringify(params) : '') }) },
     './WorktreeForceDeleteDialog': { WorktreeForceDeleteDialog: 'WorktreeForceDeleteDialog' },
     './worktreeStore': { useWorktreeStore: select => select(deps) },
+    '../../../shared/lib/worktreeLaunchAdmission': admission,
     './worktreeMetadata': { getWorktreeDisplayName: wt => wt.name }, './worktreeFinish': finish,
     '../../terminal/state': { useTerminalStore: { getState: () => ({ sessions }) } },
     '../../../shared/ui/dialog': Object.fromEntries(['Dialog', 'DialogContent', 'DialogDescription', 'DialogFooter', 'DialogTitle'].map(k => [k, k])),
@@ -216,7 +227,9 @@ function storeHarness() {
       calls.push(command);
       if (command === 'git_worktree_finish_inspect' && inspectError) throw Error(inspectError);
       assert.equal(args.req.worktreeId, 'w1');
-      if (command === 'git_worktree_finish_cleanup') state = pending({ done: true, checkoutValid: false });
+      if (command === 'git_worktree_finish_cleanup_confirmed') state = pending({ done: true, checkoutValid: false });
+      if (command === 'git_worktree_finish_cleanup_plan') return plan();
+      if (command === 'git_worktree_finish_cleanup_validate') return plan({ admissionAcquired: true });
       return state;
     } },
     zustand: { create: init => {
@@ -234,18 +247,19 @@ function storeHarness() {
     '../../terminal/state': { useTerminalStore: { getState: () => ({ sessions, closeSession: async id => { calls.push('close:' + id); sessions.splice(sessions.findIndex(item => item.id === id), 1); } }) } },
     './worktreeForceDelete': force,
     './worktreeFinish': finish,
+    '../../../shared/lib/worktreeLaunchAdmission': admission,
   });
   api.useWorktreeStore.getState().worktrees = [{ ...record }];
   return { sessions, get store() { return api.useWorktreeStore.getState(); }, calls, setState: next => { state = next; }, sqlFail: next => { sqlFail = next; }, refreshFail: next => { refreshFail = next; }, inspectError: next => { inspectError = next; } };
 }
 test('actual store SQL failure remains pending and retry does not merge; refresh failure removes store immediately', async () => {
   const h = storeHarness(); h.setState(pending()); h.sqlFail(true);
-  await assert.rejects(h.store.finishCleanup(record, true, []), /database_failed/);
+  await assert.rejects(h.store.finishCleanup(record, true, confirmation([])), /database_failed/);
   assert.equal(h.store.worktrees[0].status, 'pending');
   assert.equal(h.calls.includes('git_worktree_finish_ack'), false);
-  h.sqlFail(false); h.refreshFail(true); await h.store.finishCleanup(record, true, []);
+  h.sqlFail(false); h.refreshFail(true); await h.store.finishCleanup(record, true, confirmation([]));
   assert.equal(h.store.worktrees.length, 0);
-  assert.equal(h.calls.filter(call => call === 'git_worktree_finish_cleanup').length, 1);
+  assert.equal(h.calls.filter(call => call === 'git_worktree_finish_cleanup_confirmed').length, 1);
   assert.equal(h.calls.includes('git_worktree_finish_merge'), false);
   assert.ok(h.calls.indexOf('sql-delete') < h.calls.indexOf('git_worktree_finish_ack'));
 });
@@ -300,7 +314,7 @@ test('commit reinspection becoming pending prevents staging; cancelled open cann
 test('actual store and dialog commit share the same same-worktree process lock', async () => {
   const h = storeHarness(), wait = deferred();
   const held = finish.withFinishLock('w1', () => wait.promise);
-  await assert.rejects(h.store.finishCleanup(record, true, []), /finish_in_progress/);
+  await assert.rejects(h.store.finishCleanup(record, true, confirmation([])), /finish_in_progress/);
   await assert.rejects(h.store.finishMerge(record), /finish_in_progress/);
   assert.equal(h.calls.length, 0); wait.resolve(); await held;
 });

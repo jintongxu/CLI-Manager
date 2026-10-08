@@ -214,7 +214,7 @@ export interface TerminalStore {
   subagentTranscripts: Record<string, SubagentTranscriptContent>;
   createSession: (projectId?: string, cwd?: string, title?: string, startupCmd?: string, envVars?: Record<string, string>, shell?: string, paneId?: string, worktreeId?: string, sshHostId?: string, cliSessionId?: string, remoteHistoryConsumerId?: string, remoteHistorySourceInstanceId?: string, options?: { sessionKind?: "ephemeral-pi" }) => Promise<string>;
   /** Explicit destructive deletion, including hidden sessions. */
-  closeSession: (id: string) => Promise<void>;
+  closeSession: (id: string, requireBackendClose?: boolean) => Promise<void>;
   hideSession: (id: string) => Promise<void>;
   reopenSession: (id: string) => void;
   setActive: (id: string) => void;

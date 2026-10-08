@@ -168,7 +168,7 @@ fn delete_bound_branch(ctx: &Context, oid: &Option<String>) -> Result<(), String
 }
 
 // Git prune 无路径参数；只允许 dry-run 精确指向本目标登记，否则保守阻塞。
-fn ensure_scoped_prune(ctx: &Context) -> Result<(), String> {
+pub(super) fn ensure_scoped_prune(ctx: &Context) -> Result<(), String> {
     let output = run_git_checked(
         &ctx.project,
         [

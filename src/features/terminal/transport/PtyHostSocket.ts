@@ -338,10 +338,18 @@ export class PtyHostSocket {
     });
   }
 
-  async close(sessionId: string): Promise<void> {
-    this.closedSessions.add(sessionId);
-    this.clearSession(sessionId);
-    await this.request({ type: "close", session_id: sessionId });
+  async close(sessionId: string, requireBackendClose = false): Promise<void> {
+    // Strict finish closure keeps output/replay and reattachment live until ACK.
+    // Ordinary tab closure retains its optimistic tombstone-on-failure behavior.
+    if (requireBackendClose) {
+      await this.request({ type: "close", session_id: sessionId });
+      this.closedSessions.add(sessionId);
+      this.clearSession(sessionId);
+    } else {
+      this.closedSessions.add(sessionId);
+      this.clearSession(sessionId);
+      await this.request({ type: "close", session_id: sessionId });
+    }
   }
 
   async closeAll(): Promise<void> {

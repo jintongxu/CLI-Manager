@@ -41,6 +41,7 @@ function harness() {
     '../../providers/api/providerSwitching': { hasConfiguredCliTool: () => true },
     './projectCapabilities': { projectSupportsCapability: () => true },
     './projectStore': { useProjectStore: { getState: () => ({ fetchAll: async () => {} }) } },
+    '../../../shared/lib/worktreeLaunchAdmission': {},
     './worktreeFinish': {}, './worktreeForceDelete': {}, '../../terminal/state': {},
   });
   return { api, project, calls, sql, get store() { return api.useWorktreeStore.getState(); },

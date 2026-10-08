@@ -214,13 +214,15 @@ export class TerminalProcessManager {
     return ptyHostSocket.checkpoint(sessionId, sequence, cols, rows, serializedState);
   }
 
-  close(sessionId: string): Promise<void> {
-    return ptyHostSocket.close(sessionId).finally(() => {
+  close(sessionId: string, requireBackendClose = false): Promise<void> {
+    const clear = () => {
       this.clearOutputState(sessionId);
       this.processTraits.delete(sessionId);
       this.interactivePriorityAt.delete(sessionId);
       forgetTerminalQuerySession(sessionId);
-    });
+    };
+    const closed = ptyHostSocket.close(sessionId, requireBackendClose);
+    return requireBackendClose ? closed.then(clear) : closed.finally(clear);
   }
 
   closeAll(): Promise<void> {

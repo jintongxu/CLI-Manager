@@ -24,6 +24,10 @@ pub(super) struct Receipt {
     pub ownership: Option<Ownership>,
     pub delete_branch: Option<bool>,
     pub acknowledged: bool,
+    #[serde(default)]
+    pub artifacts: Option<super::artifact_manifest::Manifest>,
+    #[serde(default)]
+    pub checkout_identity: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,9 +47,16 @@ pub(super) fn root_identity(path: &Path) -> Result<String, String> {
     if unsafe_link(&metadata) || !metadata.is_dir() {
         return Err("finish_unsafe_root".into());
     }
+    entry_identity(path)
+}
+
+// Native identity of the entry itself, never the link target.
+pub(super) fn entry_identity(path: &Path) -> Result<String, String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
+        let metadata =
+            fs::symlink_metadata(path).map_err(|e| format!("finish_identity_failed: {e}"))?;
         Ok(format!("{}:{}", metadata.dev(), metadata.ino()))
     }
     #[cfg(windows)]
@@ -84,6 +95,18 @@ pub(super) fn root_identity(path: &Path) -> Result<String, String> {
 
 // 有界记录文件内容和目录结构；不跟随链接，任一读取失败都不能产生删除授权。
 pub(super) fn snapshot(root: &Path) -> Result<Ownership, String> {
+    snapshot_excluding(root, &[])
+}
+
+pub(super) fn snapshot_excluding(root: &Path, excluded: &[String]) -> Result<Ownership, String> {
+    snapshot_with_limits(root, excluded, 256 * 1024 * 1024, 20000)
+}
+pub(super) fn snapshot_with_limits(
+    root: &Path,
+    excluded: &[String],
+    byte_limit: u64,
+    entry_limit: usize,
+) -> Result<Ownership, String> {
     let identity = root_identity(root)?;
     let mut entries = BTreeMap::new();
     let mut pending = vec![root.to_path_buf()];
@@ -93,6 +116,12 @@ pub(super) fn snapshot(root: &Path) -> Result<Ownership, String> {
             let path = entry
                 .map_err(|e| format!("finish_snapshot_failed: {e}"))?
                 .path();
+            if excluded.iter().any(|p| {
+                super::normalize_path_for_compare(&super::local_path_from_input(p))
+                    == super::normalize_path_for_compare(&path)
+            }) {
+                continue;
+            }
             let meta =
                 fs::symlink_metadata(&path).map_err(|e| format!("finish_snapshot_failed: {e}"))?;
             // Reject reparse points, including junctions; never enumerate their targets.
@@ -105,14 +134,17 @@ pub(super) fn snapshot(root: &Path) -> Result<Ownership, String> {
                 .to_str()
                 .ok_or("finish_non_utf8_path")?
                 .replace('\\', "/");
+            if path.file_name().is_some_and(|n| n == ".git")
+                && (path.parent() != Some(root) || !meta.is_file())
+            {
+                return Err("finish_nested_git".into());
+            }
+            let native = entry_identity(&path)?;
             let value = if meta.is_dir() {
                 pending.push(path.clone());
-                "dir".to_string()
+                format!("dir:{}", entry_identity(&path)?)
             } else if meta.is_file() {
-                bytes = bytes
-                    .checked_add(meta.len())
-                    .ok_or("finish_snapshot_limit")?;
-                if bytes > 256 * 1024 * 1024 {
+                if meta.len() > byte_limit.saturating_sub(bytes) {
                     return Err("finish_snapshot_limit".into());
                 }
                 let mut options = fs::OpenOptions::new();
@@ -149,17 +181,20 @@ pub(super) fn snapshot(root: &Path) -> Result<Ownership, String> {
                         break;
                     }
                     bytes = bytes.checked_add(n as u64).ok_or("finish_snapshot_limit")?;
-                    if bytes > 512 * 1024 * 1024 {
+                    if bytes > byte_limit {
                         return Err("finish_snapshot_limit".into());
                     }
                     hash.update(&buf[..n]);
                 }
-                format!("file:{:x}", hash.finalize())
+                format!("file:{}:{:x}", entry_identity(&path)?, hash.finalize())
             } else {
                 return Err("finish_unsupported_entry".into());
             };
+            if native != entry_identity(&path)? {
+                return Err("finish_residual_changed".into());
+            }
             entries.insert(relative, value);
-            if entries.len() > 20000 {
+            if entries.len() > entry_limit {
                 return Err("finish_snapshot_limit".into());
             }
         }
@@ -172,7 +207,22 @@ pub(super) fn snapshot(root: &Path) -> Result<Ownership, String> {
 
 // 仅接受同一目录身份下未变化的残留子集，不认领新增或被修改的文件。
 pub(super) fn verify_subset(root: &Path, owned: &Ownership) -> Result<(), String> {
-    let current = snapshot(root)?;
+    verify_subset_excluding(root, owned, &[])
+}
+
+pub(super) fn verify_subset_excluding(
+    root: &Path,
+    owned: &Ownership,
+    excluded: &[String],
+) -> Result<(), String> {
+    if owned
+        .entries
+        .values()
+        .any(|v| v == "dir" || (v.starts_with("file:") && v.matches(':').count() == 1))
+    {
+        return Err("finish_legacy_residual_manual_review".into());
+    }
+    let current = snapshot_excluding(root, excluded)?;
     if current.identity != owned.identity {
         return Err("finish_root_replaced".into());
     }
@@ -262,7 +312,7 @@ impl Journal {
             &fs::read(path).map_err(|e| format!("finish_receipt_read_failed: {e}"))?,
         )
         .map_err(|e| format!("finish_receipt_corrupt: {e}"))?;
-        if receipt.version != 1 {
+        if receipt.version != 1 && receipt.version != 2 {
             return Err("finish_receipt_version".into());
         }
         Ok(Some(receipt))

@@ -12,6 +12,7 @@ pub mod protocol;
 mod route_http;
 mod routing;
 pub mod server;
+pub mod worktree_admission;
 mod ssh_agent_bridge;
 
 /// 进程治理兜底（契约★）：Windows 上把 daemon 自身挂进

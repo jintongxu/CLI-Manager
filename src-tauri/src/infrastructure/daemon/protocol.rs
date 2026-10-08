@@ -27,6 +27,7 @@ pub const FEATURE_PIXEL_RESIZE: &str = "pixel_resize_v1";
 pub const FEATURE_PROCESS_TRAITS: &str = "process_traits_v1";
 pub const FEATURE_TERMINAL_COLORS: &str = "terminal_colors_v1";
 pub const FEATURE_SSH_AGENT_RPC: &str = "ssh_agent_rpc_v1";
+pub const FEATURE_WORKTREE_ADMISSION: &str = "worktree_admission_v1";
 pub const FEATURE_LOCAL_ROUTING_V1: &str = "local_routing_v1";
 pub const ROUTING_ERROR_FEATURE_NOT_SUPPORTED: &str = "routing_feature_not_supported";
 pub const ROUTING_ERROR_PROTOCOL_UNSUPPORTED: &str = "routing_protocol_unsupported";
@@ -43,6 +44,7 @@ pub fn supported_features() -> Vec<String> {
         FEATURE_TERMINAL_COLORS,
         FEATURE_SSH_AGENT_RPC,
         FEATURE_LOCAL_ROUTING_V1,
+        FEATURE_WORKTREE_ADMISSION,
     ]
     .into_iter()
     .map(str::to_string)
@@ -64,6 +66,12 @@ pub enum ClientFrame {
     /// 列出 daemon 持有的全部会话（含已退出但 buffer 未回收的）。
     List {
         id: u64,
+    },
+    WorktreeAdmission {
+        id: u64,
+        path: String,
+        token: String,
+        action: String,
     },
     Create {
         id: u64,

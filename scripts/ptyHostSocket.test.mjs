@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
+import { build } from "esbuild";
+import { fileURLToPath } from "node:url";
 
 const tempDir = mkdtempSync(join(tmpdir(), "cli-manager-pty-host-socket-"));
 // 进程退出时清理临时转译目录。
@@ -144,7 +146,17 @@ const transpiled = ts.transpileModule(source, {
   .replace('from "../../../shared/platform/resourceDiagnosticsLog"', 'from "./resourceDiagnosticsLog.mjs"');
 const socketPath = join(tempDir, "PtyHostSocket.mjs");
 writeFileSync(socketPath, transpiled, "utf8");
-const { PtyHostSocket } = await import(pathToFileURL(socketPath).href);
+const { PtyHostSocket, ptyHostSocket } = await import(pathToFileURL(socketPath).href);
+// Exercise the actual manager against the actual socket, stubbing only native IPC.
+await build({ entryPoints: [fileURLToPath(new URL("../src/shared/lib/terminalQueryPolicy.ts", import.meta.url))], bundle: true, platform: "node", format: "esm", outfile: join(tempDir, "terminalQueryPolicy.mjs") });
+const managerSource = readFileSync(new URL("../src/features/terminal/api/TerminalProcessManager.ts", import.meta.url), "utf8");
+const managerCode = ts.transpileModule(managerSource, { compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 } }).outputText
+  .replace('from "@tauri-apps/api/core"', 'from "./tauriCore.mjs"')
+  .replace('from "../../../shared/lib/terminalQueryPolicy"', 'from "./terminalQueryPolicy.mjs"')
+  .replace('from "../../../shared/platform/resourceDiagnosticsLog"', 'from "./resourceDiagnosticsLog.mjs"')
+  .replace('from "../transport/PtyHostSocket"', 'from "./PtyHostSocket.mjs"');
+writeFileSync(join(tempDir, "TerminalProcessManager.mjs"), managerCode);
+const { TerminalProcessManager } = await import(pathToFileURL(join(tempDir, "TerminalProcessManager.mjs")).href);
 const resourceLogStub = await import(pathToFileURL(join(tempDir, "resourceDiagnosticsLog.mjs")).href);
 
 // 验证认证等待具有明确超时边界。
@@ -381,4 +393,67 @@ test("missing heartbeat pong forces disconnect and reconnect scheduling", { conc
   assert.ok(FakeWebSocket.attachRequests >= 2);
   await socket.close("session-heartbeat");
   socket.socket?.close();
+});
+
+// Deliver an actual binary output frame through the socket's message handler.
+function emitBinary(socket, sessionId, sequence, text) {
+  const id = new TextEncoder().encode(sessionId), data = new TextEncoder().encode(text);
+  const bytes = new Uint8Array(20 + id.length + data.length), view = new DataView(bytes.buffer);
+  view.setUint8(0, 1); view.setUint8(1, 1); view.setUint16(2, id.length);
+  view.setBigUint64(4, BigInt(sequence)); view.setUint16(12, 80); view.setUint16(14, 24);
+  view.setUint32(16, data.length); bytes.set(id, 20); bytes.set(data, 20 + id.length);
+  socket.socket.onmessage({ data: bytes.buffer });
+}
+test("strict socket close preserves attachment, replay and live binary output until ACK", { concurrency: false }, async () => {
+  FakeWebSocket.mode = "normal";
+  const socket = new PtyHostSocket(), id = "strict-socket";
+  await socket.attach(id);
+  socket.queueReplay(id, [{ kind: "replay", sessionId: id, sequence: 1, cols: 80, rows: 24, data: new TextEncoder().encode("pending") }]);
+  FakeWebSocket.mode = "close-timeout";
+  const closing = socket.close(id, true);
+  assert.equal(socket.diagnosticsSnapshot().attachedSessions, 1);
+  assert.equal(socket.diagnosticsSnapshot().pendingOutputFrames, 1);
+  await assert.rejects(closing, /request timed out: close/);
+  assert.equal(socket.diagnosticsSnapshot().closedSessions, 0);
+  assert.equal(socket.diagnosticsSnapshot().pendingOutputFrames, 1);
+  FakeWebSocket.mode = "normal";
+  assert.equal((await socket.attach(id)).attached, true);
+  const received = []; socket.subscribeOutput(id, frame => received.push(frame));
+  await Promise.resolve(); // Pending replay dispatch is a microtask.
+  emitBinary(socket, id, 2, "still live");
+  assert.equal(received.length, 2);
+  FakeWebSocket.mode = "normal";
+  assert.equal((await socket.attach(id)).attached, true);
+  await socket.close(id, true);
+  assert.equal(socket.diagnosticsSnapshot().attachedSessions, 0);
+  assert.equal((await socket.attach(id)).attached, false);
+  emitBinary(socket, id, 3, "closed"); assert.equal(received.length, 2);
+  socket.socket?.close();
+});
+test("strict manager close with real transport retains caches and consumer on failure, clears only on ACK", { concurrency: false }, async () => {
+  FakeWebSocket.mode = "normal";
+  const manager = new TerminalProcessManager(), id = "strict-manager", received = [];
+  await manager.attach(id);
+  await manager.subscribeOutput(id, delivery => received.push(delivery));
+  manager.processTraits.set(id, { os: "windows" });
+  manager.interactivePriorityAt.set(id, Date.now());
+  emitBinary(ptyHostSocket, id, 1, "before");
+  FakeWebSocket.mode = "close-timeout";
+  const closing = manager.close(id, true);
+  emitBinary(ptyHostSocket, id, 2, "during");
+  await assert.rejects(closing, /request timed out: close/);
+  assert.equal(manager.diagnosticsSnapshot().queuedFrames, 2);
+  assert.equal(manager.hasActiveOutputConsumer(id), true);
+  assert.equal(manager.getProcessTraits(id).os, "windows");
+  assert.equal(manager.hasInteractivePriority(id), true);
+  FakeWebSocket.mode = "normal";
+  assert.equal((await manager.attach(id)).attached, true);
+  emitBinary(ptyHostSocket, id, 3, "after"); assert.equal(received.length, 3);
+  assert.equal((await manager.attach(id)).attached, true);
+  await manager.close(id, true);
+  assert.equal(manager.diagnosticsSnapshot().trackedSessions, 0);
+  assert.equal(manager.hasActiveOutputConsumer(id), false);
+  assert.equal(manager.getProcessTraits(id), null);
+  assert.equal(manager.hasInteractivePriority(id), false);
+  ptyHostSocket.socket?.close();
 });

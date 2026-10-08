@@ -1134,3 +1134,57 @@ fn websocket_origin_requires_an_exact_loopback_authority() {
         assert!(!is_allowed_webview_origin(rejected), "{rejected}");
     }
 }
+
+#[test]
+fn worktree_admission_dispatch_rejects_create_before_any_pty_or_session_mutation() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().to_str().unwrap().to_string();
+    let token = uuid::Uuid::new_v4().to_string();
+    let server = DaemonServer {
+        host: Arc::new(DaemonHost::new()),
+        next_client_id: AtomicU64::new(1),
+        token: String::new(),
+        version: String::new(),
+        info_path: PathBuf::new(),
+    };
+    assert!(matches!(
+        server.handle_frame(
+            123,
+            ClientFrame::WorktreeAdmission {
+                id: 1,
+                path: path.clone(),
+                token: token.clone(),
+                action: "acquire".into()
+            }
+        ),
+        DaemonFrame::Ok { .. }
+    ));
+    let reply = server.handle_frame(
+        124,
+        ClientFrame::Create {
+            id: 2,
+            session_id: uuid::Uuid::new_v4().to_string(),
+            cwd: Some(path.clone()),
+            env_vars: None,
+            shell: None,
+            ssh_launch: None,
+            terminal_colors: None,
+        },
+    );
+    assert!(
+        matches!(reply,DaemonFrame::Err{message,..} if message=="worktree_cleanup_in_progress")
+    );
+    assert!(server.host.sessions.lock().unwrap().is_empty());
+    assert!(matches!(
+        server.handle_frame(
+            123,
+            ClientFrame::WorktreeAdmission {
+                id: 3,
+                path,
+                token,
+                action: "release".into()
+            }
+        ),
+        DaemonFrame::Ok { .. }
+    ));
+}

@@ -59,6 +59,8 @@ import { filterPaneTreeBySessionIds } from "../api/terminalPaneTree";
 import { createTerminalSidebarMetadata } from "./terminalSidebarMetadata";
 import { createTerminalRuntime } from "./terminalRuntime";
 
+import { reserveWorktreeLaunch } from "../../../shared/lib/worktreeLaunchAdmission";
+
 let restoreInProgress = false;
 
 function startPtyOrphanReconcileHeartbeat() {
@@ -492,165 +494,176 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       if (worktreeId && !useProjectStore.getState().worktrees.some(item => item.id === worktreeId && item.status === "active")) {
         throw new Error("finish_invalid_checkout");
       }
-      const sessionKind = options?.sessionKind;
-      const os = await getOsPlatform();
-      const createdAtMs = Date.now();
-      let launch: ResolvedPtyLaunch | null = null;
-      let sessionId: string;
+      const launchScope = cwd ?? (worktreeId
+        ? useProjectStore.getState().worktrees.find(item => item.id === worktreeId)?.path
+        : useProjectStore.getState().projects.find(item => item.id === projectId)?.path);
+      const releaseLaunch = reserveWorktreeLaunch(sshHostId ? undefined : launchScope);
       try {
-        launch = await resolvePtyLaunch({ projectId, worktreeId, sshHostId, cwd, startupCmd, envVars, shell, sessionKind }, os);
-        recordCrashActivity("terminal.session_create", {
-          projectId: projectId ?? null,
-          worktreeId: worktreeId ?? null,
-          cwd: cwd ?? null,
-          shell: launch.shell,
-          paneId: paneId ?? null,
-          startupCmdSummary: summarizeStartupCmd(launch.startupCmd),
-        });
-        sessionId = await terminalProcessManager.create(launch.invokeArgs);
-      } catch (err) {
-        const description = formatTerminalCreateError(err);
-        toast.error(translateCurrent("terminal.toast.createFailed"), { description });
-        logError("PtyHost create failed", {
-          projectId: projectId ?? null,
-          cwd: cwd ?? null,
-          shell: shell ?? null,
-          err,
-        });
-        releaseProviderSnapshot(launch?.providerSnapshot);
-        releaseProjectExtensionSnapshot(launch?.extensionSnapshotId);
-        throw err;
-      }
-      if (!launch) throw new Error("terminal_launch_missing");
-      const resolvedShell = launch.shell;
-      const launchStartupCmd = launch.startupCmd;
-      const session: TerminalSession = {
-        id: sessionId,
-        createdAtMs,
-        projectId,
-        worktreeId,
-        title: title ?? "Terminal",
-        cwd: sessionKind === "ephemeral-pi" ? undefined : cwd,
-        shell: resolvedShell,
-        envVars,
-        startupCmd: sessionKind !== "ephemeral-pi" && startupCmd === "" ? ""
-          : launch.startupHandledByLaunch || sessionKind === "ephemeral-pi" ? launchStartupCmd : startupCmd,
-        ...(sessionKind === "ephemeral-pi"
-          ? { kind: sessionKind, isAgentSession: true, cliTool: "pi" }
-          : getProjectAgentTerminalMetadata(projectId, startupCmd)),
-        environmentType: launch.environmentType,
-        sshHostId: launch.sshHostId,
-        remotePath: launch.remotePath,
-        connectionState: launch.environmentType === "ssh" ? "connecting" : undefined,
-        providerSnapshot: launch.providerSnapshot ?? undefined,
-        extensionSnapshotId: launch.extensionSnapshotId ?? undefined,
-        extensionPolicyRevision: launch.extensionPolicyRevision,
-        extensionLaunchStatus: launch.extensionStatus,
-        cliSessionId: sessionKind === "ephemeral-pi" ? undefined : cliSessionId?.trim() || undefined,
-        remoteHistoryConsumerId: sessionKind === "ephemeral-pi" ? undefined : remoteHistoryConsumerId?.trim() || undefined,
-        remoteHistorySourceInstanceId: remoteHistorySourceInstanceId?.trim() || undefined,
-      };
-
-      let unlisten: UnlistenFn;
-      try {
-        unlisten = await terminalProcessManager.subscribeStatus(sessionId, (payload) => {
-          const status = payload.status as SessionStatus;
-          logTerminalExitStatus(session, payload);
-          set((state) => ({
-            sessions: applyPtyStatusToSessions(state.sessions, sessionId, payload),
-            sessionStatuses: { ...state.sessionStatuses, [sessionId]: status },
-            ...(status === "running" ? {} : buildTabStatusUpdate(state, sessionId, "shell", status === "error" ? "failed" : "done", new Date().toISOString())),
-          }));
-          persistSshConnectionStateAfterPtyStatus(sessionId, payload);
-          if (
-            (status === "exited" || status === "error")
-          ) {
-            releaseRemoteHistoryConsumer(session);
-          }
-        });
-      } catch (error) {
-        await terminalProcessManager.close(sessionId).catch(() => { });
-        releaseProviderSnapshot(launch.providerSnapshot);
-        releaseProjectExtensionSnapshot(launch.extensionSnapshotId);
-        throw error;
-      }
-
-      const state = get();
-      const newSessions = [...state.sessions, session];
-      let workspans: TerminalWorkspan[];
-      let activeWorkspanId: string;
-      const workspanEnabled = useSettingsStore.getState().workspanEnabled;
-      const explicitTargetWorkspan = paneId ? findWorkspanByPane(state.workspans, paneId) : null;
-      const targetWorkspan = explicitTargetWorkspan
-        ?? (!workspanEnabled
-          ? state.workspans.find((workspan) => workspan.id === state.activeWorkspanId) ?? state.workspans[0] ?? null
-          : null);
-      if (targetWorkspan) {
-        const paneResult = addSessionToPaneTree(
-          targetWorkspan.paneTree,
-          explicitTargetWorkspan ? paneId ?? null : targetWorkspan.activePaneId,
-          sessionId,
-          createPaneId
-        );
-        workspans = updateTerminalWorkspan(state.workspans, targetWorkspan.id, (workspan) => (
-          syncTerminalWorkspanLayout(workspan, paneResult.tree, paneResult.activePaneId, sessionId)
-        ));
-        activeWorkspanId = targetWorkspan.id;
-      } else {
-        const workspan = createTerminalWorkspan(createWorkspanId(), createPaneId(), sessionId);
-        workspans = [...state.workspans, workspan];
-        activeWorkspanId = workspan.id;
-      }
-      const mirror = buildWorkspanMirror(workspans, activeWorkspanId, newSessions);
-      set({
-        sessions: newSessions,
-        ...mirror,
-        sessionStatuses: { ...state.sessionStatuses, [sessionId]: "running" },
-        statusListeners: { ...state.statusListeners, [sessionId]: unlisten },
-      });
-
-      // 临时 Pi 会话只存在于当前运行，不写入会话恢复数据。
-      if (sessionKind !== "ephemeral-pi") {
-        await queueSshSessionPersistence(newSessions);
-        await useSessionStore.getState().saveActiveSessionId(sessionId);
-        await useSessionStore.getState().saveWorkspans(workspans, activeWorkspanId, newSessions);
-      }
-
-      if (launch.extensionStatus === "error") {
-        toast.warning(translateCurrent("extensions.project.startupFallbackWarning"));
-      }
-
-      if (launchStartupCmd && !launch.startupHandledByLaunch) {
+        const sessionKind = options?.sessionKind;
+        const os = await getOsPlatform();
+        const createdAtMs = Date.now();
+        let launch: ResolvedPtyLaunch | null = null;
+        let sessionId: string;
         try {
-          await terminalProcessManager.write(
-            sessionId,
-            formatStartupInputForPty(launchStartupCmd, normalizeShellKey(resolvedShell) ?? null),
-          );
+          launch = await resolvePtyLaunch({ projectId, worktreeId, sshHostId, cwd, startupCmd, envVars, shell, sessionKind }, os);
+          recordCrashActivity("terminal.session_create", {
+            projectId: projectId ?? null,
+            worktreeId: worktreeId ?? null,
+            cwd: cwd ?? null,
+            shell: launch.shell,
+            paneId: paneId ?? null,
+            startupCmdSummary: summarizeStartupCmd(launch.startupCmd),
+          });
+          sessionId = await terminalProcessManager.create(launch.invokeArgs);
         } catch (err) {
-          toast.error("启动命令写入失败", { description: String(err) });
-          logError("Failed to write startup command", {
-            sessionId,
-            hasStartupCmd: true,
-            startupCmdSummary: summarizeStartupCmd(launchStartupCmd),
+          const description = formatTerminalCreateError(err);
+          toast.error(translateCurrent("terminal.toast.createFailed"), { description });
+          logError("PtyHost create failed", {
+            projectId: projectId ?? null,
+            cwd: cwd ?? null,
+            shell: shell ?? null,
             err,
           });
+          releaseProviderSnapshot(launch?.providerSnapshot);
+          releaseProjectExtensionSnapshot(launch?.extensionSnapshotId);
           throw err;
         }
-      }
+        if (!launch) throw new Error("terminal_launch_missing");
+        const resolvedShell = launch.shell;
+        const launchStartupCmd = launch.startupCmd;
+        const session: TerminalSession = {
+          id: sessionId,
+          createdAtMs,
+          projectId,
+          worktreeId,
+          title: title ?? "Terminal",
+          cwd: sessionKind === "ephemeral-pi" ? undefined : cwd,
+          shell: resolvedShell,
+          envVars,
+          startupCmd: sessionKind !== "ephemeral-pi" && startupCmd === "" ? ""
+            : launch.startupHandledByLaunch || sessionKind === "ephemeral-pi" ? launchStartupCmd : startupCmd,
+          ...(sessionKind === "ephemeral-pi"
+            ? { kind: sessionKind, isAgentSession: true, cliTool: "pi" }
+            : getProjectAgentTerminalMetadata(projectId, startupCmd)),
+          environmentType: launch.environmentType,
+          sshHostId: launch.sshHostId,
+          remotePath: launch.remotePath,
+          connectionState: launch.environmentType === "ssh" ? "connecting" : undefined,
+          providerSnapshot: launch.providerSnapshot ?? undefined,
+          extensionSnapshotId: launch.extensionSnapshotId ?? undefined,
+          extensionPolicyRevision: launch.extensionPolicyRevision,
+          extensionLaunchStatus: launch.extensionStatus,
+          cliSessionId: sessionKind === "ephemeral-pi" ? undefined : cliSessionId?.trim() || undefined,
+          remoteHistoryConsumerId: sessionKind === "ephemeral-pi" ? undefined : remoteHistoryConsumerId?.trim() || undefined,
+          remoteHistorySourceInstanceId: remoteHistorySourceInstanceId?.trim() || undefined,
+        };
 
-      return sessionId;
+        let unlisten: UnlistenFn;
+        try {
+          unlisten = await terminalProcessManager.subscribeStatus(sessionId, (payload) => {
+            const status = payload.status as SessionStatus;
+            logTerminalExitStatus(session, payload);
+            set((state) => ({
+              sessions: applyPtyStatusToSessions(state.sessions, sessionId, payload),
+              sessionStatuses: { ...state.sessionStatuses, [sessionId]: status },
+              ...(status === "running" ? {} : buildTabStatusUpdate(state, sessionId, "shell", status === "error" ? "failed" : "done", new Date().toISOString())),
+            }));
+            persistSshConnectionStateAfterPtyStatus(sessionId, payload);
+            if (
+              (status === "exited" || status === "error")
+            ) {
+              releaseRemoteHistoryConsumer(session);
+            }
+          });
+        } catch (error) {
+          await terminalProcessManager.close(sessionId).catch(() => { });
+          releaseProviderSnapshot(launch.providerSnapshot);
+          releaseProjectExtensionSnapshot(launch.extensionSnapshotId);
+          throw error;
+        }
+
+        const state = get();
+        const newSessions = [...state.sessions, session];
+        let workspans: TerminalWorkspan[];
+        let activeWorkspanId: string;
+        const workspanEnabled = useSettingsStore.getState().workspanEnabled;
+        const explicitTargetWorkspan = paneId ? findWorkspanByPane(state.workspans, paneId) : null;
+        const targetWorkspan = explicitTargetWorkspan
+          ?? (!workspanEnabled
+            ? state.workspans.find((workspan) => workspan.id === state.activeWorkspanId) ?? state.workspans[0] ?? null
+            : null);
+        if (targetWorkspan) {
+          const paneResult = addSessionToPaneTree(
+            targetWorkspan.paneTree,
+            explicitTargetWorkspan ? paneId ?? null : targetWorkspan.activePaneId,
+            sessionId,
+            createPaneId
+          );
+          workspans = updateTerminalWorkspan(state.workspans, targetWorkspan.id, (workspan) => (
+            syncTerminalWorkspanLayout(workspan, paneResult.tree, paneResult.activePaneId, sessionId)
+          ));
+          activeWorkspanId = targetWorkspan.id;
+        } else {
+          const workspan = createTerminalWorkspan(createWorkspanId(), createPaneId(), sessionId);
+          workspans = [...state.workspans, workspan];
+          activeWorkspanId = workspan.id;
+        }
+        const mirror = buildWorkspanMirror(workspans, activeWorkspanId, newSessions);
+        set({
+          sessions: newSessions,
+          ...mirror,
+          sessionStatuses: { ...state.sessionStatuses, [sessionId]: "running" },
+          statusListeners: { ...state.statusListeners, [sessionId]: unlisten },
+        });
+
+        // 临时 Pi 会话只存在于当前运行，不写入会话恢复数据。
+        if (sessionKind !== "ephemeral-pi") {
+          await queueSshSessionPersistence(newSessions);
+          await useSessionStore.getState().saveActiveSessionId(sessionId);
+          await useSessionStore.getState().saveWorkspans(workspans, activeWorkspanId, newSessions);
+        }
+
+        if (launch.extensionStatus === "error") {
+          toast.warning(translateCurrent("extensions.project.startupFallbackWarning"));
+        }
+
+        if (launchStartupCmd && !launch.startupHandledByLaunch) {
+          try {
+            await terminalProcessManager.write(
+              sessionId,
+              formatStartupInputForPty(launchStartupCmd, normalizeShellKey(resolvedShell) ?? null),
+            );
+          } catch (err) {
+            toast.error("启动命令写入失败", { description: String(err) });
+            logError("Failed to write startup command", {
+              sessionId,
+              hasStartupCmd: true,
+              startupCmdSummary: summarizeStartupCmd(launchStartupCmd),
+              err,
+            });
+            throw err;
+          }
+        }
+
+        return sessionId;
+      } finally { releaseLaunch(); }
     },
 
-    closeSession: async (id) => {
-      const state = get();
+    closeSession: async (id, requireBackendClose = false) => {
+      const initialState = get();
       const ptySessionIds = [id];
-      const closingSession = state.sessions.find((s) => s.id === id);
+      const closingSession = initialState.sessions.find((s) => s.id === id);
       if (
         closingSession?.remoteHandoff
         && closingSession.remoteHandoff.phase !== "recovery_failed"
       ) {
         toast.warning(translateCurrent("remoteHandoff.toast.lockedSession"));
         return;
+      }
+      if (requireBackendClose && (!closingSession || (closingSession.kind ?? "pty") === "pty")) {
+        await terminalProcessManager.close(id, true); // Failure retains transport, caches and visible session.
+        releaseProviderSnapshot(closingSession?.providerSnapshot);
+        releaseProjectExtensionSnapshot(closingSession?.extensionSnapshotId);
       }
       const isTranscript = closingSession?.kind === "subagent-transcript";
       const isFileEditor = closingSession?.kind === "file-editor";
@@ -665,6 +678,8 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         clearPendingSubagentPanesForParent(id);
       }
 
+      // Backend closure and pane cleanup can interleave with unrelated Store changes.
+      const state = get();
       // 必须在 set sessions 之前记录原索引，否则后续 findIndex 永远返回 -1，
       // 导致 persistedSplits 永远清不掉（历史 bug）。
       const closedIndex = state.sessions.findIndex((s) => s.id === id);
@@ -751,7 +766,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
           void invoke("subagent_transcript_unsubscribe", { key: id }).catch((err) => {
             logError("subagent_transcript_unsubscribe failed while closing tab", { key: id, err });
           });
-        } else {
+        } else if (!requireBackendClose) {
           for (const sessionId of ptySessionIds) {
             void terminalProcessManager.close(sessionId)
               .then(() => {

@@ -1,7 +1,7 @@
 use super::*;
 use std::process::Command;
 
-fn git(path: &Path, args: &[&str]) -> String {
+pub(super) fn git(path: &Path, args: &[&str]) -> String {
     let output = Command::new("git")
         .current_dir(path)
         .args(args)
@@ -14,7 +14,7 @@ fn git(path: &Path, args: &[&str]) -> String {
     );
     String::from_utf8_lossy(&output.stdout).trim().into()
 }
-fn fixture() -> (tempfile::TempDir, Context) {
+pub(super) fn fixture() -> (tempfile::TempDir, Context) {
     let temp = tempfile::tempdir().unwrap();
     let main = temp.path().join("repo");
     let wt = temp.path().join("task");
@@ -57,7 +57,7 @@ fn finish_normal_and_ack_keeps_receipt() {
     assert!(cleanup(&ctx, true).unwrap().done);
 }
 
-fn unregister(ctx: &Context) {
+pub(super) fn unregister(ctx: &Context) {
     for entry in fs::read_dir(ctx.common.join("worktrees")).unwrap() {
         fs::remove_dir_all(entry.unwrap().path()).unwrap();
     }
@@ -70,6 +70,7 @@ fn finish_unregistered_residual_restart_and_deleted_branch() {
     let (_temp, ctx) = fixture();
     merge(&ctx, false).unwrap();
     let mut r = load(&ctx).unwrap().unwrap();
+    r.ownership = Some(receipt::snapshot(&ctx.target).unwrap());
     r.phase = "cleanup_intent".into();
     r.delete_branch = Some(true);
     ctx.journal.save(&r).unwrap();
@@ -118,12 +119,17 @@ fn finish_dirty_new_tip_and_ignored_content_block_cleanup() {
 fn finish_residual_modified_new_git_and_replaced_root_block_cleanup() {
     let (_temp, ctx) = fixture();
     merge(&ctx, false).unwrap();
+    let mut r = load(&ctx).unwrap().unwrap();
+    r.ownership = Some(receipt::snapshot(&ctx.target).unwrap());
+    r.phase = "cleanup_intent".into();
+    r.delete_branch = Some(true);
+    ctx.journal.save(&r).unwrap();
     unregister(&ctx);
     fs::write(ctx.target.join("task"), "modified").unwrap();
     assert_eq!(cleanup(&ctx, true).unwrap_err(), "finish_residual_changed");
     fs::write(ctx.target.join("task"), "task\n").unwrap();
     fs::create_dir(ctx.target.join(".git")).unwrap();
-    assert_eq!(cleanup(&ctx, true).unwrap_err(), "finish_residual_changed");
+    assert_eq!(cleanup(&ctx, true).unwrap_err(), "finish_nested_git");
     fs::remove_dir(ctx.target.join(".git")).unwrap();
     let displaced = ctx.target.with_extension("old");
     fs::rename(&ctx.target, &displaced).unwrap();

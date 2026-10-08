@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
+import { logWarn } from "../../../shared/platform/logger";
 import type { GitFileChange, Project, WorktreeRecord } from "../../../shared/types/index";
 import { useI18n, type TranslationKey } from "../../../shared/i18n/index";
 import { useWorktreeStore, type GitWorktreeMergeResult } from "./worktreeStore";
 import { useTerminalStore } from "../../terminal/state";
-import { canReviewFinish, assertCleanupReady, FinishGeneration, readFinishReview, withFinishLock, type FinishState } from "./worktreeFinish";
+import { canReviewFinish, assertCleanupReady, FinishGeneration, readFinishReview, withFinishLock, type FinishState, type CleanupPlan, type CleanupConfirmation } from "./worktreeFinish";
+import { isWithinWorktree } from "../../../shared/lib/worktreeLaunchAdmission";
 import { getWorktreeDisplayName } from "./worktreeMetadata";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "../../../shared/ui/dialog";
 import { Button } from "../../../shared/ui/button";
@@ -89,6 +91,11 @@ function formatFinishError(err: unknown, t: Translate, projectPath?: string): Fi
   const raw = errorText(err).trim();
   if (raw.includes("finish_database_failed")) return { code: "database", title: t("worktree.finish.databasePending"), description: t("worktree.finish.databaseFailed"), raw };
   if (raw.includes("finish_sessions_changed")) return { code: "sessions", title: t("worktree.finish.sessionsTitle"), description: t("worktree.finish.sessionsChanged"), raw };
+  if (raw.includes("finish_admission_feature_missing") || raw.includes("finish_admission_daemon_unavailable") || (/git_worktree_finish_cleanup_/.test(raw) && /not found|unknown command|not registered/i.test(raw))) return { code: "admission", title: t("worktree.finish.plan.admissionTitle"), description: t("worktree.finish.plan.restart"), raw };
+  if (raw.includes("finish_artifact_budget") || raw.includes("finish_snapshot_limit")) return { code: "budget", title: t("worktree.finish.plan.budgetTitle"), description: t("worktree.finish.plan.budget"), raw };
+  if (raw.includes("finish_plan_") || raw.includes("finish_artifact_changed")) return { code: "plan", title: t("worktree.finish.blockedTitle"), description: t("worktree.finish.plan.changed"), raw };
+  if (raw.includes("finish_unknown_content_preserved")) return { code: "preserved", title: t("worktree.finish.plan.preserved"), description: t("worktree.finish.plan.moveUnknown"), raw };
+  if (raw.includes("finish_sessions_still_active") || raw.includes("finish_admission_launch")) return { code: "sessions", title: t("worktree.finish.sessionsTitle"), description: t("worktree.finish.sessionsChanged"), raw };
   if (raw.includes("finish_unknown")) return { code: "unknown", title: t("worktree.finish.unknownTitle"), description: t("worktree.finish.unknownMessage"), raw };
   if (raw.includes("finish_legacy_residual_manual_review")) return { code: "legacy", title: t("worktree.finish.blockedTitle"), description: t("worktree.finish.legacyResidualMessage", { path: projectPath ?? "" }), raw };
   if (raw.includes("merge_conflict")) return { ...createMergeConflictError([], t), raw };
@@ -177,11 +184,34 @@ function formatFinishError(err: unknown, t: Translate, projectPath?: string): Fi
   };
 }
 
+function cleanupPlanText(plan: CleanupPlan, t: Translate): string {
+  const estimate = (value: number | null) => value === null ? t("worktree.finish.plan.unknownSize") : String(value);
+  const kind = (value: string) => t(value === "node_dependencies" ? "worktree.finish.plan.node" : value === "cargo_default_target" ? "worktree.finish.plan.cargo" : "worktree.finish.plan.residual");
+  return [
+    t("worktree.finish.plan.target") + ": " + plan.request.worktreePath,
+    t("worktree.finish.plan.branch") + ": " + (plan.deleteBranch ? plan.request.branch : t("worktree.finish.plan.none")),
+    t("worktree.finish.plan.wholeRoot"),
+    ...plan.candidates.map(candidate => [
+      candidate.path, kind(candidate.kind) + " (" + candidate.kind + ")", candidate.evidence,
+      t("worktree.finish.plan.estimate", { bytes: estimate(candidate.estimatedBytes), entries: estimate(candidate.estimatedEntries) }),
+      candidate.deletesEntireDirectory ? t("worktree.finish.plan.wholeDirectory") : "",
+    ].filter(Boolean).join("\n")),
+    t("worktree.finish.plan.preserved") + ": " + (plan.preserved.length ? "" : t("worktree.finish.plan.none")),
+    ...plan.preserved.map(item => item.path + " — " + item.reason),
+    ...(plan.preserved.length ? [t("worktree.finish.plan.moveUnknown")] : []),
+    t("worktree.finish.plan.provenance") + " (" + plan.provenanceNotice + ")",
+    t("worktree.finish.plan.scope") + "\n" + plan.admissionScope,
+    t("worktree.finish.plan.expiry", { seconds: plan.expiresInSeconds }),
+  ].join("\n\n");
+}
+
 export function WorktreeFinishDialog({ project, worktree, open, onClose }: WorktreeFinishDialogProps) {
   const { t } = useI18n();
   const inspectFinish = useWorktreeStore(state => state.inspectFinish);
   const finishMerge = useWorktreeStore(state => state.finishMerge);
   const finishCleanup = useWorktreeStore(state => state.finishCleanup);
+  const planFinishCleanup = useWorktreeStore(state => state.planFinishCleanup);
+  const releaseFinishCleanup = useWorktreeStore(state => state.releaseFinishCleanup);
   const [changes, setChanges] = useState<GitFileChange[]>([]);
   const [loadingChanges, setLoadingChanges] = useState(false);
   const [step, setStep] = useState<Step>("review");
@@ -194,7 +224,15 @@ export function WorktreeFinishDialog({ project, worktree, open, onClose }: Workt
   const [failureStage, setFailureStage] = useState<"operation" | "cleanup">("operation");
   const [failure, setFailure] = useState<unknown>(null);
   const [forceConfirmOpen, setForceConfirmOpen] = useState(false);
-  const [cleanupConfirmation, setCleanupConfirmation] = useState<string[] | null>(null);
+  const [cleanupConfirmation, setCleanupConfirmation] = useState<CleanupConfirmation | null>(null);
+  const [cleanupPlan, setCleanupPlan] = useState<CleanupPlan | null>(null);
+  const planRef = useRef<CleanupPlan | null>(null);
+  const discardPlan = async () => {
+    const plan = planRef.current;
+    planRef.current = null;
+    setCleanupConfirmation(null);
+    if (plan) await releaseFinishCleanup(plan);
+  };
   const currentProps = useRef({ project, worktree });
   currentProps.current = { project, worktree };
   const identity = project && worktree ? `${project.path}\0${worktree.id}\0${worktree.path}\0${worktree.branch}\0${worktree.base_branch}` : "";
@@ -218,6 +256,7 @@ export function WorktreeFinishDialog({ project, worktree, open, onClose }: Workt
     setStep("review");
     setForceConfirmOpen(false);
     setCleanupConfirmation(null);
+    setCleanupPlan(null);
     const target = currentProps.current.worktree;
     if (!open || !target) return () => generation.current.cancel();
     setFailureStage("operation");
@@ -228,13 +267,18 @@ export function WorktreeFinishDialog({ project, worktree, open, onClose }: Workt
     }).finally(() => {
       if (generation.current.current(token)) setLoadingChanges(false);
     });
-    return () => generation.current.cancel();
+    return () => {
+      generation.current.cancel();
+      const oldPlan = planRef.current;
+      planRef.current = null;
+      if (oldPlan) void releaseFinishCleanup(oldPlan).catch(() => {});
+    };
     // Object and language refreshes are not new open cycles.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, identity]);
 
   const changeSummary = useMemo(() => formatChangeSummary(changes), [changes]);
-  const error: FinishErrorInfo | null = failure ? failureStage === "cleanup" && !errorText(failure).includes("finish_database_failed") && !errorText(failure).includes("finish_sessions_changed")
+  const error: FinishErrorInfo | null = failure ? failureStage === "cleanup" && !errorText(failure).includes("finish_database_failed") && !errorText(failure).includes("finish_")
     ? { title: t("worktree.finish.cleanupFailedTitle"), description: t("worktree.finish.cleanupFailedMessage"), raw: errorText(failure) }
     : formatFinishError(failure, t, worktree?.path) : authority?.blocker && !canReviewFinish(authority)
     ? authority.mergeResult?.stashCreated && !authority.mergeResult.stashRestored
@@ -308,7 +352,15 @@ export function WorktreeFinishDialog({ project, worktree, open, onClose }: Workt
     assertCleanupReady(checked);
     if (generation.current.current(token)) {
       setAuthority(checked);
-      setCleanupConfirmation(useTerminalStore.getState().sessions.filter(session => session.worktreeId === worktree.id).map(session => session.id));
+      await discardPlan();
+      const localIds = useTerminalStore.getState().sessions.filter(session => session.worktreeId === worktree.id || isWithinWorktree(session.cwd, worktree.path)).map(session => session.id);
+      if (checked.done) { setCleanupConfirmation({ plan: null, sessionIds: localIds }); return; }
+      const plan = await planFinishCleanup(worktree, true);
+      if (!generation.current.current(token)) { await releaseFinishCleanup(plan); return; }
+      planRef.current = plan;
+      setCleanupPlan(plan);
+      if (plan.blocker || plan.preserved.length) { setFailure(plan.blocker || "finish_unknown_content_preserved"); return; }
+      setCleanupConfirmation({ plan, sessionIds: [...new Set([...localIds, ...plan.sessionIds])] });
     }
   });
   const confirmCleanup = () => {
@@ -317,7 +369,19 @@ export function WorktreeFinishDialog({ project, worktree, open, onClose }: Workt
     setCleanupConfirmation(null);
     void run(async token => {
       setFailureStage("cleanup");
-      await finishCleanup(worktree, true, confirmed);
+      let operationFailed = false;
+      try { await finishCleanup(worktree, true, confirmed, () => generation.current.current(token)); }
+      catch (err) { operationFailed = true; throw err; }
+      finally {
+        planRef.current = null;
+        if (confirmed.plan) {
+          try { await releaseFinishCleanup(confirmed.plan); }
+          catch (err) {
+            if (!operationFailed) throw err;
+            try { logWarn("finish cleanup plan release failed", err); } catch { /* Keep the primary error. */ }
+          }
+        }
+      }
       if (generation.current.current(token)) {
         setStep("done");
         toast.success(t("worktree.finish.cleanupDone"));
@@ -361,6 +425,11 @@ export function WorktreeFinishDialog({ project, worktree, open, onClose }: Workt
           {authority && changes.length === 0 && (authority.merged || authority.outcome === "no_diff" || authority.done) && (
             <div className="text-xs text-text-secondary">{t(authority.done ? "worktree.finish.databasePending" : authority.outcome === "no_diff" ? "worktree.finish.noDiffToMerge" : "worktree.finish.mergedEvidence")}</div>
           )}
+          {authority && <div aria-label={t("worktree.finish.plan.stage")} className="text-xs text-text-secondary">
+            {t("worktree.finish.plan.stage")}: {t(authority.done ? "worktree.finish.databasePending" : authority.cleanupPending || authority.cleanupPlanRequired ? "worktree.finish.plan.cleanupPending" : "worktree.finish.plan.awaitingMerge")}
+            {authority.phase && <span> ({authority.phase})</span>}
+          </div>}
+          {cleanupPlan && <pre aria-label={t("worktree.finish.plan.title")} className="max-h-60 overflow-auto whitespace-pre-wrap break-words text-xs">{cleanupPlanText(cleanupPlan, t)}</pre>}
           {authority && !authority.checkoutValid && <div className="text-xs text-text-muted">{t("worktree.finish.invalidCheckout")}</div>}
           {authority?.stashReference && <div className="text-xs text-danger">{t("worktree.finish.error.forceRestoreStashReference", { reference: authority.stashReference })}</div>}
           {output && (
@@ -407,20 +476,25 @@ export function WorktreeFinishDialog({ project, worktree, open, onClose }: Workt
           <Button variant="outline" onClick={() => { if (!busyRef.current && !forceConfirmOpen && cleanupConfirmation === null) onClose(); }} disabled={busy}>{t("common.cancel")}</Button>
           {step === "review" && <Button onClick={handleCommit} disabled={!canCommit}>{busy ? t("common.processing") : t("worktree.finish.commitAll")}</Button>}
           {step === "merge" && <Button onClick={handleMerge} disabled={busy || mergeBlockedByRestore || changes.length > 0}>{busy ? t("common.processing") : t("worktree.finish.merge")}</Button>}
-          {step === "cleanup" && <Button onClick={handleCleanup} disabled={busy || loadingChanges || !authority || !!authority.blocker || authority.unknown || (!authority.done && !authority.cleanupReady)}>{busy ? t("common.processing") : t("worktree.finish.cleanup")}</Button>}
+          {step === "cleanup" && <Button onClick={handleCleanup} disabled={busy || loadingChanges || !authority || !!authority.blocker || authority.unknown || (!authority.done && !authority.cleanupReady && !authority.cleanupPlanRequired)}>{busy ? t("common.processing") : t("worktree.finish.cleanup")}</Button>}
         </DialogFooter>
       </DialogContent>
       </Dialog>
       <ConfirmDialog
         open={cleanupConfirmation !== null}
-        title={t("worktree.finish.sessionsTitle")}
-        message={t("worktree.finish.sessionsMessage", { count: cleanupConfirmation?.length ?? 0 })}
+        title={t("worktree.finish.plan.title")}
+        contentClassName="max-w-[620px] max-h-[85vh] overflow-auto [&_p]:whitespace-pre-wrap"
+        message={cleanupConfirmation ? [
+          cleanupConfirmation.plan ? cleanupPlanText(cleanupConfirmation.plan, t) : t("worktree.finish.databasePending"),
+          t("worktree.finish.sessionsMessage", { count: cleanupConfirmation.sessionIds.length }),
+          t("worktree.finish.plan.sessions") + ": " + (cleanupConfirmation.sessionIds.join(", ") || t("worktree.finish.plan.none")),
+        ].join("\n\n") : ""}
         confirmText={t("worktree.finish.cleanup")}
         cancelText={t("common.cancel")}
         danger
         explicitCloseOnly
         onConfirm={confirmCleanup}
-        onClose={() => { if (!busyRef.current) setCleanupConfirmation(null); }}
+        onClose={() => { if (!busyRef.current) void discardPlan().catch(err => setFailure(err)); }}
       />
       <ConfirmDialog
         open={forceConfirmOpen}

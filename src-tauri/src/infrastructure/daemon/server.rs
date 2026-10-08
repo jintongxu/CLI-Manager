@@ -1177,6 +1177,7 @@ impl DaemonServer {
                 client.writer.close();
             }
         }
+        super::worktree_admission::disconnect(client_id);
         log::debug!("daemon client disconnected ({peer}, id={client_id})");
     }
 
@@ -1246,6 +1247,10 @@ impl DaemonServer {
             match message {
                 WebSocketClientMessage::Text(line) => match decode_client_frame(&line) {
                     Ok(frame) => {
+                        if let ClientFrame::WorktreeAdmission { id, .. } = &frame {
+                            let _ = writer.send_frame(&err_frame(*id, "worktree_admission_protocol_unsupported"));
+                            continue;
+                        }
                         if let Some(id) = routing_control_id(&frame) {
                             let _ = writer.send_frame(&DaemonFrame::RoutingEvent {
                                 event: RoutingEvent::error(
@@ -1415,6 +1420,12 @@ impl DaemonServer {
                     .filter_map(|session| session.lock().ok().map(|entry| entry.meta.clone()))
                     .collect();
                 DaemonFrame::Sessions { id, sessions }
+            }
+            ClientFrame::WorktreeAdmission { id, path, token, action } => {
+                match super::worktree_admission::control(&path, &token, &action,client_id) {
+                    Ok(()) => DaemonFrame::Ok { id },
+                    Err(message) => err_frame(id, &message),
+                }
             }
             ClientFrame::Create {
                 id,
@@ -1796,6 +1807,10 @@ impl DaemonServer {
         if !is_valid_session_id(&session_id) {
             return err_frame(id, "invalid session id");
         }
+        let _admission = match super::worktree_admission::enter(cwd.as_deref()) {
+            Ok(reservation) => reservation,
+            Err(message) => return err_frame(id, &message),
+        };
         let sink = Arc::new(DaemonPtyEventSink::new(
             Arc::clone(&self.host),
             session_id.clone(),
