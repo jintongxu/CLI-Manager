@@ -133,8 +133,8 @@ test("live PTY output enables OSC 52 copies and replay disables them", () => {
   const terminalSource = readFileSync(new URL("../src/features/terminal/hooks/useXTermController.ts", import.meta.url), "utf8");
   const appSource = readFileSync(new URL("../src/app/App.tsx", import.meta.url), "utf8");
   const settingsSource = readFileSync(new URL("../src/shared/preferences/settingsStore.ts", import.meta.url), "utf8");
-  assert.match(displaySource, /applyOsc52:\s*payload\.kind !== "replay" && payload\.kind !== "reset"/);
-  assert.match(displaySource, /normalizeOutputRef\.current\(rawText, \{ applyOsc52: false \}\)/);
+  assert.match(displaySource, /applyOsc52:\s*!first\.replay && origin === "live"/);
+  assert.match(displaySource, /normalizeOutputRef\.current\(part, \{ applyOsc52: false \}\)/);
   assert.match(terminalSource, /osc52ClipboardEnabled/);
   assert.match(terminalSource, /osc52ClipboardQueryEnabled/);
   assert.match(terminalSource, /formatOsc52Reply/);

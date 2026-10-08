@@ -15,7 +15,18 @@ import { parseProjectEnvVars } from "../../providers/api/providerSwitching";
 import { inferVendor, type VendorKey } from "../../../shared/ui/VendorIcon";
 import type { Group, HistorySourceFilter, Project, TerminalScope, TerminalSession, WorktreeRecord } from "../../../shared/types/index";
 import { WORKSPAN_TABBAR_END_DROP_ID, type WorkspanContextOption } from "../../workspace/api/WorkspanTabBar";
-import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
+import { getCompactWorktreeLabel, getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
+
+// Explicit pure-model exports for the project-row consumer. Legacy context keys
+// remain environment/worktree-specific until the UI lane migrates its callers.
+export {
+  buildTerminalProjectOptions, getTerminalProjectKey, resolveTerminalProjectMembership,
+  resolveProjectWorkspanTarget, groupProjectWorkspanModels,
+} from "../api/terminalProjectTabsModel";
+export type {
+  TerminalProjectOption, TerminalProjectMembership, WorkspanProjectMembership,
+  WorkspanProjectGroup, ProjectWorkspanTarget,
+} from "../api/terminalProjectTabsModel";
 
 export const normalizeTabMenuHex = (value: string | undefined, fallback: string) => (
   value && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback
@@ -247,7 +258,10 @@ export function buildTerminalContextOptions(
   notifications: Record<string, TabNotificationState> = {},
 ): WorkspanContextOption[] {
   const options = new Map<string, WorkspanContextOption>();
+  const seenSessionIds = new Set<string>();
   for (const group of sessionGroups) for (const sessionId of group.sessionIds) {
+    if (seenSessionIds.has(sessionId)) continue;
+    seenSessionIds.add(sessionId);
     const session = sessions.find((item) => item.id === sessionId);
     if (!session) continue;
     const key = getTerminalTabScopeKey(session);
@@ -305,23 +319,7 @@ function getWorktreeName(worktree: WorktreeRecord): string {
   return getWorktreeDisplayName(worktree).trim() || worktree.name.trim() || "Worktree";
 }
 
-export function getCompactWorktreeLabel(worktree: WorktreeRecord, siblings: WorktreeRecord[] = []): string {
-  const fullName = getWorktreeName(worktree);
-  const names = siblings.map(getWorktreeName).filter(Boolean);
-  if (names.length <= 1) return fullName;
-  const normalized = fullName.replace(/[\\/]+/g, "-");
-  const commonPrefix = names.reduce((prefix, name) => {
-    let length = 0;
-    while (length < prefix.length && length < name.length && prefix[length].toLowerCase() === name[length].toLowerCase()) length += 1;
-    return prefix.slice(0, length);
-  }, normalized);
-  const suffix = normalized.slice(commonPrefix.length).replace(/^[\\/_.-]+/, "");
-  if (suffix && names.filter((name) => name.toLowerCase().endsWith(suffix.toLowerCase())).length === 1) return suffix;
-  const parts = normalized.split(/[-\\/]/).filter(Boolean);
-  const tail = parts[parts.length - 1] || normalized;
-  if (names.filter((name) => name.toLowerCase().endsWith(tail.toLowerCase())).length === 1) return tail;
-  return normalized.length > 12 ? `…${normalized.slice(-10)}` : normalized;
-}
+export { getCompactWorktreeLabel } from "../../projects/api/worktreeMetadata";
 
 export function buildTerminalTabContext(
   session: TerminalSession,

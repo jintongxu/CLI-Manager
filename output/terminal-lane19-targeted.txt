@@ -1,0 +1,198 @@
+TAP version 13
+# Subtest: immediate fit does not force a viewport refresh when dimensions are unchanged
+ok 1 - immediate fit does not force a viewport refresh when dimensions are unchanged
+  ---
+  duration_ms: 2.4652
+  type: 'test'
+  ...
+# Subtest: explicit viewport refresh repaints the full grid when dimensions are unchanged
+ok 2 - explicit viewport refresh repaints the full grid when dimensions are unchanged
+  ---
+  duration_ms: 0.3081
+  type: 'test'
+  ...
+# Subtest: consecutive fit frames keep the live horizontal resize cadence pending
+ok 3 - consecutive fit frames keep the live horizontal resize cadence pending
+  ---
+  duration_ms: 0.3232
+  type: 'test'
+  ...
+# Subtest: horizontal reflow preserves the visible normal-buffer line
+ok 4 - horizontal reflow preserves the visible normal-buffer line
+  ---
+  duration_ms: 0.3577
+  type: 'test'
+  ...
+# Subtest: horizontal reflow restores live-bottom intent after asynchronous viewport drift
+ok 5 - horizontal reflow restores live-bottom intent after asynchronous viewport drift
+  ---
+  duration_ms: 0.2953
+  type: 'test'
+  ...
+# Subtest: vertical resize does not force a live-bottom scroll
+ok 6 - vertical resize does not force a live-bottom scroll
+  ---
+  duration_ms: 0.1898
+  type: 'test'
+  ...
+# Subtest: alternate buffer resize does not force a live-bottom scroll
+ok 7 - alternate buffer resize does not force a live-bottom scroll
+  ---
+  duration_ms: 0.2394
+  type: 'test'
+  ...
+# Subtest: cancelling a scheduled fit disposes a pending viewport marker
+ok 8 - cancelling a scheduled fit disposes a pending viewport marker
+  ---
+  duration_ms: 0.3035
+  type: 'test'
+  ...
+# Subtest: cancelling a scheduled fit cancels pending live-bottom restoration
+ok 9 - cancelling a scheduled fit cancels pending live-bottom restoration
+  ---
+  duration_ms: 0.5633
+  type: 'test'
+  ...
+# Subtest: initial replay fits the current container before releasing buffered live output
+ok 10 - initial replay fits the current container before releasing buffered live output
+  ---
+  duration_ms: 1.965
+  type: 'test'
+  ...
+# Subtest: reconnect replay restores historical sizes serially and fits before live output
+ok 11 - reconnect replay restores historical sizes serially and fits before live output
+  ---
+  duration_ms: 0.4469
+  type: 'test'
+  ...
+# Subtest: resize-only reconnect replay is applied locally before current-size fit
+ok 12 - resize-only reconnect replay is applied locally before current-size fit
+  ---
+  duration_ms: 0.2708
+  type: 'test'
+  ...
+# Subtest: continuous live output yields between bounded xterm writes
+ok 13 - continuous live output yields between bounded xterm writes
+  ---
+  duration_ms: 2.1579
+  type: 'test'
+  ...
+# Subtest: hidden document drains pending PTY output with timer fallback
+ok 14 - hidden document drains pending PTY output with timer fallback
+  ---
+  duration_ms: 0.519
+  type: 'test'
+  ...
+# Subtest: timer watchdog drains output if a visible rAF is stalled
+ok 15 - timer watchdog drains output if a visible rAF is stalled
+  ---
+  duration_ms: 0.2424
+  type: 'test'
+  ...
+# Subtest: multiple terminals start only one xterm write per animation frame
+ok 16 - multiple terminals start only one xterm write per animation frame
+  ---
+  duration_ms: 0.3427
+  type: 'test'
+  ...
+# Subtest: hidden terminal is not starved by continuous visible output
+ok 17 - hidden terminal is not starved by continuous visible output
+  ---
+  duration_ms: 0.6315
+  type: 'test'
+  ...
+# Subtest: display permits first startup replay, consumes on callback, suppresses repeat, then allows live
+ok 18 - display permits first startup replay, consumes on callback, suppresses repeat, then allows live
+  ---
+  duration_ms: 0.3512
+  type: 'test'
+  ...
+# Subtest: display suppresses old-process replay colors while retaining setter order
+ok 19 - display suppresses old-process replay colors while retaining setter order
+  ---
+  duration_ms: 0.2704
+  type: 'test'
+  ...
+# Subtest: attach [] streamed waits for real callbacks and end fit
+ok 20 - attach [] streamed waits for real callbacks and end fit
+  ---
+  duration_ms: 0.4477
+  type: 'test'
+  ...
+# Subtest: attach explicit+stream waits for real callbacks and end fit
+ok 21 - attach explicit+stream waits for real callbacks and end fit
+  ---
+  duration_ms: 0.2331
+  type: 'test'
+  ...
+# Subtest: cancelled explicit completion resolves false before disposed xterm callbacks; replacement owns ACK/claim
+ok 22 - cancelled explicit completion resolves false before disposed xterm callbacks; replacement owns ACK/claim
+  ---
+  duration_ms: 0.3228
+  type: 'test'
+  ...
+# Subtest: stream interruption before final callback preserves completion false and cannot ACK a replacement
+ok 23 - stream interruption before final callback preserves completion false and cannot ACK a replacement
+  ---
+  duration_ms: 0.294
+  type: 'test'
+  ...
+# Subtest: streamed UTF8 carry joins Chinese/emoji but reset abandons partial bytes
+ok 24 - streamed UTF8 carry joins Chinese/emoji but reset abandons partial bytes
+  ---
+  duration_ms: 0.2992
+  type: 'test'
+  ...
+# Subtest: replay end does not complete without current container fit; retry needs no timeout
+ok 25 - replay end does not complete without current container fit; retry needs no timeout
+  ---
+  duration_ms: 0.2725
+  type: 'test'
+  ...
+# Subtest: actual xterm streamed attach barrier waits async parser continuation, commits sequence once and then fits
+ok 26 - actual xterm streamed attach barrier waits async parser continuation, commits sequence once and then fits
+  ---
+  duration_ms: 16.6604
+  type: 'test'
+  ...
+# Subtest: desktop visibility reclaim and every size reader wait for async history and actual current fit
+ok 27 - desktop visibility reclaim and every size reader wait for async history and actual current fit
+  ---
+  duration_ms: 34.0642
+  type: 'test'
+  ...
+# file:///D:/ai/cli-manager-worktrees/task-1007-1111/scripts/terminalSnapshotCapture.test.mjs:137
+#     for(let i=0;i<25;i++)await write(a.t,'row'+i+'
+#                                                  ^
+# SyntaxError: Invalid or unexpected token
+#     at compileSourceTextModule (node:internal/modules/esm/utils:346:16)
+#     at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:110:18)
+#     at \#translate (node:internal/modules/esm/loader:559:20)
+#     at afterLoad (node:internal/modules/esm/loader:612:29)
+#     at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:617:12)
+#     at \#createModuleJob (node:internal/modules/esm/loader:640:36)
+#     at \#getJobFromResolveResult (node:internal/modules/esm/loader:353:34)
+#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:321:41)
+#     at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:680:25)
+# Node.js v22.23.3
+# Subtest: scripts\\terminalSnapshotCapture.test.mjs
+not ok 2 - scripts\\terminalSnapshotCapture.test.mjs
+  ---
+  duration_ms: 1286.3767
+  type: 'test'
+  location: 'D:\\ai\\cli-manager-worktrees\\task-1007-1111\\scripts\\terminalSnapshotCapture.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+1..28
+# tests 28
+# suites 0
+# pass 27
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2030.5569

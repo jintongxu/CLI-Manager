@@ -62,7 +62,7 @@ export function finishRequest(worktree: WorktreeRecord, projectPath: string): Fi
 }
 // pending 仅表示恢复入口，不允许作为普通 checkout 启动路径。
 export function finishStatus(state: FinishState): WorktreeStatus {
-  if (state.cleanupPending || state.done || state.blocker && state.merged) return 'pending';
+  if (state.cleanupPending || state.done) return 'pending';
   return state.checkoutValid ? 'active' : 'missing';
 }
 // 仅有效且尚未进入清理的 checkout 可提交；已合并后新改动仍须留在审查阶段。

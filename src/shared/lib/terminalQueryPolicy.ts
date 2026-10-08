@@ -1,10 +1,20 @@
 import type { Terminal } from "@xterm/xterm";
+import { canEmitTerminalProtocol } from "./terminalHistoricalParser";
 
-const replaying = new WeakSet<Terminal>();
-const sessions = new Map<string, { createdHere: boolean; sequence: number }>();
+const sessions = new Map<string, { createdHere: boolean; sequence: number; coldSnapshotRestored?: boolean }>();
 
 export function createTerminalQuerySession(sessionId: string): void {
   sessions.set(sessionId, { createdHere: true, sequence: 0 });
+}
+
+export function shouldResetTerminalSnapshotInputModes(sessionId: string): boolean {
+  const state = sessions.get(sessionId);
+  return state?.createdHere === true && state.sequence === 0 && !state.coldSnapshotRestored;
+}
+
+export function markTerminalColdSnapshotRestored(sessionId: string): void {
+  const state = sessions.get(sessionId);
+  if (state) state.coldSnapshotRestored = true;
 }
 
 export function forgetTerminalQuerySession(sessionId?: string): void {
@@ -26,13 +36,8 @@ export function claimTerminalQueryFrame(sessionId: string, sequence: number, rep
   return answer;
 }
 
-export function setTerminalQueryReplay(terminal: Terminal, replay: boolean): void {
-  if (replay) replaying.add(terminal);
-  else replaying.delete(terminal);
-}
-
 export function canAnswerTerminalQuery(terminal: Terminal): boolean {
-  return !replaying.has(terminal);
+  return canEmitTerminalProtocol(terminal);
 }
 
 /** Queries are output-side protocol, not keystrokes. Mirrored/replayed output must not write back. */

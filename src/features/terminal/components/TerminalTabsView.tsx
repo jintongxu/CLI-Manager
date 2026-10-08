@@ -95,6 +95,7 @@ export function TerminalTabsView({
   workspanEnabled,
   workspanTabModels,
   workspanContextOptions,
+  selectedProjectKey, activateProject, onWorkspanRowChange,
   workspanTabOverflow,
   workspanTabListOpen,
   effectiveActiveWorkspanId,
@@ -104,6 +105,7 @@ export function TerminalTabsView({
   workspanDetachPreview,
   setWorkspanTabListOpen,
   activateWorkspanTab,
+  handleHideProjectTerminals,
   handleCloseSessions,
   projectById,
   worktrees,
@@ -344,19 +346,27 @@ export function TerminalTabsView({
                     activeWorkspanId={effectiveActiveWorkspanId}
                     hasScopedTerminalFilter={hasScopedTerminalFilter}
                     contextOptions={workspanContextOptions}
+                    selectedProjectKey={selectedProjectKey}
+                    onActivateProject={activateProject}
+                    onRowChange={onWorkspanRowChange}
                     menuStyle={splitPickerMenuStyle}
                     tabBarRef={workspanTabBarRef}
                     tabScrollRef={workspanTabScrollRef}
                     detachPreview={workspanDetachPreview}
                     onToggleList={setWorkspanTabListOpen}
                     onActivate={activateWorkspanTab}
-                    onNewTab={(sessionId) => { void handleNewTab(sessionId); }}
                     notifications={tabNotifications}
+                    onHideProjectTerminals={handleHideProjectTerminals}
                     onClose={(model, anchor) => handleCloseSessions(model.closeSessionIds, anchor)}
-                    renderTab={(model, index) => (
+                    renderTab={(model, closeTargets, badge, activate) => (
+                      <div key={model.workspan.id} className="flex h-full shrink-0"
+                        title={[...model.members.map((member) => [member.project,
+                          member.worktreeName ?? t("terminal.context.rootDirectory"), member.branch,
+                          member.worktreePath, member.environmentType, member.sshHostId].filter(Boolean).join(" / ")),
+                          model.mixedProject ? t("terminal.context.mixedCloseHint") : null].filter(Boolean).join("\n")}>
                       <SortableWorkspanTab
-                        key={model.workspan.id}
                         workspan={model.workspan}
+                        worktreeBadge={badge}
                         title={model.title}
                         notification={model.notification}
                         vendor={model.vendor}
@@ -374,7 +384,7 @@ export function TerminalTabsView({
                         isActive={model.workspan.id === effectiveActiveWorkspanId}
                         dragDisabled={hasScopedTerminalFilter}
                         renameDisabled={!model.singleSession}
-                        onActivate={() => activateWorkspanTab(model.workspan.id)}
+                        onActivate={activate}
                         onClose={(anchor) => handleCloseSessions(model.closeSessionIds, anchor)}
                         onRename={(title) => {
                           if (model.singleSession) void handleSubmitTabEdit(model.singleSession.id, title);
@@ -434,29 +444,27 @@ export function TerminalTabsView({
                               );
                             })()}
                             <ContextMenuItem
-                              disabled={workspanTabModels.length <= 1}
+                              disabled={closeTargets.otherSessionIds.length === 0}
                               onSelect={() => handleCloseSessions(
-                                workspanTabModels
-                                  .filter((item) => item.workspan.id !== model.workspan.id)
-                                  .flatMap((item) => item.closeSessionIds),
+                                closeTargets.otherSessionIds,
                                 getAnchor()
                               )}
                             >
                               {t("terminal.workspan.closeOthers")}
                             </ContextMenuItem>
                             <ContextMenuItem
-                              disabled={index === 0}
+                              disabled={closeTargets.leftSessionIds.length === 0}
                               onSelect={() => handleCloseSessions(
-                                workspanTabModels.slice(0, index).flatMap((item) => item.closeSessionIds),
+                                closeTargets.leftSessionIds,
                                 getAnchor()
                               )}
                             >
                               {t("terminal.workspan.closeLeft")}
                             </ContextMenuItem>
                             <ContextMenuItem
-                              disabled={index === workspanTabModels.length - 1}
+                              disabled={closeTargets.rightSessionIds.length === 0}
                               onSelect={() => handleCloseSessions(
-                                workspanTabModels.slice(index + 1).flatMap((item) => item.closeSessionIds),
+                                closeTargets.rightSessionIds,
                                 getAnchor()
                               )}
                             >
@@ -465,6 +473,7 @@ export function TerminalTabsView({
                           </>
                         )}
                       />
+                      </div>
                     )}
                     />
                   ) : null}

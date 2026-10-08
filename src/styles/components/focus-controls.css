@@ -564,6 +564,91 @@
   scrollbar-width: thin;
 }
 
+.ui-workspan-project-chip {
+  border: 1px solid color-mix(in srgb, var(--on-surface) 18%, transparent);
+  background-color: color-mix(in srgb, var(--surface-container-highest) 78%, transparent);
+}
+
+.ui-workspan-project-chip[data-selected="true"] {
+  border-color: color-mix(in srgb, var(--primary) 55%, transparent);
+  background-color: color-mix(in srgb, var(--primary) 10%, var(--surface-container-highest) 90%);
+}
+
+.ui-workspan-project-chip > .ui-workspan-context-button {
+  border: 0;
+  background-color: transparent;
+}
+
+.ui-workspan-project-hide {
+  opacity: 1;
+  pointer-events: auto;
+  color: var(--terminal-theme-foreground, var(--on-surface));
+}
+
+.ui-workspan-project-hide:hover:not(:disabled),
+.ui-workspan-project-hide:focus-visible {
+  background-color: color-mix(in srgb, currentColor 13%, transparent);
+}
+
+.ui-workspan-project-hide:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.ui-workspan-project-group {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+}
+
+/* Worktree identity stays inside the existing h-7 tab, independent of status/selection. */
+.ui-workspan-tab,
+.ui-workspan-overflow-target {
+  position: relative;
+}
+
+.ui-workspan-tab::after,
+.ui-workspan-overflow-target::after {
+  content: "";
+  position: absolute;
+  inset-inline: 7px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--worktree-identity-color, transparent);
+  pointer-events: none;
+}
+
+.ui-workspan-worktree-badge {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  border: 1px solid var(--outline-variant);
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 16px;
+  font-weight: 400;
+  color: var(--on-surface-variant);
+  white-space: nowrap;
+}
+
+/* Fixed-width overflow rows keep the title above the secondary badge.
+   Bound the badge to the shrinkable text column, never the sibling close button. */
+.ui-workspan-overflow-text > .ui-workspan-worktree-badge {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ui-workspan-context-button:focus-visible,
+.ui-workspan-status-filter-button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
 .ui-workspan-context-status {
   font-size: 12px;
   line-height: 1;

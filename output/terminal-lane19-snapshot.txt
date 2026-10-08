@@ -1,0 +1,76 @@
+TAP version 13
+# Subtest: actual serialize restore 80x24 at source size then fit 40x8
+ok 1 - actual serialize restore 80x24 at source size then fit 40x8
+  ---
+  duration_ms: 24.4523
+  type: 'test'
+  ...
+# Subtest: actual serialize restore 40x8 at source size then fit 100x30
+ok 2 - actual serialize restore 40x8 at source size then fit 100x30
+  ---
+  duration_ms: 14.4862
+  type: 'test'
+  ...
+# Subtest: actual serialize restore 72x10 at source size then fit 45x22
+ok 3 - actual serialize restore 72x10 at source size then fit 45x22
+  ---
+  duration_ms: 7.9977
+  type: 'test'
+  ...
+# Subtest: actual serialize restore 42x30 at source size then fit 95x8
+ok 4 - actual serialize restore 42x30 at source size then fit 95x8
+  ---
+  duration_ms: 5.7583
+  type: 'test'
+  ...
+# Subtest: bounded addon scrollback retains leading SGR cells beyond 2000 lines and full checkpoint is separate
+ok 5 - bounded addon scrollback retains leading SGR cells beyond 2000 lines and full checkpoint is separate
+  ---
+  duration_ms: 302.4778
+  type: 'test'
+  ...
+# Subtest: legacy string without geometry remains compatible and invalid geometry is ignored
+ok 6 - legacy string without geometry remains compatible and invalid geometry is ignored
+  ---
+  duration_ms: 3.7194
+  type: 'test'
+  ...
+# Subtest: persisted optional geometry, source identity, full checkpoint, legacy API and replacement capture fencing
+ok 7 - persisted optional geometry, source identity, full checkpoint, legacy API and replacement capture fencing
+  ---
+  duration_ms: 0.9608
+  type: 'test'
+  ...
+# Subtest: session save retains whole objects; shell restore geometry only accompanies image; CLI resume never gets image
+ok 8 - session save retains whole objects; shell restore geometry only accompanies image; CLI resume never gets image
+  ---
+  duration_ms: 0.9451
+  type: 'test'
+  ...
+# Subtest: real lifecycle exit and unmount use bounded committed capture, resize-only geometry, full same-state checkpoint
+ok 9 - real lifecycle exit and unmount use bounded committed capture, resize-only geometry, full same-state checkpoint
+  ---
+  duration_ms: 66.3477
+  type: 'test'
+  ...
+# Subtest: parsed writes are cheap; unmount serializes once, pending parse falls back to whole committed image, cancelled flush cannot publish
+ok 10 - parsed writes are cheap; unmount serializes once, pending parse falls back to whole committed image, cancelled flush cannot publish
+  ---
+  duration_ms: 401.7117
+  type: 'test'
+  ...
+# Subtest: coalesced concurrent exit flushes share bounded/full same-state capture
+ok 11 - coalesced concurrent exit flushes share bounded/full same-state capture
+  ---
+  duration_ms: 15.9212
+  type: 'test'
+  ...
+1..11
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5069.3794

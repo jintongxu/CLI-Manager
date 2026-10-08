@@ -41,15 +41,15 @@ import type { Project, TerminalSession, WorktreeRecord } from "../../../shared/t
 import type { NativeProviderAppType } from "../../settings/api/nativeProviderTypes";
 import { getTerminalTheme, isLightTerminalTheme } from "../../../shared/lib/terminalThemes";
 import { getTerminalSidePanelSkinStyle } from "../../stats/api/termStatsUi";
-import { findWorktreeForSession, isSameProjectFileContext, projectWithWorktreeProviderOverrides, resolveProjectForSessionFileContext } from "../api/terminalProject";
+import { findWorktreeForSession, isSameProjectFileContext, projectWithWorktreeProviderOverrides, resolveProjectForSession, resolveProjectForSessionFileContext } from "../api/terminalProject";
 import { ALL_TERMINALS_SCOPE, collectProjectIdsForGroup, sessionMatchesTerminalScope } from "../api/terminalScope";
 import { TERMINAL_FILE_NAVIGATION_REQUEST_EVENT, type TerminalFileNavigationRequest } from "../lib/terminalFileNavigation";
 import { consumeTerminalFileDragPanelSyncSuppression } from "../api/terminalFileDrag";
 import {
-  WORKSPAN_TABBAR_END_DROP_ID, type WorkspanTabOverflowState,
+  WORKSPAN_TABBAR_END_DROP_ID,
 } from "../../workspace/api/WorkspanTabBar";
 import {
-  buildTerminalContextOptions, normalizeTabMenuHex, TERMINAL_PANEL_SEMANTIC_COLORS, tabMenuHexToRgba,
+  normalizeTabMenuHex, TERMINAL_PANEL_SEMANTIC_COLORS, tabMenuHexToRgba,
   SPLIT_PICKER_OUTSIDE_GUARD_MS, type SplitPickerAnchor, type SplitPickerAlign, type SplitPickerState,
   type TerminalCloseConfirmState, type PaneDropPreview, parsePaneDropTarget,
   resolveWorkspanDropEdge, resolveHistorySourceFilter,
@@ -61,6 +61,11 @@ import { useScopedTerminalEmptyState } from "./useScopedTerminalEmptyState";
 import { useTerminalVisibleLayouts } from "./useTerminalVisibleLayouts";
 import { isHideableTerminalSession } from "../lib/terminalTabVisibility";
 import { buildWorkspanTabModels } from "../lib/workspanTabModel";
+import { hideProjectTerminalSessions } from "../api/terminalProjectHide";
+import { resolveNewTabSource } from "../api/terminalProjectSelection";
+import { buildTerminalProjectOptions } from "../api/terminalProjectTabsModel";
+import { useTerminalProjectSelection } from "./useTerminalProjectSelection";
+import { useWorkspanTabOverflow } from "./useWorkspanTabOverflow";
 
 export function useTerminalTabsController({
   fullscreen = false,
@@ -188,11 +193,6 @@ export function useTerminalTabsController({
   });
   const fullscreenPaneId = useTerminalStore((s) => s.fullscreenPaneId);
   const setFullscreenPaneId = useTerminalStore((s) => s.setFullscreenPaneId);
-  const [workspanTabListOpen, setWorkspanTabListOpen] = useState(false);
-  const [workspanTabOverflow, setWorkspanTabOverflow] = useState<WorkspanTabOverflowState>({
-    isOverflowing: false,
-    hiddenIds: [],
-  });
   const [sidePanelOpen, setSidePanelOpen] = useState(false);
   const [sidePanelTab, setSidePanelTab] = useState<TerminalSidePanelTab>("stats");
   // 非合并模式：实时统计与 Git 变更各自独立开关，可并排显示
@@ -321,20 +321,26 @@ export function useTerminalTabsController({
     ?? (gitWorkspaceProject?.environment_type === "ssh"
       ? gitWorkspaceProject.remote_path.trim() || null
       : gitWorkspaceProject?.path.trim() || null);
-  const workspanContextOptions = useMemo(() => buildTerminalContextOptions(visibleWorkspanLayouts, sessions, projectById, worktrees, {
-    unboundProject: t("terminal.context.unboundProject"), missingWorktree: t("terminal.context.worktreeMissing"), defaultShell: t("terminal.context.defaultShell"),
+  const workspanContextOptions = useMemo(() => buildTerminalProjectOptions(visibleWorkspanLayouts, sessions, projectById, worktrees, {
+    unboundProject: t("terminal.context.unboundProject"), missingWorktree: t("terminal.context.worktreeMissing"),
   }, tabNotifications), [projectById, sessions, t, tabNotifications, visibleWorkspanLayouts, worktrees]);
   const workspanTabModels = useMemo(
-    () => buildWorkspanTabModels(visibleWorkspanLayouts, sessions, projectById, tabNotifications, t),
+    () => buildWorkspanTabModels(visibleWorkspanLayouts, sessions, projectById, tabNotifications, t, worktrees),
     [projectById, sessions, t, tabNotifications, visibleWorkspanLayouts, worktrees]
   );
-  const workspanTabSignature = workspanTabModels
-    .map(({ workspan, title, vendor, cliToolIcon }) => `${workspan.id}:${title}:${vendor ?? "none"}:${cliToolIcon ?? "none"}`)
-    .join("|");
-  const activateWorkspanTab = useCallback((workspanId: string) => {
+  const activateProjectTarget = useCallback((workspanId: string, sessionId?: string) => {
     setActiveWorkspaceTab("terminal");
     setActiveWorkspan(workspanId);
-  }, [setActiveWorkspan]);
+    if (sessionId) setActive(sessionId);
+  }, [setActive, setActiveWorkspan]);
+  const { selectedProjectKey, activateProject, activateWorkspanTab } = useTerminalProjectSelection(
+    workspanTabModels, effectiveActiveSessionId, activateProjectTarget,
+  );
+  const {
+    workspanTabListOpen, setWorkspanTabListOpen, workspanTabOverflow,
+    updateWorkspanTabOverflow, onWorkspanRowChange,
+  } = useWorkspanTabOverflow(workspanTabBarRef, workspanTabScrollRef,
+    activeDragWorkspanIdRef, workspanEnabled && workspanTabBarVisible, effectiveActiveWorkspanId);
 
   const clearWorkspanDragHoverActivation = useCallback(() => {
     if (workspanDragHoverTimerRef.current !== null) {
@@ -357,101 +363,12 @@ export function useTerminalTabsController({
 
   useEffect(() => clearWorkspanDragHoverActivation, [clearWorkspanDragHoverActivation]);
 
-  const updateWorkspanTabOverflow = useCallback(() => {
-    if (activeDragWorkspanIdRef.current) return;
-    const bar = workspanTabBarRef.current;
-    const scroller = workspanTabScrollRef.current;
-    if (!bar || !scroller) {
-      setWorkspanTabOverflow((current) => {
-        if (!current.isOverflowing && current.hiddenIds.length === 0) return current;
-        return { isOverflowing: false, hiddenIds: [] };
-      });
-      return;
-    }
-
-    const barStyle = window.getComputedStyle(bar);
-    const paddingLeft = Number.parseFloat(barStyle.paddingLeft) || 0;
-    const paddingRight = Number.parseFloat(barStyle.paddingRight) || 0;
-    const fullAvailableWidth = Math.max(0, bar.clientWidth - paddingLeft - paddingRight);
-    const isOverflowing = scroller.scrollWidth > fullAvailableWidth + 1;
-    const viewportRect = scroller.getBoundingClientRect();
-    const hiddenIds = isOverflowing
-      ? Array.from(scroller.querySelectorAll<HTMLElement>("[data-workspan-id]"))
-          .filter((tab) => {
-            const tabRect = tab.getBoundingClientRect();
-            return tabRect.left < viewportRect.left + 1 || tabRect.right > viewportRect.right - 1;
-          })
-          .map((tab) => tab.dataset.workspanId)
-          .filter((id): id is string => Boolean(id))
-      : [];
-
-    setWorkspanTabOverflow((current) => {
-      const hiddenIdsUnchanged =
-        current.hiddenIds.length === hiddenIds.length &&
-        current.hiddenIds.every((id, index) => id === hiddenIds[index]);
-      if (current.isOverflowing === isOverflowing && hiddenIdsUnchanged) return current;
-      return { isOverflowing, hiddenIds };
-    });
-  }, []);
-
   useEffect(() => () => {
     if (workspanDragOverflowFrameRef.current !== null) {
       window.cancelAnimationFrame(workspanDragOverflowFrameRef.current);
     }
   }, []);
 
-  useEffect(() => {
-    const bar = workspanTabBarRef.current;
-    const scroller = workspanTabScrollRef.current;
-    let frameId: number | null = null;
-    const scheduleUpdate = () => {
-      if (frameId !== null) window.cancelAnimationFrame(frameId);
-      frameId = window.requestAnimationFrame(() => {
-        frameId = null;
-        updateWorkspanTabOverflow();
-      });
-    };
-
-    scheduleUpdate();
-    if (!bar || !scroller) {
-      return () => {
-        if (frameId !== null) window.cancelAnimationFrame(frameId);
-      };
-    }
-
-    scroller.addEventListener("scroll", scheduleUpdate, { passive: true });
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleUpdate);
-    observer?.observe(bar);
-    observer?.observe(scroller);
-    scroller.querySelectorAll<HTMLElement>("[data-workspan-id]").forEach((tab) => observer?.observe(tab));
-
-    return () => {
-      scroller.removeEventListener("scroll", scheduleUpdate);
-      observer?.disconnect();
-      if (frameId !== null) window.cancelAnimationFrame(frameId);
-    };
-  }, [updateWorkspanTabOverflow, workspanEnabled, workspanTabBarVisible, workspanTabSignature]);
-
-  useEffect(() => {
-    if (!workspanTabOverflow.isOverflowing || workspanTabOverflow.hiddenIds.length === 0) {
-      setWorkspanTabListOpen(false);
-    }
-  }, [workspanTabOverflow.hiddenIds.length, workspanTabOverflow.isOverflowing]);
-
-  useEffect(() => {
-    if (!workspanTabBarVisible) setWorkspanTabListOpen(false);
-  }, [workspanTabBarVisible]);
-
-  useEffect(() => {
-    if (!effectiveActiveWorkspanId) return;
-    const frameId = window.requestAnimationFrame(() => {
-      const tab = Array.from(workspanTabScrollRef.current?.querySelectorAll<HTMLElement>("[data-workspan-id]") ?? [])
-        .find((node) => node.dataset.workspanId === effectiveActiveWorkspanId);
-      tab?.scrollIntoView({ block: "nearest", inline: "nearest" });
-    });
-
-    return () => window.cancelAnimationFrame(frameId);
-  }, [effectiveActiveWorkspanId, workspanEnabled, workspanTabModels.length]);
   const terminalTheme = useMemo(
     () => getTerminalTheme(terminalThemeName, resolvedTheme, lightThemePalette, darkThemePalette),
     [darkThemePalette, lightThemePalette, resolvedTheme, terminalThemeName]
@@ -622,7 +539,7 @@ export function useTerminalTabsController({
   }, []);
 
   const handleNewTab = useCallback(async (sourceSessionId?: string) => {
-    const sourceSession = sourceSessionId ? sessions.find((session) => session.id === sourceSessionId) ?? null : activeSession;
+    const sourceSession = resolveNewTabSource(sessions, sourceSessionId ?? activeSessionId);
     if (rejectMissingSessionWorktree(sourceSession)) return;
     const newTerminalContext =
       sourceSession?.kind === "subagent-transcript"
@@ -630,14 +547,14 @@ export function useTerminalTabsController({
         : sourceSession?.kind === "file-editor"
           ? { cwd: sourceSession.fileEditor?.projectPath, title: "Terminal" }
           : { cwd: sourceSession?.cwd, title: sourceSession?.title ?? "Terminal" };
-    const activeProject = sourceSession?.projectId ? projectById.get(sourceSession.projectId) : null;
-    const sourceWorktree = sourceSession?.worktreeId ? worktrees.find((worktree) => worktree.id === sourceSession.worktreeId) ?? null : null;
+    const activeProject = sourceSession ? resolveProjectForSession(sourceSession, sessions, projects, projectById) : null;
+    const sourceWorktree = findWorktreeForSession(sourceSession, sessions, worktrees);
     const projectLaunchOptions = activeProject ? buildProjectSplitOptions(activeProject, groups) : null;
     const launchCwd = sourceWorktree?.path.trim() || newTerminalContext.cwd;
     const launchStartupCmd = sourceSession?.isAgentSession === false && !sourceSession.startupCmd
       ? "" : projectLaunchOptions?.startupCmd;
     const launchEnvVars = projectLaunchOptions?.envVars;
-    const launchShell = projectLaunchOptions?.shell;
+    const launchShell = sourceSession?.shell ?? projectLaunchOptions?.shell;
     if (useExternalTerminal) {
       if (rejectUnsupportedCapability(activeProject, "externalTerminal")) return;
       await openWindowsTerminal([{
@@ -656,12 +573,12 @@ export function useTerminalTabsController({
       launchEnvVars,
       launchShell,
       undefined,
-      sourceSession?.worktreeId,
+      sourceSession?.worktreeId ?? sourceWorktree?.id,
       sourceSession?.sshHostId,
     );
     closeHistory();
     setActiveWorkspaceTab("terminal");
-  }, [activeSession, closeHistory, createSession, projectById, rejectMissingSessionWorktree, rejectUnsupportedCapability, sessions, useExternalTerminal]);
+  }, [activeSessionId, closeHistory, createSession, groups, projectById, projects, rejectMissingSessionWorktree, rejectUnsupportedCapability, sessions, useExternalTerminal, worktrees]);
   const handleNewAnonymousPi = useMemo(
     () => createAnonymousPiSessionHandler(createSession, closeHistory, setActiveWorkspaceTab),
     [closeHistory, createSession],
@@ -860,6 +777,11 @@ export function useTerminalTabsController({
       .find((node) => targetIds.has(node.dataset.terminalTabId ?? ""));
     return tab?.getBoundingClientRect();
   }, []);
+
+  const handleHideProjectTerminals = useCallback((ids: string[]) => {
+    void hideProjectTerminalSessions(ids, () => useTerminalStore.getState().sessions, hideSession,
+      (sessionId, err) => logError("Failed to hide project terminal", { sessionId, err }));
+  }, [hideSession]);
 
   const closeSessionIds = useCallback((sessionIds: string[]) => {
     void (async () => {
@@ -1899,6 +1821,9 @@ export function useTerminalTabsController({
     workspanEnabled,
     workspanTabModels,
     workspanContextOptions,
+    selectedProjectKey,
+    activateProject,
+    onWorkspanRowChange,
     workspanTabOverflow,
     workspanTabListOpen,
     effectiveActiveWorkspanId,
@@ -1908,6 +1833,7 @@ export function useTerminalTabsController({
     workspanDetachPreview,
     setWorkspanTabListOpen,
     activateWorkspanTab,
+    handleHideProjectTerminals,
     handleCloseSessions,
     projectById,
     worktrees,

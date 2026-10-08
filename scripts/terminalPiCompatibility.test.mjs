@@ -333,10 +333,10 @@ test("Pi facade transforms active sessions and leaves non-Pi sessions byte-for-b
 test("live, replay, reset, and serialized snapshot use the shared transform", () => {
   const displaySource = readFileSync(new URL("../src/features/terminal/hooks/useTerminalDisplay.ts", import.meta.url), "utf8");
   const componentSource = readFileSync(new URL("../src/features/terminal/hooks/useXTermController.ts", import.meta.url), "utf8");
-  assert.match(displaySource, /const transformed = colorQueries\.feed\(transformOutputRef\.current\(combined\), !answerQueries\);/);
-  assert.match(displaySource, /const transformed = colorQueries\.feed\(transformOutputRef\.current\(text\), !canAnswerTerminalQueryFrame\(/);
-  assert.match(displaySource, /if \(first\.reset\) \{\s*outputDiagnosticsRef\?\.current\?\.reset\(\);/);
-  assert.match(componentSource, /const restoredOutput = displayTransformOutputRef\.current\(initialTerminalOutput\);[\s\S]*?terminal\.write\(`\$\{restoredOutput\}/);
+  assert.match(displaySource, /transformOutputRef\.current\(normalizeOutputRef\.current\(part, \{ applyOsc52: !first\.replay && origin === "live" \}\)\)/);
+  assert.match(displaySource, /transformOutputRef\.current\(normalizeOutputRef\.current\(part, \{ applyOsc52: false \}\)\)/);
+  assert.match(displaySource, /if \(first\.reset\) \{\s*resetNormalizerRef\?\.current\?\.\(\);\s*outputDiagnosticsRef\?\.current\?\.reset\(\);/);
+  assert.match(componentSource, /const restoredOutput = displayTransformOutputRef\.current\(initialTerminalOutput\);[\s\S]*?writeTerminalOutput\(terminal, `\$\{restoredOutput\}/);
   assert.match(componentSource, /displayTransformOutputRef\.current = \(text\) => processCodexCursorVisibility\(/);
   assert.match(componentSource, /const processCodexCursorVisibility = \(text: string\) =>/);
   assert.match(componentSource, /hideCodexRuntimeCursorRef\.current/);

@@ -1,0 +1,5 @@
+
+> cli-manager@1.4.4 check:architecture
+> node ./scripts/architecture.mjs --strict
+
+Architecture: 1263 source files; 0 above 2000 lines; 0 new violations (strict).

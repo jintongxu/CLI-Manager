@@ -408,3 +408,124 @@ test('startup inspection errors fail closed without hiding pending recovery or c
 
 export { load, finish, force, record, dialogHarness, storeHarness, flush, deferred };
 export function setForceInvoke(fn) { forceInvoke = fn; }
+
+// Lifecycle classification must not confuse historical ancestry with Finish progress.
+test('lifecycle matrix keeps historical dirty and prepared checkouts active, true recovery pending', () => {
+  const historicalDirty = initial({ merged: true, outcome: 'merged', blocker: 'finish_dirty_checkout' });
+  for (const state of [initial(), initial({ merged: true, outcome: 'merged', cleanupReady: true }),
+    historicalDirty, initial({ blocker: 'finish_dirty_checkout' })]) {
+    assert.equal(finish.finishStatus(state), 'active');
+    assert.equal(finish.canReviewFinish(state), true);
+  }
+  assert.throws(() => finish.assertCleanupReady(historicalDirty), /finish_dirty_checkout/);
+  for (const state of [pending(), pending({ merged: false, outcome: 'no_diff' }),
+    initial({ cleanupPending: true }), initial({ done: true }),
+    ...['finish_stash_restore_pending', 'finish_restore_blocked', 'finish_source_changed',
+      'finish_base_changed', 'finish_residual_changed', 'finish_root_replaced'].map(blocker => pending({ blocker }))]) {
+    assert.equal(finish.finishStatus(state), 'pending');
+    assert.equal(finish.canReviewFinish(state), false);
+  }
+  assert.equal(finish.finishStatus(initial({ checkoutValid: false, unknown: true })), 'missing');
+  assert.equal(finish.finishStatus(pending({ checkoutValid: false, unknown: true })), 'pending');
+});
+
+// Execute BOTH production stores and production tree building. Only platform/SQL
+// boundaries are mocked; persisted state is reloaded on every startup cycle.
+function startupHarness(storedStatus = 'pending') {
+  const calls = [], rows = [{ ...record, status: storedStatus, description: '' }];
+  const projects = [{ id: 'p1', name: 'Project', cli_tool: '', path: 'D:/main', group_id: null }];
+  const sessions = [{ id: 'hidden-wt', projectId: 'p1', worktreeId: 'w1', cwd: record.path, cliSessionId: 'cli-one', hidden: true },
+    { id: 'root', projectId: 'p1', cwd: 'D:/main', cliSessionId: 'cli-root' }];
+  let state = initial({ merged: true, outcome: 'merged', blocker: 'finish_dirty_checkout' }), error = null;
+  const create = init => {
+    let value;
+    const get = () => value;
+    const set = update => { value = { ...value, ...(typeof update === 'function' ? update(value) : update) }; };
+    value = init(set, get);
+    return { getState: get, setState: set };
+  };
+  const db = { select: async sql => {
+    calls.push(['select', sql]);
+    if (sql.includes('FROM worktrees')) return rows.map(row => ({ ...row }));
+    if (sql.includes('FROM projects')) return projects.map(row => ({ ...row }));
+    if (sql.includes('FROM groups')) return [];
+    throw Error('unexpected select ' + sql);
+  }, execute: async (sql, params) => {
+    calls.push(['execute', sql, [...params]]);
+    assert.equal(sql, 'UPDATE worktrees SET status = $1, updated_at = $2 WHERE id = $3');
+    assert.equal(params[2], 'w1'); rows[0].status = params[0]; rows[0].updated_at = params[1];
+  } };
+  const native = { invoke: async (command, args) => {
+    calls.push(['invoke', command, args]);
+    assert.equal(command, 'git_worktree_finish_inspect');
+    assert.equal(JSON.stringify(args.req), JSON.stringify(finish.finishRequest(record, 'D:/main')));
+    if (error) throw Error(error); return state;
+  } };
+  const settings = { getState: () => ({ worktreeOrderByProject: {} }), subscribe: () => () => {} };
+  const shared = { zustand: { create }, '@tauri-apps/api/core': native,
+    '../../../shared/platform/db': { getDb: async () => db },
+    '../../../shared/platform/logger': { logWarn: (...args) => calls.push(['warn', ...args]) },
+    '../../providers/api/providerSwitching': {}, './projectCapabilities': { projectSupportsCapability: () => false } };
+  const projectApi = load('src/features/projects/api/projectStore.ts', { ...shared,
+    '../../../shared/lib/worktreeOrder': load('src/shared/lib/worktreeOrder.ts'),
+    sonner: { toast: {} }, '../../../shared/i18n/index': {},
+    '../lib/projectLoadPolicy': { resolveProjectFetchPolicy: () => ({ includePathHealth: false, refreshProviderBadges: false }) },
+    '../../../shared/preferences/settingsStore': { useSettingsStore: settings },
+    '../../../shared/platform/shell': {}, './nodeAppearance': {}, '../../remote/api/sshToolIntegration': {}, './groupPath': {},
+  });
+  const worktreeApi = load('src/features/projects/api/worktreeStore.ts', { ...shared,
+    '../../../shared/lib/worktreeLaunchAdmission': load('src/shared/lib/worktreeLaunchAdmission.ts'),
+    './projectStore': projectApi, './worktreeFinish': finish, './worktreeForceDelete': force,
+    '../../terminal/state': { useTerminalStore: { getState: () => ({ sessions,
+      closeSession: async id => { calls.push(['close', id]); throw Error('startup must not close'); } }) } },
+  });
+  return { calls, rows, sessions, get project() { return projectApi.useProjectStore.getState(); },
+    get store() { return worktreeApi.useWorktreeStore.getState(); },
+    state: next => { state = next; }, error: next => { error = next; },
+    async startup() {
+      await projectApi.useProjectStore.getState().fetchAll('startup');
+      await worktreeApi.useWorktreeStore.getState().loadWorktrees();
+      await worktreeApi.useWorktreeStore.getState().markMissingWorktrees();
+    } };
+}
+function assertStartupStatus(h, status) {
+  assert.equal(h.store.worktrees[0].status, status);
+  assert.equal(h.project.worktrees[0].status, status);
+  assert.equal(h.project.tree[0].worktrees[0].status, status);
+}
+function assertInspectionOnly(h, sessions) {
+  assert.ok(h.calls.filter(call => call[0] === 'invoke').every(call => call[1] === 'git_worktree_finish_inspect'));
+  assert.equal(h.calls.some(call => call[0] === 'close'), false);
+  assert.equal(JSON.stringify(h.sessions), sessions);
+}
+test('actual startup repairs stale SQL pending in both stores/tree and repeated reload is idempotent', async () => {
+  const h = startupHarness(), sessions = JSON.stringify(h.sessions);
+  await h.startup();
+  assertStartupStatus(h, 'active'); assert.equal(h.rows[0].status, 'active');
+  const writes = h.calls.filter(call => call[0] === 'execute');
+  assert.equal(writes.length, 1); assert.equal(writes[0][2][0], 'active');
+  await h.startup(); // Same loading/checking path is also used after backup restore.
+  await h.store.markMissingWorktrees();
+  assertStartupStatus(h, 'active');
+  assert.equal(h.calls.filter(call => call[0] === 'execute').length, 1);
+  assertInspectionOnly(h, sessions);
+});
+test('actual startup keeps trusted recovery pending and inspection errors preserve stale pending without SQL', async () => {
+  for (const error of ['finish_receipt_corrupt', 'finish_receipt_identity_mismatch', 'finish_path_failed: access denied']) {
+    const h = startupHarness(), sessions = JSON.stringify(h.sessions); h.error(error);
+    await h.startup(); await h.startup();
+    assertStartupStatus(h, 'pending'); assert.equal(h.rows[0].status, 'pending');
+    assert.equal(h.calls.filter(call => call[0] === 'execute').length, 0);
+    assertInspectionOnly(h, sessions);
+  }
+  for (const state of [pending(), pending({ merged: false, outcome: 'no_diff' }),
+    pending({ blocker: 'finish_stash_restore_pending' }), pending({ checkoutValid: false, done: true })]) {
+    const h = startupHarness(), sessions = JSON.stringify(h.sessions); h.state(state);
+    await h.startup(); await h.startup(); assertStartupStatus(h, 'pending');
+    assert.equal(h.calls.filter(call => call[0] === 'execute').length, 0);
+    assertInspectionOnly(h, sessions);
+  }
+  const h = startupHarness('active'); h.error('finish_path_failed');
+  await h.startup(); assertStartupStatus(h, 'missing');
+  assert.equal(h.rows[0].status, 'active'); // Failed authority never normalizes SQL.
+});
