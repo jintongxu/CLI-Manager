@@ -15,6 +15,7 @@ import { useFileExplorerStore } from "../../files/api/fileExplorerStore";
 import { useHistoryStore } from "../../history/index";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { createDefaultWorktreeTaskName, isWorktreeCreateInProgressError, useWorktreeStore } from "../api/worktreeStore";
+import { useWorktreeDepsRunnerStore } from "../api/worktreeDepsRunner";
 import { getWorktreeDisplayName } from "../api/worktreeMetadata";
 import { useExternalSessionSyncStore } from "../../history/api/externalSessionSyncStore";
 import type { TerminalPaneSplitDirection } from "../../terminal/api/terminalPaneTree";
@@ -116,8 +117,7 @@ export function useSidebarController({
   const createWorktreeForProject = useWorktreeStore((s) => s.createWorktreeForProject);
   const shouldIsolateNewSession = useWorktreeStore((s) => s.shouldIsolateNewSession);
   const validateProjectGit = useWorktreeStore((s) => s.validateProjectGit);
-  const checkWorktreeDeps = useWorktreeStore((s) => s.checkDeps);
-  const dismissWorktreeDepsPrompt = useWorktreeStore((s) => s.dismissDepsPrompt);
+
   const updateWorktreeMetadata = useWorktreeStore((s) => s.updateWorktreeMetadata);
   const removeWorktree = useWorktreeStore((s) => s.removeWorktree);
   const useExternalTerminal = useSettingsStore((s) => s.useExternalTerminal);
@@ -191,12 +191,7 @@ export function useSidebarController({
     shortLabel?: string;
     description: string;
   } | null>(null);
-  const [depsPrompt, setDepsPrompt] = useState<{
-    project: Project;
-    worktree: WorktreeRecord;
-    command: string;
-  } | null>(null);
-  const depsPromptingWorktreeIdsRef = useRef(new Set<string>());
+
   const stoppingGroupIdsRef = useRef(new Set<string>());
   const [finishTarget, setFinishTarget] = useState<{ project: Project; worktree: WorktreeRecord } | null>(null);
   const [discardTarget, setDiscardTarget] = useState<{ project: Project; worktree: WorktreeRecord } | null>(null);
@@ -303,7 +298,7 @@ export function useSidebarController({
   const openWorktreeIds = useMemo(() => {
     const ids = new Set<string>();
     for (const session of sessions) {
-      if ((session.kind ?? "pty") === "pty" && session.worktreeId) ids.add(session.worktreeId);
+      if ((session.kind ?? "pty") === "pty" && session.transientBackground !== true && session.worktreeId) ids.add(session.worktreeId);
     }
     return ids;
   }, [sessions]);
@@ -384,7 +379,7 @@ export function useSidebarController({
 
   const activateFirstWorktreeSession = useCallback(
     (worktreeId: string): boolean => {
-      const session = sessions.find((item) => item.worktreeId === worktreeId && (item.kind ?? "pty") === "pty");
+      const session = sessions.find((item) => item.worktreeId === worktreeId && (item.kind ?? "pty") === "pty" && item.transientBackground !== true);
       if (!session) return false;
       if (session.id !== activeSessionId) {
         setActiveSession(session.id);
@@ -697,46 +692,23 @@ export function useSidebarController({
     return true;
   };
 
-  const maybePromptWorktreeDeps = async (project: Project, worktree: WorktreeRecord) => {
-    if (worktree.status !== "active") return;
-    if (!project.worktree_deps_prompt_enabled) return;
-    if (worktree.deps_prompt_dismissed || depsPromptingWorktreeIdsRef.current.has(worktree.id)) return;
-    depsPromptingWorktreeIdsRef.current.add(worktree.id);
-    try {
-      const deps = await checkWorktreeDeps(worktree);
-      if (deps.needsInstall && deps.command) {
-        setDepsPrompt({ project, worktree, command: deps.command });
-        return;
-      }
-      depsPromptingWorktreeIdsRef.current.delete(worktree.id);
-    } catch (err) {
-      depsPromptingWorktreeIdsRef.current.delete(worktree.id);
-      logError("Failed to check worktree dependencies", err);
-    }
+  const maybeInstallWorktreeDeps = async (project: Project, worktree: WorktreeRecord) => {
+    const options = buildProjectSplitOptions(project);
+    await useWorktreeDepsRunnerStore.getState().start(project, worktree, {
+      projectId: options.projectId ?? project.id,
+      envVars: options.envVars,
+      shell: options.shell,
+    }, "auto");
   };
 
   const handleInstallWorktreeDeps = (project: Project, worktree: WorktreeRecord) => {
     if (rejectMissingWorktree(worktree)) return;
-    void checkWorktreeDeps(worktree)
-      .then((deps) => {
-        if (!deps.needsInstall || !deps.command) {
-          toast.info(t("worktree.deps.notNeeded"));
-          return;
-        }
-        const options = buildProjectSplitOptions(project);
-        void dismissWorktreeDepsPrompt(worktree.id);
-        return createSession(
-          options.projectId,
-          worktree.path,
-          t("worktree.deps.installTitle", { name: getWorktreeDisplayName(worktree) }),
-          deps.command,
-          options.envVars,
-          options.shell,
-          undefined,
-          worktree.id,
-        ).then(() => closeHistory());
-      })
-      .catch((err) => toast.error(t("worktree.deps.checkFailed"), { description: String(err) }));
+    const options = buildProjectSplitOptions(project);
+    void useWorktreeDepsRunnerStore.getState().start(project, worktree, {
+      projectId: options.projectId ?? project.id,
+      envVars: options.envVars,
+      shell: options.shell,
+    }, "manual");
   };
 
   // Serialize prompt initialization, while allowing independent normal/split actions.
@@ -749,7 +721,7 @@ export function useSidebarController({
         () => createWorktreeForProject(project, { taskName, displayName, description, shortLabel: normalizeWorktreeShortLabel(shortLabel) }),
         worktree => openWorktreeSession(project, worktree, targetPaneId));
       toast.success(t("worktree.toast.created"), { description: worktree.path });
-      void maybePromptWorktreeDeps(project, worktree);
+      void maybeInstallWorktreeDeps(project, worktree);
       setWorktreePrompt(null);
     } catch (err) {
       if (isWorktreeCreateInProgressError(err)) return;
@@ -773,7 +745,7 @@ export function useSidebarController({
           closeHistory();
       });
       toast.success(t("worktree.toast.created"), { description: worktree.path });
-      void maybePromptWorktreeDeps(project, worktree);
+      void maybeInstallWorktreeDeps(project, worktree);
       setWorktreePrompt(null);
     } catch (err) {
       if (isWorktreeCreateInProgressError(err)) return;
@@ -1012,7 +984,7 @@ export function useSidebarController({
 
   const handleOpenWorktree = useCallback((project: Project, worktree: WorktreeRecord) => {
     void openWorktreeSession(project, worktree).then((opened) => {
-      if (opened) void maybePromptWorktreeDeps(project, worktree);
+      if (opened) void maybeInstallWorktreeDeps(project, worktree);
     });
   }, []);
 
@@ -1874,10 +1846,6 @@ export function useSidebarController({
     updateProject,
     createAndSplitWorktree,
     createAndOpenWorktree,
-    depsPrompt,
-    depsPromptingWorktreeIdsRef,
-    dismissWorktreeDepsPrompt,
-    setDepsPrompt,
     openWorktreeSession,
     finishTarget,
     discardTarget,

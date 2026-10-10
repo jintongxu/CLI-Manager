@@ -2,7 +2,7 @@ import { WorktreeCreationError } from "./worktreeCreationRecovery";
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import { getDb } from "../../../shared/platform/db";
-import { logWarn } from "../../../shared/platform/logger";
+import { logInfo, logWarn } from "../../../shared/platform/logger";
 import { hasConfiguredCliTool } from "../../providers/api/providerSwitching";
 import { projectSupportsCapability } from "./projectCapabilities";
 import type { Project, TerminalSession, WorktreeIsolationStrategy, WorktreeRecord } from "../../../shared/types/index";
@@ -54,6 +54,7 @@ export type WorktreeIsolationDecision = "prompt" | "auto" | "none";
 export const WORKTREE_CREATE_IN_PROGRESS = "worktree_create_in_progress";
 
 const inFlightWorktreeCreates = new Set<string>();
+const inFlightWorktreeRemovals = new Map<string, Promise<void>>();
 
 const RESERVED_WINDOWS_WORKTREE_NAMES = new Set([
   "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
@@ -417,9 +418,11 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
       } catch (error) {
         throw new WorktreeCreationError("readback", pendingRecord, error);
       }
-      set((state) => ({ worktrees: [record, ...state.worktrees] }));
-      try { await useProjectStore.getState().fetchAll("interactive"); }
-      catch (error) { throw new WorktreeCreationError("refresh", record, error); }
+      // The inserted record is authoritative for the new row. Refresh the full
+      // project tree in the background so terminal creation is not blocked by it.
+      set((state) => ({ worktrees: [record, ...state.worktrees.filter(item => item.id !== record.id)] }));
+      useProjectStore.getState().addWorktreeLocal(record);
+      void useProjectStore.getState().fetchAll("interactive").catch(() => {});
       return record;
     } finally {
       inFlightWorktreeCreates.delete(creationKey);
@@ -545,20 +548,30 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
   },
 
   removeWorktree: async (worktree, deleteBranch) => {
-    const project = useProjectStore.getState().projects.find((item) => item.id === worktree.project_id);
-    if (!project) throw new Error("project_not_found");
-    // Explicit discard remains destructive, but cannot close sessions or mutate
-    // Git while a finish/commit operation owns this Worktree.
-    await withFinishLock(worktree.id, async () => {
+    logInfo("Worktree discard started", { worktreeId: worktree.id, path: worktree.path });
+    const existing = inFlightWorktreeRemovals.get(worktree.id);
+    if (existing) return existing;
+    const removal = (async () => {
+      const project = useProjectStore.getState().projects.find((item) => item.id === worktree.project_id);
+      if (!project) throw new Error("project_not_found");
+      // Explicit discard remains destructive, but cannot close sessions or mutate
+      // Git while a finish/commit operation owns this Worktree.
+      await withFinishLock(worktree.id, async () => {
+      // 先停掉同 worktree 的后台依赖安装任务（动态引入避免 store 循环依赖），再关会话删目录。
+      await import("./worktreeDepsRunner")
+        .then(async (mod) => {
+          await mod.useWorktreeDepsRunnerStore.getState().cancel(worktree.id);
+          await mod.waitForWorktreeDepsClose(worktree.id);
+        })
+        .catch(() => {});
       const terminalStore = useTerminalStore.getState();
       const linkedSessionIds = terminalStore.sessions
         .filter((session) => session.worktreeId === worktree.id)
         .map((session) => session.id);
+      // Await each backend close before Git removal. This removes the fixed
+      // 350ms delay while preserving terminal-store snapshot ordering.
       for (const sessionId of linkedSessionIds) {
-        await terminalStore.closeSession(sessionId);
-      }
-      if (linkedSessionIds.length > 0) {
-        await waitForSessionRelease();
+        await terminalStore.closeSession(sessionId, true);
       }
       await invoke<string>("git_worktree_remove", {
         projectPath: project.path,
@@ -570,7 +583,15 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
       await db.execute("DELETE FROM worktrees WHERE id = $1", [worktree.id]);
       set((state) => ({ worktrees: state.worktrees.filter((item) => item.id !== worktree.id) }));
       useProjectStore.getState().removeWorktreeLocal(worktree.id);
-      await useProjectStore.getState().fetchAll("interactive");
-    });
+          logInfo("Worktree discard completed", { worktreeId: worktree.id });
+        void useProjectStore.getState().fetchAll("interactive").catch(() => {});
+      });
+    })();
+    inFlightWorktreeRemovals.set(worktree.id, removal);
+    try {
+      return await removal;
+    } finally {
+      if (inFlightWorktreeRemovals.get(worktree.id) === removal) inFlightWorktreeRemovals.delete(worktree.id);
+    }
   },
 }));

@@ -507,12 +507,14 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       const releaseLaunch = reserveWorktreeLaunch(sshHostId ? undefined : launchScope);
       try {
         const sessionKind = options?.sessionKind;
+        const transientBackground = options?.transientBackground === true && sessionKind !== "ephemeral-pi";
+        const oneShot = options?.oneShot === true && transientBackground;
         const os = await getOsPlatform();
         const createdAtMs = Date.now();
         let launch: ResolvedPtyLaunch | null = null;
         let sessionId: string;
         try {
-          launch = await resolvePtyLaunch({ projectId, worktreeId, sshHostId, cwd, startupCmd, envVars, shell, sessionKind }, os);
+          launch = await resolvePtyLaunch({ projectId, worktreeId, sshHostId, cwd, startupCmd, envVars: oneShot && startupCmd ? { ...(envVars ?? {}), CLI_MANAGER_ONE_SHOT_COMMAND: startupCmd } : envVars, shell, sessionKind }, os);
           recordCrashActivity("terminal.session_create", {
             projectId: projectId ?? null,
             worktreeId: worktreeId ?? null,
@@ -563,6 +565,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
           cliSessionId: sessionKind === "ephemeral-pi" ? undefined : cliSessionId?.trim() || undefined,
           remoteHistoryConsumerId: sessionKind === "ephemeral-pi" ? undefined : remoteHistoryConsumerId?.trim() || undefined,
           remoteHistorySourceInstanceId: remoteHistorySourceInstanceId?.trim() || undefined,
+          ...(transientBackground ? { transientBackground: true as const, tabHidden: true as const } : {}),
         };
 
         let unlisten: UnlistenFn;
@@ -593,30 +596,38 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         assignTerminalTitle(session, title, terminalPurpose(resolvedShell, startupCmd === "" ? "" : launchStartupCmd, launch.environmentType), [...pendingNamingSessions, ...useSessionStore.getState().sessions, ...state.sessions]);
         const newSessions = [...state.sessions, session];
         let workspans: TerminalWorkspan[];
-        let activeWorkspanId: string;
-        const workspanEnabled = useSettingsStore.getState().workspanEnabled;
-        const explicitTargetWorkspan = paneId ? findWorkspanByPane(state.workspans, paneId) : null;
-        const targetWorkspan = explicitTargetWorkspan
-          ?? (!workspanEnabled
-            ? state.workspans.find((workspan) => workspan.id === state.activeWorkspanId) ?? state.workspans[0] ?? null
-            : null);
-        if (targetWorkspan) {
-          const paneResult = addSessionToPaneTree(
-            targetWorkspan.paneTree,
-            explicitTargetWorkspan ? paneId ?? null : targetWorkspan.activePaneId,
-            sessionId,
-            createPaneId
-          );
-          workspans = updateTerminalWorkspan(state.workspans, targetWorkspan.id, (workspan) => (
-            syncTerminalWorkspanLayout(workspan, paneResult.tree, paneResult.activePaneId, sessionId)
-          ));
-          activeWorkspanId = targetWorkspan.id;
+        let activeWorkspanId: string | null;
+        if (transientBackground) {
+          // 后台任务会话不挂 pane 树：无 XTerm 挂载、无布局/焦点参与，杜绝退出后的协议回写。
+          workspans = state.workspans;
+          activeWorkspanId = state.activeWorkspanId;
         } else {
-          const workspan = createTerminalWorkspan(createWorkspanId(), createPaneId(), sessionId);
-          workspans = [...state.workspans, workspan];
-          activeWorkspanId = workspan.id;
+          const workspanEnabled = useSettingsStore.getState().workspanEnabled;
+          const explicitTargetWorkspan = paneId ? findWorkspanByPane(state.workspans, paneId) : null;
+          const targetWorkspan = explicitTargetWorkspan
+            ?? (!workspanEnabled
+              ? state.workspans.find((workspan) => workspan.id === state.activeWorkspanId) ?? state.workspans[0] ?? null
+              : null);
+          if (targetWorkspan) {
+            const paneResult = addSessionToPaneTree(
+              targetWorkspan.paneTree,
+              explicitTargetWorkspan ? paneId ?? null : targetWorkspan.activePaneId,
+              sessionId,
+              createPaneId
+            );
+            workspans = updateTerminalWorkspan(state.workspans, targetWorkspan.id, (workspan) => (
+              syncTerminalWorkspanLayout(workspan, paneResult.tree, paneResult.activePaneId, sessionId)
+            ));
+            activeWorkspanId = targetWorkspan.id;
+          } else {
+            const workspan = createTerminalWorkspan(createWorkspanId(), createPaneId(), sessionId);
+            workspans = [...state.workspans, workspan];
+            activeWorkspanId = workspan.id;
+          }
         }
-        const mirror = buildWorkspanMirror(workspans, activeWorkspanId, newSessions);
+        const mirror = transientBackground
+          ? { workspans, activeWorkspanId, paneTree: state.paneTree, activePaneId: state.activePaneId, activeSessionId: state.activeSessionId }
+          : buildWorkspanMirror(workspans, activeWorkspanId, newSessions);
         set({
           sessions: newSessions,
           ...mirror,
@@ -624,8 +635,8 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
           statusListeners: { ...state.statusListeners, [sessionId]: unlisten },
         });
 
-        // 临时 Pi 会话只存在于当前运行，不写入会话恢复数据。
-        if (sessionKind !== "ephemeral-pi") {
+        // 临时 Pi 会话与后台任务会话只存在于当前运行，不写入会话恢复数据。
+        if (sessionKind !== "ephemeral-pi" && !transientBackground) {
           await persistCommittedLaunch(sessionId, [
             () => queueSshSessionPersistence(newSessions),
             () => useSessionStore.getState().saveActiveSessionId(sessionId),
@@ -637,7 +648,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
           toast.warning(translateCurrent("extensions.project.startupFallbackWarning"));
         }
 
-        if (launchStartupCmd && !launch.startupHandledByLaunch) {
+        if (launchStartupCmd && !launch.startupHandledByLaunch && !oneShot) {
           try {
             await terminalProcessManager.write(
               sessionId,
@@ -1980,7 +1991,6 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
     },
 
     openSubagentTranscript: runtimeActions.openSubagentTranscript,
-
     finishSubagentTranscript: runtimeActions.finishSubagentTranscript,
 
     appendSubagentTranscript: runtimeActions.appendSubagentTranscript,

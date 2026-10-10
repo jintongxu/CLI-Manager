@@ -60,7 +60,7 @@ test("entrypoint title and startup-policy contracts remain explicit", () => {
   const sidebar = read("../../projects/hooks/useSidebarController.tsx");
   assert.doesNotMatch(sidebar, /renameOpenProjectTabs|renameSession/);
   assert.match(sidebar, /worktree\.path,\s*title,\s*startupCmd/);
-  assert.match(sidebar, /t\("worktree.deps.installTitle"/);
+  assert.match(sidebar, /useWorktreeDepsRunnerStore/);
   for (const file of ["../../workspace/api/CommandPalette.tsx", "../../workspace/api/useKeyboardShortcuts.ts"]) {
     const text = read(file);
     assert.doesNotMatch(text, /newTerminalTitle/);

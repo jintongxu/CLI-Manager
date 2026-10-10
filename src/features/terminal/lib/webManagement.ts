@@ -1,5 +1,4 @@
 import { invoke } from "@tauri-apps/api/core";
-import { translateCurrent } from "../../../shared/i18n/index";
 import { executeWebGitRead, validateWebGitRead, WEB_GIT_READ_KINDS } from "./webGitRead";
 import { useProjectStore } from "../../projects/api/projectStore";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
@@ -7,6 +6,7 @@ import { useSshHostStore } from "../../remote/api/sshHostStore";
 import { useTerminalStore } from "../state";
 import { useWorktreeStore } from "../../projects/api/worktreeStore";
 import { normalizeWorktreeShortLabel } from "../../projects/api/worktreeLabels";
+import { useWorktreeDepsRunnerStore } from "../../projects/api/worktreeDepsRunner";
 import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
 import type { CreateSshHostInput, Project, SshAuthMode, UpdateSshHostInput, WorktreeRecord } from "../../../shared/types/index";
 import { buildSshConnectionSpec } from "../../remote/api/ssh";
@@ -428,16 +428,14 @@ async function executeProjectAction(payload: Payload): Promise<unknown> {
   if (target.action === "worktree.installDeps") {
     const context = (await resolveProjectStartTargets({ targetType: "worktree", targetId: target.targetId }))[0]!;
     const launch = projectLaunch(context);
-    const deps = await useWorktreeStore.getState().checkDeps(context.worktree!);
-    if (!deps.needsInstall || !deps.command) return { started: false, reason: deps.reason };
-    const sessionId = await useTerminalStore.getState().createSession(
-      launch.project.id, launch.cwd,
-      translateCurrent("worktree.deps.installTitle", { name: getWorktreeDisplayName(context.worktree!) }),
-      deps.command, launch.envVars, launch.shell,
-      undefined, context.worktree!.id,
-    );
-    await useWorktreeStore.getState().dismissDepsPrompt(context.worktree!.id);
-    return { started: true, sessionIds: [sessionId] };
+    const result = await useWorktreeDepsRunnerStore.getState().start(context.project, context.worktree!, {
+      projectId: launch.project.id,
+      envVars: launch.envVars,
+      shell: launch.shell,
+    }, "manual");
+    if (!result.started) return { started: false, reason: result.reason };
+    const task = useWorktreeDepsRunnerStore.getState().tasks[context.worktree!.id];
+    return { started: true, sessionIds: task ? [task.sessionId] : [] };
   }
   return requestWebDeviceAction({ ...target, confirmed: payload.confirmed === true });
 }

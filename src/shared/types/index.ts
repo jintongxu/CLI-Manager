@@ -529,6 +529,8 @@ export interface TerminalSession {
   wslDistroName?: string;
   /** 标签呈现隐藏；缺省可见。隐藏不删除会话/布局，也不停止 PTY。 */
   tabHidden?: boolean;
+  /** 后台任务会话：有 PTY 但不展示、不持久化，关闭时不留痕。 */
+  transientBackground?: boolean;
   /** 会话类型；缺省视为 "pty"。临时 Pi 会话有 PTY，但不持久化。 */
   kind?: TerminalSessionKind;
   /** 仅 kind="subagent-transcript" 时存在：子 Agent 元数据。 */

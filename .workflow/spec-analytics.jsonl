@@ -92,3 +92,5 @@
 {"type":"cli","id":"CLI-1791452538481-1","timestamp":"2026-10-08T09:42:18.481Z","command":"load","args":{"type":"spec","category":"coding"}}
 {"type":"cli","id":"CLI-1791452571544-1","timestamp":"2026-10-08T09:42:51.544Z","command":"load","args":{"type":"spec","category":"coding"}}
 {"type":"cli","id":"CLI-1791453884337-1","timestamp":"2026-10-08T10:04:44.337Z","command":"load","args":{"type":"spec","id":"spec:project:coding-conventions-001"}}
+{"type":"cli","id":"CLI-1791515149104-1","timestamp":"2026-10-09T03:05:49.104Z","command":"load","args":{"type":"spec","id":"spec:project:coding-conventions-001"}}
+{"type":"cli","id":"CLI-1791613336894-1","timestamp":"2026-10-10T06:22:16.894Z","command":"load","args":{"type":"spec","id":"spec:project:coding-conventions-001"}}

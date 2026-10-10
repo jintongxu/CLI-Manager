@@ -9,7 +9,7 @@ import { getWorktreeDisplayName } from "../api/worktreeMetadata";
 import { useTreeActions, worktreeListCollapseId, worktreeTerminalsCollapseId } from "./TreeContext";
 import { WorktreeTerminalSummary } from "./WorktreeTerminalSummary";
 import { WorktreeTerminalsToggle } from "./WorktreeTerminalsToggle";
-import { ChevronRight, AlertTriangle, Link2, Pin, Play, Sparkles } from "../../../shared/ui/icons";
+import { ChevronRight, AlertTriangle, Link2, Pin, Play, RefreshCw, Sparkles } from "../../../shared/ui/icons";
 import { VendorIcon, inferVendor } from "../../../shared/ui/VendorIcon";
 import { WorktreeIcon } from "../../../shared/ui/WorktreeIcon";
 import { useI18n } from "../../../shared/i18n/index";
@@ -23,6 +23,7 @@ import { worktreeMoveIds } from "../lib/sidebarOrdering";
 import { SidebarTerminalList } from "./SidebarTerminalList";
 import { resolveNodeAppearance } from "../api/nodeAppearance";
 import { resolveCliToolIconKey } from "../../../shared/lib/cliTools";
+import { useWorktreeDepsRunnerStore } from "../api/worktreeDepsRunner";
 
 // 右键只打开项目菜单，避免浏览器先把树节点焦点移走。
 export function preventSecondaryPointerFocus(event: ReactPointerEvent<HTMLElement>) {
@@ -137,6 +138,8 @@ function TreeNodeItemImpl({
     opacity: isDragging ? 0.5 : 1,
   };
   const compact = density === "compact";
+  const installingWorktreeId = node.type === "worktree" ? node.worktree.id : "";
+  const depsInstalling = useWorktreeDepsRunnerStore((s) => Boolean(installingWorktreeId && s.tasks[installingWorktreeId]));
   const indentBase = compact ? 6 : 8;
   const indentStep = compact ? 14 : 16;
   const paddingLeft = indentBase + depth * indentStep;
@@ -219,6 +222,15 @@ function TreeNodeItemImpl({
               aria-label={t(worktree.status === "pending" ? "worktree.status.pending" : "worktree.status.missing")}
             >
               <AlertTriangle size={12} strokeWidth={1.5} />
+            </span>
+          )}
+          {depsInstalling && (
+            <span
+              className="inline-flex shrink-0 items-center justify-center"
+              title={t("worktree.deps.installing", { name: getWorktreeDisplayName(worktree) })}
+              aria-label={t("worktree.deps.installing", { name: getWorktreeDisplayName(worktree) })}
+            >
+              <RefreshCw size={12} strokeWidth={2} className="animate-spin" />
             </span>
           )}
           <span

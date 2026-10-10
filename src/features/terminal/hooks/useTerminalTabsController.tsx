@@ -12,7 +12,7 @@ import { useTerminalStore } from "../state";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { updateWorkspaceLayout } from "../../../shared/lib/workspaceLayout";
 import { useWorktreeStore } from "../../projects/api/worktreeStore";
-import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
+import { useWorktreeDepsRunnerStore } from "../../projects/api/worktreeDepsRunner";
 import { useProjectStore } from "../../projects/api/projectStore";
 import { useFileExplorerStore } from "../../files/api/fileExplorerStore";
 import { useI18n } from "../../../shared/i18n/index";
@@ -116,8 +116,6 @@ export function useTerminalTabsController({
     }))
   );
   const worktrees = useWorktreeStore((s) => s.worktrees);
-  const checkWorktreeDeps = useWorktreeStore((s) => s.checkDeps);
-  const dismissWorktreeDepsPrompt = useWorktreeStore((s) => s.dismissDepsPrompt);
   const removeWorktree = useWorktreeStore((s) => s.removeWorktree);
   const useExternalTerminal = useSettingsStore((s) => s.useExternalTerminal);
   const fontSize = useSettingsStore((s) => s.fontSize);
@@ -604,25 +602,13 @@ export function useTerminalTabsController({
 
   const handleInstallWorktreeDeps = useCallback((project: Project, worktree: WorktreeRecord) => {
     if (rejectMissingWorktree(worktree)) return;
-    void checkWorktreeDeps(worktree).then((deps) => {
-      if (!deps.needsInstall || !deps.command) {
-        toast.info(t("worktree.deps.notNeeded"));
-        return;
-      }
-      const options = buildProjectSplitOptions(project, groups);
-      void dismissWorktreeDepsPrompt(worktree.id);
-      void createSession(
-        options.projectId,
-        worktree.path,
-        t("worktree.deps.installTitle", { name: getWorktreeDisplayName(worktree) }),
-        deps.command,
-        options.envVars,
-        options.shell,
-        undefined,
-        worktree.id,
-      );
-    }).catch((err) => toast.error(t("worktree.deps.checkFailed"), { description: String(err) }));
-  }, [checkWorktreeDeps, createSession, dismissWorktreeDepsPrompt, groups, rejectMissingWorktree, t]);
+    const options = buildProjectSplitOptions(project, groups);
+    void useWorktreeDepsRunnerStore.getState().start(project, worktree, {
+      projectId: options.projectId ?? project.id,
+      envVars: options.envVars,
+      shell: options.shell,
+    }, "manual");
+  }, [groups, rejectMissingWorktree]);
 
   const handleOpenWorktreeDirectory = useCallback((worktree: WorktreeRecord) => {
     if (rejectMissingWorktree(worktree)) return;
@@ -642,7 +628,7 @@ export function useTerminalTabsController({
       handleOpenWorktreeDirectory(worktree);
       return;
     }
-    const existing = sessions.find((session) => session.worktreeId === worktree.id && (session.kind ?? "pty") === "pty");
+    const existing = sessions.find((session) => session.worktreeId === worktree.id && (session.kind ?? "pty") === "pty" && session.transientBackground !== true);
     if (existing) {
       closeGitWorkspace();
       closeHistory();
