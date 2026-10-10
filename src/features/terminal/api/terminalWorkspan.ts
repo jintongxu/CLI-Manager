@@ -240,6 +240,30 @@ export function reorderTerminalWorkspans(
   return next;
 }
 
+/** Reorder Workspans by an explicit id list; unknown/missing ids keep stable tails. */
+export function orderTerminalWorkspans(
+  workspans: TerminalWorkspan[],
+  orderedIds: readonly string[]
+): TerminalWorkspan[] {
+  const byId = new Map(workspans.map((workspan) => [workspan.id, workspan]));
+  const seen = new Set<string>();
+  const next: TerminalWorkspan[] = [];
+  for (const id of orderedIds) {
+    const workspan = byId.get(id);
+    if (workspan && !seen.has(id)) {
+      seen.add(id);
+      next.push(workspan);
+    }
+  }
+  for (const workspan of workspans) {
+    if (!seen.has(workspan.id)) next.push(workspan);
+  }
+  return next.length === workspans.length
+    && next.every((workspan, index) => workspan === workspans[index])
+    ? workspans
+    : next;
+}
+
 export function getAdjacentWorkspanSessionId(
   workspans: TerminalWorkspan[],
   activeWorkspanId: string | null,

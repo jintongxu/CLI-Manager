@@ -17,7 +17,7 @@ import { useProjectStore } from "../../projects/api/projectStore";
 import { useFileExplorerStore } from "../../files/api/fileExplorerStore";
 import { useI18n } from "../../../shared/i18n/index";
 import { logError } from "../../../shared/platform/logger";
-import { DND_ACTIVATION_CONSTRAINT, parseWorkspanDragId, resolveWorkspanDragHoverTarget, WORKSPAN_DRAG_AUTO_ACTIVATE_MS } from "../../workspace/api/dragInteraction";
+import { DND_ACTIVATION_CONSTRAINT, parseProjectDragId, parseWorkspanDragId, resolveWorkspanDragHoverTarget, WORKSPAN_DRAG_AUTO_ACTIVATE_MS } from "../../workspace/api/dragInteraction";
 import type { TerminalPaneLeaf, TerminalPaneSplitDirection } from "../api/terminalPaneTree";
 import { type BackgroundTaskMeta } from "../components/BackgroundTasksPanel";
 import { TERMINAL_SIDE_PANEL_TAB_ORDER, type TerminalSidePanelTab } from "../components/TerminalSidePanel";
@@ -65,7 +65,7 @@ import { buildWorkspanTabModels } from "../lib/workspanTabModel";
 import { buildGlobalWorktreeBadges } from "../api/terminalWorktreeBadge";
 import { hideProjectTerminalSessions } from "../api/terminalProjectHide";
 import { resolveNewTabSource } from "../api/terminalProjectSelection";
-import { buildTerminalProjectOptions } from "../api/terminalProjectTabsModel";
+import { buildTerminalProjectOptions, resolveWorkspanIdOrderByProjectMove } from "../api/terminalProjectTabsModel";
 import { useTerminalProjectSelection } from "./useTerminalProjectSelection";
 import { useWorkspanTabOverflow } from "./useWorkspanTabOverflow";
 
@@ -93,6 +93,7 @@ export function useTerminalTabsController({
   const setActive = useTerminalStore((s) => s.setActive);
   const setActiveWorkspan = useTerminalStore((s) => s.setActiveWorkspan);
   const reorderWorkspans = useTerminalStore((s) => s.reorderWorkspans);
+  const orderWorkspans = useTerminalStore((s) => s.orderWorkspans);
   const renameWorkspan = useTerminalStore((s) => s.renameWorkspan);
   const restoreWorkspanToSinglePane = useTerminalStore((s) => s.restoreWorkspanToSinglePane);
   const mergeWorkspanAtPaneEdge = useTerminalStore((s) => s.mergeWorkspanAtPaneEdge);
@@ -1341,6 +1342,8 @@ export function useTerminalTabsController({
     hideWorkspanDetachPreview();
     activeDragWorkspanIdRef.current = null;
     const dragId = String(event.active.id);
+    // First-row project chips never touch Workspan hover/detach state.
+    if (parseProjectDragId(dragId)) return;
     const workspanId = parseWorkspanDragId(dragId);
     if (workspanId) {
       if (scopedSessionIds || !workspans.some((workspan) => workspan.id === workspanId)) return;
@@ -1358,6 +1361,8 @@ export function useTerminalTabsController({
     }
 
     const activeId = String(event.active.id);
+    // Project chips only reorder against project chips: no pane/detach preview.
+    if (parseProjectDragId(activeId)) return;
     const activeWorkspanId = parseWorkspanDragId(activeId);
     const overId = String(event.over.id);
     const dropTarget = parsePaneDropTarget(overId);
@@ -1422,6 +1427,15 @@ export function useTerminalTabsController({
 
     const activeId = String(active.id);
     const overId = String(over.id);
+    const sourceProjectKey = parseProjectDragId(activeId);
+    if (sourceProjectKey) {
+      const targetProjectKey = parseProjectDragId(overId);
+      if (targetProjectKey && targetProjectKey !== sourceProjectKey && !scopedSessionIds) {
+        // First-row order derives from Workspan order: move the whole project block.
+        orderWorkspans(resolveWorkspanIdOrderByProjectMove(workspanTabModels, sourceProjectKey, targetProjectKey));
+      }
+      return;
+    }
     const sourceWorkspanId = parseWorkspanDragId(activeId);
     if (sourceWorkspanId) {
       const targetWorkspanId = parseWorkspanDragId(overId);
@@ -1489,7 +1503,7 @@ export function useTerminalTabsController({
     }
     moveSessionToPane(activeId, targetPane.id, overId);
     setActiveWorkspaceTab("terminal");
-  }, [activeWorkspanLayout, canSplitSessionToPaneEdge, clearDragState, detachSessionToWorkspan, findPaneForSession, mergeWorkspanAtPaneEdge, moveSessionToPane, reorderSessions, reorderWorkspans, scopedSessionIds, splitSessionToPaneEdge, workspans]);
+  }, [activeWorkspanLayout, canSplitSessionToPaneEdge, clearDragState, detachSessionToWorkspan, findPaneForSession, mergeWorkspanAtPaneEdge, moveSessionToPane, orderWorkspans, reorderSessions, reorderWorkspans, scopedSessionIds, splitSessionToPaneEdge, workspanTabModels, workspans]);
 
   const handleToolbarDragStart = useCallback((event: DragStartEvent) => {
     setActiveToolbarDragId(String(event.active.id));

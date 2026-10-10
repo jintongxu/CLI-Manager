@@ -8,7 +8,14 @@ export const DND_SORTABLE_TRANSITION = {
 export const POINTER_DRAG_START_PX = DND_ACTIVATION_CONSTRAINT.distance;
 
 export const WORKSPAN_DRAG_PREFIX = "workspan:";
+export const PROJECT_DRAG_PREFIX = "project:";
 export const WORKSPAN_DRAG_AUTO_ACTIVATE_MS = 500;
+
+export function parseProjectDragId(value: string): string | null {
+  return value.startsWith(PROJECT_DRAG_PREFIX)
+    ? value.slice(PROJECT_DRAG_PREFIX.length) || null
+    : null;
+}
 
 export function parseWorkspanDragId(value: string): string | null {
   return value.startsWith(WORKSPAN_DRAG_PREFIX)

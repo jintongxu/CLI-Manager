@@ -1,8 +1,9 @@
 import { useEffect, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { useDroppable } from "@dnd-kit/core";
-import { SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { CliToolIconKey } from "../../../shared/lib/cliTools";
-import { WORKSPAN_DRAG_PREFIX } from "./dragInteraction";
+import { DND_SORTABLE_TRANSITION, PROJECT_DRAG_PREFIX, WORKSPAN_DRAG_PREFIX } from "./dragInteraction";
 import type { WorkspanTabBarPosition } from "../../../shared/lib/workspaceLayout";
 import type { TerminalSession } from "../../../shared/types/index";
 
@@ -80,6 +81,46 @@ interface WorkspanTabBarProps {
 function WorkspanTabbarEndDropTarget({ disabled }: { disabled: boolean }) {
   const { setNodeRef } = useDroppable({ id: WORKSPAN_TABBAR_END_DROP_ID, disabled });
   return <div ref={setNodeRef} className="ui-workspan-end-drop min-w-0 flex-1" aria-hidden="true" />;
+}
+
+type SortableChipRenderProps = {
+  ref: (element: HTMLDivElement | null) => void;
+  style: CSSProperties;
+  attributes: ReturnType<typeof useSortable>["attributes"];
+  listeners: ReturnType<typeof useSortable>["listeners"];
+  isDragging: boolean;
+};
+
+/** First-row project chip: the whole chip is the sortable node/activator; inner clicks stay untouched. */
+function SortableProjectChip({ optionKey, title, disabled, children }: {
+  optionKey: string;
+  title: string;
+  disabled: boolean;
+  children: (props: SortableChipRenderProps) => ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: `${PROJECT_DRAG_PREFIX}${optionKey}`,
+    disabled,
+    data: {
+      type: "project",
+      projectKey: optionKey,
+      overlay: { title, notification: "none", vendor: null, cliToolIcon: null },
+    },
+    transition: DND_SORTABLE_TRANSITION,
+  });
+  const horizontalTransform = transform ? { ...transform, y: 0 } : transform;
+  return children({
+    ref: setNodeRef,
+    style: {
+      transform: isDragging ? undefined : CSS.Transform.toString(horizontalTransform),
+      transition: isDragging ? undefined : transition,
+      opacity: isDragging ? 0.45 : 1,
+      zIndex: isDragging ? 10 : undefined,
+    } as CSSProperties,
+    attributes,
+    listeners,
+    isDragging,
+  });
 }
 
 export function WorkspanTabBar({
@@ -163,6 +204,7 @@ export function WorkspanTabBar({
             </button>
           ))}
         </div>
+        <SortableContext items={contextOptions.map((option) => `${PROJECT_DRAG_PREFIX}${option.key}`)} strategy={horizontalListSortingStrategy}>
         {contextOptions.map((option) => {
           const projectLabel = contextOptions.some((other) => other.key !== option.key
             && other.project.toLocaleLowerCase() === option.project.toLocaleLowerCase())
@@ -170,7 +212,14 @@ export function WorkspanTabBar({
           const hideIds = displayedProjectTerminalIds(models, option.key, statusFilter, notifications);
           const hideLabel = t("terminal.context.hideDisplayedProjectTerminals", { project: option.project });
           return (
-            <div key={option.key} className="ui-workspan-project-chip inline-flex h-6 max-w-[286px] shrink-0 items-center rounded-md" data-selected={option.key === selectedProjectKey ? "true" : "false"}>
+            <SortableProjectChip
+              key={option.key}
+              optionKey={option.key}
+              title={option.project}
+              disabled={hasScopedTerminalFilter}
+            >
+              {({ ref, style, attributes, listeners, isDragging }) => (
+            <div ref={ref} style={style} className="ui-workspan-project-chip inline-flex h-6 max-w-[286px] shrink-0 items-center rounded-md" data-selected={option.key === selectedProjectKey ? "true" : "false"} data-project-key={option.key} data-project-dragging={isDragging ? "true" : "false"} {...attributes} {...listeners}>
               <button
                 type="button"
                 className="ui-workspan-context-button inline-flex h-6 min-w-0 items-center gap-1 rounded-md px-2 text-[11px] font-medium"
@@ -193,6 +242,7 @@ export function WorkspanTabBar({
                 type="button"
                 className="ui-focus-ring ui-workspan-project-hide inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
                 disabled={hideIds.length === 0}
+                onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => { event.stopPropagation(); onHideProjectTerminals(hideIds); }}
                 aria-label={hideLabel}
                 title={hideLabel}
@@ -200,8 +250,11 @@ export function WorkspanTabBar({
                 <X size={13} strokeWidth={2} aria-hidden="true" />
               </button>
             </div>
+              )}
+            </SortableProjectChip>
           );
         })}
+        </SortableContext>
       </div>
       <div className="ui-workspan-groups-row">
         <div
@@ -215,10 +268,11 @@ export function WorkspanTabBar({
             event.preventDefault();
           }}
         >
+          {/* Single row-wide SortableContext so cross-group drags displace live; groups stay visual-only. */}
+          <SortableContext items={visibleModels.map(({ workspan }) => `${WORKSPAN_DRAG_PREFIX}${workspan.id}`)} strategy={horizontalListSortingStrategy}>
           {groups.map(({ group, models: items }) => (
             <div key={group.key} className="ui-workspan-project-group" role="group" aria-label={groupLabel(group)}>
               <div className="ui-workspan-group-tabs">
-                <SortableContext items={items.map(({ workspan }) => `${WORKSPAN_DRAG_PREFIX}${workspan.id}`)} strategy={horizontalListSortingStrategy}>
                   {items.map((model) => {
                     // Menu targets follow this exact displayed project/global-status row.
                     // Keep each model's close scope, including mixed/scoped Workspans.
@@ -229,10 +283,10 @@ export function WorkspanTabBar({
                       otherSessionIds: visibleModels.filter((item) => item !== model).flatMap((item) => item.closeSessionIds),
                     }, badges.get(model.workspan.id)!, () => activateResult(model));
                   })}
-                </SortableContext>
               </div>
             </div>
           ))}
+          </SortableContext>
           {(statusSummary.running > 0 || statusSummary.done > 0 || statusSummary.failed > 0) && (
             <span className="ui-workspan-status-summary inline-flex shrink-0 items-center gap-2 px-2 text-[10px] font-medium" title={t("terminal.status.summary")}>
               {statusSummary.running > 0 && <span className="ui-workspan-status-count ui-workspan-status-running">◉ {statusSummary.running}</span>}
