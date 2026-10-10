@@ -298,6 +298,50 @@ export function formatWorkspanGroupTitle(
   return resolved;
 }
 
+/** Primary project of a Workspan: the project of its first member. */
+export function resolveWorkspanPrimaryProjectKey<T extends { members: TerminalProjectMembership[] }>(
+  model: T,
+): string | null {
+  return model.members[0]?.projectKey ?? null;
+}
+
+/**
+ * Move the Workspan block of `fromProjectKey` to the block position of `toProjectKey`.
+ * Members inside each project block keep their relative order; mixed-project
+ * Workspans travel with their primary project and are never split. Workspans
+ * without members sink to the end in stable order.
+ */
+export function resolveWorkspanIdOrderByProjectMove<T extends {
+  workspan: { id: string }; members: TerminalProjectMembership[];
+}>(models: readonly T[], fromProjectKey: string, toProjectKey: string): string[] {
+  const original = models.map((model) => model.workspan.id);
+  if (fromProjectKey === toProjectKey) return original;
+  const keys = models.map((model) => resolveWorkspanPrimaryProjectKey(model));
+  // Stable project blocks in first-appearance order (memberless Workspans
+  // form a null-keyed block like any other project).
+  const blocks: Array<string | null> = [];
+  for (const key of keys) {
+    if (!blocks.includes(key)) blocks.push(key);
+  }
+  const fromBlock = blocks.indexOf(fromProjectKey);
+  const toBlock = blocks.indexOf(toProjectKey);
+  if (fromBlock < 0 || toBlock < 0) return original;
+  // Same move-onto semantics as reorderTerminalWorkspans.
+  const [moved] = blocks.splice(fromBlock, 1);
+  blocks.splice(toBlock, 0, moved);
+  const order: string[] = [];
+  const consumed = new Array(models.length).fill(false);
+  for (const key of blocks) {
+    for (let i = 0; i < models.length; i++) {
+      if (!consumed[i] && keys[i] === key) {
+        consumed[i] = true;
+        order.push(models[i].workspan.id);
+      }
+    }
+  }
+  return order;
+}
+
 export function groupProjectWorkspanModels<T extends {
   workspan: { id: string }; members: TerminalProjectMembership[]; projectMemberships: WorkspanProjectMembership[];
 }>(models: readonly T[], projectKey: string): Array<{ group: WorkspanTabGroupDescriptor; models: T[] }> {

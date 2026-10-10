@@ -5,7 +5,7 @@ import {
 import { type SplitTerminalOptions, type TabNotificationState } from "../state";
 import { useSshHostStore } from "../../remote/api/sshHostStore";
 import { type TranslationKey } from "../../../shared/i18n/index";
-import { WORKSPAN_DRAG_PREFIX } from "../../workspace/api/dragInteraction";
+import { PROJECT_DRAG_PREFIX, WORKSPAN_DRAG_PREFIX } from "../../workspace/api/dragInteraction";
 import type { TerminalPaneDropEdge, TerminalPaneSplitDirection } from "../api/terminalPaneTree";
 import { resolvePaneDropEdgeFromPoint } from "../api/terminalPaneTree";
 import { resolveProjectPath } from "../../projects/api/groupPath";
@@ -403,14 +403,22 @@ export function buildTerminalTabHoverInfo(
 
 export const terminalTabCollisionDetection: CollisionDetection = (args) => {
   const pointerCollisions = pointerWithin(args);
+  const activeId = String(args.active.id);
+  // Gap-tolerant nearest-center: chips/tabs are separated by flex gaps where
+  // pointerWithin drops `over` and the displacement animation snaps back.
+  // closestCenter keeps a stable target across gaps (sortable standard).
+  if (activeId.startsWith(PROJECT_DRAG_PREFIX)) {
+    const projectCollision = closestCenter(args).find((collision) => String(collision.id).startsWith(PROJECT_DRAG_PREFIX));
+    return projectCollision ? [projectCollision] : [];
+  }
   const edgeCollision = pointerCollisions.find((collision) => String(collision.id).startsWith(PANE_EDGE_DROP_PREFIX));
   if (edgeCollision) return [edgeCollision];
 
   const centerCollision = pointerCollisions.find((collision) => String(collision.id).startsWith(PANE_CENTER_DROP_PREFIX));
   if (centerCollision) return [centerCollision];
 
-  if (String(args.active.id).startsWith(WORKSPAN_DRAG_PREFIX)) {
-    const workspanTabCollision = pointerCollisions.find((collision) => String(collision.id).startsWith(WORKSPAN_DRAG_PREFIX));
+  if (activeId.startsWith(WORKSPAN_DRAG_PREFIX)) {
+    const workspanTabCollision = closestCenter(args).find((collision) => String(collision.id).startsWith(WORKSPAN_DRAG_PREFIX));
     return workspanTabCollision ? [workspanTabCollision] : [];
   }
 

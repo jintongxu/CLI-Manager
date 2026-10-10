@@ -222,6 +222,7 @@ export interface TerminalStore {
   setWorkspanModeEnabled: (enabled: boolean) => void;
   setActiveWorkspan: (id: string) => void;
   reorderWorkspans: (fromId: string, toId: string) => void;
+  orderWorkspans: (orderedIds: readonly string[]) => void;
   renameWorkspan: (id: string, title: string) => void;
   restoreWorkspanToSinglePane: (id: string) => void;
   mergeWorkspanAtPaneEdge: (sourceId: string, targetId: string, targetPaneId: string, edge: TerminalPaneDropEdge) => void;
