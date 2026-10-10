@@ -1,5 +1,11 @@
 # Changelog
 
+## [V1.4.6] - 2026-10-09
+
+### Windows 发布
+
+- 发布 Windows 正式版 `V1.4.6`，仅构建 Windows NSIS 安装包。
+
 ## [TEMP]
 
 ### Worktree 依赖后台安装（2026-10-09）
