@@ -1,7 +1,7 @@
 import type { TerminalSession } from "../types/index";
 
 export function isOrdinarySidebarTerminal(session: TerminalSession): boolean {
-  return (session.kind ?? "pty") === "pty";
+  return (session.kind ?? "pty") === "pty" && session.transientBackground !== true;
 }
 
 /** Presentation only: hidden terminals participate; input and layout order are untouched. */

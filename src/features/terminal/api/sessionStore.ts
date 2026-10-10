@@ -29,7 +29,8 @@ function isPersistableSession(session: TerminalSession): boolean {
   return session.kind !== "subagent-transcript"
     && session.kind !== "file-editor"
     && session.kind !== "synced-history"
-    && session.kind !== "ephemeral-pi";
+    && session.kind !== "ephemeral-pi"
+    && session.transientBackground !== true;
 }
 
 let store: Store | null = null;

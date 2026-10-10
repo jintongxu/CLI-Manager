@@ -39,6 +39,14 @@ test("grouping retains hidden and legacy PTYs, isolates worktrees by identity an
   assert.deepEqual(domain.getSidebarTerminals(sessions, "p2").map((s) => s.id), ["other"]);
 });
 
+test("transient background tasks are excluded from ordinary sidebar terminals", () => {
+  const sessions = [session("visible"), session("bg", { tabHidden: true, transientBackground: true }),
+    session("bg-wt", { worktreeId: "w1", tabHidden: true, transientBackground: true }),
+    session("wt", { worktreeId: "w1", tabHidden: true })];
+  assert.deepEqual(domain.getSidebarTerminals(sessions, "p1").map((s) => s.id), ["visible"]);
+  assert.deepEqual(domain.getSidebarTerminals(sessions, "p1", "w1").map((s) => s.id), ["wt"]);
+});
+
 test("open selects exact project/worktree scope, closes competing workspaces, reopens original ID without creating", () => {
   for (const worktreeId of [undefined, "w1"]) {
     const calls = [];

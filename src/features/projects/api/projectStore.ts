@@ -26,6 +26,7 @@ import type {
 } from "../../../shared/types/index";
 
 let inflightFetchAll: Promise<void> | null = null;
+let localWorktreeMutationVersion = 0;
 let providerBadgeRefreshSeq = 0;
 
 export interface ProviderBadge {
@@ -38,6 +39,7 @@ interface ProjectStore {
   projects: Project[];
   groups: Group[];
   worktrees: WorktreeRecord[];
+  addWorktreeLocal: (worktree: WorktreeRecord) => void;
   removeWorktreeLocal: (id: string) => void;
   setWorktreeStatusLocal: (id: string, status: WorktreeStatus) => void;
   tree: TreeNode[];
@@ -188,7 +190,14 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const updated = worktrees.map(item => item.id === id ? { ...item, status } : item);
     set({ worktrees: updated, tree: buildTree(groups, projects, searchQuery, updated) });
   },
+  addWorktreeLocal: (worktree) => {
+    localWorktreeMutationVersion += 1;
+    const { groups, projects, searchQuery, worktrees } = get();
+    const next = [worktree, ...worktrees.filter(item => item.id !== worktree.id)];
+    set({ worktrees: next, tree: buildTree(groups, projects, searchQuery, next) });
+  },
   removeWorktreeLocal: (id) => {
+    localWorktreeMutationVersion += 1;
     const { groups, projects, searchQuery, worktrees } = get();
     const remaining = worktrees.filter(item => item.id !== id);
     set({ worktrees: remaining, tree: buildTree(groups, projects, searchQuery, remaining) });
@@ -209,6 +218,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   fetchAll: async (reason = "interactive") => {
     if (inflightFetchAll) return inflightFetchAll;
     inflightFetchAll = (async () => {
+      const fetchVersion = localWorktreeMutationVersion;
       try {
         const policy = resolveProjectFetchPolicy(reason);
         const db = await getDb();
@@ -230,6 +240,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           } catch { /* ignore */ }
         }
 
+        if (fetchVersion !== localWorktreeMutationVersion) return;
         const tree = buildTree(groups, projects, get().searchQuery, worktrees);
         set({ groups, projects, worktrees, tree, projectHealth, loaded: true });
         if (policy.refreshProviderBadges) {

@@ -18,7 +18,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } f
 import { Button } from "../../../shared/ui/button";
 import { Input } from "../../../shared/ui/input";
 import { toast } from "sonner";
-import { logError } from "../../../shared/platform/logger";
+import { logError, logInfo } from "../../../shared/platform/logger";
 import { SidebarHeader } from "./SidebarHeader";
 import { ProjectTree } from "./ProjectTree";
 import { BatchShellDialog } from "./BatchShellDialog";
@@ -133,11 +133,6 @@ export function SidebarView({
   updateWorktreeMetadata,
   createAndSplitWorktree,
   createAndOpenWorktree,
-  depsPrompt,
-  depsPromptingWorktreeIdsRef,
-  dismissWorktreeDepsPrompt,
-  setDepsPrompt,
-  openWorktreeSession,
   finishTarget,
   discardTarget,
   removeWorktree,
@@ -174,6 +169,7 @@ export function SidebarView({
   const [renameDescription, setRenameDescription] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
   const [renameSaving, setRenameSaving] = useState(false);
+  const [discardingWorktreeIds, setDiscardingWorktreeIds] = useState<Set<string>>(() => new Set());
 
   const confirmRenameWorktree = async () => {
     if (!renameTarget) return;
@@ -1043,57 +1039,6 @@ export function SidebarView({
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={!!depsPrompt}
-        onOpenChange={(next) => {
-          if (next) return;
-          if (depsPrompt) {
-            depsPromptingWorktreeIdsRef.current.delete(depsPrompt.worktree.id);
-            void dismissWorktreeDepsPrompt(depsPrompt.worktree.id);
-          }
-          setDepsPrompt(null);
-        }}
-      >
-        <DialogContent className="max-w-[420px]" showCloseButton={false}>
-          <DialogTitle>{t("worktree.deps.title")}</DialogTitle>
-          <DialogDescription className="mt-2">
-            {depsPrompt ? t("worktree.deps.description", { name: getWorktreeDisplayName(depsPrompt.worktree), command: depsPrompt.command }) : ""}
-          </DialogDescription>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                if (depsPrompt) {
-                  depsPromptingWorktreeIdsRef.current.delete(depsPrompt.worktree.id);
-                  void dismissWorktreeDepsPrompt(depsPrompt.worktree.id);
-                }
-                setDepsPrompt(null);
-              }}
-            >
-              {t("worktree.deps.skip")}
-            </Button>
-            <Button
-              onClick={() => {
-                if (depsPrompt) {
-                  depsPromptingWorktreeIdsRef.current.delete(depsPrompt.worktree.id);
-                  void dismissWorktreeDepsPrompt(depsPrompt.worktree.id);
-                  void openWorktreeSession(
-                    depsPrompt.project,
-                    depsPrompt.worktree,
-                    undefined,
-                    depsPrompt.command,
-                    t("worktree.deps.installTitle", { name: getWorktreeDisplayName(depsPrompt.worktree) }),
-                  );
-                }
-                setDepsPrompt(null);
-              }}
-            >
-              {t("worktree.deps.install")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <WorktreeForceDeleteFlow
         open={!!forceDeleteTarget}
         project={forceDeleteTarget?.project ?? null}
@@ -1119,18 +1064,35 @@ export function SidebarView({
         open={!!discardTarget}
         title={t("worktree.discard.title", { name: discardTarget ? getWorktreeDisplayName(discardTarget.worktree) : "" })}
         message={t("worktree.discard.message", { branch: discardTarget?.worktree.branch ?? "" })}
-        confirmText={t("worktree.discard.confirm")}
+        confirmText={discardTarget && discardingWorktreeIds.has(discardTarget.worktree.id) ? t("common.processing") : t("worktree.discard.confirm")}
         cancelText={t("common.cancel")}
         danger
+        confirmDisabled={!!discardTarget && discardingWorktreeIds.has(discardTarget.worktree.id)}
+        confirmLoading={!!discardTarget && discardingWorktreeIds.has(discardTarget.worktree.id)}
+        loadingText={t("common.processing")}
         onConfirm={() => {
-          if (discardTarget) {
-            void removeWorktree(discardTarget.worktree, true).catch((err) => {
-              toast.error(t("worktree.toast.discardFailed"), { description: String(err) });
+          const target = discardTarget;
+          logInfo("Worktree discard confirm clicked", { worktreeId: target?.worktree.id ?? null });
+          if (!target || discardingWorktreeIds.has(target.worktree.id)) return;
+          setDiscardingWorktreeIds((current) => new Set(current).add(target.worktree.id));
+          const toastId = `worktree-discard-${target.worktree.id}`;
+          toast.loading(t("common.processing"), { id: toastId });
+          // Keep the confirmation visible while deletion runs so the button
+          // spinner makes the in-progress state unambiguous.
+          void removeWorktree(target.worktree, true).then(() => {
+            toast.success(t("worktree.toast.discardSuccess"), { id: toastId });
+            setDiscardTarget(null);
+          }).catch((err) => {
+            toast.error(t("worktree.toast.discardFailed"), { id: toastId, description: String(err) });
+          }).finally(() => {
+            setDiscardingWorktreeIds((current) => {
+              const next = new Set(current);
+              next.delete(target.worktree.id);
+              return next;
             });
-          }
-          setDiscardTarget(null);
+          });
         }}
-        onClose={() => setDiscardTarget(null)}
+        onClose={() => { if (!discardTarget || !discardingWorktreeIds.has(discardTarget.worktree.id)) setDiscardTarget(null); }}
       />
 
       <ConfirmDialog

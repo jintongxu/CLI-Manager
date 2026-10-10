@@ -3,7 +3,7 @@ use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
 use std::path::Path;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex, RwLock};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -591,6 +591,25 @@ function global:prompt {
         shell: &str,
         env_vars: Option<&HashMap<String, String>>,
     ) -> Result<(String, Vec<String>), String> {
+        if let Some(command) = env_vars.and_then(|vars| vars.get("CLI_MANAGER_ONE_SHOT_COMMAND")) {
+            if !command.trim().is_empty() {
+                return match shell {
+                    "powershell" | "pwsh" if cfg!(target_os = "windows") => Ok((
+                        if shell == "pwsh" { "pwsh.exe".to_string() } else { "powershell.exe".to_string() },
+                        vec!["-NoLogo".to_string(), "-NoProfile".to_string(), "-NonInteractive".to_string(), "-Command".to_string(), command.clone()],
+                    )),
+                    "cmd" if cfg!(target_os = "windows") => Ok((
+                        "cmd.exe".to_string(),
+                        vec!["/Q".to_string(), "/D".to_string(), "/C".to_string(), command.clone()],
+                    )),
+                    "bash" | "gitbash" | "zsh" | "fish" | "sh" => Ok((
+                        if shell == "gitbash" && cfg!(target_os = "windows") { "bash.exe".to_string() } else { shell.to_string() },
+                        vec!["-c".to_string(), command.clone()],
+                    )),
+                    _ => Self::resolve_shell(shell),
+                };
+            }
+        }
         let monitoring_enabled = Self::shell_runtime_monitoring_enabled(env_vars);
         if !monitoring_enabled {
             if shell == "pwsh" && cfg!(target_os = "windows") {
@@ -786,6 +805,9 @@ function global:prompt {
         let session_id_owned = session_id.to_string();
         let writer_for_reader = Arc::clone(&writer);
         let colors_for_reader = Arc::clone(&terminal_colors);
+        let exit_reported_for_reader = Arc::new(AtomicBool::new(false));
+        let exit_reported_for_watcher = Arc::clone(&exit_reported_for_reader);
+        let sink_for_reader = Arc::clone(&sink);
         let color_replies_enabled = ssh_launch.is_none();
         let defer_initial_output = cfg!(target_os = "windows") && launch_shell_key == "gitbash";
 
@@ -850,10 +872,10 @@ function global:prompt {
                                     }
                                 }
                                 if !filtered.output.is_empty() {
-                                    sink.on_output(&session_id_owned, &filtered.output);
+                                    sink_for_reader.on_output(&session_id_owned, &filtered.output);
                                 }
                             } else {
-                                sink.on_output(&session_id_owned, safe_output);
+                                sink_for_reader.on_output(&session_id_owned, safe_output);
                             }
                             pending.drain(..safe);
                         } else if pending.len() > READER_FLUSH_THRESHOLD * 8 {
@@ -867,7 +889,7 @@ function global:prompt {
                             if vt_diag_enabled {
                                 scan_vt_scroll_sequences(&pending, &mut vt_diag, &session_id_owned);
                             }
-                            sink.on_output(&session_id_owned, &pending);
+                            sink_for_reader.on_output(&session_id_owned, &pending);
                             pending.clear();
                         }
                     }
@@ -882,7 +904,7 @@ function global:prompt {
                 if vt_diag_enabled {
                     scan_vt_scroll_sequences(&pending, &mut vt_diag, &session_id_owned);
                 }
-                sink.on_output(&session_id_owned, &pending);
+                sink_for_reader.on_output(&session_id_owned, &pending);
                 pending.clear();
             }
 
@@ -952,7 +974,32 @@ function global:prompt {
                 }
             }
 
-            sink.on_status(&session_id_owned, new_status);
+            if !exit_reported_for_reader.swap(true, Ordering::AcqRel) {
+                sink_for_reader.on_status(&session_id_owned, new_status);
+            }
+        });
+
+        // ConPTY may keep its output pipe open briefly after a child exits. Watch the
+        // process handle independently so one-shot commands always publish terminal status.
+        let child_for_watcher = child.clone();
+        let sink_for_watcher = Arc::clone(&sink);
+        let session_id_for_watcher = session_id.to_string();
+        std::thread::spawn(move || {
+            loop {
+                match child_for_watcher.try_wait() {
+                    Ok(Some(exit)) => {
+                        if !exit_reported_for_watcher.swap(true, Ordering::AcqRel) {
+                            sink_for_watcher.on_status(&session_id_for_watcher, PtyProcessStatus {
+                                status: "exited".to_string(),
+                                exit_code: exit.code,
+                            });
+                        }
+                        break;
+                    }
+                    Ok(None) => std::thread::sleep(std::time::Duration::from_millis(25)),
+                    Err(_) => break,
+                }
+            }
         });
 
         let session = Arc::new(Mutex::new(PtySession {
@@ -1352,6 +1399,11 @@ mod tests {
     }
 
     #[cfg(target_os = "windows")]
+    struct ExitPtySink {
+        status: Arc<Mutex<Option<PtyProcessStatus>>>,
+    }
+
+    #[cfg(target_os = "windows")]
     impl PtyEventSink for TestPtySink {
         // 将测试会话输出追加到共享字节缓冲。
         fn on_output(&self, _session_id: &str, data: &[u8]) {
@@ -1360,6 +1412,34 @@ mod tests {
 
         // 测试出口忽略进程状态事件。
         fn on_status(&self, _session_id: &str, _status: PtyProcessStatus) {}
+    }
+
+    #[cfg(target_os = "windows")]
+    impl PtyEventSink for ExitPtySink {
+        fn on_output(&self, _session_id: &str, _data: &[u8]) {}
+        fn on_status(&self, _session_id: &str, status: PtyProcessStatus) {
+            *self.status.lock().unwrap() = Some(status);
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn oneshot_conpty_reports_exit_without_ui_close() {
+        for code in [0, 7] {
+            let manager = PtyManager::new();
+            let id = format!("oneshot-exit-{code}");
+            let status = Arc::new(Mutex::new(None));
+            manager.create(&id, None, Some(HashMap::from([
+                ("CLI_MANAGER_ONE_SHOT_COMMAND".to_string(), format!("echo done & exit {code}")),
+            ])), Some("cmd"), Arc::new(ExitPtySink { status: Arc::clone(&status) })).unwrap();
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while Instant::now() < deadline && status.lock().unwrap().is_none() {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            let actual = status.lock().unwrap().clone().and_then(|status| status.exit_code);
+            manager.close(&id).unwrap();
+            assert_eq!(actual, Some(code), "one-shot status must not wait for UI close");
+        }
     }
 
     #[cfg(target_os = "windows")]

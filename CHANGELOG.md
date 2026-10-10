@@ -1,5 +1,16 @@
 # Changelog
 
+## [TEMP]
+
+### Worktree 依赖后台安装（2026-10-09）
+
+- 新建 Worktree 命中缺依赖时不再弹窗确认、不新开终端 Tab，改为隐藏 PTY 后台任务自动安装（复用 `git_worktree_check_deps` 命令，链式 `exit` 透传退出码）；进行中侧栏 worktree 行显示旋转指示 + Toast loading（可取消），成功静默完成，失败 Toast 给原因 + 重试按钮。
+- 手动入口（侧栏菜单、终端 Tab 右键、Web `worktree.installDeps`）统一走同一后台 runner；安装中删除 Worktree 自动取消任务；`worktree_deps_prompt_enabled=0`/SSH 项目行为不变。
+- 根因修复：后台安装会话不再挂 pane 树（无 XTerm 挂载，退出后无协议回写 `Session not found` Toast）；`isOrdinarySidebarTerminal` 排除 transient，会话不计入侧栏列表/计数，点 worktree 行不再激活隐藏安装会话。
+- 后台安装使用 one-shot shell（PowerShell `-NoProfile -NonInteractive -Command`，不再复用交互式 `-NoExit`），并持续消费/确认 PTY 输出；补充独立进程退出 watcher，避免 Windows ConPTY 输出管道延迟 EOF 时丢失退出状态导致永久转圈；连续 PTY ACK 合并发送，避免安装输出拖慢同 daemon 下的普通终端和 Pi 启动；安装完成/取消与丢弃 Worktree 的会话关闭改为可等待且幂等，同一 Worktree 的重复丢弃请求合并执行，避免 `finish_in_progress` 误报。
+- 性能优化：创建 Worktree 后不再等待完整项目树刷新再打开终端；PTY ACK 增加 5ms 短批处理窗口，daemon 输出广播释放 session 锁后才获取 clients 锁，降低依赖安装对 Pi Agent 创建/attach 的影响；丢弃 Worktree 时直接等待 PTY 后端关闭确认后删除 Git，移除固定 350ms 等待和删除后的同步全量刷新；确认删除后立即显示处理中并锁定按钮，避免首次点击因异步清理无反馈而被重复触发；确认按钮自身在点击事件内即时进入旋转状态，不依赖删除异步任务或 Toast 的状态刷新；弹窗内同步显示“处理中”状态和旋转图标。
+- 定向测试（runner 8 项、webManagement 4 项、worktreeCreation 10 项、terminalCreationContext）、`tsc --noEmit`、严格架构通过；人工验收（真实安装全程、中英切换、安装中删除）待补。任务：`.trellis/tasks/10-09-worktree-deps-background-install`。
+
 ## [V1.4.5] - 2026-10-08
 
 ### Windows 发布

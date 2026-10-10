@@ -51,8 +51,9 @@ function harness() {
     '../../../shared/platform/logger': { logWarn() {} },
     '../../providers/api/providerSwitching': { hasConfiguredCliTool: () => true },
     './projectCapabilities': { projectSupportsCapability: () => true },
-    './projectStore': { useProjectStore: { getState: () => ({ fetchAll: async () => {} }) } },
+    './projectStore': { useProjectStore: { getState: () => ({ fetchAll: async () => {}, addWorktreeLocal: () => {} }) } },
     '../../../shared/lib/worktreeLaunchAdmission': {},
+    './worktreeDepsRunner': { useWorktreeDepsRunnerStore: { getState: () => ({ cancel: async () => {} }) } },
     './worktreeFinish': {}, './worktreeForceDelete': {}, '../../terminal/state': {},
   });
   return { api, project, calls, sql, get store() { return api.useWorktreeStore.getState(); },
@@ -217,6 +218,7 @@ test('all isolated launches prompt before creation, with stable names and initia
       shouldIsolateNewSession: () => decision, validateProjectGit: async () => validateImpl ? validateImpl() : true,
       createWorktreeForProject: async (...args) => { creations.push(args); if (createImpl) return await createImpl(...args); return { id: 'w', status: 'active', name: 'result', path: 'D:/result' }; },
     }) },
+    '../api/worktreeDepsRunner': { useWorktreeDepsRunnerStore: { getState: () => ({ start: async () => ({ started: false, reason: 'notNeeded' }) }) } },
     '../../files/api/fileExplorerStore': { useFileExplorerStore: store({}) },
     '../../history/index': { useHistoryStore: store({ closeHistory() {} }) },
     '../../history/api/externalSessionSyncStore': { useExternalSessionSyncStore: store({}) },

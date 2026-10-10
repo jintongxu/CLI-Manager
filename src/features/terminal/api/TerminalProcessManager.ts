@@ -52,6 +52,7 @@ export interface TerminalCreateRequest extends Record<string, unknown> {
   grokProvider: TerminalGrokProviderLaunchConfig | null;
   sshLaunch: unknown | null;
   terminalColors: TerminalColors;
+  oneShot?: boolean;
 }
 
 interface PreparedTerminalCreate {
@@ -102,6 +103,9 @@ interface TerminalOutputState {
   latestCommittedSequence: number;
   queuedBytes: number;
   backlogWarned: boolean;
+  pendingAckSequence: number;
+  pendingAckChars: number;
+  ackTimer: ReturnType<typeof setTimeout> | null;
 }
 
 export interface TerminalProcessDiagnosticsSnapshot {
@@ -372,6 +376,9 @@ export class TerminalProcessManager {
         latestCommittedSequence: 0,
         queuedBytes: 0,
         backlogWarned: false,
+        pendingAckSequence: 0,
+        pendingAckChars: 0,
+        ackTimer: null,
       };
       this.outputStates.set(sessionId, state);
     }
@@ -381,6 +388,10 @@ export class TerminalProcessManager {
   private enqueueOutputFrame(sessionId: string, frame: TerminalBinaryFrame): void {
     const state = this.getOutputState(sessionId);
     if (frame.kind === "reset") {
+      if (state.ackTimer !== null) clearTimeout(state.ackTimer);
+      state.ackTimer = null;
+      state.pendingAckSequence = 0;
+      state.pendingAckChars = 0;
       state.frames = [];
       state.sequences.clear();
       state.deliveredCount = 0;
@@ -428,6 +439,8 @@ export class TerminalProcessManager {
   }
 
   private drainCommittedOutput(sessionId: string, state: TerminalOutputState): void {
+    let ackSequence = 0;
+    let ackChars = 0;
     while (state.frames[0]?.committed) {
       const [queued] = state.frames.splice(0, 1);
       state.sequences.delete(queued.frame.sequence);
@@ -438,7 +451,25 @@ export class TerminalProcessManager {
         queued.frame.kind === "reset" ? 0 : queued.frame.sequence,
       );
       if (queued.frame.kind !== "reset" && !queued.frame.replayBatchEnd) {
-        ptyHostSocket.acknowledge(sessionId, queued.frame.sequence, queued.charCount);
+        ackSequence = queued.frame.sequence;
+        ackChars += queued.charCount;
+      }
+    }
+    // Coalesce contiguous frame acknowledgements into one protocol message. A
+    // dependency install can emit hundreds of small frames; sending one ACK per
+    // frame contends on the daemon's global client lock and starves other PTYs.
+    if (ackSequence > 0 && ackChars > 0) {
+      state.pendingAckSequence = ackSequence;
+      state.pendingAckChars += ackChars;
+      if (state.ackTimer === null) {
+        state.ackTimer = setTimeout(() => {
+          state.ackTimer = null;
+          if (state.pendingAckSequence > 0 && state.pendingAckChars > 0) {
+            ptyHostSocket.acknowledge(sessionId, state.pendingAckSequence, state.pendingAckChars);
+            state.pendingAckSequence = 0;
+            state.pendingAckChars = 0;
+          }
+        }, 5);
       }
     }
     this.updateBacklogWarning(sessionId, state);
@@ -478,6 +509,7 @@ export class TerminalProcessManager {
   private clearOutputState(sessionId: string): void {
     const state = this.outputStates.get(sessionId);
     state?.socketUnlisten?.();
+    if (state?.ackTimer) clearTimeout(state.ackTimer);
     this.outputStates.delete(sessionId);
   }
 }

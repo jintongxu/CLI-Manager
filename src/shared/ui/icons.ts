@@ -41,6 +41,7 @@ export {
   KeyRound,
   Layers,
   Link2,
+  LoaderCircle,
   Maximize2,
   Minimize2,
   FolderPlus,

@@ -213,7 +213,7 @@ export interface TerminalStore {
   /** 仅运行态：XTerm 输出监听就绪后才可执行 daemon attach。 */
   daemonAttachPendingSessionIds: Set<string>;
   subagentTranscripts: Record<string, SubagentTranscriptContent>;
-  createSession: (projectId?: string, cwd?: string, title?: string, startupCmd?: string, envVars?: Record<string, string>, shell?: string, paneId?: string, worktreeId?: string, sshHostId?: string, cliSessionId?: string, remoteHistoryConsumerId?: string, remoteHistorySourceInstanceId?: string, options?: { sessionKind?: "ephemeral-pi" }) => Promise<string>;
+  createSession: (projectId?: string, cwd?: string, title?: string, startupCmd?: string, envVars?: Record<string, string>, shell?: string, paneId?: string, worktreeId?: string, sshHostId?: string, cliSessionId?: string, remoteHistoryConsumerId?: string, remoteHistorySourceInstanceId?: string, options?: { sessionKind?: "ephemeral-pi"; transientBackground?: boolean; oneShot?: boolean }) => Promise<string>;
   /** Explicit destructive deletion, including hidden sessions. */
   closeSession: (id: string, requireBackendClose?: boolean) => Promise<void>;
   hideSession: (id: string) => Promise<void>;

@@ -112,23 +112,31 @@ pub(super) fn emit_daemon_output(host: &DaemonHost, session_id: &str, data: &[u8
     let Some(session) = host.get_session(session_id) else {
         return;
     };
-    let Ok(mut entry) = session.lock() else {
-        return;
+    let frame = {
+        let Ok(mut entry) = session.lock() else {
+            return;
+        };
+        let sequence = entry.next_sequence;
+        entry.next_sequence = entry.next_sequence.saturating_add(1);
+        let output_size = (entry.cols, entry.rows);
+        entry
+            .buffer
+            .push_output(output_size.0, output_size.1, sequence, data);
+        entry.meta.replay_available = entry.buffer.replay_available();
+        entry.meta.replay_truncated = entry.buffer.truncated;
+        DaemonFrame::Output {
+            session_id: session_id.to_string(),
+            sequence,
+            cols: output_size.0,
+            rows: output_size.1,
+            data_base64: STANDARD.encode(data),
+        }
     };
-    let sequence = entry.next_sequence;
-    entry.next_sequence = entry.next_sequence.saturating_add(1);
-    let output_size = (entry.cols, entry.rows);
-    entry
-        .buffer
-        .push_output(output_size.0, output_size.1, sequence, data);
-    entry.meta.replay_available = entry.buffer.replay_available();
-    entry.meta.replay_truncated = entry.buffer.truncated;
-    let frame = DaemonFrame::Output {
-        session_id: session_id.to_string(),
-        sequence,
-        cols: output_size.0,
-        rows: output_size.1,
-        data_base64: STANDARD.encode(data),
+    // Do not hold the per-session lock while taking the global clients lock.
+    // A noisy background install must not delay Pi/session creation or attach.
+    let sequence = match &frame {
+        DaemonFrame::Output { sequence, .. } => *sequence,
+        _ => return,
     };
     host.push_output_to_attached(session_id, sequence, char_count, &frame);
 }
