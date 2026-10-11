@@ -157,6 +157,7 @@ interface UseTerminalInputOptions {
   getTerminalRenderedCellSize: (terminal: Terminal, container: HTMLElement, fallbackFontSize: number) => TerminalCellSize;
   setSuggestionGhost: Dispatch<SetStateAction<TerminalSuggestionGhostState | null>>;
   getOsPlatformForPathQuoting: () => Promise<Parameters<typeof normalizeShellForKnownOs>[1]>;
+  onInputActivity?: (terminal: Terminal) => void;
 }
 
 interface SuggestionContextCache {
@@ -245,6 +246,7 @@ export function useTerminalInput({
   getTerminalRenderedCellSize,
   setSuggestionGhost,
   getOsPlatformForPathQuoting,
+  onInputActivity,
 }: UseTerminalInputOptions): UseTerminalInputResult {
   const inputBufferRef = useRef("");
   const inputCursorIndexRef = useRef(0);
@@ -801,6 +803,7 @@ export function useTerminalInput({
     });
     const forwardTerminalInput = (data: string, source: TerminalInputSource) => {
       if (!canAcceptTerminalInput(terminal)) return;
+      onInputActivity?.(terminal);
       const now = performance.now();
       if (!inputDeduper.shouldForward(data, source, now)) return;
 
@@ -842,6 +845,7 @@ export function useTerminalInput({
     });
     const onBinaryDisposable = terminal.onBinary((data) => {
       if (!canAcceptTerminalInput(terminal)) return;
+      onInputActivity?.(terminal);
       terminalProcessManager
         .writeBinary(sessionId, data)
         .catch((err) => reportPtyWriteError("onBinary", err));
@@ -1444,6 +1448,7 @@ export function useTerminalInput({
     if (!canAcceptTerminalInput(terminal)) return;
     const normalizedText = trimTerminalPasteBoundaryLineBreaks(text);
     if (!normalizedText) return;
+    onInputActivity?.(terminal);
     useTerminalStore.getState().markAttentionInputHandled(sessionId);
     terminal.paste(normalizedText);
   };

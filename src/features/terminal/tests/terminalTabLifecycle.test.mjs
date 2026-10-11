@@ -22,12 +22,29 @@ const workspan = load("../api/terminalWorkspan.ts", pane);
 const visibility = load("../lib/terminalTabVisibility.ts", pane);
 const layout = load("../lib/terminalStoreLayout.ts", visibility);
 const plain = (value) => JSON.parse(JSON.stringify(value));
+const rendererPolicy = load("../types/xTermModel.ts");
 
 const naming = load("../lib/terminalSessionNaming.ts", {
   CLI_TOOL_DESCRIPTORS: [{ id: "pi", command: "pi", label: "Pi" }, { id: "claude", command: "claude", label: "Claude" }, { id: "codex", command: "codex", label: "Codex" }],
   normalizeShellKey: (shell) => shell,
 });
 const agent = load("../../agents/api/agentTerminal.ts");
+
+test("terminal renderer refreshes after the idle threshold but not before it", () => {
+  const threshold = rendererPolicy.TERMINAL_IDLE_RENDER_REFRESH_MS;
+  assert.equal(rendererPolicy.shouldRefreshTerminalRendererAfterIdle(0, threshold - 1), false);
+  assert.equal(rendererPolicy.shouldRefreshTerminalRendererAfterIdle(0, threshold), true);
+  assert.equal(rendererPolicy.shouldRefreshTerminalRendererAfterIdle(10_000, 10_000 + threshold + 1), true);
+  assert.equal(rendererPolicy.shouldRefreshTerminalRendererAfterIdle(20_000, 19_999), false);
+});
+
+test("terminal idle recovery is shared by keyboard forwarding and paste input", () => {
+  const controller = readFileSync(new URL("../hooks/useXTermController.ts", import.meta.url), "utf8");
+  const input = readFileSync(new URL("../hooks/useTerminalInput.ts", import.meta.url), "utf8");
+  assert.match(controller, /onInputActivity: \(terminal\) => terminalInputActivityRef\.current\(terminal\)/);
+  assert.match(input, /onInputActivity\?\.\(terminal\);[\s\S]*terminalProcessManager\.write/);
+  assert.match(input, /const pasteText = \(terminal: Terminal, text: string\) =>[\s\S]*onInputActivity\?\.\(terminal\);[\s\S]*terminal\.paste/);
+});
 
 function fixture(sessions = [], workspans = [], daemon = [], projects = [], worktrees = [], launchOverrides = {}) {
   const calls = [];

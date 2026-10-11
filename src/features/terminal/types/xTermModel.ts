@@ -18,6 +18,15 @@ export const ANSI_CSI_SEQUENCE_PATTERN = /\x1b\[[0-?]*[ -/]*[@-~]/g;
 
 export const WEBGL_ATLAS_REFRESH_MIN_HIDDEN_MS = 10_000;
 
+// A long-idle WebGL renderer can lose its glyph/viewport state without a
+// visibility transition. Refresh before the first key is rendered so input
+// never appears against a stale atlas or cell layout.
+export const TERMINAL_IDLE_RENDER_REFRESH_MS = 10_000;
+
+export const shouldRefreshTerminalRendererAfterIdle = (lastRefreshAt: number, now: number): boolean => (
+  now - lastRefreshAt >= TERMINAL_IDLE_RENDER_REFRESH_MS
+);
+
 export const CODEX_IME_DEBUG_WINDOW_MS = 250;
 
 export const CODEX_IME_DUPLICATE_WINDOW_MS = 120;

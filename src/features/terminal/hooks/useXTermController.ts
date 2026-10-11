@@ -83,7 +83,8 @@ import {
   SEARCH_HIGHLIGHT_LIMIT, IMAGE_ADDON_PIXEL_LIMIT, IMAGE_ADDON_SEQUENCE_LIMIT,
   IMAGE_ADDON_STORAGE_LIMIT_MB, VISIBILITY_RESTORE_REVEAL_TIMEOUT_MS,
   OSC52_MAX_PENDING_CLIPBOARD_ACTIONS, CODEX_OUTPUT_SIGNATURE_PATTERN, ANSI_CSI_SEQUENCE_PATTERN,
-  WEBGL_ATLAS_REFRESH_MIN_HIDDEN_MS, CODEX_IME_DEBUG_WINDOW_MS, CODEX_IME_DUPLICATE_WINDOW_MS,
+  WEBGL_ATLAS_REFRESH_MIN_HIDDEN_MS, shouldRefreshTerminalRendererAfterIdle,
+  CODEX_IME_DEBUG_WINDOW_MS, CODEX_IME_DUPLICATE_WINDOW_MS,
   type TerminalContextMenuPoint, type Props,
 } from "../types/xTermModel";
 
@@ -105,6 +106,8 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
   const visibilityRestoreRevealRafRef = useRef<number | null>(null);
   const visibilityRestoreFallbackRafRef = useRef<number | null>(null);
   const codexCursorShowTimerRef = useRef<number | null>(null);
+  const terminalInputActivityRef = useRef<(terminal: Terminal) => void>(() => {});
+  const terminalRendererActivityAtRef = useRef(Date.now());
   const codexSessionDetectedRef = useRef(false);
   const grokSessionDetectedRef = useRef(false);
   const osc52ClipboardChainRef = useRef(Promise.resolve());
@@ -294,6 +297,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     getTerminalRenderedCellSize,
     setSuggestionGhost,
     getOsPlatformForPathQuoting,
+    onInputActivity: (terminal) => terminalInputActivityRef.current(terminal),
   });
 
   // Clear suggestions when search opens (must come after hook call to read searchOpen)
@@ -587,6 +591,23 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     piTerminalCompatibilityRef.current?.transformOutput(text) ?? text,
   );
 
+  const refreshIdleTerminalRenderer = (terminal: Terminal) => {
+    const now = Date.now();
+    const wasIdle = shouldRefreshTerminalRendererAfterIdle(
+      terminalRendererActivityAtRef.current,
+      now,
+    );
+    terminalRendererActivityAtRef.current = now;
+    if (!wasIdle || !isVisibleRef.current || document.visibilityState === "hidden") return;
+    try {
+      clearWebglTextureAtlas();
+      refreshTerminalViewport(terminal);
+      scheduleFit(true, true);
+    } catch {
+      // Renderer recovery is best effort; input must still reach the PTY.
+    }
+  };
+  terminalInputActivityRef.current = refreshIdleTerminalRenderer;
   const applyCodexCursorVisibility = (terminal: Terminal) => {
     cancelPendingCodexCursorShow();
     terminal.write(shouldHideCodexCursor(terminal) ? "\x1b[?25l" : "\x1b[?25h");
