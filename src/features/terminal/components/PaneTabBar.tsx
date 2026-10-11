@@ -64,6 +64,8 @@ export interface PaneTabBarProps {
   onInstallWorktreeDeps: (project: Project, worktree: WorktreeRecord) => void;
   onDiscardWorktree: (project: Project, worktree: WorktreeRecord) => void;
   onOpenWorktreeDirectory: (worktree: WorktreeRecord) => void;
+  currentWorkSessionIds?: readonly string[];
+  onToggleCurrentWork?: (sessionId: string) => void;
   variant?: "global" | "pane";
 }
 
@@ -102,6 +104,8 @@ export function PaneTabBar({
   onInstallWorktreeDeps,
   onDiscardWorktree,
   onOpenWorktreeDirectory,
+  currentWorkSessionIds = [],
+  onToggleCurrentWork,
   variant = "pane",
   resolvedTheme,
   terminalThemeName,
@@ -391,6 +395,13 @@ export function PaneTabBar({
               menuStyle={tabMenuStyle}
               menuContent={(getAnchor) => (
                 <>
+                  {onToggleCurrentWork && (
+                    <ContextMenuItem onSelect={() => onToggleCurrentWork(session.id)}>
+                      {currentWorkSessionIds.includes(session.id)
+                        ? t("terminal.currentWork.remove")
+                        : t("terminal.currentWork.add")}
+                    </ContextMenuItem>
+                  )}
                   <ContextMenuItem onSelect={() => closePaneSessions([session.id], getAnchor())}>{t("terminal.tab.closeCurrent")}</ContextMenuItem>
                   <ContextMenuItem
                     onSelect={() => {

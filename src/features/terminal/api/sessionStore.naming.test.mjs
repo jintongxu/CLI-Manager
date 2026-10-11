@@ -49,6 +49,19 @@ test("whole session snapshot explicitly saves naming/identity and reloads legacy
   assert.deepEqual(JSON.parse(JSON.stringify(reopened.api.getState().sessions)), records);
 });
 
+test("current work saves ordered persistable session ids and restores active id", async () => {
+  const f = fixture();
+  const sessions = [{ id: "a", title: "A" }, { id: "b", title: "B" }, { id: "temp", title: "Temp", kind: "ephemeral-pi" }];
+  await f.api.getState().saveSessions(sessions);
+  await f.api.getState().saveCurrentWork(["b", "a", "b", "missing", "temp"], "a", sessions);
+  assert.deepEqual(f.disk.currentWorkSessionIds, ["b", "a"]);
+  assert.equal(f.disk.currentWorkActiveSessionId, "a");
+  const reopened = fixture(f.disk);
+  await reopened.api.getState().load();
+  assert.deepEqual(reopened.api.getState().currentWorkSessionIds, ["b", "a"]);
+  assert.equal(reopened.api.getState().currentWorkActiveSessionId, "a");
+});
+
 test("failed save is observable; retry saves full latest snapshot", async () => {
   const f = fixture({ sessions: [{ id: "legacy", title: "Old" }] });
   f.fail(true);

@@ -27,6 +27,7 @@ import { SortableWorkspanTab } from "./SortableTerminalTabs";
 import { TerminalTabDragOverlay } from "./TerminalTabDragOverlay";
 import { SplitProjectPicker, TerminalCloseConfirmBubble } from "./TerminalTabDialogs";
 import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
+import { CurrentWorkTabBar } from "./CurrentWorkTabBar";
 
 export function TerminalTabsView({
   fullscreen,
@@ -109,6 +110,7 @@ export function TerminalTabsView({
   handleHideProjectTerminals,
   handleCloseSessions,
   projectById,
+  projects,
   worktrees,
   handleSubmitTabEdit,
   prompt,
@@ -126,6 +128,18 @@ export function TerminalTabsView({
   scopedEmptyState,
   tabNotifications,
   handleNewTab,
+  sessions,
+  currentWorkMode,
+  currentWorkSessionIds,
+  currentWorkActiveSessionId,
+  currentWorkPortalTarget,
+  setCurrentWorkPortalTarget,
+  selectedCurrentWorkSessionIds,
+  toggleCurrentWorkSelection,
+  clearCurrentWork,
+  activateCurrentWork,
+  leaveCurrentWork,
+  toggleCurrentWork,
 }: ReturnType<typeof useTerminalTabsController>) {
   return (
     <div
@@ -340,7 +354,28 @@ export function TerminalTabsView({
                 <WorkspanTerminalLayout
                   position={workspanTabBarPosition}
                   tabBarVisible={workspanTabBarVisible}
-                  tabBar={workspanEnabled ? (
+                  tabBar={currentWorkMode ? (
+                    <CurrentWorkTabBar
+                      sessions={currentWorkSessionIds.map((id) => sessions.find((session) => session.id === id)).filter((session): session is typeof sessions[number] => Boolean(session))}
+                      activeSessionId={currentWorkActiveSessionId}
+                      notifications={tabNotifications}
+                      projects={projects}
+                      worktrees={worktrees}
+                      selectedSessionIds={selectedCurrentWorkSessionIds}
+                      onActivate={activateCurrentWork}
+                      onToggleSelected={toggleCurrentWorkSelection}
+                      onRemove={toggleCurrentWork}
+                      onClear={clearCurrentWork}
+                      onExit={leaveCurrentWork}
+                      label={t("terminal.currentWork.title")}
+                      exitLabel={t("terminal.currentWork.exit")}
+                      clearLabel={t("terminal.currentWork.clear")}
+                      selectedLabel={(count) => t("terminal.currentWork.selected", { count })}
+                      statusLabels={{ hidden: t("terminal.currentWork.hidden"), sshDisconnected: t("terminal.currentWork.sshDisconnected"), worktreeMissing: t("terminal.currentWork.worktreeMissing") }}
+                      contextLabels={{ unboundProject: t("terminal.context.unboundProject"), missingWorktree: t("terminal.context.worktreeMissing"), defaultShell: t("terminal.context.defaultShell") }}
+                      removeLabel={(title) => t("terminal.currentWork.removeNamed", { title })}
+                    />
+                  ) : workspanEnabled ? (
                     <WorkspanTabBar
                     position={workspanTabBarPosition}
                     models={workspanTabModels}
@@ -352,6 +387,8 @@ export function TerminalTabsView({
                     selectedProjectKey={selectedProjectKey}
                     onActivateProject={activateProject}
                     onRowChange={onWorkspanRowChange}
+                    currentWorkCount={currentWorkSessionIds.length}
+                    onActivateCurrentWork={() => activateCurrentWork()}
                     menuStyle={splitPickerMenuStyle}
                     tabBarRef={workspanTabBarRef}
                     tabScrollRef={workspanTabScrollRef}
@@ -396,6 +433,13 @@ export function TerminalTabsView({
                         menuStyle={splitPickerMenuStyle}
                         menuContent={(getAnchor) => (
                           <>
+                            {model.singleSession && (
+                              <ContextMenuItem onSelect={() => toggleCurrentWork(model.singleSession!.id)}>
+                                {currentWorkSessionIds.includes(model.singleSession.id)
+                                  ? t("terminal.currentWork.remove")
+                                  : t("terminal.currentWork.add")}
+                              </ContextMenuItem>
+                            )}
                             <ContextMenuItem onSelect={() => handleCloseSessions(model.closeSessionIds, getAnchor())}>
                               {t("terminal.workspan.closeCurrent")}
                             </ContextMenuItem>
@@ -480,7 +524,29 @@ export function TerminalTabsView({
                       </div>
                     )}
                     />
-                  ) : null}
+                  ) : (
+                    <CurrentWorkTabBar
+                      sessions={[]}
+                      activeSessionId={null}
+                      notifications={tabNotifications}
+                      projects={projects}
+                      worktrees={worktrees}
+                      selectedSessionIds={new Set()}
+                      onActivate={() => activateCurrentWork()}
+                      onToggleSelected={() => undefined}
+                      onRemove={() => undefined}
+                      onClear={() => undefined}
+                      onExit={() => activateCurrentWork()}
+                      label={t("terminal.currentWork.title")}
+                      exitLabel={t("terminal.currentWork.open")}
+                      clearLabel={t("terminal.currentWork.clear")}
+                      selectedLabel={(count) => t("terminal.currentWork.selected", { count })}
+                      statusLabels={{ hidden: t("terminal.currentWork.hidden"), sshDisconnected: t("terminal.currentWork.sshDisconnected"), worktreeMissing: t("terminal.currentWork.worktreeMissing") }}
+                      contextLabels={{ unboundProject: t("terminal.context.unboundProject"), missingWorktree: t("terminal.context.worktreeMissing"), defaultShell: t("terminal.context.defaultShell") }}
+                      removeLabel={() => ""}
+                      compact
+                    />
+                  )}
                 >
                 <div className="relative min-h-0 flex-1 overflow-hidden">
                   {mountedWorkspanLayouts.map((layout) => {
@@ -495,8 +561,8 @@ export function TerminalTabsView({
                       <div
                         key={layout.workspan.id}
                         className="absolute inset-0 min-h-0 min-w-0 overflow-hidden"
-                        style={{ display: layoutVisible ? "block" : "none" }}
-                        aria-hidden={layoutVisible ? undefined : "true"}
+                        style={{ display: layoutVisible && !currentWorkMode ? "block" : "none" }}
+                        aria-hidden={layoutVisible && !currentWorkMode ? undefined : "true"}
                       >
                         <SplitTerminalView
                           node={layout.paneTree}
@@ -505,13 +571,26 @@ export function TerminalTabsView({
                             pane,
                             layout.visiblePanes,
                             layoutActiveSessionId,
-                            layoutVisible && layout.visiblePaneIds.has(pane.id)
+                            layoutVisible && layout.visiblePaneIds.has(pane.id),
+                            { currentWorkSessionIds, onToggleCurrentWork: toggleCurrentWork, activeSessionId: currentWorkMode ? currentWorkActiveSessionId : undefined, currentWorkPortalTarget: currentWorkMode ? currentWorkPortalTarget : null },
                           )}
                           fullscreenLeafId={layoutVisible ? activeFullscreenPaneId : null}
                         />
                       </div>
                     );
                   })}
+                  {currentWorkMode && (
+                    <div
+                      ref={setCurrentWorkPortalTarget}
+                      className="absolute inset-0 min-h-0 min-w-0 overflow-hidden"
+                    >
+                      {!currentWorkActiveSessionId && (
+                        <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm opacity-70">
+                          {t("terminal.currentWork.empty")}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 </WorkspanTerminalLayout>
                 <TerminalTabDragOverlay style={terminalWellStyle} themeTone={terminalThemeTone} />

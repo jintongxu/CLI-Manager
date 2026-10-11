@@ -1,4 +1,3 @@
-import { getWorktreeShortLabel } from "../api/worktreeLabels";
 import { findNodeById } from "../lib/treeNodeLookup";
 import { DndContext, DragOverlay, PointerSensor, closestCenter, useSensor, useSensors, type CollisionDetection, type DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -21,9 +20,10 @@ import { NodeAppearanceIcon } from "../api/NodeAppearanceIcon";
 import { resolveNodeAppearance } from "../api/nodeAppearance";
 import { useTreeActions, worktreeListCollapseId, worktreeTerminalsCollapseId, type TreeActions } from "./TreeContext";
 import { useI18n } from "../../../shared/i18n/index";
+import { getWorktreeShortLabel } from "../api/worktreeLabels";
 import { toast } from "sonner";
 import { countProjectsInNode } from "../api/projectStore";
-import { getWorktreeDisplayName } from "../api/worktreeMetadata";
+import { getWorktreeDisplayName, getWorktreeSidebarLabel } from "../api/worktreeMetadata";
 import { resolveCliToolIconKey } from "../../../shared/lib/cliTools";
 import { DND_ACTIVATION_CONSTRAINT } from "../../workspace/api/dragInteraction";
 import { PinnedProjectSection } from "./PinnedProjectSection";
@@ -1099,7 +1099,7 @@ function renderFlyoutNodes(nodes: TNode[], depth: number, actions: TreeActions, 
           </span>
           <span className="worktree-terminal-heading">
             <span className="worktree-terminal-title-line">
-              <span className="worktree-terminal-title truncate">{getWorktreeShortLabel(child.worktree)} · {getWorktreeDisplayName(child.worktree)}</span>
+              <span className="worktree-terminal-title truncate">{getWorktreeSidebarLabel(child.worktree)}</span>
             </span>
             <WorktreeTerminalSummary projectId={child.project.id} worktreeId={child.worktree.id} compact />
           </span>
@@ -1156,7 +1156,7 @@ function renderFlyoutNodes(nodes: TNode[], depth: number, actions: TreeActions, 
 function DragGhost({ activeId, tree }: { activeId: string; tree: TNode[] }) {
   const node = findNodeById(tree, activeId);
   if (!node) return null;
-  const label = node.type === "group" ? node.group.name : node.type === "worktree" ? `${getWorktreeShortLabel(node.worktree)} · ${getWorktreeDisplayName(node.worktree)}` : node.project.name;
+  const label = node.type === "group" ? node.group.name : node.type === "worktree" ? getWorktreeSidebarLabel(node.worktree) : node.project.name;
   const icon = node.type === "group" ? <Folder size={14} strokeWidth={1.5} /> : node.type === "worktree" ? <WorktreeIcon className="h-3.5 w-3.5" /> : <Terminal size={14} strokeWidth={1.5} />;
   return (
     <div className="ui-tree-drag-ghost flex items-center gap-2 rounded-xl border border-border bg-surface-container-high px-3 py-1.5 text-[12px] font-medium shadow-lg">

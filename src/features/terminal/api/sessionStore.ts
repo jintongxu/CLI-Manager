@@ -15,6 +15,8 @@ interface SessionStore {
   activeSessionId: string | null;
   workspans: TerminalWorkspan[];
   activeWorkspanId: string | null;
+  currentWorkSessionIds: string[];
+  currentWorkActiveSessionId: string | null;
   loaded: boolean;
 
   load: () => Promise<void>;
@@ -22,6 +24,7 @@ interface SessionStore {
   saveSplits: (splits: PersistedSplit[]) => Promise<void>;
   saveActiveSessionId: (id: string | null) => Promise<void>;
   saveWorkspans: (workspans: TerminalWorkspan[], activeWorkspanId: string | null, sessions: TerminalSession[]) => Promise<void>;
+  saveCurrentWork: (sessionIds: string[], activeSessionId: string | null, sessions: TerminalSession[]) => Promise<void>;
   clear: () => Promise<void>;
 }
 
@@ -48,6 +51,8 @@ export const useSessionStore = create<SessionStore>(() => ({
   activeSessionId: null,
   workspans: [],
   activeWorkspanId: null,
+  currentWorkSessionIds: [],
+  currentWorkActiveSessionId: null,
   loaded: false,
 
   load: singleFlight(async () => {
@@ -61,6 +66,16 @@ export const useSessionStore = create<SessionStore>(() => ({
       && workspans.some((workspan) => workspan.id === storedActiveWorkspanId)
       ? storedActiveWorkspanId
       : null;
+    const sessionIds = new Set(sessions.filter(isPersistableSession).map((session) => session.id));
+    const storedCurrentWorkSessionIds = await s.get<unknown>("currentWorkSessionIds");
+    const currentWorkSessionIds = Array.isArray(storedCurrentWorkSessionIds)
+      ? storedCurrentWorkSessionIds.filter((id): id is string => typeof id === "string" && sessionIds.has(id))
+      : [];
+    const storedCurrentWorkActiveSessionId = await s.get<unknown>("currentWorkActiveSessionId");
+    const currentWorkActiveSessionId = typeof storedCurrentWorkActiveSessionId === "string"
+      && currentWorkSessionIds.includes(storedCurrentWorkActiveSessionId)
+      ? storedCurrentWorkActiveSessionId
+      : currentWorkSessionIds[0] ?? null;
 
     useSessionStore.setState({
       sessions,
@@ -68,6 +83,8 @@ export const useSessionStore = create<SessionStore>(() => ({
       activeSessionId: activeSessionId ?? null,
       workspans,
       activeWorkspanId,
+      currentWorkSessionIds,
+      currentWorkActiveSessionId,
       loaded: true,
     });
   }),
@@ -113,6 +130,19 @@ export const useSessionStore = create<SessionStore>(() => ({
     });
   },
 
+  saveCurrentWork: async (sessionIds, activeSessionId, sessions) => {
+    const s = await getStore();
+    const validSessionIds = new Set(sessions.filter(isPersistableSession).map((session) => session.id));
+    const currentWorkSessionIds = sessionIds.filter((id, index, ids) => validSessionIds.has(id) && ids.indexOf(id) === index);
+    const currentWorkActiveSessionId = activeSessionId && currentWorkSessionIds.includes(activeSessionId)
+      ? activeSessionId
+      : currentWorkSessionIds[0] ?? null;
+    await s.set("currentWorkSessionIds", currentWorkSessionIds);
+    await s.set("currentWorkActiveSessionId", currentWorkActiveSessionId);
+    await s.save();
+    useSessionStore.setState({ currentWorkSessionIds, currentWorkActiveSessionId });
+  },
+
   clear: async () => {
     const s = await getStore();
     await s.set("sessions", []);
@@ -120,12 +150,16 @@ export const useSessionStore = create<SessionStore>(() => ({
     await s.set("activeSessionId", null);
     await s.set("workspans", []);
     await s.set("activeWorkspanId", null);
+    await s.set("currentWorkSessionIds", []);
+    await s.set("currentWorkActiveSessionId", null);
     useSessionStore.setState({
       sessions: [],
       splits: [],
       activeSessionId: null,
       workspans: [],
       activeWorkspanId: null,
+      currentWorkSessionIds: [],
+      currentWorkActiveSessionId: null,
     });
   },
 }));

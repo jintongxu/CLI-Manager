@@ -17,6 +17,8 @@ import { resolveProjectStartupCommand } from "../../projects/api/projectStartupC
 import { parseProjectEnvVars } from "../../providers/api/providerSwitching";
 import { terminalProcessManager } from "../../terminal/api/TerminalProcessManager";
 import { resolveProjectPath } from "../../projects/api/groupPath";
+import { dispatchCurrentWorkAction } from "../../terminal/api/currentWorkEvents";
+import { useI18n } from "../../../shared/i18n/index";
 
 export const useCommandPaletteStore = create<{
   isOpen: boolean;
@@ -53,6 +55,7 @@ function fuzzyMatch(text: string, queryLower: string): boolean {
 
 export function CommandPalette() {
   const { isOpen, close } = useCommandPaletteStore();
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -105,6 +108,27 @@ export function CommandPalette() {
       });
     }
 
+    result.push({
+      id: "action:current-work",
+      label: t("terminal.currentWork.command.open"),
+      description: t("terminal.currentWork.command.openDescription"),
+      category: "操作",
+      action: () => dispatchCurrentWorkAction("toggle-view"),
+    });
+    result.push({
+      id: "action:add-current-work",
+      label: t("terminal.currentWork.command.add"),
+      description: t("terminal.currentWork.command.addDescription"),
+      category: "操作",
+      action: () => dispatchCurrentWorkAction("add-active"),
+    });
+    result.push({
+      id: "action:clear-current-work",
+      label: t("terminal.currentWork.command.clear"),
+      description: t("terminal.currentWork.command.clearDescription"),
+      category: "操作",
+      action: () => dispatchCurrentWorkAction("clear"),
+    });
     result.push({
       id: "action:open-history",
       label: "打开历史会话",
@@ -211,7 +235,7 @@ export function CommandPalette() {
     }
 
     return result;
-  }, [projects, groups, templates, activeSessionId, activeSession, resolvedTheme, createSession, splitTerminal, unsplitTerminal, setTheme, viewMode, sessionHistoryShortcut]);
+  }, [projects, groups, templates, activeSessionId, activeSession, resolvedTheme, createSession, splitTerminal, unsplitTerminal, setTheme, t, viewMode, sessionHistoryShortcut]);
 
   const queryLower = useMemo(() => query.trim().toLowerCase(), [query]);
 

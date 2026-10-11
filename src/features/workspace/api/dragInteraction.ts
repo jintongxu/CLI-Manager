@@ -9,11 +9,18 @@ export const POINTER_DRAG_START_PX = DND_ACTIVATION_CONSTRAINT.distance;
 
 export const WORKSPAN_DRAG_PREFIX = "workspan:";
 export const PROJECT_DRAG_PREFIX = "project:";
+export const CURRENT_WORK_DRAG_PREFIX = "current-work:";
 export const WORKSPAN_DRAG_AUTO_ACTIVATE_MS = 500;
 
 export function parseProjectDragId(value: string): string | null {
   return value.startsWith(PROJECT_DRAG_PREFIX)
     ? value.slice(PROJECT_DRAG_PREFIX.length) || null
+    : null;
+}
+
+export function parseCurrentWorkDragId(value: string): string | null {
+  return value.startsWith(CURRENT_WORK_DRAG_PREFIX)
+    ? value.slice(CURRENT_WORK_DRAG_PREFIX.length) || null
     : null;
 }
 
