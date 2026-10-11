@@ -348,7 +348,13 @@ export class PtyHostSocket {
     // Strict finish closure keeps output/replay and reattachment live until ACK.
     // Ordinary tab closure retains its optimistic tombstone-on-failure behavior.
     if (requireBackendClose) {
-      await this.request({ type: "close", session_id: sessionId });
+      try {
+        await this.request({ type: "close", session_id: sessionId });
+      } catch (error) {
+        // Worktree cleanup may have already terminated an exited PTY. Closing
+        // an absent session is idempotent and must not surface a false error.
+        if (!/session .* not found|terminal session .* not found/i.test(String(error))) throw error;
+      }
       this.closedSessions.add(sessionId);
       this.clearSession(sessionId);
     } else {

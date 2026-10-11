@@ -3963,3 +3963,7 @@ px tauri icon` 生成全尺寸）
 - **[High]** `manager.rs` — `try_wait()` 的 `Err(_)` 分支映射为 `"error"` 而非 `"exited"`
 - **[Medium]** `TerminalTabs.tsx` / `Sidebar.tsx` — 状态指示点添加 `role="status"` 和 `aria-label` 无障碍属性
 - **[Medium]** `Sidebar.tsx` — `getProjectStatus` 改用 `useCallback` 稳定引用，状态回退使用 `?? "running"`
+
+## TEMP
+- 新增 Rust 工作树删除后台作业队列基础设施：持久化队列状态、去重、容量上限与有限重试。
+- 前端工作树丢弃、完成清理与强制删除后台操作会先取消依赖安装任务并强制关闭关联 PTY 进程树，确认占用消失后再删除；完成任务合并成功后，用户确认即可删除整个 Worktree（包括未知内容）；递归清理前自动取消 Windows 只读属性，处理“拒绝访问”文件；后台任务完成后分别提示丢弃成功、清理成功或强制删除成功；已退出的 PTY session 在清理时按幂等关闭处理，不再显示误导性的“Session not found”；遇到文件占用、Git 锁或数据库忙等瞬态失败时自动指数退避重试，身份与安全校验错误立即停止；应用重启后强制删除与完成清理任务要求重新确认。

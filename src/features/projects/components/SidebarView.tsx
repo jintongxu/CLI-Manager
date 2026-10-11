@@ -1080,7 +1080,7 @@ export function SidebarView({
           // Keep the confirmation visible while deletion runs so the button
           // spinner makes the in-progress state unambiguous.
           void removeWorktree(target.worktree, true).then(() => {
-            toast.success(t("worktree.toast.discardSuccess"), { id: toastId });
+            toast.success(t("worktree.toast.discardQueued"), { id: toastId });
             setDiscardTarget(null);
           }).catch((err) => {
             toast.error(t("worktree.toast.discardFailed"), { id: toastId, description: String(err) });
@@ -1113,7 +1113,7 @@ export function SidebarView({
                 await removeWorktree(target.worktree, true);
               } catch (err) {
                 failed += 1;
-                logError("Failed to discard worktree", err);
+                logError("Failed to enqueue Worktree discard", err);
               }
             }
             setSelectedWorktreeIds(new Set());
@@ -1122,7 +1122,7 @@ export function SidebarView({
                 description: t("worktree.toast.batchDiscardPartial", { failed, total: targets.length }),
               });
             } else {
-              toast.success(t("worktree.toast.batchDiscardSuccess", { count: targets.length }));
+              toast.success(t("worktree.toast.discardQueued", { count: targets.length }));
             }
           })();
         }}

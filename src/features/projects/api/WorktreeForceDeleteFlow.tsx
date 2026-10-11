@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import type { Project, WorktreeRecord } from "../../../shared/types/index";
 import { useI18n } from "../../../shared/i18n/index";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "../../../shared/ui/dialog";
@@ -77,18 +76,15 @@ export function WorktreeForceDeleteFlow({ project, worktree, open, onClose }: Wo
   const confirm = (typedPath: string) => {
     if (!confirmation || !isCurrent(confirmation.generationToken) || busyRef.current || typedPath !== confirmation.confirmedPath) return;
     const checked = confirmation;
-    const token = generation.current.begin();
+    generation.current.begin();
     busyRef.current = true;
     setBusy(true);
     setConfirmation(null);
     setFailure(null);
-    void forceDelete(worktree, checked, typedPath, () => isCurrent(token)).then(() => {
-      if (isCurrent(token)) { toast.success(t("worktree.forceDelete.done")); onClose(); }
-    }).catch(err => {
-      if (isCurrent(token)) setFailure(err);
-    }).finally(() => {
-      if (isCurrent(token)) { busyRef.current = false; setBusy(false); }
-    });
+    void forceDelete(worktree, checked, typedPath, undefined, true);
+    busyRef.current = false;
+    setBusy(false);
+    onClose();
   };
 
   return <>

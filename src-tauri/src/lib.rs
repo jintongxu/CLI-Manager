@@ -558,6 +558,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .manage(PendingBackgroundSession::default())
         .manage(daemon::client::DaemonBridge::new())
+        .manage(commands::git_worktree::jobs::WorktreeDeleteQueue::load().expect("worktree job queue"))
         .manage(file_watcher::FileWatcherBridge::new())
         .manage(git_watcher::GitWatcherBridge::new())
         .manage(live_server::LiveServerManager::new())
@@ -976,6 +977,9 @@ pub fn run() {
             commands::git_worktree::git_worktree_merge,
             commands::git_worktree::git_worktree_force_merge,
             commands::git_worktree::git_worktree_remove,
+            commands::git_worktree::jobs::git_worktree_delete_enqueue,
+            commands::git_worktree::jobs::git_worktree_delete_jobs,
+            commands::git_worktree::jobs::git_worktree_delete_job_update,
             commands::git_worktree::finish::git_worktree_finish_inspect,
             commands::git_worktree::finish::git_worktree_finish_merge,
             commands::git_worktree::finish::git_worktree_finish_cleanup,

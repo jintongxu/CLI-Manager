@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { toast } from "sonner";
-import { logWarn } from "../../../shared/platform/logger";
 import type { GitFileChange, Project, WorktreeRecord } from "../../../shared/types/index";
 import { useI18n, type TranslationKey } from "../../../shared/i18n/index";
 import { useWorktreeStore, type GitWorktreeMergeResult } from "./worktreeStore";
@@ -210,6 +208,8 @@ export function WorktreeFinishDialog({ project, worktree, open, onClose }: Workt
   const inspectFinish = useWorktreeStore(state => state.inspectFinish);
   const finishMerge = useWorktreeStore(state => state.finishMerge);
   const finishCleanup = useWorktreeStore(state => state.finishCleanup);
+  const inspectForceDelete = useWorktreeStore(state => state.inspectForceDelete);
+  const forceDelete = useWorktreeStore(state => state.forceDelete);
   const planFinishCleanup = useWorktreeStore(state => state.planFinishCleanup);
   const releaseFinishCleanup = useWorktreeStore(state => state.releaseFinishCleanup);
   const [changes, setChanges] = useState<GitFileChange[]>([]);
@@ -359,7 +359,9 @@ export function WorktreeFinishDialog({ project, worktree, open, onClose }: Workt
       if (!generation.current.current(token)) { await releaseFinishCleanup(plan); return; }
       planRef.current = plan;
       setCleanupPlan(plan);
-      if (plan.blocker || plan.preserved.length) { setFailure(plan.blocker || "finish_unknown_content_preserved"); return; }
+      if (plan.blocker && !plan.preserved.length) { setFailure(plan.blocker); return; }
+      // Finish confirmation intentionally authorizes whole-root deletion after
+      // a successful merge; preserved/unknown entries are informational only.
       setCleanupConfirmation({ plan, sessionIds: [...new Set([...localIds, ...plan.sessionIds])] });
     }
   });
@@ -369,22 +371,21 @@ export function WorktreeFinishDialog({ project, worktree, open, onClose }: Workt
     setCleanupConfirmation(null);
     void run(async token => {
       setFailureStage("cleanup");
-      let operationFailed = false;
-      try { await finishCleanup(worktree, true, confirmed, () => generation.current.current(token)); }
-      catch (err) { operationFailed = true; throw err; }
-      finally {
-        planRef.current = null;
-        if (confirmed.plan) {
-          try { await releaseFinishCleanup(confirmed.plan); }
-          catch (err) {
-            if (!operationFailed) throw err;
-            try { logWarn("finish cleanup plan release failed", err); } catch { /* Keep the primary error. */ }
-          }
+      try {
+        if (confirmed.plan?.preserved.length) {
+          // The user explicitly confirmed the post-merge whole-root cleanup.
+          // Reuse force-delete's identity/token checks, but keep execution in
+          // the same background deletion queue as the other removal paths.
+          await releaseFinishCleanup(confirmed.plan).catch(() => undefined);
+          planRef.current = null;
+          const forceConfirmation = await inspectForceDelete(worktree);
+          await forceDelete(worktree, forceConfirmation, forceConfirmation.confirmedPath, undefined, true);
+        } else {
+          await finishCleanup(worktree, true, confirmed, undefined, true);
         }
-      }
+      } finally { planRef.current = null; }
       if (generation.current.current(token)) {
         setStep("done");
-        toast.success(t("worktree.finish.cleanupDone"));
         onClose();
       }
     });
@@ -486,6 +487,7 @@ export function WorktreeFinishDialog({ project, worktree, open, onClose }: Workt
         contentClassName="max-w-[620px] max-h-[85vh] overflow-auto [&_p]:whitespace-pre-wrap"
         message={cleanupConfirmation ? [
           cleanupConfirmation.plan ? cleanupPlanText(cleanupConfirmation.plan, t) : t("worktree.finish.databasePending"),
+          ...(cleanupConfirmation.plan?.preserved.length ? [t("worktree.finish.plan.wholeRootWarning")] : []),
           t("worktree.finish.sessionsMessage", { count: cleanupConfirmation.sessionIds.length }),
           t("worktree.finish.plan.sessions") + ": " + (cleanupConfirmation.sessionIds.join(", ") || t("worktree.finish.plan.none")),
         ].join("\n\n") : ""}
