@@ -91,6 +91,8 @@ export const zh = {
   "backgroundOperations.dataSync.import": "正在导入本地备份",
   "backgroundOperations.dataSync.undo": "正在撤销上次恢复",
   "backgroundOperations.agentInstall.title": "安装 SSH Agent",
+  "backgroundOperations.worktree.title": "清理 Worktree",
+  "backgroundOperations.worktree.loading": "正在关闭会话并删除 Worktree 文件",
   "backgroundOperations.error.databaseBusy": "数据库正被其他任务占用",
   "backgroundOperations.error.databaseBusyHint": "其他任务正在写入本地数据库，请稍后重试；正式版与开发版可以同时运行。",
   "backgroundOperations.error.bridgeTimeout": "服务主机响应超时",

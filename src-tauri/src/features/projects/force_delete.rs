@@ -296,9 +296,22 @@ fn validate_force(
 
 // Explicit traversal: links are unlinked, never enumerated. Directory junctions
 // require remove_dir on Windows; remove_file is correct for Unix symlinks.
+fn clear_readonly(path: &Path, meta: &fs::Metadata) -> io::Result<()> {
+    #[cfg(windows)]
+    {
+        let mut permissions = meta.permissions();
+        if permissions.readonly() {
+            permissions.set_readonly(false);
+            fs::set_permissions(path, permissions)?;
+        }
+    }
+    Ok(())
+}
+
 fn unlink_tree(path: &Path) -> io::Result<()> {
     let meta = fs::symlink_metadata(path)?;
     if unsafe_worktree_link(&meta) {
+        clear_readonly(path, &meta)?;
         #[cfg(windows)]
         {
             use std::os::windows::fs::MetadataExt;
@@ -309,11 +322,13 @@ fn unlink_tree(path: &Path) -> io::Result<()> {
         return fs::remove_file(path);
     }
     if meta.is_dir() {
+        clear_readonly(path, &meta)?;
         for entry in fs::read_dir(path)? {
             unlink_tree(&entry?.path())?;
         }
         fs::remove_dir(path)
     } else if meta.is_file() {
+        clear_readonly(path, &meta)?;
         fs::remove_file(path)
     } else {
         Err(io::Error::other("force_delete_unsupported_entry"))

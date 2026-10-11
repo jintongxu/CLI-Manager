@@ -1,5 +1,7 @@
 #[path = "finish.rs"]
 pub mod finish;
+#[path = "worktree_jobs.rs"]
+pub mod jobs;
 #[path = "worktree_create.rs"]
 mod create;
 
@@ -481,6 +483,32 @@ fn worktree_root_metadata(path: &Path) -> Result<Option<fs::Metadata>, String> {
     }
 }
 
+fn clear_readonly_tree(path: &Path) -> io::Result<()> {
+    let metadata = fs::symlink_metadata(path)?;
+    if unsafe_worktree_link(&metadata) {
+        return Ok(());
+    }
+    #[cfg(windows)]
+    {
+        let mut permissions = metadata.permissions();
+        if permissions.readonly() {
+            permissions.set_readonly(false);
+            fs::set_permissions(path, permissions)?;
+        }
+    }
+    if metadata.is_dir() {
+        for entry in fs::read_dir(path)? {
+            clear_readonly_tree(&entry?.path())?;
+        }
+    }
+    Ok(())
+}
+
+fn remove_worktree_tree(path: &Path) -> io::Result<()> {
+    clear_readonly_tree(path)?;
+    fs::remove_dir_all(path)
+}
+
 fn unsafe_worktree_link(metadata: &fs::Metadata) -> bool {
     #[cfg(windows)]
     {
@@ -509,7 +537,7 @@ fn remove_registered_stale_worktree_dir(target_path: &Path) -> Result<String, St
     if unsafe_worktree_link(&metadata) || !metadata.is_dir() {
         return Err("worktree_path_not_directory".to_string());
     }
-    remove_worktree_path_with_retry(target_path, |path| fs::remove_dir_all(path))?;
+    remove_worktree_path_with_retry(target_path, remove_worktree_tree)?;
     Ok("removed_stale_registered_worktree_dir".to_string())
 }
 
@@ -552,7 +580,7 @@ fn cleanup_residual_worktree_dir_after_remove(
     if worktree_path_registered(project_path, target_path)? {
         return Err("worktree_remove_incomplete".to_string());
     }
-    remove_worktree_path_with_retry(target_path, |path| fs::remove_dir_all(path))?;
+    remove_worktree_path_with_retry(target_path, remove_worktree_tree)?;
     let mut output = String::from("removed_residual_worktree_dir");
     append_output_line(
         &mut output,

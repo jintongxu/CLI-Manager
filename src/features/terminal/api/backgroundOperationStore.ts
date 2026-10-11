@@ -2,7 +2,7 @@ import { create } from "zustand";
 import type { TranslationKey } from "../../../shared/i18n/index";
 
 export type BackgroundOperationStatus = "running" | "succeeded" | "failed";
-export type BackgroundOperationKind = "dataSync" | "remoteHistory" | "remoteFiles" | "remoteGit" | "sshHook";
+export type BackgroundOperationKind = "dataSync" | "remoteHistory" | "remoteFiles" | "remoteGit" | "sshHook" | "worktree";
 
 export interface BackgroundOperation {
   id: string;

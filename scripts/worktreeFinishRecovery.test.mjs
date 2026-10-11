@@ -10,8 +10,20 @@ function load(file, dependencies = {}) {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX,
   } }).outputText;
   const exports = {};
-  vm.runInNewContext(code, { exports, console, setTimeout, crypto: { randomUUID: () => 'new-id' },
-    require(name) { if (name === './worktreeLabels') return load('src/features/projects/api/worktreeLabels.ts'); if (name in dependencies) return dependencies[name]; throw new Error('unexpected import ' + name); } });
+  vm.runInNewContext(code, {
+    exports,
+    console,
+    setTimeout,
+    crypto: { randomUUID: () => 'new-id' },
+    require(name) {
+      if (name === './worktreeLabels') return load('src/features/projects/api/worktreeLabels.ts');
+      if (name === './worktreeCreationRecovery') return { WorktreeCreationError: class WorktreeCreationError extends Error {} };
+      if (name in dependencies) return dependencies[name];
+      if (name === 'sonner') return { toast: { success() {}, error() {}, loading() {}, warning() {} } };
+      if (name === '../../../shared/i18n/index') return { translateCurrent: key => key, useI18n: () => ({ t: key => key }) };
+      throw new Error('unexpected import ' + name);
+    },
+  });
   return exports;
 }
 const force = load('src/features/projects/api/worktreeForceDelete.ts', { '@tauri-apps/api/core': { invoke: (...args) => forceInvoke(...args) } });
@@ -248,6 +260,8 @@ function storeHarness() {
     './worktreeForceDelete': force,
     './worktreeFinish': finish,
     '../../../shared/lib/worktreeLaunchAdmission': admission,
+    '../../../shared/platform/logger': { logInfo: () => {}, logWarn: () => {} },
+    '../../terminal/api/backgroundOperationStore': { useBackgroundOperationStore: { getState: () => ({ start: () => {}, succeed: () => {}, fail: () => {} }) } },
   });
   api.useWorktreeStore.getState().worktrees = [{ ...record }];
   return { sessions, get store() { return api.useWorktreeStore.getState(); }, calls, setState: next => { state = next; }, sqlFail: next => { sqlFail = next; }, refreshFail: next => { refreshFail = next; }, inspectError: next => { inspectError = next; } };
@@ -344,11 +358,11 @@ test('dialog failed initialization clears old changes and blocks commit until a 
   assert.equal(h.button('worktree.finish.commitAll').props.disabled, false);
 });
 
-test('explicit discard shares finish lock and cannot close sessions during a finish operation', async () => {
+test('explicit discard is submitted in the background while the finish lock remains authoritative', async () => {
   const h = storeHarness(), wait = deferred();
   const held = finish.withFinishLock('w1', () => wait.promise);
-  await assert.rejects(h.store.removeWorktree(record, true), /finish_in_progress/);
-  assert.equal(h.calls.length, 0);
+  await h.store.removeWorktree(record, true);
+  assert.equal(h.calls.includes('git_worktree_remove'), false);
   wait.resolve(); await held;
 });
 
@@ -478,6 +492,7 @@ function startupHarness(storedStatus = 'pending') {
     './projectStore': projectApi, './worktreeFinish': finish, './worktreeForceDelete': force,
     '../../terminal/state': { useTerminalStore: { getState: () => ({ sessions,
       closeSession: async id => { calls.push(['close', id]); throw Error('startup must not close'); } }) } },
+    '../../terminal/api/backgroundOperationStore': { useBackgroundOperationStore: { getState: () => ({ start: () => {}, succeed: () => {}, fail: () => {} }) } },
   });
   return { calls, rows, sessions, get project() { return projectApi.useProjectStore.getState(); },
     get store() { return worktreeApi.useWorktreeStore.getState(); },

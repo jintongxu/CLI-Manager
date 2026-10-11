@@ -71,6 +71,8 @@ export const en: Record<keyof typeof zh, string> = {
   "backgroundOperations.dataSync.import": "Importing a local backup",
   "backgroundOperations.dataSync.undo": "Undoing the last restore",
   "backgroundOperations.agentInstall.title": "Install SSH Agent",
+  "backgroundOperations.worktree.title": "Clean up Worktree",
+  "backgroundOperations.worktree.loading": "Closing sessions and removing Worktree files",
   "backgroundOperations.error.databaseBusy": "The database is busy with another task",
   "backgroundOperations.error.databaseBusyHint": "Another task is writing to the local database. Retry shortly; production and development builds can run together.",
   "backgroundOperations.error.bridgeTimeout": "The server host timed out",

@@ -1126,6 +1126,9 @@ function App() {
         await useProjectStore.getState().fetchAll("startup");
         await useWorktreeStore.getState().loadWorktrees();
         await useWorktreeStore.getState().markMissingWorktrees();
+        void useWorktreeStore.getState().resumeWorktreeDeleteJobs().catch((err) => {
+          logWarn("Failed to resume Worktree deletion jobs during startup", err);
+        });
       });
 
       // 3. 恢复功能关闭时清理当前环境快照；开启时检测遗留标签，按恢复方式分流：
