@@ -1,4 +1,4 @@
-import { Component, memo, useMemo, useRef, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { Component, memo, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import Markdown, { type Components } from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
@@ -16,10 +16,14 @@ import markdown from "react-syntax-highlighter/dist/esm/languages/prism/markdown
 import rust from "react-syntax-highlighter/dist/esm/languages/prism/rust";
 import tsx from "react-syntax-highlighter/dist/esm/languages/prism/tsx";
 import typescript from "react-syntax-highlighter/dist/esm/languages/prism/typescript";
+import python from "react-syntax-highlighter/dist/esm/languages/prism/python";
+import sql from "react-syntax-highlighter/dist/esm/languages/prism/sql";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { cn } from "../lib/utils";
 import { logError } from "../platform/logger";
+import { copyTextToClipboard } from "../platform/systemClipboard";
 import { useSettingsStore } from "../preferences/settingsStore";
+import { useI18n } from "../i18n/index";
 import { createMarkdownHeadingId } from "../lib/markdownNavigation";
 
 SyntaxHighlighter.registerLanguage("bash", bash);
@@ -42,6 +46,9 @@ SyntaxHighlighter.registerLanguage("rs", rust);
 SyntaxHighlighter.registerLanguage("tsx", tsx);
 SyntaxHighlighter.registerLanguage("typescript", typescript);
 SyntaxHighlighter.registerLanguage("ts", typescript);
+SyntaxHighlighter.registerLanguage("python", python);
+SyntaxHighlighter.registerLanguage("py", python);
+SyntaxHighlighter.registerLanguage("sql", sql);
 
 // remark-gfm 的 autolink 依赖（mdast-util-gfm-autolink-literal）包含 lookbehind
 // 正则；esbuild 按 build target 会把该字面量降级成运行时 new RegExp() 调用，
@@ -192,10 +199,100 @@ function makeLink(
   );
 }
 
+function detectCodeLanguage(code: string): string | null {
+  const trimmed = code.trim();
+  if (!trimmed || trimmed.length > 20_000) return null;
+  if (/^(?:\s*[\[{]|\s*["'][^\n]+["']\s*:)/u.test(trimmed)) {
+    try {
+      JSON.parse(trimmed);
+      return "json";
+    } catch {
+      // Continue with other language heuristics when this is not valid JSON.
+    }
+  }
+  if (/^(?:#!.*\b(?:bash|sh)|(?:set -e|export\s+\w+=|(?:npm|pnpm|yarn|cargo|git)\s+))/mu.test(trimmed)) return "bash";
+  if (/(?:^|\n)\s*(?:from\s+\w+\s+import|import\s+\w+|def\s+\w+\s*\(|if __name__ == ["']__main__["'])/u.test(trimmed)) return "python";
+  if (/(?:^|\n)\s*(?:SELECT\s+.+\s+FROM|INSERT\s+INTO|UPDATE\s+\w+\s+SET|CREATE\s+TABLE)\b/iu.test(trimmed)) return "sql";
+  if (/(?:const|let|var)\s+\w+\s*=|(?:function|class)\s+\w+|console\.(?:log|error)\s*\(/u.test(trimmed)) return "javascript";
+  if (/(?:interface|type)\s+\w+\s*=|:\s*(?:string|number|boolean)(?:\[\])?\b|<[^>]+\/>/u.test(trimmed)) return "typescript";
+  if (/(?:fn\s+\w+\s*\(|let\s+mut\s+\w+|use\s+\w+::)/u.test(trimmed)) return "rust";
+  if (/(?:^[.#]?[\w-]+\s*\{|@[a-z-]+|--[\w-]+\s*:)/imu.test(trimmed)) return "css";
+  return null;
+}
+
+function markdownFenceForCode(code: string): string {
+  let maxBackticks = 0;
+  for (const match of code.matchAll(/`+/gu)) {
+    maxBackticks = Math.max(maxBackticks, match[0].length);
+  }
+  return "`".repeat(Math.max(3, maxBackticks + 1));
+}
+
+function MarkdownCodeBlock({
+  code,
+  language,
+  codeTheme,
+  copyLabel,
+  copiedLabel,
+  copyFailedLabel,
+}: {
+  code: string;
+  language: string | null;
+  codeTheme: MarkdownCodeTheme;
+  copyLabel: string;
+  copiedLabel: string;
+  copyFailedLabel: string;
+}) {
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const copyCode = async () => {
+    try {
+      const fence = markdownFenceForCode(code);
+      const markdown = `${fence}${language ?? "text"}\n${code}\n${fence}`;
+      await copyTextToClipboard(markdown);
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
+  };
+  const displayLanguage = language ?? "text";
+  return (
+    <div className="ui-markdown-code-block">
+      <div className="ui-markdown-code-header">
+        <span>{displayLanguage}</span>
+        <button
+          type="button"
+          className="ui-markdown-code-copy ui-focus-ring"
+          onClick={() => void copyCode()}
+          aria-label={copyState === "copied" ? copiedLabel : copyState === "failed" ? copyFailedLabel : copyLabel}
+          title={copyState === "copied" ? copiedLabel : copyState === "failed" ? copyFailedLabel : copyLabel}
+        >
+          {copyState === "copied" ? "✓" : copyState === "failed" ? "!" : copyLabel}
+        </button>
+      </div>
+      {language ? (
+        <SyntaxHighlighter
+          language={language}
+          style={codeTheme}
+          customStyle={{ margin: 0, padding: "0.75rem", background: "transparent", fontSize: "0.75rem", lineHeight: 1.55 }}
+          codeTagProps={{ className: "ui-markdown-code-tag" }}
+          wrapLongLines
+        >
+          {code}
+        </SyntaxHighlighter>
+      ) : (
+        <pre className="ui-markdown-code-plain"><code>{code}</code></pre>
+      )}
+    </div>
+  );
+}
+
 const makeComponents = (
   query: string,
   linkBehavior: MarkdownLinkBehavior,
-  codeTheme: MarkdownCodeTheme
+  codeTheme: MarkdownCodeTheme,
+  copyLabel: string,
+  copiedLabel: string,
+  copyFailedLabel: string,
 ): Components => {
   const headingCounts = new Map<string, number>();
 
@@ -358,34 +455,21 @@ const makeComponents = (
   },
   code({ children, className }) {
     const code = String(children).replace(/\n$/, "");
-    const match = /language-([\w-]+)/.exec(className ?? "");
-    const language = match?.[1]?.toLowerCase();
-
-    if (!language) {
+    const explicitLanguage = /language-([\w-]+)/.exec(className ?? "")?.[1]?.toLowerCase() ?? null;
+    // react-markdown does not expose the inline flag in its current component type;
+    // inline code has no language class and never contains a line break.
+    if (!explicitLanguage && !code.includes("\n")) {
       return <code className="ui-markdown-inline-code">{renderText(code, query)}</code>;
     }
-
     return (
-      <div className="ui-markdown-code-block">
-        <div className="ui-markdown-code-header">
-          <span>{language}</span>
-        </div>
-        <SyntaxHighlighter
-          language={language}
-          style={codeTheme}
-          customStyle={{
-            margin: 0,
-            padding: "0.75rem",
-            background: "transparent",
-            fontSize: "0.75rem",
-            lineHeight: 1.55,
-          }}
-          codeTagProps={{ className: "ui-markdown-code-tag" }}
-          wrapLongLines
-        >
-          {code}
-        </SyntaxHighlighter>
-      </div>
+      <MarkdownCodeBlock
+        code={code}
+        language={explicitLanguage ?? detectCodeLanguage(code)}
+        codeTheme={codeTheme}
+        copyLabel={copyLabel}
+        copiedLabel={copiedLabel}
+        copyFailedLabel={copyFailedLabel}
+      />
     );
   },
   pre({ children }) {
@@ -439,6 +523,7 @@ export const MarkdownContent = memo(function MarkdownContent({
 }: MarkdownContentProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const resolvedTheme = useSettingsStore((s) => s.resolvedTheme);
+  const { t } = useI18n();
   const codeTheme = useMemo<MarkdownCodeTheme>(() => {
     if (variant === "terminal") {
       return terminalCodeTheme === "light" ? oneLight : oneDark;
@@ -492,7 +577,14 @@ export const MarkdownContent = memo(function MarkdownContent({
         <Markdown
           remarkPlugins={remarkPlugins}
           rehypePlugins={rehypePlugins}
-          components={makeComponents(query, linkBehavior, codeTheme)}
+          components={makeComponents(
+            query,
+            linkBehavior,
+            codeTheme,
+            t("common.copyCode"),
+            t("common.copied"),
+            t("common.copyFailed"),
+          )}
           skipHtml
         >
           {content}

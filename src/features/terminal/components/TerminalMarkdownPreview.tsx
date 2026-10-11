@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type WheelEvent as ReactWheelEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n, type AppLanguage } from "../../../shared/i18n/index";
+import { copyTextToClipboard } from "../../../shared/platform/systemClipboard";
 import { unwrapFencedMarkdown } from "../../../shared/lib/markdownSource";
 import { normalizeFontFamilyStack } from "../../../shared/platform/systemFonts";
 import type { HistoryMessage, HistorySessionDetail, HistorySource, Project, TerminalSession } from "../../../shared/types/index";
 import { resolveCliToolHistorySourceId } from "../../../shared/lib/cliTools";
 import { formatTime } from "../../history/api/historyViewUtils";
+import { conversationText } from "../../history/index";
 import { useTerminalPreviewTheme } from "../api/useTerminalPreviewTheme";
 import { resolveTerminalProjectPath } from "../lib/terminalOscPath";
 import { buildSshAgentHistoryContext, type SshAgentHistoryContext } from "../../remote/api/sshAgentHistory";
@@ -21,7 +23,7 @@ import {
 import { useTerminalStore } from "../state";
 import { useWorktreeStore } from "../../projects/api/worktreeStore";
 import { ArrowDown, ArrowDownToLine } from "lucide-react";
-import { FileText, RefreshCw, X } from "../../../shared/ui/icons";
+import { Check, Copy, FileText, RefreshCw, X } from "../../../shared/ui/icons";
 import { SessionTranscriptContent } from "../../history/api/SessionTranscriptContent";
 import { FontSizeControl, useFontSizeControlVisibility } from "../../../shared/ui/FontSizeControl";
 import { MarkdownPreviewAnswerSelect, type MarkdownPreviewMessage } from "./MarkdownPreviewAnswerSelect";
@@ -76,11 +78,14 @@ function selectAssistantMarkdownMessages(detail: HistorySessionDetail): Markdown
   const messages: MarkdownPreviewMessage[] = [];
   for (let messageIndex = 0; messageIndex < detail.messages.length; messageIndex += 1) {
     const message: HistoryMessage | undefined = detail.messages[messageIndex];
-    if (message?.role.toLowerCase() !== "assistant" || message.content.trim().length === 0) continue;
+    if (message?.role.toLowerCase() !== "assistant") continue;
+    // 只渲染 text 分块；thinking/reasoning 仅用于统计和历史结构展示，不进入 Markdown 预览。
+    const content = message ? conversationText(message) : "";
+    if (content.length === 0 || isProgressUpdateContent(content)) continue;
     messages.push({
       messageIndex,
       order: messages.length + 1,
-      content: message.content,
+      content,
       timestamp: message.timestamp ?? null,
     });
   }
@@ -89,6 +94,20 @@ function selectAssistantMarkdownMessages(detail: HistorySessionDetail): Markdown
 
 const MARKDOWN_PREVIEW_FONT_SIZE_MIN = 8;
 const MARKDOWN_PREVIEW_FONT_SIZE_MAX = 32;
+
+const PROGRESS_UPDATE_LEAD_PATTERN = /^(?:我(?:会|将|先|正在|现在|确认)|接下来|下一步|当前(?:进度|状态)|进度(?:更新)?|正在|已完成|完成后|本轮|i(?:'m| am| will|['’]ll)\b|next\b|currently\b|progress update\b|working on\b|completed\b)/iu;
+const PROGRESS_UPDATE_BODY_PATTERN = /(?:阶段|任务|步骤|记录|验证|检查|测试|实现|修复|更新|构建|计划|进度|状态|phase|task|step|record|verif(?:y|ication)?|check|test|implement|fix|update|build|plan|progress|status)/iu;
+const PROGRESS_UPDATE_PLAN_PATTERN = /(?:将(?:直接)?(?:创建|实现|完成|修改|添加|构建)|(?:包含|支持).{0,80}(?:功能|运算|键盘|测试|验证|文件|页面))/iu;
+
+function isProgressUpdateContent(content: string): boolean {
+  const normalized = content.trim().replace(/\s+/gu, " ");
+  if (normalized.length === 0 || !PROGRESS_UPDATE_LEAD_PATTERN.test(normalized)) return false;
+  // 过程播报通常是无 Markdown 结构的短状态句；带标题、代码或列表的最终回答不应被误删。
+  const hasMarkdownStructure = /(?:^|\s)(?:#{1,6}\s|```|[-*+]\s|\d+[.)、]\s)/mu.test(normalized);
+  const isStatusUpdate = PROGRESS_UPDATE_BODY_PATTERN.test(normalized)
+    || PROGRESS_UPDATE_PLAN_PATTERN.test(normalized);
+  return !hasMarkdownStructure && normalized.length <= 600 && isStatusUpdate;
+}
 
 function formatPreviewMessageTime(timestamp: string | null, language: AppLanguage): string {
   const parsed = timestamp ? Date.parse(timestamp) : Number.NaN;
@@ -139,10 +158,12 @@ export function TerminalMarkdownPreview({ sessionId, open, onClose }: TerminalMa
   const [fontSize, setFontSize] = useState(uiFontSize);
   const { fontSizeControlVisible, showFontSizeControl } = useFontSizeControlVisibility();
   const [loading, setLoading] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [error, setError] = useState<PreviewError | null>(null);
   const remoteContextRef = useRef<SshAgentHistoryContext | null>(null);
   const requestSeqRef = useRef(0);
   const loadedTriggerRef = useRef<string | null>(null);
+  const previousOpenRef = useRef(false);
   const ensureStarsLoaded = useMessageStarStore((state) => state.ensureLoaded);
   const setAnswerStar = useMessageStarStore((state) => state.setStar);
   const starRows = useMessageStarStore((state) => (
@@ -208,7 +229,7 @@ export function TerminalMarkdownPreview({ sessionId, open, onClose }: TerminalMa
   }, [answerIdentity, ensureStarsLoaded]);
 
   // 只提交仍属于当前绑定会话的结果；迟到的远程上下文必须关闭，不能覆盖新 consumer。
-  const loadLatest = useCallback(async (trigger: string) => {
+  const loadLatest = useCallback(async (trigger: string, selectLatest = false) => {
     const requestSeq = ++requestSeqRef.current;
     if (!source) return;
     if (!cliSessionId) {
@@ -273,9 +294,13 @@ export function TerminalMarkdownPreview({ sessionId, open, onClose }: TerminalMa
           sessionId: detail.session_id,
         });
         setSelectedMessageIndex((current) => {
-          if (current !== null && nextMessages.some((message) => message.messageIndex === current)) return current;
+          if (!selectLatest && current !== null && nextMessages.some((message) => message.messageIndex === current)) return current;
           return nextMessages[nextMessages.length - 1]?.messageIndex ?? null;
         });
+        setError(null);
+      } else if (selectLatest && previewMessages.length > 0) {
+        // 远程历史内容未变化时复用现有列表，但打开动作仍需回到最新回答。
+        setSelectedMessageIndex(previewMessages[previewMessages.length - 1].messageIndex);
         setError(null);
       } else {
         setError("loadFailed");
@@ -285,14 +310,17 @@ export function TerminalMarkdownPreview({ sessionId, open, onClose }: TerminalMa
     } finally {
       if (requestSeq === requestSeqRef.current) setLoading(false);
     }
-  }, [cliSessionId, closeRemoteContext, isSshProject, lookupProjectPath, project, session?.remoteTranscriptRef, source]);
+  }, [cliSessionId, closeRemoteContext, isSshProject, lookupProjectPath, previewMessages, project, session?.remoteTranscriptRef, source]);
 
   useEffect(() => {
+    const opened = open && !previousOpenRef.current;
+    previousOpenRef.current = open;
     if (!source) return;
     const completed = hookStatus === "done" || hookStatus === "failed";
     if (!open && !completed) return;
-    if (loadedTriggerRef.current === previewLoadTrigger) return;
-    void loadLatest(previewLoadTrigger);
+    if (!opened && loadedTriggerRef.current === previewLoadTrigger) return;
+    // 每次从关闭状态打开都重新读取，避免复用旧回答并确保定位到最新回答。
+    void loadLatest(previewLoadTrigger, opened);
   }, [hookStatus, loadLatest, open, previewLoadTrigger, source]);
 
   // 手动选择取消尚未提交的跳转；最新回答使用源消息坐标，不把列表序号当 messageIndex。
@@ -306,6 +334,20 @@ export function TerminalMarkdownPreview({ sessionId, open, onClose }: TerminalMa
     previewScroll.requestScrollToBottom(latest.messageIndex);
     setSelectedMessageIndex(latest.messageIndex);
   };
+  const copyCurrentAnswer = async () => {
+    if (!content) return;
+    try {
+      await copyTextToClipboard(content);
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
+  };
+  useEffect(() => {
+    if (copyState === "idle") return;
+    const timeout = window.setTimeout(() => setCopyState("idle"), 1800);
+    return () => window.clearTimeout(timeout);
+  }, [copyState]);
   // 取消星标必须按已解析到的真实行删除：星标可能因对话回退已跟随到新的回答下标。
   const toggleAnswerStar = (message: MarkdownPreviewMessage, star: boolean) => {
     if (!answerIdentity) return;
@@ -368,6 +410,24 @@ export function TerminalMarkdownPreview({ sessionId, open, onClose }: TerminalMa
           title={t("terminal.markdownPreview.latestAnswer")}
         >
           <ArrowDownToLine size={13} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          onClick={() => void copyCurrentAnswer()}
+          disabled={!content}
+          className="ui-focus-ring inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[var(--text-secondary)] transition hover:bg-[var(--interactive-hover-bg)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+          aria-label={copyState === "copied"
+            ? t("terminal.markdownPreview.copied")
+            : copyState === "failed"
+              ? t("terminal.markdownPreview.copyFailed")
+              : t("terminal.markdownPreview.copy")}
+          title={copyState === "copied"
+            ? t("terminal.markdownPreview.copied")
+            : copyState === "failed"
+              ? t("terminal.markdownPreview.copyFailed")
+              : t("terminal.markdownPreview.copy")}
+        >
+          {copyState === "copied" ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
         </button>
         <button
           type="button"

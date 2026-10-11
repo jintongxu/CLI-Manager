@@ -638,6 +638,33 @@
   text-transform: uppercase;
 }
 
+.ui-markdown-code-copy {
+  border: 0;
+  padding: 0.1rem 0.35rem;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-transform: none;
+  cursor: pointer;
+}
+
+.ui-markdown-code-copy:hover {
+  color: var(--text-primary);
+  background: var(--interactive-hover-bg);
+}
+
+.ui-markdown-code-plain {
+  margin: 0;
+  min-width: max-content;
+  overflow-x: auto;
+  padding: 0.75rem;
+  color: var(--md-text);
+  font-family: var(--font-ui-mono);
+  font-size: 0.75rem;
+  line-height: 1.55;
+  white-space: pre;
+}
+
 .ui-markdown-code-tag {
   font-family: var(--font-ui-mono) !important;
 }
