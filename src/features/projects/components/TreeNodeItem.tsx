@@ -1,11 +1,10 @@
-import { getWorktreeShortLabel } from "../api/worktreeLabels";
 import { useState, useEffect, useRef, memo, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { TreeNode as TNode } from "../../../shared/types/index";
 import { countProjectsInNode, type ProviderBadge } from "../api/projectStore";
-import { getWorktreeDisplayName } from "../api/worktreeMetadata";
+import { getWorktreeDisplayName, getWorktreeSidebarLabel } from "../api/worktreeMetadata";
 import { useTreeActions, worktreeListCollapseId, worktreeTerminalsCollapseId } from "./TreeContext";
 import { WorktreeTerminalSummary } from "./WorktreeTerminalSummary";
 import { WorktreeTerminalsToggle } from "./WorktreeTerminalsToggle";
@@ -210,7 +209,7 @@ function TreeNodeItemImpl({
           </span>
           <span className="worktree-terminal-heading" title={`${getWorktreeDisplayName(worktree)}\n${worktree.description}\n${worktree.branch}\n${worktree.path}`}>
             <span className="worktree-terminal-title-line">
-              <span className="worktree-terminal-title truncate font-medium">{getWorktreeShortLabel(worktree)} · {getWorktreeDisplayName(worktree)}</span>
+              <span className="worktree-terminal-title truncate font-medium">{getWorktreeSidebarLabel(worktree)}</span>
               {providerBadge && <ProviderBadgeChip badge={providerBadge} />}
             </span>
             <WorktreeTerminalSummary projectId={project.id} worktreeId={worktree.id} compact={compact} />

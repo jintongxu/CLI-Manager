@@ -763,7 +763,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         const nextActiveSession = mirror.activeSessionId ? remaining.find((session) => session.id === mirror.activeSessionId) : undefined;
         await useSessionStore.getState().saveActiveSessionId(isPersistableSession(nextActiveSession) ? mirror.activeSessionId : null);
         await useSessionStore.getState().saveWorkspans(workspans, mirror.activeWorkspanId, remaining);
-
+        const currentWork = useSessionStore.getState(); if (typeof currentWork.saveCurrentWork === "function") await currentWork.saveCurrentWork(currentWork.currentWorkSessionIds, currentWork.currentWorkActiveSessionId, remaining);
         // 更新 splits（移除已关闭主会话对应的 split），使用关闭前记录的索引
         if (closedIndex >= 0) {
           const persistedSplits = useSessionStore.getState().splits.filter(
@@ -1408,7 +1408,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       );
       await useSessionStore.getState().saveSplits([]);
       await useSessionStore.getState().saveWorkspans(workspans, mirror.activeWorkspanId, remaining);
-
+      const currentWork = useSessionStore.getState(); if (typeof currentWork.saveCurrentWork === "function") await currentWork.saveCurrentWork(currentWork.currentWorkSessionIds, currentWork.currentWorkActiveSessionId, remaining);
       for (const closedSessionId of closedSessionIds) {
         if (fileEditorClosedIds.has(closedSessionId)) {
           continue;

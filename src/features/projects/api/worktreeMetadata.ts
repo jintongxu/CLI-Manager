@@ -1,10 +1,18 @@
 import type { WorktreeRecord } from "../../../shared/types/index";
+import { getWorktreeShortLabel } from "./worktreeLabels";
 
 /** Return the persisted user-facing name, with legacy ASCII rows as a safe fallback. */
 export function getWorktreeDisplayName(
   worktree: Pick<WorktreeRecord, "name" | "display_name">
 ): string {
   return worktree.display_name?.trim() || worktree.name;
+}
+
+/** Prefer the explicit short label for compact sidebar Worktree identities. */
+export function getWorktreeSidebarLabel(
+  worktree: Pick<WorktreeRecord, "name" | "display_name"> & Partial<Pick<WorktreeRecord, "short_label" | "label_ordinal">>,
+): string {
+  return getWorktreeShortLabel(worktree) || getWorktreeDisplayName(worktree);
 }
 
 /** Shortest distinguishing name suffix; identical display names use stable record IDs.

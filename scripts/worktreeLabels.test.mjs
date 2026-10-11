@@ -15,6 +15,12 @@ function load(file, deps = {}) {
   return exports;
 }
 const labels = load('src/features/projects/api/worktreeLabels.ts');
+const metadata = load('src/features/projects/api/worktreeMetadata.ts', { './worktreeLabels': labels });
+test('sidebar Worktree labels prefer short labels and fall back to display names', () => {
+  assert.equal(metadata.getWorktreeSidebarLabel({ name: 'internal', display_name: '显示名称', short_label: 'Alias', label_ordinal: 1 }), 'Alias');
+  assert.equal(metadata.getWorktreeSidebarLabel({ name: 'internal', display_name: '显示名称', short_label: '', label_ordinal: 0 }), '显示名称');
+  assert.equal(metadata.getWorktreeSidebarLabel({ name: 'internal', display_name: '  ', short_label: '', label_ordinal: 0 }), 'internal');
+});
 test('canonical aliases count Unicode points, preserve full tokens and reserve all W digits', () => {
   assert.equal(labels.normalizeWorktreeShortLabel('  e\u0301  '), 'é');
   assert.equal(labels.normalizeWorktreeShortLabel('😀'.repeat(12)), '😀'.repeat(12));

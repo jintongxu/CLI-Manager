@@ -75,6 +75,8 @@ interface WorkspanTabBarProps {
   selectedProjectKey: string | null;
   onActivateProject: (key: string) => void;
   onRowChange: (signature: string) => void;
+  currentWorkCount?: number;
+  onActivateCurrentWork?: () => void;
   renderTab: (model: ProjectWorkspanTabModel, closeTargets: WorkspanTabCloseTargets, badge: TerminalWorktreeBadge, activate: () => void) => ReactNode;
 }
 
@@ -142,6 +144,7 @@ export function WorkspanTabBar({
   contextOptions = [],
   renderTab,
   selectedProjectKey, onActivateProject, onRowChange,
+  currentWorkCount = 0, onActivateCurrentWork,
 }: WorkspanTabBarProps) {
   const { t } = useI18n();
   const [statusFilter, setStatusFilter] = useState<TabNotificationState | "all">("all");
@@ -188,6 +191,17 @@ export function WorkspanTabBar({
         aria-hidden="true"
       />
       <div className="ui-workspan-context-row flex h-7 min-h-7 min-w-0 items-center gap-1 overflow-x-auto px-1" role="tablist" aria-label={t("terminal.context.switcher")}>
+        {onActivateCurrentWork && (
+          <button
+            type="button"
+            className="ui-workspan-context-button inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-2 text-[11px] font-medium"
+            onClick={onActivateCurrentWork}
+            title={t("terminal.currentWork.open")}
+          >
+            <span aria-hidden="true">●</span>
+            <span>{t("terminal.currentWork.shortTitle", { count: currentWorkCount })}</span>
+          </button>
+        )}
         <div className="ui-workspan-status-filter inline-flex shrink-0 items-center gap-0.5">
           {(["all", "running", "done", "failed"] as const).map((filter) => (
             <button

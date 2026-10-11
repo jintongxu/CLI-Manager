@@ -48,6 +48,7 @@
   display: block;
   flex: 0 0 auto;
   min-height: 0;
+  overflow: visible;
 }
 
 /* Keep panel content mounted while letting the title-bar control reclaim the

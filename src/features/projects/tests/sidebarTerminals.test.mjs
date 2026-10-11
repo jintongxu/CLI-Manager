@@ -367,7 +367,7 @@ function collapseHarness(language = "en-US") {
     "../../../shared/preferences/settingsStore": { useSettingsStore: (selector) => selector({ worktreeOrderByProject: {} }) },
     "../api/worktreeOrder": { orderProjectWorktrees: (items, id) => items.filter((w) => w.project_id === id).sort((a,b) => a.name.localeCompare(b.name)) },
     "../api/projectStore": { useProjectStore: (selector) => selector({ worktrees }) },
-    "../api/worktreeMetadata": { getWorktreeDisplayName: (w) => w.name },
+    "../api/worktreeMetadata": { getWorktreeDisplayName: (w) => w.name, getWorktreeSidebarLabel: (w) => w.short_label || w.name },
     "./SidebarTerminalList": { SidebarTerminalList: (props) => React.createElement("ul", { "data-scope": props.worktreeId ?? "main" }) },
     "@dnd-kit/core": { useDroppable: () => ({}) },
     "@dnd-kit/sortable": { useSortable: () => ({ attributes: {}, setNodeRef: noop }), SortableContext: noop },
@@ -408,7 +408,7 @@ function collapseHarness(language = "en-US") {
   vm.runInNewContext(transpile(flyoutSource.slice(flyoutSource.indexOf("function renderFlyoutNodes("),
     flyoutSource.indexOf("function findNodeById(")) + "\nexports.render = renderFlyoutNodes;", ts.ModuleKind.CommonJS), {
     exports: flyoutExports, require: (id) => modules[id],
-    WorktreeIcon: noop, getWorktreeDisplayName: (w) => w.name,
+    WorktreeIcon: noop, getWorktreeDisplayName: (w) => w.name, getWorktreeSidebarLabel: (w) => w.short_label || w.name,
     WorktreeTerminalsToggle: modules["./WorktreeTerminalsToggle"].WorktreeTerminalsToggle,
     WorktreeTerminalSummary: modules["./WorktreeTerminalSummary"].WorktreeTerminalSummary,
     SidebarTerminalList: modules["./SidebarTerminalList"].SidebarTerminalList,

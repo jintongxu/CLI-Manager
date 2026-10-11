@@ -1,6 +1,5 @@
-import { getWorktreeShortLabel } from "../api/worktreeLabels";
 import type { WorktreeRecord } from "../../../shared/types/index";
-import { getWorktreeDisplayName } from "../api/worktreeMetadata";
+import { getWorktreeSidebarLabel } from "../api/worktreeMetadata";
 import { useTreeActions, worktreeTerminalsCollapseId } from "./TreeContext";
 import { SidebarTerminalList } from "./SidebarTerminalList";
 import { WorktreeTerminalSummary } from "./WorktreeTerminalSummary";
@@ -19,7 +18,7 @@ export function SidebarWorktreeTerminals({ projectId, worktree, depth = 1, compa
       </span>
       <span className="worktree-terminal-heading">
         <span className="worktree-terminal-title-line">
-          <span className="worktree-terminal-title truncate">{getWorktreeShortLabel(worktree)} · {getWorktreeDisplayName(worktree)}</span>
+          <span className="worktree-terminal-title truncate">{getWorktreeSidebarLabel(worktree)}</span>
         </span>
         <WorktreeTerminalSummary projectId={projectId} worktreeId={worktree.id} compact={compact} />
       </span>

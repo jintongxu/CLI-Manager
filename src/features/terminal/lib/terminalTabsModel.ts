@@ -5,7 +5,7 @@ import {
 import { type SplitTerminalOptions, type TabNotificationState } from "../state";
 import { useSshHostStore } from "../../remote/api/sshHostStore";
 import { type TranslationKey } from "../../../shared/i18n/index";
-import { PROJECT_DRAG_PREFIX, WORKSPAN_DRAG_PREFIX } from "../../workspace/api/dragInteraction";
+import { CURRENT_WORK_DRAG_PREFIX, PROJECT_DRAG_PREFIX, WORKSPAN_DRAG_PREFIX } from "../../workspace/api/dragInteraction";
 import type { TerminalPaneDropEdge, TerminalPaneSplitDirection } from "../api/terminalPaneTree";
 import { resolvePaneDropEdgeFromPoint } from "../api/terminalPaneTree";
 import { resolveProjectPath } from "../../projects/api/groupPath";
@@ -407,6 +407,10 @@ export const terminalTabCollisionDetection: CollisionDetection = (args) => {
   // Gap-tolerant nearest-center: chips/tabs are separated by flex gaps where
   // pointerWithin drops `over` and the displacement animation snaps back.
   // closestCenter keeps a stable target across gaps (sortable standard).
+  if (activeId.startsWith(CURRENT_WORK_DRAG_PREFIX)) {
+    const currentWorkCollision = closestCenter(args).find((collision) => String(collision.id).startsWith(CURRENT_WORK_DRAG_PREFIX));
+    return currentWorkCollision ? [currentWorkCollision] : [];
+  }
   if (activeId.startsWith(PROJECT_DRAG_PREFIX)) {
     const projectCollision = closestCenter(args).find((collision) => String(collision.id).startsWith(PROJECT_DRAG_PREFIX));
     return projectCollision ? [projectCollision] : [];

@@ -574,6 +574,102 @@
   border-color: color-mix(in srgb, var(--terminal-tab-border) 38%, transparent);
 }
 
+/* Workspan tabs carry a title and a context line; preserve the full two-row chrome. */
+.ui-terminal-well .ui-terminal-pane-chrome.ui-workspan-tabbar {
+  height: 68px;
+  min-height: 68px;
+}
+
+.ui-current-workbar {
+  background: var(--terminal-chrome-surface, #111c2d);
+  border-bottom: 1px solid color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 10%, transparent);
+}
+
+.ui-current-work-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--terminal-theme-foreground, #f8fafc);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.ui-current-work-heading-dot {
+  color: var(--terminal-theme-muted, #94a3b8);
+  font-size: 0.7rem;
+}
+
+.ui-current-work-count {
+  display: inline-flex;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 16%, transparent);
+  border-radius: 999px;
+  color: var(--terminal-theme-muted, #94a3b8);
+  font-size: 0.64rem;
+  font-weight: 600;
+}
+
+.ui-current-work-list {
+  min-height: 42px;
+  padding-block: 1px;
+  scrollbar-width: none;
+}
+
+.ui-current-work-list::-webkit-scrollbar {
+  display: none;
+}
+
+.ui-current-work-item {
+  border: 1px solid color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 13%, transparent);
+  background: color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 4%, transparent);
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.ui-current-work-item:hover,
+.ui-current-work-item:focus-within {
+  border-color: color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 28%, transparent);
+  background: color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 8%, transparent);
+}
+
+.ui-current-work-item[data-selected="true"] {
+  border-color: color-mix(in srgb, var(--terminal-tab-accent) 38%, var(--terminal-theme-foreground) 62%);
+  background: color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 7%, transparent);
+}
+
+.ui-current-work-item[data-dragging="true"] {
+  border-style: dashed;
+}
+
+.ui-current-work-main {
+  color: var(--terminal-theme-foreground, #f8fafc);
+}
+
+.ui-current-work-remove,
+.ui-current-work-clear,
+.ui-current-work-exit {
+  color: var(--terminal-theme-muted, #94a3b8);
+}
+
+.ui-current-work-remove:hover,
+.ui-current-work-clear:hover,
+.ui-current-work-exit:hover {
+  color: var(--terminal-theme-foreground, #f8fafc);
+  background: color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 10%, transparent);
+}
+
+.ui-current-work-tab-context {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ui-workspan-detach-insertion {
   position: absolute;
   bottom: 8px;

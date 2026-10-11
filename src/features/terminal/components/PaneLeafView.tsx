@@ -1,4 +1,5 @@
 import { Suspense, memo, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { useTerminalStore, type TabNotificationState } from "../state";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import type { TerminalPaneLeaf, TerminalPaneSplitDirection } from "../api/terminalPaneTree";
@@ -62,6 +63,10 @@ export interface PaneLeafViewProps {
   onInstallWorktreeDeps: (project: Project, worktree: WorktreeRecord) => void;
   onDiscardWorktree: (project: Project, worktree: WorktreeRecord) => void;
   onOpenWorktreeDirectory: (worktree: WorktreeRecord) => void;
+  currentWorkSessionIds?: readonly string[];
+  onToggleCurrentWork?: (sessionId: string) => void;
+  currentWorkPortalTarget?: HTMLElement | null;
+  currentWorkActiveSessionId?: string | null;
   hideTabBar?: boolean;
 }
 
@@ -114,6 +119,10 @@ export function PaneLeafView({
   onInstallWorktreeDeps,
   onDiscardWorktree,
   onOpenWorktreeDirectory,
+  currentWorkSessionIds = [],
+  onToggleCurrentWork,
+  currentWorkPortalTarget,
+  currentWorkActiveSessionId,
   hideTabBar = false,
 }: PaneLeafViewProps) {
   const paneSessions = pane.sessionIds
@@ -188,6 +197,8 @@ export function PaneLeafView({
           onInstallWorktreeDeps={onInstallWorktreeDeps}
           onDiscardWorktree={onDiscardWorktree}
           onOpenWorktreeDirectory={onOpenWorktreeDirectory}
+          currentWorkSessionIds={currentWorkSessionIds}
+          onToggleCurrentWork={onToggleCurrentWork}
           resolvedTheme={resolvedTheme}
           terminalThemeName={terminalThemeName}
           lightThemePalette={lightThemePalette}
@@ -197,27 +208,36 @@ export function PaneLeafView({
       <div
         className={`ui-terminal-pane-content relative min-h-0 flex-1 overflow-hidden${isPiPane ? " ui-terminal-pane-content--pi" : ""}`}
         onPointerDownCapture={() => {
-          if (effectivePaneActiveSessionId && effectivePaneActiveSessionId !== useTerminalStore.getState().activeSessionId) {
-            onActivateSession(effectivePaneActiveSessionId);
+          const focusSessionId = currentWorkPortalTarget && currentWorkActiveSessionId
+            ? currentWorkActiveSessionId
+            : effectivePaneActiveSessionId;
+          if (focusSessionId && focusSessionId !== useTerminalStore.getState().activeSessionId) {
+            onActivateSession(focusSessionId);
           }
         }}
         onFocusCapture={() => {
-          if (effectivePaneActiveSessionId && effectivePaneActiveSessionId !== activeSessionId) {
-            onActivateSession(effectivePaneActiveSessionId);
+          const focusSessionId = currentWorkPortalTarget && currentWorkActiveSessionId
+            ? currentWorkActiveSessionId
+            : effectivePaneActiveSessionId;
+          if (focusSessionId && focusSessionId !== activeSessionId) {
+            onActivateSession(focusSessionId);
           }
         }}
       >
-        {paneSessions.map((session) => (
+        {paneSessions.map((session) => {
+          const shouldPortalCurrentWork = Boolean(currentWorkPortalTarget && currentWorkSessionIds?.includes(session.id));
+          const isCurrentWorkActive = Boolean(currentWorkPortalTarget && currentWorkActiveSessionId === session.id);
+          const sessionElement = (
           <div
             key={session.id}
             className={`absolute inset-0${isPiPane ? " ui-terminal-session--pi" : ""}`}
-            style={{ display: session.id === effectivePaneActiveSessionId ? "block" : "none" }}
+            style={{ display: (shouldPortalCurrentWork ? isCurrentWorkActive : session.id === effectivePaneActiveSessionId) ? "block" : "none" }}
           >
             {session.kind === "file-editor" ? (
               <Suspense fallback={null}>
                 <FileEditorPane
                   session={session}
-                  isActive={!historyActive && isLayoutVisible && session.id === activeSessionId}
+                  isActive={isCurrentWorkActive || (!historyActive && isLayoutVisible && session.id === activeSessionId)}
                   terminalThemeBackground={terminalThemeBackground}
                   onClose={() => onCloseSessions([session.id])}
                 />
@@ -227,7 +247,7 @@ export function PaneLeafView({
                 <SubagentTranscriptView
                   sessionId={session.id}
                   title={session.title}
-                  isVisible={!historyActive && isLayoutVisible && session.id === effectivePaneActiveSessionId}
+                  isVisible={isCurrentWorkActive || (!historyActive && isLayoutVisible && session.id === effectivePaneActiveSessionId)}
                 />
               </Suspense>
             ) : session.remoteHandoff ? (
@@ -235,8 +255,8 @@ export function PaneLeafView({
             ) : (
               <XTermTerminal
                 sessionId={session.id}
-                isActive={!historyActive && isLayoutVisible && !session.tabHidden && session.id === activeSessionId}
-                isVisible={!historyActive && isLayoutVisible && session.id === effectivePaneActiveSessionId}
+                isActive={isCurrentWorkActive || (!historyActive && isLayoutVisible && !session.tabHidden && session.id === activeSessionId)}
+                isVisible={isCurrentWorkActive || (!historyActive && isLayoutVisible && session.id === effectivePaneActiveSessionId)}
                 fontSize={fontSize}
                 fontFamily={fontFamily}
                 resolvedTheme={resolvedTheme}
@@ -265,7 +285,11 @@ export function PaneLeafView({
               />
             )}
           </div>
-        ))}
+          );
+          return shouldPortalCurrentWork && currentWorkPortalTarget
+            ? createPortal(sessionElement, currentWorkPortalTarget)
+            : sessionElement;
+        })}
         <PaneContentDropZones
           paneId={pane.id}
           enabled={isLayoutVisible}
@@ -389,6 +413,10 @@ export function arePaneLeafViewPropsEqual(prevProps: PaneLeafViewProps, nextProp
   if (prevProps.terminalBackgroundEnabled !== nextProps.terminalBackgroundEnabled) return false;
   if (prevProps.terminalBackgroundImagePath !== nextProps.terminalBackgroundImagePath) return false;
   if (prevProps.hideTabBar !== nextProps.hideTabBar) return false;
+  if (prevProps.currentWorkSessionIds !== nextProps.currentWorkSessionIds) return false;
+  if (prevProps.currentWorkPortalTarget !== nextProps.currentWorkPortalTarget) return false;
+  if (prevProps.currentWorkActiveSessionId !== nextProps.currentWorkActiveSessionId) return false;
+  if (prevProps.onToggleCurrentWork !== nextProps.onToggleCurrentWork) return false;
   if (prevProps.paneMarkerSettings !== nextProps.paneMarkerSettings) return false;
   if (prevProps.isAppFocused !== nextProps.isAppFocused) return false;
   if (!areSessionIdSetsEqual(prevProps.visibleSessionIds, nextProps.visibleSessionIds)) return false;
