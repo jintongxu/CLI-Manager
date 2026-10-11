@@ -1,5 +1,11 @@
 # Changelog
 
+## [V1.4.7] - 2026-10-11
+
+### Windows 发布
+
+- 发布 Windows 正式版 `V1.4.7`，提供签名 NSIS/MSI 安装包、便携 ZIP 和 Tauri `latest.json`，仅构建 Windows 版本。
+
 ## [V1.4.6] - 2026-10-09
 
 ### Windows 发布
