@@ -25,16 +25,6 @@ export interface ProjectIdea {
   sort_order: number;
 }
 
-export interface ProjectIdeaChecklistItem {
-  id: string;
-  idea_id: string;
-  text: string;
-  is_completed: boolean;
-  sort_order: number;
-  created_at: number;
-  updated_at: number;
-}
-
 interface ProjectIdeaStore {
   ideasByProject: Record<string, ProjectIdea[]>;
   loadingByProject: Record<string, boolean>;
@@ -64,17 +54,11 @@ interface ProjectIdeaStore {
     id: string,
     projectId: string,
     priority: ProjectIdeaPriority,
-    tags: string[],
   ) => Promise<void>;
   updateIdeaWorktree: (
     id: string,
     projectId: string,
     worktreeId: string | null,
-  ) => Promise<void>;
-  updateOrganizedContent: (
-    id: string,
-    projectId: string,
-    organizedContent: string,
   ) => Promise<void>;
   /** Changes status using both the idea id and owning project id. */
   updateIdeaStatus: (
@@ -93,31 +77,6 @@ interface ProjectIdeaStore {
     id: string,
     projectId: string,
     archived: boolean,
-  ) => Promise<void>;
-  updateAcceptanceCriteria: (
-    id: string,
-    projectId: string,
-    criteria: string[],
-  ) => Promise<void>;
-  listChecklistItems: (
-    ideaId: string,
-    projectId: string,
-  ) => Promise<ProjectIdeaChecklistItem[]>;
-  addChecklistItem: (
-    ideaId: string,
-    projectId: string,
-    text: string,
-  ) => Promise<ProjectIdeaChecklistItem>;
-  updateChecklistItem: (
-    id: string,
-    ideaId: string,
-    projectId: string,
-    patch: { text?: string; is_completed?: boolean; sort_order?: number },
-  ) => Promise<void>;
-  deleteChecklistItem: (
-    id: string,
-    ideaId: string,
-    projectId: string,
   ) => Promise<void>;
   batchSetPinned: (
     projectId: string,
@@ -386,20 +345,14 @@ export const useProjectIdeaStore = create<ProjectIdeaStore>((set, get) => ({
       },
     }));
   },
-  updateIdeaMetadata: async (id, projectId, priority, tags) => {
+  updateIdeaMetadata: async (id, projectId, priority) => {
     const updatedAt = Date.now();
+    const normalizedPriority = normalizePriority(priority);
     const db = await getDb();
-    const normalizedTags = normalizeTags(tags);
     await executeChecked(
       db,
-      "UPDATE project_ideas SET priority = $1, tags = $2, updated_at = $3 WHERE id = $4 AND project_id = $5",
-      [
-        normalizePriority(priority),
-        JSON.stringify(normalizedTags),
-        updatedAt,
-        id,
-        projectId,
-      ],
+      "UPDATE project_ideas SET priority = $1, updated_at = $2 WHERE id = $3 AND project_id = $4",
+      [normalizedPriority, updatedAt, id, projectId],
       { id, projectId },
     );
     set((state) => ({
@@ -408,12 +361,7 @@ export const useProjectIdeaStore = create<ProjectIdeaStore>((set, get) => ({
         [projectId]: sortIdeas(
           (state.ideasByProject[projectId] ?? []).map((idea) =>
             idea.id === id
-              ? {
-                  ...idea,
-                  priority: normalizePriority(priority),
-                  tags: normalizedTags,
-                  updated_at: updatedAt,
-                }
+              ? { ...idea, priority: normalizedPriority, updated_at: updatedAt }
               : idea,
           ),
         ),
@@ -442,32 +390,6 @@ export const useProjectIdeaStore = create<ProjectIdeaStore>((set, get) => ({
               ? {
                   ...idea,
                   worktree_id: normalizedWorktreeId,
-                  updated_at: updatedAt,
-                }
-              : idea,
-          ),
-        ),
-      },
-    }));
-  },
-  updateOrganizedContent: async (id, projectId, organizedContent) => {
-    const updatedAt = Date.now();
-    const db = await getDb();
-    await executeChecked(
-      db,
-      "UPDATE project_ideas SET organized_content = $1, updated_at = $2 WHERE id = $3 AND project_id = $4",
-      [organizedContent, updatedAt, id, projectId],
-      { id, projectId },
-    );
-    set((state) => ({
-      ideasByProject: {
-        ...state.ideasByProject,
-        [projectId]: sortIdeas(
-          (state.ideasByProject[projectId] ?? []).map((idea) =>
-            idea.id === id
-              ? {
-                  ...idea,
-                  organized_content: organizedContent,
                   updated_at: updatedAt,
                 }
               : idea,
@@ -540,106 +462,6 @@ export const useProjectIdeaStore = create<ProjectIdeaStore>((set, get) => ({
         ),
       },
     }));
-  },
-  updateAcceptanceCriteria: async (id, projectId, criteria) => {
-    const normalized = normalizeStringList(criteria);
-    const updatedAt = Date.now();
-    const db = await getDb();
-    await executeChecked(
-      db,
-      "UPDATE project_ideas SET acceptance_criteria = $1, updated_at = $2 WHERE id = $3 AND project_id = $4",
-      [JSON.stringify(normalized), updatedAt, id, projectId],
-      { id, projectId },
-    );
-    set((state) => ({
-      ideasByProject: {
-        ...state.ideasByProject,
-        [projectId]: (state.ideasByProject[projectId] ?? []).map((idea) =>
-          idea.id === id
-            ? {
-                ...idea,
-                acceptance_criteria: normalized,
-                updated_at: updatedAt,
-              }
-            : idea,
-        ),
-      },
-    }));
-  },
-  listChecklistItems: async (ideaId, projectId) => {
-    const db = await getDb();
-    await executeChecked(
-      db,
-      "SELECT id FROM project_ideas WHERE id = $1 AND project_id = $2",
-      [ideaId, projectId],
-      { id: ideaId, projectId },
-    );
-    return db.select<ProjectIdeaChecklistItem[]>(
-      "SELECT id, idea_id, text, is_completed, sort_order, created_at, updated_at FROM project_idea_checklist_items WHERE idea_id = $1 ORDER BY sort_order, created_at",
-      [ideaId],
-    );
-  },
-  addChecklistItem: async (ideaId, projectId, text) => {
-    const db = await getDb();
-    await executeChecked(
-      db,
-      "SELECT id FROM project_ideas WHERE id = $1 AND project_id = $2",
-      [ideaId, projectId],
-      { id: ideaId, projectId },
-    );
-    const now = Date.now();
-    const item: ProjectIdeaChecklistItem = {
-      id: crypto.randomUUID(),
-      idea_id: ideaId,
-      text: text.trim(),
-      is_completed: false,
-      sort_order: 0,
-      created_at: now,
-      updated_at: now,
-    };
-    if (!item.text) throw new Error("project_idea_checklist_blank");
-    await db.execute(
-      "INSERT INTO project_idea_checklist_items (id, idea_id, text, is_completed, sort_order, created_at, updated_at) VALUES ($1,$2,$3,0,0,$4,$4)",
-      [item.id, ideaId, item.text, now],
-    );
-    return item;
-  },
-  updateChecklistItem: async (id, ideaId, projectId, patch) => {
-    const db = await getDb();
-    const owned = await db.select<{ id: string }[]>(
-      "SELECT c.id FROM project_idea_checklist_items c JOIN project_ideas i ON i.id=c.idea_id WHERE c.id=$1 AND c.idea_id=$2 AND i.project_id=$3",
-      [id, ideaId, projectId],
-    );
-    if (!owned.length) throw new Error("project_idea_not_found");
-    const fields: string[] = [];
-    const params: unknown[] = [];
-    if (patch.text !== undefined) {
-      fields.push("text = $" + (params.length + 1));
-      params.push(patch.text.trim());
-    }
-    if (patch.is_completed !== undefined) {
-      fields.push("is_completed = $" + (params.length + 1));
-      params.push(patch.is_completed ? 1 : 0);
-    }
-    if (patch.sort_order !== undefined) {
-      fields.push("sort_order = $" + (params.length + 1));
-      params.push(patch.sort_order);
-    }
-    if (fields.length) {
-      params.push(Date.now(), id);
-      await db.execute(
-        `UPDATE project_idea_checklist_items SET ${fields.join(", ")}, updated_at = $${params.length - 1} WHERE id = $${params.length}`,
-        params,
-      );
-    }
-  },
-  deleteChecklistItem: async (id, ideaId, projectId) => {
-    const db = await getDb();
-    await executeChecked(
-      db,
-      "DELETE FROM project_idea_checklist_items WHERE id=$1 AND idea_id=$2 AND EXISTS (SELECT 1 FROM project_ideas WHERE id=$2 AND project_id=$3)",
-      [id, ideaId, projectId],
-    );
   },
   batchSetPinned: async (projectId, ids, pinned) => {
     for (const id of ids) await get().setIdeaPinned(id, projectId, pinned);

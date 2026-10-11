@@ -60,7 +60,7 @@ export function ProjectIdeasPanel({
   }, [loadProjectIdeas, open, project?.id]);
 
   const pinnedIdeas = useMemo(
-    () => ideas.filter((idea) => idea.is_pinned && !idea.is_archived).slice(0, 3),
+    () => ideas.filter((idea) => idea.is_pinned && !idea.is_archived && idea.status === "open").slice(0, 3),
     [ideas],
   );
   const recentIdeas = useMemo(

@@ -43,28 +43,22 @@ export function ProjectIdeasDialog({
   const { t } = useI18n();
   const [projectId, setProjectId] = useState(project?.id ?? "");
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<IdeaStatusFilter>("all");
+  const [status, setStatus] = useState<IdeaStatusFilter>("open");
   const [workspaceFilter, setWorkspaceFilter] = useState<IdeaWorkspaceFilter>("unarchived");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [priority, setPriority] = useState<IdeaPriorityFilter>("all");
-  const [tag, setTag] = useState("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [draft, setDraft] = useState("");
-  const [organized, setOrganized] = useState("");
-  const [tags, setTags] = useState("");
   const [newTitle, setNewTitle] = useState("");
   const [newDraft, setNewDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [copyFormat, setCopyFormat] = useState<"plain" | "markdown" | "prompt" | "context">("plain");
   const [copyState, setCopyState] = useState<"idle" | "success" | "failure">("idle");
-  const [acceptanceText, setAcceptanceText] = useState("");
   const [saveRequested, setSaveRequested] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ProjectIdea | null>(null);
-  const [checklist, setChecklist] = useState<import("../api/projectIdeaStore").ProjectIdeaChecklistItem[]>([]);
-  const [checklistText, setChecklistText] = useState("");
   const [undoDelete, setUndoDelete] = useState<{ id: string; projectId: string } | null>(null);
 
   const selectedProject =
@@ -84,12 +78,7 @@ export function ProjectIdeasDialog({
   const reload = useProjectIdeaStore((state) => state.reloadProjectIdeas);
   const create = useProjectIdeaStore((state) => state.createIdea);
   const update = useProjectIdeaStore((state) => state.updateIdea);
-  const updateOrganized = useProjectIdeaStore(
-    (state) => state.updateOrganizedContent,
-  );
-  const updateMetadata = useProjectIdeaStore(
-    (state) => state.updateIdeaMetadata,
-  );
+  const updateMetadata = useProjectIdeaStore((state) => state.updateIdeaMetadata);
   const setPinned = useProjectIdeaStore((state) => state.setIdeaPinned);
   const setArchived = useProjectIdeaStore((state) => state.setIdeaArchived);
   const batchPinned = useProjectIdeaStore((state) => state.batchSetPinned);
@@ -97,11 +86,6 @@ export function ProjectIdeasDialog({
   const toggle = useProjectIdeaStore((state) => state.toggleIdea);
   const remove = useProjectIdeaStore((state) => state.deleteIdea);
   const restore = useProjectIdeaStore((state) => state.restoreIdea);
-  const listChecklist = useProjectIdeaStore((state) => state.listChecklistItems);
-  const addChecklist = useProjectIdeaStore((state) => state.addChecklistItem);
-  const updateChecklist = useProjectIdeaStore((state) => state.updateChecklistItem);
-  const deleteChecklist = useProjectIdeaStore((state) => state.deleteChecklistItem);
-  const updateAcceptance = useProjectIdeaStore((state) => state.updateAcceptanceCriteria);
   const updateIdeaWorktree = useProjectIdeaStore((state) => state.updateIdeaWorktree);
   const reorderIdeas = useProjectIdeaStore((state) => state.reorderIdeas);
   const worktrees = useWorktreeStore((state) => state.worktrees);
@@ -119,6 +103,10 @@ export function ProjectIdeasDialog({
   }, [project?.id, projects]);
 
   useEffect(() => {
+    if (project?.id) setStatus("open");
+  }, [project?.id]);
+
+  useEffect(() => {
     if (selectedProject) {
       void load(selectedProject.id).catch(() => undefined);
     }
@@ -130,19 +118,18 @@ export function ProjectIdeasDialog({
   const filtered = useMemo(
     () =>
       ideas.filter((idea) => {
-        const searchable = `${idea.title} ${idea.content} ${idea.organized_content} ${idea.tags.join(" ")}`.toLowerCase();
+        const searchable = `${idea.title} ${idea.content}`.toLowerCase();
         const matchesQuery = !normalizedQuery || searchable.includes(normalizedQuery);
         const matchesStatus = status === "all" || idea.status === status;
         const matchesWorkspace = workspaceFilter === "all" || (workspaceFilter === "unarchived" && !idea.is_archived) || (workspaceFilter === "archived" && idea.is_archived) || (workspaceFilter === "pinned" && idea.is_pinned);
         const matchesPriority = priority === "all" || idea.priority === priority;
-        const matchesTag = tag === "all" || idea.tags.includes(tag);
-        return matchesQuery && matchesStatus && matchesWorkspace && matchesPriority && matchesTag;
+        return matchesQuery && matchesStatus && matchesWorkspace && matchesPriority;
       }),
-    [ideas, normalizedQuery, status, workspaceFilter, priority, tag],
+    [ideas, normalizedQuery, status, workspaceFilter, priority],
   );
   const selected =
     filtered.find((idea) => idea.id === selectedId) ?? filtered[0] ?? null;
-  const canReorder = !normalizedQuery && (workspaceFilter === "all" || workspaceFilter === "unarchived") && status === "all" && priority === "all" && tag === "all" && selectedIds.length === 0;
+  const canReorder = !normalizedQuery && (workspaceFilter === "all" || workspaceFilter === "unarchived") && status === "all" && priority === "all" && selectedIds.length === 0;
   const selectedWorktree = selected?.worktree_id
     ? projectWorktrees.find((worktree) => worktree.id === selected.worktree_id) ?? null
     : null;
@@ -152,20 +139,9 @@ export function ProjectIdeasDialog({
       setSelectedId(selected.id);
       setTitle(selected.title);
       setDraft(selected.content);
-      setOrganized(selected.organized_content);
-      setTags(selected.tags.join(", "));
-      setAcceptanceText(selected.acceptance_criteria.join("\n"));
       setIsEditing(false);
-      if (selectedProject) void listChecklist(selected.id, selectedProject.id).then(setChecklist).catch(() => setChecklist([]));
     }
-  }, [selected?.id, selectedProject?.id, listChecklist]);
-
-  const allTags = Array.from(new Set(ideas.flatMap((idea) => idea.tags))).sort();
-  const parseTags = () =>
-    tags
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
+  }, [selected?.id]);
 
   const save = async () => {
     if (!selected || !selectedProject || busy || !title.trim() || !draft.trim()) return;
@@ -173,14 +149,6 @@ export function ProjectIdeasDialog({
     try {
       setMutationError(null);
       await update(selected.id, selectedProject.id, title, draft);
-      await updateOrganized(selected.id, selectedProject.id, organized);
-      await updateMetadata(
-        selected.id,
-        selectedProject.id,
-        selected.priority,
-        parseTags(),
-      );
-      await updateAcceptance(selected.id, selectedProject.id, acceptanceText.split("\n"));
       setIsEditing(false);
     } catch (error) {
       setMutationError(error instanceof Error ? error.message : String(error));
@@ -199,9 +167,6 @@ export function ProjectIdeasDialog({
     if (selected) {
       setTitle(selected.title);
       setDraft(selected.content);
-      setOrganized(selected.organized_content);
-      setTags(selected.tags.join(", "));
-      setAcceptanceText(selected.acceptance_criteria.join("\n"));
     }
     setIsEditing(false);
   };
@@ -280,9 +245,6 @@ export function ProjectIdeasDialog({
             setStatus={setStatus}
             priority={priority}
             setPriority={setPriority}
-            tag={tag}
-            setTag={setTag}
-            allTags={allTags}
             workspaceFilter={workspaceFilter}
             setWorkspaceFilter={setWorkspaceFilter}
           />
@@ -350,26 +312,14 @@ export function ProjectIdeasDialog({
               selected={selected}
               title={title}
               draft={draft}
-              organized={organized}
-              tags={tags}
               busy={busy}
               setTitle={setTitle}
               setDraft={setDraft}
-              setOrganized={setOrganized}
-              setTags={setTags}
               onCopy={() => void copySelected()}
               copyFormat={copyFormat}
               setCopyFormat={setCopyFormat}
               copyState={copyState}
-              acceptanceText={acceptanceText}
-              setAcceptanceText={setAcceptanceText}
-              checklist={checklist}
-              checklistText={checklistText}
-              setChecklistText={setChecklistText}
-              onAddChecklist={async () => { if (isEditing && selected && selectedProject && checklistText.trim()) { const item = await addChecklist(selected.id, selectedProject.id, checklistText); setChecklist((items) => [...items, item]); setChecklistText(""); } }}
-              onToggleChecklist={async (item) => { if (isEditing && selected && selectedProject) { await updateChecklist(item.id, selected.id, selectedProject.id, { is_completed: !item.is_completed }); setChecklist((items) => items.map((current) => current.id === item.id ? { ...current, is_completed: !current.is_completed } : current)); } }}
-              onDeleteChecklist={async (item) => { if (isEditing && selected && selectedProject) { await deleteChecklist(item.id, selected.id, selectedProject.id); setChecklist((items) => items.filter((current) => current.id !== item.id)); } }}
-              onToggle={() => isEditing && selected && void toggle(selected)}
+              onToggle={() => selected && void toggle(selected)}
               onPin={() => isEditing && selected && selectedProject && void setPinned(selected.id, selectedProject.id, !selected.is_pinned)}
               onArchive={() => isEditing && selected && selectedProject && void setArchived(selected.id, selectedProject.id, !selected.is_archived)}
               isEditing={isEditing}
@@ -388,12 +338,7 @@ export function ProjectIdeasDialog({
               }}
               onPriorityChange={(value) => {
                 if (isEditing && selected) {
-                  void updateMetadata(
-                    selected.id,
-                    selected.project_id,
-                    value,
-                    parseTags(),
-                  );
+                  void updateMetadata(selected.id, selected.project_id, value);
                 }
               }}
             />
@@ -438,9 +383,6 @@ interface WorkspaceFiltersProps {
   setStatus: (value: IdeaStatusFilter) => void;
   priority: IdeaPriorityFilter;
   setPriority: (value: IdeaPriorityFilter) => void;
-  tag: string;
-  setTag: (value: string) => void;
-  allTags: string[];
   workspaceFilter: IdeaWorkspaceFilter;
   setWorkspaceFilter: (value: IdeaWorkspaceFilter) => void;
 }
@@ -456,9 +398,6 @@ function WorkspaceFilters({
   setStatus,
   priority,
   setPriority,
-  tag,
-  setTag,
-  allTags,
   workspaceFilter,
   setWorkspaceFilter,
 }: WorkspaceFiltersProps) {
@@ -521,19 +460,6 @@ function WorkspaceFilters({
         <option value="high">{t("projectIdeas.workspace.priorityHigh")}</option>
         <option value="medium">{t("projectIdeas.workspace.priorityMedium")}</option>
         <option value="low">{t("projectIdeas.workspace.priorityLow")}</option>
-      </select>
-      <select
-        value={tag}
-        onChange={(event) => setTag(event.currentTarget.value)}
-        className="h-8 rounded border border-border bg-bg-primary px-2 text-xs"
-        aria-label={t("projectIdeas.workspace.tag")}
-      >
-        <option value="all">{t("projectIdeas.workspace.all")}</option>
-        {allTags.map((item) => (
-          <option key={item} value={item}>
-            {item}
-          </option>
-        ))}
       </select>
     </div>
   );
@@ -646,11 +572,6 @@ function SortableIdeaCard({ idea, selected, selectedIds, onSelect, onSelectedIds
               </span>
             </div>
             <div className="mt-1 flex gap-1 text-[10px] text-text-muted">{idea.is_pinned && <span><Star size={10} className="inline" /> {t("projectIdeas.workspace.pinned")}</span>}{idea.is_archived && <span><Folder size={10} className="inline" /> {t("projectIdeas.workspace.archived")}</span>}</div>
-            {idea.tags.length > 0 && (
-              <div className="mt-1 text-[10px] text-text-muted">
-                {idea.tags.join(" · ")}
-              </div>
-            )}
           </button>;
 }
 
@@ -658,26 +579,14 @@ interface IdeaInspectorProps {
   selected: ProjectIdea | null;
   title: string;
   draft: string;
-  organized: string;
-  tags: string;
   busy: boolean;
   isEditing: boolean;
   setTitle: (value: string) => void;
   setDraft: (value: string) => void;
-  setOrganized: (value: string) => void;
-  setTags: (value: string) => void;
   onCopy: () => void;
   copyFormat: "plain" | "markdown" | "prompt" | "context";
   setCopyFormat: (value: "plain" | "markdown" | "prompt" | "context") => void;
   copyState: "idle" | "success" | "failure";
-  acceptanceText: string;
-  setAcceptanceText: (value: string) => void;
-  checklist: import("../api/projectIdeaStore").ProjectIdeaChecklistItem[];
-  checklistText: string;
-  setChecklistText: (value: string) => void;
-  onAddChecklist: () => Promise<void>;
-  onToggleChecklist: (item: import("../api/projectIdeaStore").ProjectIdeaChecklistItem) => Promise<void>;
-  onDeleteChecklist: (item: import("../api/projectIdeaStore").ProjectIdeaChecklistItem) => Promise<void>;
   onToggle: () => void;
   onPin: () => void;
   onArchive: () => void;
@@ -695,26 +604,14 @@ function IdeaInspector({
   selected,
   title,
   draft,
-  organized,
-  tags,
   busy,
   isEditing,
   setTitle,
   setDraft,
-  setOrganized,
-  setTags,
   onCopy,
   copyFormat,
   setCopyFormat,
   copyState,
-  acceptanceText,
-  setAcceptanceText,
-  checklist,
-  checklistText,
-  setChecklistText,
-  onAddChecklist,
-  onToggleChecklist,
-  onDeleteChecklist,
   onToggle,
   onPin,
   onArchive,
@@ -776,7 +673,7 @@ function IdeaInspector({
             {copyState === "failure" && <span className="self-center text-[11px] text-danger">{t("projectIdeas.toolbar.copyFailed")}</span>}
             <Button size="sm" onClick={onPin} disabled={!isEditing} aria-label={selected.is_pinned ? t("projectIdeas.toolbar.unpinned") : t("projectIdeas.toolbar.pinned")} title={selected.is_pinned ? t("projectIdeas.toolbar.unpinned") : t("projectIdeas.toolbar.pinned")}><Star size={13} className={selected.is_pinned ? "fill-amber-400 text-amber-400" : ""} /></Button>
             <Button size="sm" onClick={onArchive} disabled={!isEditing} aria-label={selected.is_archived ? t("projectIdeas.toolbar.unarchived") : t("projectIdeas.toolbar.archived")} title={selected.is_archived ? t("projectIdeas.toolbar.unarchived") : t("projectIdeas.toolbar.archived")}><Folder size={13} /></Button>
-            <Button size="sm" onClick={onToggle} disabled={!isEditing}>
+            <Button size="sm" onClick={onToggle} disabled={busy}>
               <Check size={13} />
               {selected.status === "done"
                 ? t("projectIdeas.reopen")
@@ -786,7 +683,7 @@ function IdeaInspector({
               size="sm"
               variant="destructive"
               onClick={onDelete}
-              disabled={!isEditing}
+              disabled={busy}
               aria-label={t("projectIdeas.workspace.deleteAria")}
             >
               <Trash2 size={13} />
@@ -844,58 +741,6 @@ function IdeaInspector({
             <option value="medium">{t("projectIdeas.workspace.priorityMedium")}</option>
             <option value="low">{t("projectIdeas.workspace.priorityLow")}</option>
           </select>
-        </label>
-        <label className="block text-xs text-text-muted">
-          {t("projectIdeas.workspace.tag")}
-          <input
-            value={tags}
-            onChange={(event) => setTags(event.currentTarget.value)}
-            readOnly={!isEditing}
-            placeholder={t("projectIdeas.workspace.tagsHint")}
-            className="mt-1 block h-8 w-full rounded border border-border bg-bg-primary px-2 text-xs"
-          />
-        </label>
-        <label className="block text-xs text-text-muted">
-          {t("projectIdeas.workspace.acceptanceCriteria")}
-          <textarea value={acceptanceText} onChange={(event) => setAcceptanceText(event.currentTarget.value)} readOnly={!isEditing} rows={3} placeholder={t("projectIdeas.workspace.acceptanceCriteriaHint")} className="mt-1 w-full resize-y rounded border border-border bg-bg-primary p-2 text-sm read-only:cursor-default read-only:opacity-80" />
-        </label>
-        <div className="rounded border border-border p-2">
-          <h4 className="text-xs font-semibold">{t("projectIdeas.workspace.checklist")}</h4>
-          <div className="mt-1 space-y-1">
-            {checklist.map((item) => (
-              <div key={item.id} className="flex items-center gap-2 text-xs">
-                <input
-                  type="checkbox"
-                  checked={Boolean(item.is_completed)}
-                  disabled={!isEditing}
-                  onChange={() => void onToggleChecklist(item)}
-                />
-                <span className={item.is_completed ? "line-through opacity-60" : ""}>{item.text}</span>
-                {isEditing && (
-                  <button
-                    type="button"
-                    className="ml-auto text-danger"
-                    onClick={() => void onDeleteChecklist(item)}
-                    aria-label={t("projectIdeas.workspace.deleteChecklist")}
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-          {isEditing && <div className="mt-2 flex gap-1"><input value={checklistText} onChange={(event) => setChecklistText(event.currentTarget.value)} placeholder={t("projectIdeas.workspace.checklistPlaceholder")} className="h-7 min-w-0 flex-1 rounded border border-border bg-bg-primary px-2 text-xs" /><Button size="sm" onClick={() => void onAddChecklist()} disabled={!checklistText.trim()}><Plus size={12} /></Button></div>}
-        </div>
-        <label className="block text-xs text-text-muted">
-          {t("projectIdeas.workspace.organized")}
-          <textarea
-            value={organized}
-            onChange={(event) => setOrganized(event.currentTarget.value)}
-            readOnly={!isEditing}
-            rows={8}
-            aria-label={t("projectIdeas.workspace.organizedAria")}
-            className="mt-1 max-h-64 w-full resize-y overflow-y-auto rounded border border-border bg-bg-primary p-2 text-sm"
-          />
         </label>
         {isEditing && <Button onClick={onSave} disabled={busy || !title.trim() || !draft.trim()}>
           <Pencil size={13} />

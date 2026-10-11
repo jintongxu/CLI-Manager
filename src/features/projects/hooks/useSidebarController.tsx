@@ -16,7 +16,7 @@ import { useHistoryStore } from "../../history/index";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { createDefaultWorktreeTaskName, isWorktreeCreateInProgressError, useWorktreeStore } from "../api/worktreeStore";
 import { useWorktreeDepsRunnerStore } from "../api/worktreeDepsRunner";
-import { getWorktreeDisplayName } from "../api/worktreeMetadata";
+import { getWorktreeSidebarLabel } from "../api/worktreeMetadata";
 import { useExternalSessionSyncStore } from "../../history/api/externalSessionSyncStore";
 import type { TerminalPaneSplitDirection } from "../../terminal/api/terminalPaneTree";
 import type { Project, TreeNode as TNode, Group, WorktreeRecord, TerminalScope } from "../../../shared/types/index";
@@ -818,12 +818,12 @@ export function useSidebarController({
   const handleNewWorktreeTerminal = useCallback(
     async (project: Project, worktree: WorktreeRecord) => {
       if (rejectMissingWorktree(worktree)) return;
-      const title = getWorktreeDisplayName(worktree);
+      const title = getWorktreeSidebarLabel(worktree);
       if (compactMode || useExternalTerminal) {
         await openWindowsTerminal([{ title, cwd: worktree.path, shell: project.shell || useSettingsStore.getState().defaultShell }]);
       } else {
         // Worktree 右键新建终端同样必须绕过项目启动配置。
-        await createSession(project.id, worktree.path, undefined, "", buildProjectSplitOptions(project).envVars, project.shell || undefined, undefined, worktree.id);
+        await createSession(project.id, worktree.path, title, "", buildProjectSplitOptions(project).envVars, project.shell || undefined, undefined, worktree.id);
       }
       if (projectScopedTerminalViewEnabled) {
         onTerminalScopeChange?.({ kind: "worktree", projectId: worktree.project_id, worktreeId: worktree.id });

@@ -9,21 +9,18 @@ function body(idea: ProjectIdea): string {
 
 /** Complete, deterministic plain-text representation of an idea. */
 export function formatProjectIdeaPlain(idea: ProjectIdea): string {
-  const organized = idea.organized_content.trim();
-  return [idea.title.trim(), body(idea), organized ? `Organized content:\n${organized}` : ""].filter(Boolean).join("\n\n");
+  return [idea.title.trim(), body(idea)].filter(Boolean).join("\n\n");
 }
 
 export function formatProjectIdeaMarkdown(idea: ProjectIdea, project?: Project, worktree?: WorktreeRecord): string {
-  const metadata = [project && `Project: ${project.name}`, worktree && `Worktree: ${worktree.display_name || worktree.name}`, `Status: ${idea.status}`, `Priority: ${idea.priority}`, idea.tags.length ? `Tags: ${idea.tags.join(", ")}` : ""].filter(Boolean);
-  const organized = idea.organized_content.trim();
-  return [`# ${idea.title.trim()}`, metadata.length ? metadata.join("\n") : "", body(idea), organized ? `## Organized content\n\n${organized}` : ""].filter(Boolean).join("\n\n");
+  const metadata = [project && `Project: ${project.name}`, worktree && `Worktree: ${worktree.display_name || worktree.name}`, `Status: ${idea.status}`, `Priority: ${idea.priority}`].filter(Boolean);
+  return [`# ${idea.title.trim()}`, metadata.length ? metadata.join("\n") : "", body(idea)].filter(Boolean).join("\n\n");
 }
 
 /** A self-contained task prompt suitable for pasting into an assistant. */
 export function formatProjectIdeaPrompt(idea: ProjectIdea, project?: Project, worktree?: WorktreeRecord): string {
   const location = [project?.name && `Project: ${project.name}`, project?.path && `Path: ${project.path}`, worktree && `Worktree: ${worktree.display_name || worktree.name}`].filter(Boolean).join("\n");
-  const organized = idea.organized_content.trim();
-  return [`Task: ${idea.title.trim()}`, location, `Original idea:\n${body(idea)}`, organized ? `Additional context:\n${organized}` : "", "Please clarify assumptions, propose a plan, and identify the smallest safe next steps."].filter(Boolean).join("\n\n");
+  return [`Task: ${idea.title.trim()}`, location, `Original idea:\n${body(idea)}`, "Please clarify assumptions, propose a plan, and identify the smallest safe next steps."].filter(Boolean).join("\n\n");
 }
 
 /** Project context without executing commands or creating/mutating a Worktree. */
