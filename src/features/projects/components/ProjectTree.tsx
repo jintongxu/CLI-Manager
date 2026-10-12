@@ -20,7 +20,6 @@ import { NodeAppearanceIcon } from "../api/NodeAppearanceIcon";
 import { resolveNodeAppearance } from "../api/nodeAppearance";
 import { useTreeActions, worktreeListCollapseId, worktreeTerminalsCollapseId, type TreeActions } from "./TreeContext";
 import { useI18n } from "../../../shared/i18n/index";
-import { getWorktreeShortLabel } from "../api/worktreeLabels";
 import { toast } from "sonner";
 import { countProjectsInNode } from "../api/projectStore";
 import { getWorktreeDisplayName, getWorktreeSidebarLabel } from "../api/worktreeMetadata";
@@ -104,7 +103,7 @@ function filterTreeNodes(nodes: TNode[], query: string): TNode[] {
         continue;
       }
       const worktrees = (node.worktrees ?? []).filter((worktree) =>
-        [getWorktreeShortLabel(worktree), getWorktreeShortLabel({ label_ordinal: worktree.label_ordinal }), getWorktreeDisplayName(worktree), worktree.name, worktree.branch, worktree.description].some((value) => value.toLowerCase().includes(normalizedQuery))
+        [getWorktreeSidebarLabel(worktree), getWorktreeDisplayName(worktree), worktree.name, worktree.branch, worktree.description].some((value) => value.toLowerCase().includes(normalizedQuery))
       );
       if (worktrees.length > 0) {
         result.push({ ...node, worktrees });
@@ -113,7 +112,7 @@ function filterTreeNodes(nodes: TNode[], query: string): TNode[] {
     }
 
     if (node.type === "worktree") {
-      if ([getWorktreeShortLabel(node.worktree), getWorktreeShortLabel({ label_ordinal: node.worktree.label_ordinal }), getWorktreeDisplayName(node.worktree), node.worktree.name, node.worktree.branch, node.worktree.description].some((value) => value.toLowerCase().includes(normalizedQuery))) {
+      if ([getWorktreeSidebarLabel(node.worktree), getWorktreeDisplayName(node.worktree), node.worktree.name, node.worktree.branch, node.worktree.description].some((value) => value.toLowerCase().includes(normalizedQuery))) {
         result.push(node);
       }
       continue;

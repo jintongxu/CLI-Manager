@@ -8,7 +8,7 @@ export function getWorktreeDisplayName(
   return worktree.display_name?.trim() || worktree.name;
 }
 
-/** Prefer the explicit short label for compact sidebar Worktree identities. */
+/** Prefer the explicit short label; otherwise use the user-facing Worktree name. */
 export function getWorktreeSidebarLabel(
   worktree: Pick<WorktreeRecord, "name" | "display_name"> & Partial<Pick<WorktreeRecord, "short_label" | "label_ordinal">>,
 ): string {

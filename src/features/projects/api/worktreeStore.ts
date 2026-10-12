@@ -24,7 +24,7 @@ export interface GitWorktreeCreateResult {
 }
 
 export interface WorktreeCreateInput {
-  /** Optional independent alias; empty uses the database-allocated Wn. */
+  /** Optional independent alias; empty leaves the display name as the visible label. */
   shortLabel?: string;
   /** User-facing task name. It may contain Unicode text. */
   displayName?: string;

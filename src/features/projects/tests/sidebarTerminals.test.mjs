@@ -855,6 +855,8 @@ test("project badges aggregate only PTY task presentation, including hidden/work
   const controller = source("../hooks/useSidebarController.tsx");
   assert.match(controller, /summarizeProjectTerminalStates\(sessions, sessionStatuses, tabNotifications, taskSources\)/);
   assert.doesNotMatch(controller, /sessionStatuses\[session.id\] \?\? "running"/);
+  assert.match(controller, /openWorktreeSession\(project, worktree, targetPaneId, undefined, getWorktreeSidebarLabel\(worktree\)\)/);
+  assert.match(controller, /cwd: worktree\.path,\s*title: getWorktreeSidebarLabel\(worktree\),\s*worktreeId: worktree\.id/);
 });
 
 

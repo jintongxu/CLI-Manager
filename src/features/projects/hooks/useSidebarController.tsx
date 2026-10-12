@@ -719,7 +719,7 @@ export function useSidebarController({
     try {
       const worktree = await worktreeCreationAttempts.current.run(`${project.id}:${taskName}`,
         () => createWorktreeForProject(project, { taskName, displayName, description, shortLabel: normalizeWorktreeShortLabel(shortLabel) }),
-        worktree => openWorktreeSession(project, worktree, targetPaneId));
+        worktree => openWorktreeSession(project, worktree, targetPaneId, undefined, getWorktreeSidebarLabel(worktree)));
       toast.success(t("worktree.toast.created"), { description: worktree.path });
       void maybeInstallWorktreeDeps(project, worktree);
       setWorktreePrompt(null);
@@ -740,6 +740,7 @@ export function useSidebarController({
           await splitTerminal(activeSessionId, direction, {
             ...withoutTerminalTitle(options),
             cwd: worktree.path,
+            title: getWorktreeSidebarLabel(worktree),
             worktreeId: worktree.id,
           });
           closeHistory();

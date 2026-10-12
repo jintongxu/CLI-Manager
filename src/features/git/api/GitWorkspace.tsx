@@ -1,6 +1,6 @@
 import { WorktreeCreationAttempts, worktreeCreationPhase } from "../../projects/api/worktreeCreationRecovery";
 import { WorktreeShortLabelField, worktreeLabelErrorKey, worktreeCreationErrorDescription } from "../../projects/api/WorktreeShortLabelField";
-import { getWorktreeShortLabel, normalizeWorktreeShortLabel } from "../../projects/api/worktreeLabels";
+import { normalizeWorktreeShortLabel } from "../../projects/api/worktreeLabels";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import {
@@ -1576,7 +1576,7 @@ export function GitWorkspace({
             ) : null}
             {pendingOperation.operation === "rename-worktree" && <>
               <WorktreeShortLabelField value={worktreeShortLabel} onChange={setWorktreeShortLabel}
-                defaultLabel={getWorktreeShortLabel({ label_ordinal: projectWorktrees.find((row) => row.id === pendingOperation.target)?.label_ordinal })} />
+                defaultLabel={projectWorktrees.find((row) => row.id === pendingOperation.target)?.display_name?.trim() || projectWorktrees.find((row) => row.id === pendingOperation.target)?.name} />
               <input readOnly value={projectWorktrees.find((row) => row.id === pendingOperation.target)?.name ?? ""} aria-label={t("git.operation.worktreeInternalName")} />
             </>}
             {pendingOperation.operation === "rename-worktree" && (
