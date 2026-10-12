@@ -1,5 +1,5 @@
 import { WorktreeShortLabelField, worktreeLabelErrorKey } from "./WorktreeShortLabelField";
-import { getWorktreeShortLabel, normalizeWorktreeShortLabel } from "../api/worktreeLabels";
+import { normalizeWorktreeShortLabel } from "../api/worktreeLabels";
 import { withoutTerminalTitle } from "../../terminal/api/terminalCreationContext";
 import { useState } from "react";
 import type { useSidebarController } from "../hooks/useSidebarController";
@@ -917,7 +917,7 @@ export function SidebarView({
           <DialogTitle>{t("worktree.rename.title")}</DialogTitle>
           <DialogDescription className="mt-2">{t("worktree.rename.description")}</DialogDescription>
           <div className="mt-4 space-y-3">
-            <WorktreeShortLabelField value={renameShortLabel} onChange={setRenameShortLabel} defaultLabel={getWorktreeShortLabel({ label_ordinal: renameTarget?.label_ordinal })} />
+            <WorktreeShortLabelField value={renameShortLabel} onChange={setRenameShortLabel} defaultLabel={renameTarget?.display_name?.trim() || renameTarget?.name} />
             <Input readOnly value={renameTarget?.name ?? ""} aria-label={t("worktree.prompt.internalName")} />
             <div>
               <label className="mb-1 block text-xs text-text-muted">{t("worktree.prompt.taskName")}</label>

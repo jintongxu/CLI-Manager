@@ -90,7 +90,7 @@ function buildTree(groups: Group[], projects: Project[], search: string, worktre
           p.cli_tool.toLowerCase().includes(lowerSearch) ||
           worktrees.some((worktree) =>
             worktree.project_id === p.id &&
-            ([worktree.display_name?.trim() || worktree.name, worktree.name, worktree.branch, worktree.description, getWorktreeShortLabel(worktree), getWorktreeShortLabel({ label_ordinal: worktree.label_ordinal })].some((value) => value.toLowerCase().includes(lowerSearch)))
+            ([worktree.display_name?.trim() || worktree.name, worktree.name, worktree.branch, worktree.description, getWorktreeShortLabel(worktree)].some((value) => value.toLowerCase().includes(lowerSearch)))
           )
       )
     : projects;

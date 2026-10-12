@@ -12,6 +12,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / 'src-tauri/src/app/migrations.rs').read_text(encoding='utf-8')
 SQL = (ROOT / 'src-tauri/src/app/migrations/worktree_short_labels.sql').read_text(encoding='utf-8')
+DISABLE_ALLOCATION_SQL = (ROOT / 'src-tauri/src/app/migrations/disable_worktree_label_ordinal_allocation.sql').read_text(encoding='utf-8')
 
 
 @contextlib.contextmanager
@@ -67,6 +68,24 @@ class MigrationTests(unittest.TestCase):
         registry = SOURCE[SOURCE.index('pub(crate) fn migrations()'):]
         self.assertGreater(registry.index('version: MIGRATION_ADD_WORKTREE_SHORT_LABELS_VERSION'), registry.index('version: MIGRATION_ADD_PROJECT_IDEA_SORT_ORDER_VERSION'))
         self.assertIn('include_str!("migrations/worktree_short_labels.sql")', SOURCE)
+
+    def test_v51_disables_empty_label_allocation_without_rewriting_existing_ordinals(self):
+        insert(self.db, 'legacy', label_ordinal=7)
+        self.assertEqual(self.high(), 7)
+        self.db.executescript('BEGIN;\n' + DISABLE_ALLOCATION_SQL + '\nCOMMIT;')
+        insert(self.db, 'new-empty')
+        self.assertIsNone(self.ordinal('new-empty'))
+        self.assertEqual(self.high(), 7)
+        self.assertEqual(self.ordinal('legacy'), 7)
+        self.db.execute("UPDATE projects SET worktree_label_high_water=2147483647 WHERE id='p'")
+        insert(self.db, 'max-empty')
+        self.assertIsNone(self.ordinal('max-empty'))
+
+    def test_registered_after_50(self):
+        self.assertIn('MIGRATION_DISABLE_WORKTREE_LABEL_ORDINAL_ALLOCATION_VERSION: i64 = 51', SOURCE)
+        registry = SOURCE[SOURCE.index('pub(crate) fn migrations()'):]
+        self.assertGreater(registry.index('version: MIGRATION_DISABLE_WORKTREE_LABEL_ORDINAL_ALLOCATION_VERSION'), registry.index('version: MIGRATION_ADD_WORKTREE_SHORT_LABELS_VERSION'))
+        self.assertIn('include_str!("migrations/disable_worktree_label_ordinal_allocation.sql")', SOURCE)
 
     def test_backfill_all_statuses_ties_and_project_isolation(self):
         with connection(':memory:') as db:

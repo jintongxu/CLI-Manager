@@ -14,15 +14,11 @@ export function normalizeWorktreeShortLabel(value: string): string {
   return normalized;
 }
 
-/** Full persistent token. Missing legacy metadata never invents a default number. */
+/** Return only the user-provided short label; never derive one from legacy metadata. */
 export function getWorktreeShortLabel(
-  worktree: Partial<Pick<WorktreeRecord, "short_label" | "label_ordinal">> | null | undefined,
+  worktree: Partial<Pick<WorktreeRecord, "short_label">> | null | undefined,
 ): string {
-  if (!worktree) return "";
-  if (worktree.short_label) return worktree.short_label;
-  const ordinal = worktree.label_ordinal;
-  return typeof ordinal === "number" && Number.isInteger(ordinal) && ordinal > 0 && ordinal <= MAX_WORKTREE_LABEL_ORDINAL
-    ? `W${ordinal}` : "";
+  return worktree?.short_label?.trim() || "";
 }
 
 /** Match SQLite NOCASE exactly, rather than Unicode-wide case folding. */

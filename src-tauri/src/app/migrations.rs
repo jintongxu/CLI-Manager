@@ -946,6 +946,11 @@ pub(crate) const MIGRATION_ADD_WORKTREE_SHORT_LABELS_DESCRIPTION: &str =
     "add_worktree_persistent_short_labels";
 pub(crate) const MIGRATION_ADD_WORKTREE_SHORT_LABELS_SQL: &str =
     include_str!("migrations/worktree_short_labels.sql");
+pub(crate) const MIGRATION_DISABLE_WORKTREE_LABEL_ORDINAL_ALLOCATION_VERSION: i64 = 51;
+pub(crate) const MIGRATION_DISABLE_WORKTREE_LABEL_ORDINAL_ALLOCATION_DESCRIPTION: &str =
+    "disable_worktree_short_label_auto_allocation";
+pub(crate) const MIGRATION_DISABLE_WORKTREE_LABEL_ORDINAL_ALLOCATION_SQL: &str =
+    include_str!("migrations/disable_worktree_label_ordinal_allocation.sql");
 
 // 按既定版本顺序返回向上迁移注册表，由 SQL 插件在初始化时应用；此函数本身不执行 SQL。
 pub(crate) fn migrations() -> Vec<Migration> {
@@ -1352,6 +1357,12 @@ pub(crate) fn migrations() -> Vec<Migration> {
             version: MIGRATION_ADD_WORKTREE_SHORT_LABELS_VERSION,
             description: MIGRATION_ADD_WORKTREE_SHORT_LABELS_DESCRIPTION,
             sql: MIGRATION_ADD_WORKTREE_SHORT_LABELS_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: MIGRATION_DISABLE_WORKTREE_LABEL_ORDINAL_ALLOCATION_VERSION,
+            description: MIGRATION_DISABLE_WORKTREE_LABEL_ORDINAL_ALLOCATION_DESCRIPTION,
+            sql: MIGRATION_DISABLE_WORKTREE_LABEL_ORDINAL_ALLOCATION_SQL,
             kind: MigrationKind::Up,
         },
     ]

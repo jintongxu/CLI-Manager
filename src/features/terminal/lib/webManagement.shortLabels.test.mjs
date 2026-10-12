@@ -13,6 +13,12 @@ function load(source, require = () => ({})) {
   return exports;
 }
 const labels = load(read("../../projects/api/worktreeLabels.ts"));
+
+test("short label never derives an automatic token from legacy ordinal metadata", () => {
+  assert.equal(labels.getWorktreeShortLabel({ label_ordinal: 7 }), "");
+  assert.equal(labels.getWorktreeShortLabel({ short_label: "Fix", label_ordinal: 7 }), "Fix");
+});
+
 function harness(worktrees = []) {
   const calls = [];
   const project = { id: "p", path: "/repo", environment_type: "local" };

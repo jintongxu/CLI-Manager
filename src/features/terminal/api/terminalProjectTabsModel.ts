@@ -1,5 +1,5 @@
 import type { Project, TerminalSession, WorktreeRecord } from "../../../shared/types/index";
-import { getWorktreeShortLabel } from "../../projects/api/worktreeLabels";
+import { getWorktreeSidebarLabel } from "../../projects/api/worktreeMetadata";
 import type { TabNotificationState } from "../state";
 import { findWorktreeForSession, resolveProjectForSession } from "./terminalProject";
 
@@ -15,7 +15,7 @@ export interface TerminalProjectMembership {
   project: string;
   worktreeId: string | null;
   worktreeKind: "root" | "worktree" | "missing-worktree";
-  /** Persistent alias/Wn, or explicit ID when metadata is unavailable; empty for root. */
+  /** Explicit short label or display name, or explicit ID when metadata is unavailable; empty for root. */
   worktreeLabel: string;
   worktreeName: string | null;
   worktreePath: string | null;
@@ -87,7 +87,7 @@ export function resolveTerminalProjectMembership(
     project: project?.name.trim() || labels.unboundProject,
     worktreeId,
     worktreeKind: worktreeId ? validWorktree ? "worktree" : "missing-worktree" : "root",
-    worktreeLabel: worktreeId ? getWorktreeShortLabel(retainedWorktree) || worktreeId : "",
+    worktreeLabel: worktreeId ? retainedWorktree ? getWorktreeSidebarLabel(retainedWorktree) || worktreeId : worktreeId : "",
     worktreeName: retainedWorktree ? retainedWorktree.display_name?.trim() || retainedWorktree.name : worktreeId,
     worktreePath: retainedWorktree?.path ?? (worktreeId ? null : project?.environment_type === "ssh" ? project.remote_path || null : project?.path || null),
     branch: retainedWorktree?.branch ?? null,
