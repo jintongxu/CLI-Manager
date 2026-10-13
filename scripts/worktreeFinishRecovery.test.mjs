@@ -397,17 +397,25 @@ test('dialog force-merge stash restore conflict is integrated and remains cleanu
 
 
 test('legacy merged residual has an explicit manual recovery path, never checkout reads or cleanup', async () => {
-  const h = dialogHarness();
-  h.setState(pending({ checkoutValid: false, unknown: true, cleanupReady: false, blocker: 'finish_legacy_residual_manual_review' }));
-  h.render(h.props); await flush(); h.render();
-  assert.match(JSON.stringify(h.render()), /legacyResidualMessage/);
-  assert.match(JSON.stringify(h.render()), new RegExp(record.path));
-  assert.equal(h.nodes('Textarea').length, 0);
-  assert.equal(h.button('worktree.finish.cleanup').props.disabled, true);
-  assert.equal(h.calls.some(call => call.startsWith('git_get_changes') || call.startsWith('git_stage_all')), false);
-  h.setState(pending({ checkoutValid: false, cleanupReady: true, unknown: false, blocker: null }));
-  h.button('worktree.finish.reinspect').props.onClick(); await flush(); h.render();
-  assert.equal(h.button('worktree.finish.cleanup').props.disabled, false);
+  const blocked = dialogHarness();
+  blocked.setState(pending({ checkoutValid: false, unknown: true, cleanupReady: false, blocker: 'finish_legacy_residual_manual_review' }));
+  blocked.render({ ...blocked.props, onForceDelete: () => blocked.calls.push('force-delete') }); await flush(); blocked.render();
+  assert.match(JSON.stringify(blocked.render()), /legacyResidualMessage/);
+  assert.match(JSON.stringify(blocked.render()), new RegExp(record.path));
+  assert.equal(blocked.nodes('Textarea').length, 0);
+  assert.equal(blocked.button('worktree.finish.cleanup').props.disabled, true);
+  assert.equal(blocked.nodes('Button').some(node => node.props.children?.endsWith?.(':worktree.finish.forceDelete')), false);
+  assert.equal(blocked.calls.some(call => call.startsWith('git_get_changes') || call.startsWith('git_stage_all')), false);
+
+  const merged = dialogHarness();
+  merged.setState(pending({ checkoutValid: false, unknown: false, merged: true, outcome: 'merged', cleanupReady: false, blocker: 'finish_legacy_residual_manual_review' }));
+  merged.render({ ...merged.props, onForceDelete: () => merged.calls.push('force-delete') }); await flush(); merged.render();
+  const forceDelete = merged.button('worktree.finish.forceDelete');
+  assert.ok(forceDelete);
+  forceDelete.props.onClick();
+  assert.equal(merged.calls.includes('force-delete'), true);
+  assert.equal(merged.button('worktree.finish.cleanup').props.disabled, true);
+  assert.equal(merged.calls.some(call => call.startsWith('git_stage_all') || call.startsWith('git_commit') || call.startsWith('cleanup:')), false);
 });
 
 test('startup inspection errors fail closed without hiding pending recovery or closing sessions', async () => {

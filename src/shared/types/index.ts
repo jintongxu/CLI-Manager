@@ -307,6 +307,8 @@ export interface WorktreeRecord {
   description: string;
   branch: string;
   path: string;
+  /** Native identity captured immediately after Worktree creation; empty for legacy rows. */
+  root_identity: string;
   base_branch: string;
   deps_prompt_dismissed: number;
   provider_overrides: string;

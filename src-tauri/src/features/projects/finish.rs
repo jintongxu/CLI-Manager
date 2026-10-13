@@ -18,6 +18,8 @@ pub struct FinishRequest {
     pub worktree_id: String,
     pub project_path: String,
     pub worktree_path: String,
+    #[serde(default)]
+    pub root_identity: String,
     pub branch: String,
     pub base_branch: String,
 }
@@ -139,6 +141,12 @@ fn context(mut req: FinishRequest) -> Result<Context, String> {
     }
     req.project_path = path_to_git_arg(&project);
     req.worktree_path = path_to_git_arg(&target);
+    if !req.root_identity.is_empty() && worktree_root_metadata(&target)?.is_some() {
+        let current_identity = worktree_root_identity(&target)?;
+        if current_identity != req.root_identity {
+            return Err("finish_root_replaced".into());
+        }
+    }
     let journal = Journal::new(&common, &req.worktree_id)?;
     Ok(Context {
         request: req,
@@ -280,10 +288,12 @@ fn historical_outcome(ctx: &Context, oid: &str) -> Result<Option<String>, String
 // 每次删除前复核 source/base、恢复阻塞和目录归属；旧凭据不能授权新内容。
 fn cleanup_gate(ctx: &Context, r: &Receipt, valid: bool) -> Result<(), String> {
     if worktree_root_metadata(&ctx.target)?.is_some() {
-        if let Some(identity) = &r.checkout_identity {
-            if receipt::root_identity(&ctx.target)? != *identity {
-                return Err("finish_root_replaced".into());
-            }
+        let identity = r
+            .checkout_identity
+            .as_ref()
+            .ok_or("finish_root_identity_missing")?;
+        if receipt::root_identity(&ctx.target)? != *identity {
+            return Err("finish_root_replaced".into());
         }
     }
     if r.blocker.is_some() {
@@ -336,14 +346,9 @@ fn cleanup_gate(ctx: &Context, r: &Receipt, valid: bool) -> Result<(), String> {
         return Ok(());
     }
     if worktree_root_metadata(&ctx.target)?.is_some() {
-        let Some(owned) = &r.ownership else {
-            if valid && r.phase == "merged" {
-                return Ok(());
-            }
-            return Err("finish_legacy_residual_manual_review".into());
-        };
-        let roots = r.artifacts.as_ref().map_or(&[][..], |m| m.roots.as_slice());
-        receipt::verify_subset_excluding(&ctx.target, owned, roots)?;
+        // The target root was identity-bound above and is now covered by explicit
+        // user confirmation. Do not impose an ownership-subset dead-end: the
+        // confirmed policy intentionally removes unknown residual files too.
         if let Some(m) = &r.artifacts {
             artifact_manifest::verify(ctx, m)?;
         }
@@ -454,7 +459,8 @@ fn new_receipt(ctx: &Context, oid: String) -> Receipt {
         delete_branch: None,
         acknowledged: false,
         artifacts: None,
-        checkout_identity: None,
+        checkout_identity: (!ctx.request.root_identity.is_empty())
+            .then(|| ctx.request.root_identity.clone()),
     }
 }
 
@@ -690,16 +696,10 @@ where
             );
             if valid {
                 clean_source(ctx, &r.source_oid)?;
-                let classification = artifact_classify::classify(ctx)?;
-                if !classification.preserved.is_empty() {
-                    return Err(format!(
-                        "finish_unknown_content_preserved: {}",
-                        classification.preserved[0].path
-                    ));
-                }
-                if !classification.candidates.is_empty() {
-                    return Err("finish_cleanup_confirmation_required".into());
-                }
+                // Explicit finish cleanup is authorized to remove the complete target
+                // root. Classification remains useful for the confirmation plan, but
+                // unknown residuals are not a post-confirmation blocker.
+                let _classification = artifact_classify::classify(ctx)?;
                 r.ownership = Some(receipt::snapshot(&ctx.target)?);
             } else if worktree_root_metadata(&ctx.target)?.is_some() {
                 return Err("finish_legacy_residual_manual_review".into());
@@ -707,19 +707,15 @@ where
             r
         }
     };
+    if valid && r.checkout_identity.is_none() {
+        r.checkout_identity = Some(receipt::root_identity(&ctx.target)?);
+    }
     // Legacy callers retain ordinary cleanup, but never gain implicit cache authorization.
     if valid && r.phase == "merged" {
         cleanup_gate(ctx, &r, valid)?;
-        let classification = artifact_classify::classify(ctx)?;
-        if !classification.preserved.is_empty() {
-            return Err(format!(
-                "finish_unknown_content_preserved: {}",
-                classification.preserved[0].path
-            ));
-        }
-        if !classification.candidates.is_empty() {
-            return Err("finish_cleanup_confirmation_required".into());
-        }
+        // The caller has explicitly confirmed cleanup; all ordinary and unknown
+        // residuals in this already-fenced root are intentionally removed.
+        let _classification = artifact_classify::classify(ctx)?;
         r.ownership = Some(receipt::snapshot(&ctx.target)?);
     }
     cleanup_gate(ctx, &r, valid)?;
@@ -733,18 +729,9 @@ where
     r.phase = "cleanup_intent".into();
     // Critical intent and ownership must be durable BEFORE any Git/FS removal.
     ctx.journal.save(&r)?;
-    if let Some(m) = &r.artifacts {
-        if worktree_root_metadata(&ctx.target)?.is_some() {
-            // Complete ordinary + artifact ownership and cleanup intent were published first.
-            artifact_manifest::remove_guarded(ctx, m, &mut guard)?;
-            receipt::verify_subset(
-                &ctx.target,
-                r.ownership
-                    .as_ref()
-                    .ok_or("finish_legacy_residual_manual_review")?,
-            )?;
-        }
-    }
+    // The root deletion below is the single destructive operation. Artifact
+    // manifests are still validated during planning, but are not independently
+    // removed (and therefore cannot broaden scope into attachment directories).
     guard()?;
     if valid {
         let result = remove(ctx);
@@ -759,22 +746,31 @@ where
         {
             return Err("worktree_branch_mismatch".into());
         }
-        receipt::verify_subset(
-            &ctx.target,
-            r.ownership
-                .as_ref()
-                .ok_or("finish_legacy_residual_manual_review")?,
-        )?;
         guard()?;
         force_delete::ensure_scoped_prune(ctx)?;
-        // Missing .git is allowed only as a subset of our own pre-removal snapshot.
+        // Missing .git is allowed only after registration checks. The complete
+        // residual root is removed with the same symlink/reparse-safe walker used
+        // by explicit force delete; never recurse through links.
         if !valid
             && worktree_registration(&ctx.project, &ctx.target, &ctx.request.branch)?
                 == WorktreeRegistration::Matched
         {
             cleanup_registered_stale_worktree_path(&ctx.project, &ctx.target)?;
         } else {
-            cleanup_residual_worktree_dir_after_remove(&ctx.project, &ctx.target)?;
+            if worktree_root_metadata(&ctx.target)?.is_some() {
+                let identity = r
+                    .checkout_identity
+                    .as_ref()
+                    .ok_or("finish_root_identity_missing")?;
+                if receipt::root_identity(&ctx.target)? != *identity {
+                    return Err("finish_root_replaced".into());
+                }
+                cleanup_gate(ctx, &r, false)?;
+                force_delete::unlink_tree(&ctx.target)
+                    .map_err(|e| format!("finish_residual_remove_failed: {e}"))?;
+                ensure_worktree_root_absent(&ctx.target)?;
+                run_git_checked(&ctx.project, ["worktree", "prune"])?;
+            }
         }
     }
     ensure_worktree_root_absent(&ctx.target)?;

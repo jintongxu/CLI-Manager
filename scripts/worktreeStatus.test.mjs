@@ -88,7 +88,11 @@ test('actual read-only component classifies all finish states without SQL, sessi
     assert.match(h.text(), /cleanupReady/); assert.match(h.text(), /statusView.done/);
     if (state.blocker) assert.ok(h.text().includes(state.blocker));
     if (state.stashReference) assert.ok(h.text().includes('retained-oid'));
-    assert.equal(h.nodes('Button').length, 2); // Close + refresh, never a mutation action.
+    assert.equal(h.nodes('Button').length, state.blocker === 'finish_legacy_residual_manual_review' ? 3 : 2);
+    if (state.blocker === 'finish_legacy_residual_manual_review') {
+      const forceDelete = h.nodes('Button').find(node => node.props.children.endsWith(':worktree.statusView.forceDelete'));
+      assert.ok(forceDelete);
+    }
     assert.equal(h.calls.length, 1);
     assert.equal(JSON.stringify(h.calls[0][1]), JSON.stringify({ req: finish.finishRequest(record, 'D:/main') }));
   }
@@ -183,6 +187,7 @@ test('actual Sidebar status callback is non-dangerous, before Finish and availab
   dependencies['../api/projectIdeaStore'] = { useProjectIdeaStore: select => select({ activeProjectId: null, closeProjectIdeas() {} }) };
   dependencies['../../providers/api/providerSwitching'] = { getProviderSwitchAppType: () => null };
   dependencies['../api/worktreeMetadata'] = { getWorktreeDisplayName: wt => wt.name };
+  dependencies['../api/worktreeLabels'] = { getWorktreeShortLabel: wt => wt.short_label ?? '', normalizeWorktreeShortLabel: value => value };
   const sidebar = load('src/features/projects/components/SidebarView.tsx', dependencies).SidebarView;
   for (const status of ['active', 'missing', 'pending']) {
     slots = [];
@@ -192,7 +197,7 @@ test('actual Sidebar status callback is non-dangerous, before Finish and availab
       selectedGroupIds: new Set(), selectedWorktreeIds: new Set(), displayedTree: [], groups: [], compactMode: true,
       sidebarCollapsed: true, contextMenu: { kind: 'worktree', project, worktree: target }, t: key => key,
       setContextMenu: value => calls.push(value), setFinishTarget: () => assert.fail('must not finish'),
-      setDiscardTarget: () => assert.fail('must not discard'), removeWorktree: () => assert.fail('must not delete'),
+      setDiscardTarget: () => assert.fail('must not discard'), setForceDeleteTarget: () => assert.fail('must not force delete'), removeWorktree: () => assert.fail('must not delete'),
     };
     const render = () => { cursor = 0; return sidebar(props); };
     let tree = render();

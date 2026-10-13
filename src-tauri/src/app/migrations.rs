@@ -882,8 +882,7 @@ pub(crate) const MIGRATION_ADD_PROJECT_IDEA_METADATA_SQL: &str = "
 ";
 
 pub(crate) const MIGRATION_ADD_PROJECT_IDEA_TITLE_VERSION: i64 = 46;
-pub(crate) const MIGRATION_ADD_PROJECT_IDEA_TITLE_DESCRIPTION: &str =
-    "add_project_idea_title";
+pub(crate) const MIGRATION_ADD_PROJECT_IDEA_TITLE_DESCRIPTION: &str = "add_project_idea_title";
 pub(crate) const MIGRATION_ADD_PROJECT_IDEA_TITLE_SQL: &str = "
     ALTER TABLE project_ideas ADD COLUMN title TEXT NOT NULL DEFAULT '';
     UPDATE project_ideas
@@ -946,6 +945,11 @@ pub(crate) const MIGRATION_ADD_WORKTREE_SHORT_LABELS_DESCRIPTION: &str =
     "add_worktree_persistent_short_labels";
 pub(crate) const MIGRATION_ADD_WORKTREE_SHORT_LABELS_SQL: &str =
     include_str!("migrations/worktree_short_labels.sql");
+pub(crate) const MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_VERSION: i64 = 51;
+pub(crate) const MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_DESCRIPTION: &str =
+    "add_worktree_root_identity";
+pub(crate) const MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_SQL: &str =
+    "ALTER TABLE worktrees ADD COLUMN root_identity TEXT NOT NULL DEFAULT '';";
 
 // 按既定版本顺序返回向上迁移注册表，由 SQL 插件在初始化时应用；此函数本身不执行 SQL。
 pub(crate) fn migrations() -> Vec<Migration> {
@@ -1352,6 +1356,12 @@ pub(crate) fn migrations() -> Vec<Migration> {
             version: MIGRATION_ADD_WORKTREE_SHORT_LABELS_VERSION,
             description: MIGRATION_ADD_WORKTREE_SHORT_LABELS_DESCRIPTION,
             sql: MIGRATION_ADD_WORKTREE_SHORT_LABELS_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_VERSION,
+            description: MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_DESCRIPTION,
+            sql: MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_SQL,
             kind: MigrationKind::Up,
         },
     ]

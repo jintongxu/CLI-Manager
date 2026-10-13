@@ -845,14 +845,21 @@ fn artifact_parent_replacement_after_verify_blocks_before_child_unlink() {
         } else {
             ctx.target.join("node_modules")
         };
-        let replaced = if outside_root { parent } else { root.join("parent") };
-        let child = if outside_root { root.join("child") } else { replaced.join("child") };
+        let replaced = if outside_root {
+            parent
+        } else {
+            root.join("parent")
+        };
+        let child = if outside_root {
+            root.join("child")
+        } else {
+            replaced.join("child")
+        };
         fs::create_dir_all(child.parent().unwrap()).unwrap();
         fs::write(&child, "same").unwrap();
         let identity = receipt::entry_identity(&child).unwrap();
-        let m = artifact_manifest::prepare(
-            &ctx, &[path_to_git_arg(&root)], Default::default(),
-        ).unwrap();
+        let m = artifact_manifest::prepare(&ctx, &[path_to_git_arg(&root)], Default::default())
+            .unwrap();
         let mut checks = 0;
         let result = artifact_manifest::remove_guarded(&ctx, &m, || {
             checks += 1;
@@ -862,7 +869,11 @@ fn artifact_parent_replacement_after_verify_blocks_before_child_unlink() {
                 fs::create_dir(&replaced).unwrap();
                 // Move the original subtree, preserving every child identity/hash.
                 // Only the replaced parent's native identity can reject the unlink.
-                let retained = if outside_root { "node_modules" } else { "child" };
+                let retained = if outside_root {
+                    "node_modules"
+                } else {
+                    "child"
+                };
                 fs::rename(old.join(retained), replaced.join(retained)).unwrap();
                 assert_eq!(receipt::entry_identity(&child).unwrap(), identity);
             }

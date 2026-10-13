@@ -368,6 +368,8 @@ function collapseHarness(language = "en-US") {
     "../api/worktreeOrder": { orderProjectWorktrees: (items, id) => items.filter((w) => w.project_id === id).sort((a,b) => a.name.localeCompare(b.name)) },
     "../api/projectStore": { useProjectStore: (selector) => selector({ worktrees }) },
     "../api/worktreeMetadata": { getWorktreeDisplayName: (w) => w.name, getWorktreeSidebarLabel: (w) => w.short_label || w.name },
+    "../api/worktreeDepsRunner": { useWorktreeDepsRunnerStore: (selector) => selector({ tasks: {} }) },
+    "../api/worktreeStore": { useWorktreeStore: (selector) => selector({ deletingWorktreeIds: {} }) },
     "./SidebarTerminalList": { SidebarTerminalList: (props) => React.createElement("ul", { "data-scope": props.worktreeId ?? "main" }) },
     "@dnd-kit/core": { useDroppable: () => ({}) },
     "@dnd-kit/sortable": { useSortable: () => ({ attributes: {}, setNodeRef: noop }), SortableContext: noop },

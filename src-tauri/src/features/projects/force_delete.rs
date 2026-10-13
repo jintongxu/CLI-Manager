@@ -83,7 +83,13 @@ fn binding(req: &FinishRequest) -> Result<(Context, Binding), String> {
     ensure_scoped_prune(&ctx)?;
     let root_identity = match worktree_root_metadata(&ctx.target)? {
         None => None,
-        Some(_) => Some(receipt::root_identity(&ctx.target)?),
+        Some(_) => {
+            let current = receipt::root_identity(&ctx.target)?;
+            if !req.root_identity.is_empty() && current != req.root_identity {
+                return Err("force_delete_identity_changed".into());
+            }
+            Some(current)
+        }
     };
     // A residual containing a usable different checkout must not be adopted.
     if root_identity.is_some() && worktree_root_metadata(&ctx.target.join(".git"))?.is_some() {
@@ -188,42 +194,53 @@ pub(super) fn ensure_scoped_prune(ctx: &Context) -> Result<(), String> {
     if receipt::unsafe_link(&meta) || !meta.is_dir() {
         return Err("force_delete_unrelated_prune".into());
     }
-    let prune_path = |path: &Path| {
-        let value = path_to_git_arg(path).replace('\\', "/");
-        if cfg!(windows) {
-            value.to_lowercase()
-        } else {
-            value
+    // Git prune has no path argument. Trust only Git's explicit report, and
+    // verify every reported entry is a safe, genuinely stale admin directory
+    // below the common worktree admin directory. Unrelated stale registrations
+    // may be pruned by Git, but active registrations and links are never adopted.
+    let mut reported = 0;
+    for line in output
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
+        let Some(rest) = line.strip_prefix("Removing worktrees/") else {
+            return Err("force_delete_unrelated_prune".into());
+        };
+        let Some((name, _detail)) = rest.split_once(':') else {
+            return Err("force_delete_unrelated_prune".into());
+        };
+        if name.is_empty() || name.contains(['/', '\\']) {
+            return Err("force_delete_unrelated_prune".into());
         }
-    };
-    let expected = prune_path(&ctx.target.join(".git"));
-    let mut own = Vec::new();
-    for entry in fs::read_dir(admin).map_err(|_| "force_delete_unrelated_prune")? {
-        let entry = entry.map_err(|_| "force_delete_unrelated_prune")?;
-        let meta =
-            fs::symlink_metadata(entry.path()).map_err(|_| "force_delete_unrelated_prune")?;
+        let entry = admin.join(name);
+        let meta = fs::symlink_metadata(&entry).map_err(|_| "force_delete_unrelated_prune")?;
         if receipt::unsafe_link(&meta) || !meta.is_dir() {
-            continue;
+            return Err("force_delete_unrelated_prune".into());
         }
-        let gitdir = entry.path().join("gitdir");
-        let Ok(meta) = fs::symlink_metadata(&gitdir) else {
-            continue;
-        };
-        if receipt::unsafe_link(&meta) || !meta.is_file() {
-            continue;
+        let gitdir = entry.join("gitdir");
+        let gitdir_meta = fs::symlink_metadata(&gitdir)
+            .map_err(|_| "force_delete_unrelated_prune".to_string())?;
+        if receipt::unsafe_link(&gitdir_meta) || !gitdir_meta.is_file() {
+            return Err("force_delete_unrelated_prune".into());
         }
-        let Ok(path) = fs::read_to_string(gitdir) else {
-            continue;
-        };
-        if prune_path(&local_path_from_input(path.trim())) == expected {
-            own.push(format!(
-                "Removing worktrees/{}: ",
-                entry.file_name().to_string_lossy()
-            ));
+        let registered_gitdir = local_path_from_input(
+            fs::read_to_string(&gitdir)
+                .map_err(|_| "force_delete_unrelated_prune".to_string())?
+                .trim(),
+        );
+        // Git reports this entry stale only when the referenced checkout-side
+        // .git file is gone. It must still be the requested target's admin entry;
+        // unrelated stale registrations remain a conservative blocker.
+        let expected_gitdir = ctx.target.join(".git");
+        if force_path_compare(&registered_gitdir) != force_path_compare(&expected_gitdir)
+            || worktree_root_metadata(&registered_gitdir)?.is_some()
+        {
+            return Err("force_delete_unrelated_prune".into());
         }
+        reported += 1;
     }
-    // 未知输出/多重绑定/其它失效登记均不认领；不手工删除 Git 管理目录。
-    if own.len() != 1 || output.lines().any(|line| !line.starts_with(&own[0])) {
+    if reported == 0 {
         return Err("force_delete_unrelated_prune".into());
     }
     Ok(())
@@ -308,7 +325,7 @@ fn clear_readonly(path: &Path, meta: &fs::Metadata) -> io::Result<()> {
     Ok(())
 }
 
-fn unlink_tree(path: &Path) -> io::Result<()> {
+pub(crate) fn unlink_tree(path: &Path) -> io::Result<()> {
     let meta = fs::symlink_metadata(path)?;
     if unsafe_worktree_link(&meta) {
         clear_readonly(path, &meta)?;

@@ -1,9 +1,9 @@
+#[path = "worktree_create.rs"]
+mod create;
 #[path = "finish.rs"]
 pub mod finish;
 #[path = "worktree_jobs.rs"]
 pub mod jobs;
-#[path = "worktree_create.rs"]
-mod create;
 
 use git2::Repository;
 use serde::{Deserialize, Serialize};
@@ -39,6 +39,7 @@ pub struct GitWorktreeCreateResult {
     pub name: String,
     pub branch: String,
     pub path: String,
+    pub root_identity: String,
     pub base_branch: String,
 }
 
@@ -483,30 +484,53 @@ fn worktree_root_metadata(path: &Path) -> Result<Option<fs::Metadata>, String> {
     }
 }
 
-fn clear_readonly_tree(path: &Path) -> io::Result<()> {
-    let metadata = fs::symlink_metadata(path)?;
-    if unsafe_worktree_link(&metadata) {
-        return Ok(());
+fn remove_worktree_tree(path: &Path) -> io::Result<()> {
+    // Use the same explicit symlink/reparse-safe walker as finish and force
+    // delete; never delegate recursive removal to remove_dir_all.
+    finish::force_delete::unlink_tree(path)
+}
+
+pub(crate) fn worktree_root_identity(path: &Path) -> Result<String, String> {
+    let metadata =
+        fs::symlink_metadata(path).map_err(|e| format!("finish_metadata_failed: {e}"))?;
+    if unsafe_worktree_link(&metadata) || !metadata.is_dir() {
+        return Err("finish_unsafe_root".into());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        return Ok(format!("{}:{}", metadata.dev(), metadata.ino()));
     }
     #[cfg(windows)]
     {
-        let mut permissions = metadata.permissions();
-        if permissions.readonly() {
-            permissions.set_readonly(false);
-            fs::set_permissions(path, permissions)?;
+        use std::os::windows::{fs::OpenOptionsExt, io::AsRawHandle};
+        use windows_sys::Win32::Storage::FileSystem::{
+            GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION, FILE_FLAG_BACKUP_SEMANTICS,
+            FILE_FLAG_OPEN_REPARSE_POINT,
+        };
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(path)
+            .map_err(|e| format!("finish_identity_failed: {e}"))?;
+        let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
+        if unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, &mut info) } == 0 {
+            return Err(format!(
+                "finish_identity_failed: {}",
+                std::io::Error::last_os_error()
+            ));
         }
+        return Ok(format!(
+            "{}:{}:{}:{}:{}",
+            info.dwVolumeSerialNumber,
+            info.nFileIndexHigh,
+            info.nFileIndexLow,
+            info.ftCreationTime.dwHighDateTime,
+            info.ftCreationTime.dwLowDateTime
+        ));
     }
-    if metadata.is_dir() {
-        for entry in fs::read_dir(path)? {
-            clear_readonly_tree(&entry?.path())?;
-        }
-    }
-    Ok(())
-}
-
-fn remove_worktree_tree(path: &Path) -> io::Result<()> {
-    clear_readonly_tree(path)?;
-    fs::remove_dir_all(path)
+    #[cfg(not(any(unix, windows)))]
+    Err("finish_identity_unsupported".into())
 }
 
 fn unsafe_worktree_link(metadata: &fs::Metadata) -> bool {
@@ -1241,8 +1265,8 @@ pub async fn git_worktree_create(
 ) -> Result<GitWorktreeCreateResult, String> {
     validate_task_name(&req.task_name)?;
     tokio::task::spawn_blocking(move || create::create(req))
-    .await
-    .map_err(|e| format!("task_failed: {e}"))?
+        .await
+        .map_err(|e| format!("task_failed: {e}"))?
 }
 
 #[tauri::command]
@@ -1339,6 +1363,7 @@ fn validate_removal_target(project: &Path, target: &Path) -> Result<(), String> 
 pub async fn git_worktree_remove(
     project_path: String,
     worktree_path: String,
+    root_identity: String,
     branch: String,
     delete_branch: bool,
 ) -> Result<String, String> {
@@ -1351,6 +1376,11 @@ pub async fn git_worktree_remove(
             .canonicalize()
             .map_err(|e| format!("canonicalize_project_path_failed: {e}"))?;
         let target_path = local_path_from_input(&worktree_path);
+        if !root_identity.is_empty() && worktree_root_metadata(&target_path)?.is_some() {
+            if worktree_root_identity(&target_path)? != root_identity {
+                return Err("worktree_root_replaced".into());
+            }
+        }
         if !target_path.is_absolute() {
             return Err("worktree_path_not_absolute".to_string());
         }

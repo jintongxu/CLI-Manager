@@ -7,11 +7,12 @@ import { finishRequest, FinishGeneration, type FinishState } from './worktreeFin
 import { getWorktreeDisplayName } from './worktreeMetadata';
 import { inspectWorktreeStatus, worktreeStatusGuidance, worktreeStatusSummary } from './worktreeStatus';
 
-export function WorktreeStatusDialog({ open, project, worktree, onClose }: {
+export function WorktreeStatusDialog({ open, project, worktree, onClose, onForceDelete }: {
   open: boolean;
   project: Project | null;
   worktree: WorktreeRecord | null;
   onClose: () => void;
+  onForceDelete: (project: Project, worktree: WorktreeRecord) => void;
 }) {
   const { t } = useI18n();
   const [snapshot, setSnapshot] = useState<{ identity: string; state: FinishState | null; error: string | null; loading: boolean } | null>(null);
@@ -55,6 +56,7 @@ export function WorktreeStatusDialog({ open, project, worktree, onClose }: {
   const state = current?.state;
   const loading = !current || current.loading;
   const raw = current?.error ?? state?.blocker;
+  const legacyResidual = raw?.split(':')[0].trim() === 'finish_legacy_residual_manual_review';
   const summaryKey: TranslationKey = loading ? 'worktree.statusView.loading'
     : current?.error ? 'worktree.statusView.error'
     : state ? `worktree.statusView.summary.${worktreeStatusSummary(state)}` : 'worktree.statusView.summary.unknown';
@@ -91,6 +93,13 @@ export function WorktreeStatusDialog({ open, project, worktree, onClose }: {
           <p>{t(`worktree.statusView.guidance.${worktreeStatusGuidance(raw)}`)}</p>
           <p className="mt-2 text-text-muted">{t('worktree.statusView.raw')}</p>
           <pre className="whitespace-pre-wrap break-all select-text">{raw}</pre>
+          {legacyResidual && <Button
+            className="mt-3"
+            variant="destructive"
+            onClick={() => { close(); onForceDelete(project, worktree); }}
+          >
+            {t('worktree.statusView.forceDelete')}
+          </Button>}
         </div>}
       </div>
       <DialogFooter>

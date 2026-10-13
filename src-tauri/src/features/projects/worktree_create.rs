@@ -144,10 +144,12 @@ where
             return Err(error);
         }
         seed_trellis_developer_identity(&project, &target);
+        let root_identity = worktree_root_identity(&target)?;
         return Ok(GitWorktreeCreateResult {
             name,
             branch,
             path: target_arg,
+            root_identity,
             base_branch,
         });
     }

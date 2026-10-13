@@ -1051,6 +1051,7 @@ export function SidebarView({
         project={statusTarget?.project ?? null}
         worktree={statusTarget?.worktree ?? null}
         onClose={() => setStatusTarget(null)}
+        onForceDelete={(project, worktree) => setForceDeleteTarget({ project, worktree })}
       />
 
       <WorktreeFinishDialog
@@ -1058,6 +1059,10 @@ export function SidebarView({
         project={finishTarget?.project ?? null}
         worktree={finishTarget?.worktree ?? null}
         onClose={() => setFinishTarget(null)}
+        onForceDelete={(project, worktree) => {
+          setFinishTarget(null);
+          setForceDeleteTarget({ project, worktree });
+        }}
       />
 
       <ConfirmDialog

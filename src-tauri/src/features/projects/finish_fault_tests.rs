@@ -53,7 +53,7 @@ fn finish_normal_merge_intent_recovers_but_stash_intent_cannot() {
 }
 
 #[test]
-fn finish_dirty_main_retry_and_changed_ignored_artifact() {
+fn finish_dirty_main_retry_and_confirmed_unknown_artifact_is_removed() {
     let (_temp, ctx) = fixture();
     fs::write(ctx.project.join("local"), "keep").unwrap();
     assert_eq!(merge(&ctx, false).unwrap_err(), "dirty_main_worktree");
@@ -63,10 +63,8 @@ fn finish_dirty_main_retry_and_changed_ignored_artifact() {
     // Use the repository exclude file, not a tracked checkout mutation.
     fs::write(ctx.common.join("info/exclude"), "artifact\n").unwrap();
     fs::write(ctx.target.join("artifact"), "new ignored content").unwrap();
-    assert!(cleanup(&ctx, true)
-        .unwrap_err()
-        .starts_with("finish_unknown_content_preserved:"));
-    assert!(ctx.target.join("artifact").exists());
+    assert!(cleanup(&ctx, true).unwrap().done);
+    assert!(!ctx.target.exists());
 }
 
 #[test]

@@ -14,6 +14,21 @@
 
 ## [TEMP]
 
+### Worktree 删除进行中状态（2026-10-13）
+
+- Worktree 完成清理、丢弃和强制删除进入后台执行后，左侧栏对应 Worktree 显示与后台安装依赖一致的旋转指示器；操作完成或失败后自动停止，仅影响当前 Worktree。
+- 修复后台删除状态更新过快或侧栏节点复用时转圈未刷新的问题；删除中的 Worktree 现在由 Worktree Store 维护独立实时状态，成功或失败都会清除。
+
+### Worktree 丢弃删除失败恢复（2026-10-11）
+
+- 修复 Windows 下 Worktree 文件被占用或删除失败时后台任务无限重试、长期显示“正在删除”的问题；删除重试现在有明确上限，耗尽后记录为需重新确认，并恢复数据库与侧栏的 Worktree 状态，避免留下永久 pending。
+- 修复 discard 失败恢复误调用 finish 状态检查的问题；旧 finish 收据缺少残留目录归属时，不再把 `finish_legacy_residual_manual_review` 误显示为 discard 删除错误。
+- 状态查看弹窗遇到该安全阻塞时提供现有强制删除流程入口，要求重新预检、精确输入完整路径并确认关闭会话后才可删除，不放宽自动收尾安全检查。
+- 完成任务弹窗在合并证据可信但旧残留归属无法确认时，直接提供同一强制删除授权流程；普通自动清理仍保持安全阻塞。
+- 修复强制删除遇到 Git common dir 中其他 stale Worktree 登记时被 `force_delete_unrelated_prune` 整体阻塞的问题；现在仅接受 Git 明确报告的、位于安全管理目录内的 stale 登记，不手工删除未知或活动登记。
+- Worktree 的完成清理、丢弃和强制删除在用户明确确认并通过身份/路径/会话安全检查后，统一删除整个目标目录（包括未知残留）；主仓库、其他 Worktree、链接/junction、活动会话与不安全 stale 登记仍会阻止操作，且清理失败保留可重试恢复状态。应用重启不会自动恢复持久化的破坏性 discard 任务；完成清理残留目录前还会重新核验原目标根身份；登记仍在但 checkout `.git` 文件缺失时，丢弃与完成清理均按已登记 stale Worktree 安全清理。
+- 新建 Worktree 时立即持久化根目录原生身份；Finish、Discard、Force Delete 复用该身份校验，路径被替换或缺少匹配身份时拒绝删除，避免依赖尚未生成的 Finish 收据才建立安全边界。
+
 ### Worktree 新终端名称（2026-10-11）
 
 - Worktree 新建终端时优先使用 Worktree 短标识作为终端名称；没有短标识时使用 Worktree 显示名称，内部终端与外部 Windows Terminal 保持一致。
