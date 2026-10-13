@@ -48,6 +48,22 @@ test("unscoped and cyclic sources do not leak metadata", () => {
   assert.deepEqual(plain(withoutTerminalTitle({ title: "project", projectId: "p", startupCmd: "codex" })), { projectId: "p", startupCmd: "codex" });
 });
 
+test("pane edge parsing preserves current-work pane IDs containing colons", () => {
+  const tabsModel = load("../lib/terminalTabsModel.ts", () => ({}));
+  assert.deepEqual(plain(tabsModel.parsePaneDropTarget("pane-edge:current-work-layout:1:right")), {
+    type: "edge", paneId: "current-work-layout:1", edge: "right",
+  });
+});
+
+test("current-work drag keeps tab sorting and supports pane edge splitting", () => {
+  const tabs = readFileSync(new URL("../hooks/useTerminalTabsController.tsx", import.meta.url), "utf8");
+  const dragOver = tabs.slice(tabs.indexOf("const handleDragOver ="), tabs.indexOf("const handleDragEnd ="));
+  const dragEnd = tabs.slice(tabs.indexOf("const handleDragEnd ="), tabs.indexOf("const handleToolbarDragStart ="));
+  assert.match(dragOver, /currentWorkActiveId[\s\S]*dropTarget\?\.type === "edge"[\s\S]*updateActiveDropPreview/);
+  assert.match(dragEnd, /currentWorkOverId[\s\S]*reorderCurrentWork/);
+  assert.match(dragEnd, /currentWorkActiveId[\s\S]*splitCurrentWorkSessionToPaneEdge\(currentWorkActiveId, dropTarget\.paneId, dropTarget\.edge\)/);
+});
+
 test("entrypoint title and startup-policy contracts remain explicit", () => {
   const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
   const tabs = read("../hooks/useTerminalTabsController.tsx");
@@ -150,7 +166,7 @@ test("actual empty-split tab and palette callbacks explicitly override project C
   const calls = [];
   const deps = { resolveTerminalCreationContext: resolve, sessions: [source], projects: [project], worktrees: [worktree], groups: [],
     resolveNewTabSource: () => source, splitPicker: { sessionId: "s", direction: "vertical" },
-    splitTerminal: (...args) => calls.push(args), handleCloseSplitPicker() {}, closeHistory() {}, setActiveWorkspaceTab() {},
+    splitTerminal: (...args) => calls.push(args), splitTerminalAndAdd: (...args) => calls.push(args), handleCloseSplitPicker() {}, closeHistory() {}, setActiveWorkspaceTab() {},
     activeSession: source, activeSessionId: "s", useTerminalStore: { getState: () => ({ sessions: [source] }) },
     useProjectStore: { getState: () => ({ projects: [project], groups: [] }) },
     useWorktreeStore: { getState: () => ({ worktrees: [worktree] }) },

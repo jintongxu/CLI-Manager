@@ -200,7 +200,9 @@ export function parsePaneDropTarget(id: string): PaneDropTarget | null {
   if (!id.startsWith(PANE_EDGE_DROP_PREFIX)) return null;
 
   const payload = id.slice(PANE_EDGE_DROP_PREFIX.length);
-  const [paneId, edge] = payload.split(":");
+  const separatorIndex = payload.lastIndexOf(":");
+  const paneId = separatorIndex > 0 ? payload.slice(0, separatorIndex) : "";
+  const edge = separatorIndex > 0 ? payload.slice(separatorIndex + 1) : "";
   if (!paneId || !edge || !isTerminalPaneDropEdge(edge)) return null;
   return { type: "edge", paneId, edge };
 }
@@ -410,6 +412,8 @@ export const terminalTabCollisionDetection: CollisionDetection = (args) => {
   // pointerWithin drops `over` and the displacement animation snaps back.
   // closestCenter keeps a stable target across gaps (sortable standard).
   if (activeId.startsWith(CURRENT_WORK_DRAG_PREFIX)) {
+    const paneCollision = pointerCollisions.find((collision) => isPaneDropCollisionId(String(collision.id)));
+    if (paneCollision) return [paneCollision];
     const currentWorkCollision = closestCenter(args).find((collision) => String(collision.id).startsWith(CURRENT_WORK_DRAG_PREFIX));
     return currentWorkCollision ? [currentWorkCollision] : [];
   }

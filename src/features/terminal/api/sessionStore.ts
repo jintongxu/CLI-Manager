@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { Store } from "@tauri-apps/plugin-store";
 import type { TerminalSession, PersistedSplit } from "../../../shared/types/index";
+import type { TerminalPaneNode } from "./terminalPaneTree";
+import { sanitizeCurrentWorkPaneTree } from "../lib/currentWorkModel";
 import { getCliManagerDataPaths } from "../../../shared/platform/appPaths";
 import { singleFlight } from "../../../shared/lib/singleFlight";
 import {
@@ -17,6 +19,7 @@ interface SessionStore {
   activeWorkspanId: string | null;
   currentWorkSessionIds: string[];
   currentWorkActiveSessionId: string | null;
+  currentWorkPaneTree: TerminalPaneNode | null;
   loaded: boolean;
 
   load: () => Promise<void>;
@@ -24,7 +27,7 @@ interface SessionStore {
   saveSplits: (splits: PersistedSplit[]) => Promise<void>;
   saveActiveSessionId: (id: string | null) => Promise<void>;
   saveWorkspans: (workspans: TerminalWorkspan[], activeWorkspanId: string | null, sessions: TerminalSession[]) => Promise<void>;
-  saveCurrentWork: (sessionIds: string[], activeSessionId: string | null, sessions: TerminalSession[]) => Promise<void>;
+  saveCurrentWork: (sessionIds: string[], activeSessionId: string | null, sessions: TerminalSession[], paneTree?: TerminalPaneNode | null) => Promise<void>;
   clear: () => Promise<void>;
 }
 
@@ -53,6 +56,7 @@ export const useSessionStore = create<SessionStore>(() => ({
   activeWorkspanId: null,
   currentWorkSessionIds: [],
   currentWorkActiveSessionId: null,
+  currentWorkPaneTree: null,
   loaded: false,
 
   load: singleFlight(async () => {
@@ -76,6 +80,10 @@ export const useSessionStore = create<SessionStore>(() => ({
       && currentWorkSessionIds.includes(storedCurrentWorkActiveSessionId)
       ? storedCurrentWorkActiveSessionId
       : currentWorkSessionIds[0] ?? null;
+    const currentWorkPaneTree = sanitizeCurrentWorkPaneTree(
+      await s.get<unknown>("currentWorkPaneTree"),
+      new Set(currentWorkSessionIds),
+    );
 
     useSessionStore.setState({
       sessions,
@@ -85,6 +93,7 @@ export const useSessionStore = create<SessionStore>(() => ({
       activeWorkspanId,
       currentWorkSessionIds,
       currentWorkActiveSessionId,
+      currentWorkPaneTree,
       loaded: true,
     });
   }),
@@ -130,7 +139,7 @@ export const useSessionStore = create<SessionStore>(() => ({
     });
   },
 
-  saveCurrentWork: async (sessionIds, activeSessionId, sessions) => {
+  saveCurrentWork: async (sessionIds, activeSessionId, sessions, paneTree) => {
     const s = await getStore();
     const liveSessionIds = new Set(sessions
       .filter((session) => session.kind !== "subagent-transcript"
@@ -149,10 +158,23 @@ export const useSessionStore = create<SessionStore>(() => ({
     const persistableCurrentWorkActiveSessionId = currentWorkActiveSessionId && persistableCurrentWorkSessionIds.includes(currentWorkActiveSessionId)
       ? currentWorkActiveSessionId
       : persistableCurrentWorkSessionIds[0] ?? null;
+    const runtimeCurrentWorkPaneTree = sanitizeCurrentWorkPaneTree(
+      paneTree ?? useSessionStore.getState().currentWorkPaneTree,
+      new Set(currentWorkSessionIds),
+    );
+    const persistableCurrentWorkPaneTree = sanitizeCurrentWorkPaneTree(
+      runtimeCurrentWorkPaneTree,
+      new Set(persistableCurrentWorkSessionIds),
+    );
     await s.set("currentWorkSessionIds", persistableCurrentWorkSessionIds);
     await s.set("currentWorkActiveSessionId", persistableCurrentWorkActiveSessionId);
+    await s.set("currentWorkPaneTree", persistableCurrentWorkPaneTree);
     await s.save();
-    useSessionStore.setState({ currentWorkSessionIds, currentWorkActiveSessionId });
+    useSessionStore.setState({
+      currentWorkSessionIds,
+      currentWorkActiveSessionId,
+      currentWorkPaneTree: runtimeCurrentWorkPaneTree,
+    });
   },
 
   clear: async () => {
@@ -164,6 +186,7 @@ export const useSessionStore = create<SessionStore>(() => ({
     await s.set("activeWorkspanId", null);
     await s.set("currentWorkSessionIds", []);
     await s.set("currentWorkActiveSessionId", null);
+    await s.set("currentWorkPaneTree", null);
     useSessionStore.setState({
       sessions: [],
       splits: [],
@@ -172,6 +195,7 @@ export const useSessionStore = create<SessionStore>(() => ({
       activeWorkspanId: null,
       currentWorkSessionIds: [],
       currentWorkActiveSessionId: null,
+      currentWorkPaneTree: null,
     });
   },
 }));

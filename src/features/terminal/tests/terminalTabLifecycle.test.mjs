@@ -20,7 +20,8 @@ const metadata = load("../store/terminalSidebarMetadata.ts", sidebar);
 const pane = load("../api/terminalPaneTree.ts");
 const workspan = load("../api/terminalWorkspan.ts", pane);
 const visibility = load("../lib/terminalTabVisibility.ts", pane);
-const layout = load("../lib/terminalStoreLayout.ts", visibility);
+const currentWork = load("../lib/currentWorkModel.ts");
+const layout = load("../lib/terminalStoreLayout.ts", { ...visibility, ...currentWork });
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const rendererPolicy = load("../types/xTermModel.ts");
 
@@ -50,13 +51,15 @@ function fixture(sessions = [], workspans = [], daemon = [], projects = [], work
   const calls = [];
   const persisted = {
     sessions, workspans, activeSessionId: sessions[0]?.id ?? null, activeWorkspanId: workspans[0]?.id ?? null, splits: [],
+    currentWorkSessionIds: [], currentWorkActiveSessionId: null,
     async saveSessions(value) { calls.push(["saveSessions", plain(value)]); this.sessions = value; },
     async saveActiveSessionId(value) { calls.push(["saveActive", value]); this.activeSessionId = value; },
     async saveWorkspans(value, id) { calls.push(["saveWorkspans", plain(value)]); this.workspans = value; this.activeWorkspanId = id; },
+    async saveCurrentWork(ids, activeId) { calls.push(["saveCurrentWork", ids, activeId]); this.currentWorkSessionIds = [...ids]; this.currentWorkActiveSessionId = activeId; },
     async saveSplits(value) { this.splits = value; },
   };
   const dependencies = {
-    ...metadata, ...pane, ...workspan, ...visibility, ...layout, ...naming,
+    ...metadata, ...pane, ...workspan, ...visibility, ...layout, ...currentWork, ...naming,
     resolveNextSessionIdForShortcut: pane.getNextSessionIdForShortcut,
     unsplitPaneLeaf: pane.unsplitPaneLeaf,
     terminalProcessManager: {
@@ -384,6 +387,24 @@ test("sidebar actions validate partitions, append pin transitions and never chan
   assert.equal(calls.some(([kind]) => ["create", "close", "saveWorkspans", "scheduleActive"].includes(kind)), false);
 });
 
+
+test("restore remaps and persists current-work sessions when recreated PTYs get new IDs", async () => {
+  const originalSessions = [session("a"), session("b")];
+  const f = fixture(originalSessions, [span("w", "p", "a")]);
+  f.persisted.currentWorkSessionIds = ["b", "a", "missing"];
+  f.persisted.currentWorkActiveSessionId = "a";
+  let nextId = 0;
+  f.dependencies.terminalProcessManager.create = async () => `recreated-${++nextId}`;
+
+  await f.api.getState().restoreSessions(new Map(), {});
+
+  assert.deepEqual(Array.from(f.api.getState().sessions, (item) => item.id), ["recreated-1", "recreated-2"]);
+  assert.deepEqual([...f.persisted.currentWorkSessionIds], ["recreated-2", "recreated-1"]);
+  assert.equal(f.persisted.currentWorkActiveSessionId, "recreated-1");
+  assert.deepEqual(plain(f.calls.find(([kind]) => kind === "saveCurrentWork")), [
+    "saveCurrentWork", ["recreated-2", "recreated-1"], "recreated-1",
+  ]);
+});
 
 test("daemon restore and direct attach preserve explicit task states and use none/done fallback independent of alive", async () => {
   for (const alive of [true, false]) for (const taskStatus of [undefined, "invalid", "none", "running", "attention", "done", "failed"]) {

@@ -18,6 +18,7 @@ interface Props {
   visibleNode?: TerminalPaneNode | null;
   renderLeaf: (leaf: TerminalPaneLeaf) => ReactNode;
   fullscreenLeafId?: string | null;
+  onSplitRatioChange?: (splitId: string, ratio: number) => void;
 }
 
 interface SplitLayoutMetrics {
@@ -47,8 +48,9 @@ function applyRectStyle(element: HTMLDivElement | undefined, rect: TerminalSplit
   element.style.height = `${rect.height}px`;
 }
 
-export function SplitTerminalView({ node, visibleNode = node, renderLeaf, fullscreenLeafId }: Props) {
-  const setSplitRatio = useTerminalStore((s) => s.setSplitRatio);
+export function SplitTerminalView({ node, visibleNode = node, renderLeaf, fullscreenLeafId, onSplitRatioChange }: Props) {
+  const setStoredSplitRatio = useTerminalStore((s) => s.setSplitRatio);
+  const setSplitRatio = onSplitRatioChange ?? setStoredSplitRatio;
   const containerRef = useRef<HTMLDivElement>(null);
   const [layoutMetrics, setLayoutMetrics] = useState<SplitLayoutMetrics>({
     rect: { left: 0, top: 0, width: 0, height: 0 },
