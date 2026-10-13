@@ -25,6 +25,7 @@ import { useWorktreeStore } from "../../projects/api/worktreeStore";
 import { ArrowDown, ArrowDownToLine } from "lucide-react";
 import { Check, Copy, FileText, RefreshCw, X } from "../../../shared/ui/icons";
 import { SessionTranscriptContent } from "../../history/api/SessionTranscriptContent";
+import { TerminalMarkdownPreviewQuestions, type MarkdownPreviewQuestion } from "./TerminalMarkdownPreviewQuestions";
 import { FontSizeControl, useFontSizeControlVisibility } from "../../../shared/ui/FontSizeControl";
 import { MarkdownPreviewAnswerSelect, type MarkdownPreviewMessage } from "./MarkdownPreviewAnswerSelect";
 import { resolveStarredMessageIndexes } from "../lib/markdownPreviewStars";
@@ -92,6 +93,20 @@ function selectAssistantMarkdownMessages(detail: HistorySessionDetail): Markdown
   return messages;
 }
 
+const QuestionsComponent = typeof TerminalMarkdownPreviewQuestions === "undefined"
+  ? (() => null)
+  : TerminalMarkdownPreviewQuestions;
+
+function selectUserQuestions(detail: HistorySessionDetail): MarkdownPreviewQuestion[] {
+  return detail.messages.flatMap((message, messageIndex) => {
+    if (message.role.toLowerCase() !== "user") return [];
+    const content = conversationText(message).trim();
+    return content.length > 0
+      ? [{ messageIndex, content, timestamp: message.timestamp ?? null }]
+      : [];
+  });
+}
+
 const MARKDOWN_PREVIEW_FONT_SIZE_MIN = 8;
 const MARKDOWN_PREVIEW_FONT_SIZE_MAX = 32;
 
@@ -153,6 +168,8 @@ export function TerminalMarkdownPreview({ sessionId, open, onClose }: TerminalMa
   }, [isSshProject, project?.path, project?.remote_path, session?.cwd, worktree?.path, worktree?.status]);
 
   const [previewMessages, setPreviewMessages] = useState<MarkdownPreviewMessage[]>([]);
+  const [questions, setQuestions] = useState<MarkdownPreviewQuestion[]>([]);
+  const [questionsOpen, setQuestionsOpen] = useState(false);
   const [selectedMessageIndex, setSelectedMessageIndex] = useState<number | null>(null);
   const [answerIdentity, setAnswerIdentity] = useState<PreviewAnswerIdentity | null>(null);
   const [fontSize, setFontSize] = useState(uiFontSize);
@@ -212,6 +229,8 @@ export function TerminalMarkdownPreview({ sessionId, open, onClose }: TerminalMa
   useEffect(() => {
     loadedTriggerRef.current = null;
     setPreviewMessages([]);
+    setQuestions([]);
+    setQuestionsOpen(false);
     setSelectedMessageIndex(null);
     setAnswerIdentity(null);
     setLoading(false);
@@ -288,6 +307,7 @@ export function TerminalMarkdownPreview({ sessionId, open, onClose }: TerminalMa
         loadedTriggerRef.current = trigger;
         const nextMessages = selectAssistantMarkdownMessages(detail);
         setPreviewMessages(nextMessages);
+        setQuestions(selectUserQuestions(detail));
         setAnswerIdentity({
           sessionKey: summarySessionKey(detail),
           source: detail.source,
@@ -530,6 +550,28 @@ export function TerminalMarkdownPreview({ sessionId, open, onClose }: TerminalMa
           </div>
         )}
       </div>
+      <footer className="flex shrink-0 items-center border-t border-[color-mix(in_srgb,var(--border)_58%,transparent)] px-3 py-2">
+        <button
+          type="button"
+          onClick={() => setQuestionsOpen(true)}
+          disabled={loading}
+          className="ui-focus-ring inline-flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs text-[var(--text-secondary)] transition hover:bg-[var(--interactive-hover-bg)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-45"
+          aria-label={t("terminal.markdownPreview.questionsButton")}
+          title={questions.length === 0
+            ? t("terminal.markdownPreview.questionsEmpty")
+            : t("terminal.markdownPreview.questionsButton")}
+        >
+          <FileText size={13} aria-hidden="true" />
+          <span>{t("terminal.markdownPreview.questionsButton")}</span>
+          <span className="text-[var(--text-muted)]">({questions.length})</span>
+        </button>
+      </footer>
+      <QuestionsComponent
+        open={questionsOpen}
+        onOpenChange={setQuestionsOpen}
+        questions={questions}
+        formatTime={(timestamp) => formatPreviewMessageTime(timestamp, language)}
+      />
     </aside>
   );
 }

@@ -43,6 +43,7 @@ export {
   Link2,
   LoaderCircle,
   Maximize2,
+  MessageSquare,
   Minimize2,
   FolderPlus,
   Palette,
