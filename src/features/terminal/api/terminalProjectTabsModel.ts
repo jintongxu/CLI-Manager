@@ -5,6 +5,7 @@ import { findWorktreeForSession, resolveProjectForSession } from "./terminalProj
 
 export interface ProjectTabLabels {
   unboundProject: string;
+  anonymousPi?: string;
   missingWorktree: string;
 }
 
@@ -84,7 +85,8 @@ export function resolveTerminalProjectMembership(
     sessionId: session.id,
     projectId,
     projectKey: getTerminalProjectKey(projectId),
-    project: project?.name.trim() || labels.unboundProject,
+    project: project?.name.trim()
+      || (session.kind === "ephemeral-pi" ? labels.anonymousPi ?? labels.unboundProject : labels.unboundProject),
     worktreeId,
     worktreeKind: worktreeId ? validWorktree ? "worktree" : "missing-worktree" : "root",
     worktreeLabel: worktreeId ? retainedWorktree ? getWorktreeSidebarLabel(retainedWorktree) || worktreeId : worktreeId : "",

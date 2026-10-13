@@ -383,6 +383,7 @@ export function PaneTabBar({
                 session.worktreeId ? worktreeById.get(session.worktreeId) : null,
                 {
                   unboundProject: t("terminal.context.unboundProject"),
+                  anonymousPi: t("terminal.context.anonymousPi"),
                   missingWorktree: t("terminal.context.worktreeMissing"),
                   defaultShell: t("terminal.context.defaultShell"),
                 },

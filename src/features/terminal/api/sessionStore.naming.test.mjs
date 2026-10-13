@@ -32,7 +32,7 @@ function fixture(disk = {}) {
   return { api: exports.useSessionStore, disk, writes, fail(value) { fail = value; } };
 }
 
-test("whole session snapshot explicitly saves naming/identity and reloads legacy verbatim without new persisted keys", async () => {
+test("whole session snapshot excludes anonymous Pi from restart recovery", async () => {
   const f = fixture();
   const records = [
     { id: "auto", title: "Pi · 8", titleNaming: { source: "auto", base: "Pi", ordinal: 8 }, cliSessionId: "conversation" },
@@ -49,12 +49,13 @@ test("whole session snapshot explicitly saves naming/identity and reloads legacy
   assert.deepEqual(JSON.parse(JSON.stringify(reopened.api.getState().sessions)), records);
 });
 
-test("current work saves ordered persistable session ids and restores active id", async () => {
+test("current work keeps anonymous Pi in runtime state but excludes it from restart data", async () => {
   const f = fixture();
   const sessions = [{ id: "a", title: "A" }, { id: "b", title: "B" }, { id: "temp", title: "Temp", kind: "ephemeral-pi" }];
   await f.api.getState().saveSessions(sessions);
   await f.api.getState().saveCurrentWork(["b", "a", "b", "missing", "temp"], "a", sessions);
   assert.deepEqual(f.disk.currentWorkSessionIds, ["b", "a"]);
+  assert.deepEqual(f.api.getState().currentWorkSessionIds, ["b", "a", "temp"]);
   assert.equal(f.disk.currentWorkActiveSessionId, "a");
   const reopened = fixture(f.disk);
   await reopened.api.getState().load();

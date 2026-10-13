@@ -91,7 +91,7 @@ export const useSessionStore = create<SessionStore>(() => ({
 
   saveSessions: async (sessions) => {
     const s = await getStore();
-    // 伪会话和匿名 Pi 是临时视图，绝不持久化/恢复。
+    // 伪会话和匿名 Pi 不参与应用重启恢复。
     const persistable = sessions.filter(isPersistableSession);
     await s.set("sessions", persistable);
     await s.save();
@@ -132,13 +132,25 @@ export const useSessionStore = create<SessionStore>(() => ({
 
   saveCurrentWork: async (sessionIds, activeSessionId, sessions) => {
     const s = await getStore();
-    const validSessionIds = new Set(sessions.filter(isPersistableSession).map((session) => session.id));
-    const currentWorkSessionIds = sessionIds.filter((id, index, ids) => validSessionIds.has(id) && ids.indexOf(id) === index);
+    const liveSessionIds = new Set(sessions
+      .filter((session) => session.kind !== "subagent-transcript"
+        && session.kind !== "file-editor"
+        && session.kind !== "synced-history"
+        && session.transientBackground !== true)
+      .map((session) => session.id));
+    const currentWorkSessionIds = sessionIds.filter((id, index, ids) => liveSessionIds.has(id) && ids.indexOf(id) === index);
     const currentWorkActiveSessionId = activeSessionId && currentWorkSessionIds.includes(activeSessionId)
       ? activeSessionId
       : currentWorkSessionIds[0] ?? null;
-    await s.set("currentWorkSessionIds", currentWorkSessionIds);
-    await s.set("currentWorkActiveSessionId", currentWorkActiveSessionId);
+    const persistableCurrentWorkSessionIds = currentWorkSessionIds.filter((id) => {
+      const session = sessions.find((item) => item.id === id);
+      return session ? isPersistableSession(session) : false;
+    });
+    const persistableCurrentWorkActiveSessionId = currentWorkActiveSessionId && persistableCurrentWorkSessionIds.includes(currentWorkActiveSessionId)
+      ? currentWorkActiveSessionId
+      : persistableCurrentWorkSessionIds[0] ?? null;
+    await s.set("currentWorkSessionIds", persistableCurrentWorkSessionIds);
+    await s.set("currentWorkActiveSessionId", persistableCurrentWorkActiveSessionId);
     await s.save();
     useSessionStore.setState({ currentWorkSessionIds, currentWorkActiveSessionId });
   },
