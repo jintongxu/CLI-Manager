@@ -1454,10 +1454,12 @@ function App() {
     const closePty = options?.closePty ?? true;
     const discardSessions = options?.discardSessions ?? false;
     const closeAllPty = options?.closeAllPty ?? true;
-    const ptySessionIds = useTerminalStore
-      .getState()
-      .sessions
+    const terminalSessions = useTerminalStore.getState().sessions;
+    const ptySessionIds = terminalSessions
       .filter((session) => (session.kind ?? "pty") === "pty")
+      .map((session) => session.id);
+    const anonymousPiSessionIds = terminalSessions
+      .filter((session) => session.kind === "ephemeral-pi")
       .map((session) => session.id);
     logInfo("exit: cleanup started", {
       source,
@@ -1465,6 +1467,7 @@ function App() {
       discardSessions,
       ptySessionCount: ptySessionIds.length,
       ptySessionIds,
+      anonymousPiSessionIds,
     });
     let canExit = false;
     try {
@@ -1484,7 +1487,12 @@ function App() {
       // Phase 2：daemon 模式"转入后台"时 closePty=false——PTY 留在守护进程里继续跑，
       // 快照仍落盘作为 daemon 也挂掉时的最终兜底。
       const terminalCleanup = await cleanupTerminalProcessesForExit(
-        { closePty, closeAllPty, foregroundSessionIds: ptySessionIds },
+        {
+          closePty,
+          closeAllPty,
+          foregroundSessionIds: ptySessionIds,
+          alwaysCloseSessionIds: anonymousPiSessionIds,
+        },
         {
           closeAll: () => terminalProcessManager.closeAll(),
           close: (sessionId) => terminalProcessManager.close(sessionId),

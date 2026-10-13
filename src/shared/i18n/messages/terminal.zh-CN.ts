@@ -61,6 +61,7 @@ export const zh = {
   "terminal.context.branch": "分支",
   "terminal.context.environment": "环境",
   "terminal.context.unboundProject": "未绑定项目",
+  "terminal.context.anonymousPi": "独立匿名 Pi",
   "terminal.context.defaultShell": "默认 Shell",
   "terminal.context.projectRoot": "项目根目录",
   "terminal.context.switcher": "切换项目",

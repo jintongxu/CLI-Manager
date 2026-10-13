@@ -5,8 +5,10 @@ export function formatTerminalTabContext(
   session: TerminalSession,
   project?: Project,
   worktree?: WorktreeRecord | null,
+  labels: { unboundProject?: string; anonymousPi?: string } = {},
 ): string {
-  const projectName = project?.name?.trim() || "Unbound project";
+  const projectName = project?.name?.trim()
+    || (session.kind === "ephemeral-pi" ? labels.anonymousPi ?? labels.unboundProject ?? "Independent anonymous Pi" : labels.unboundProject ?? "Unbound project");
   const worktreeName = worktree?.status === "active"
     ? getWorktreeSidebarLabel(worktree) || "Worktree"
     : session.worktreeId ? "Worktree missing" : "Project root";

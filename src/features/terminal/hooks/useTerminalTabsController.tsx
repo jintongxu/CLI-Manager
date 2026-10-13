@@ -435,7 +435,7 @@ export function useTerminalTabsController({
       ? gitWorkspaceProject.remote_path.trim() || null
       : gitWorkspaceProject?.path.trim() || null);
   const workspanContextOptions = useMemo(() => buildTerminalProjectOptions(visibleWorkspanLayouts, sessions, projectById, worktrees, {
-    unboundProject: t("terminal.context.unboundProject"), missingWorktree: t("terminal.context.worktreeMissing"),
+    unboundProject: t("terminal.context.unboundProject"), anonymousPi: t("terminal.context.anonymousPi"), missingWorktree: t("terminal.context.worktreeMissing"),
   }, tabNotifications), [projectById, sessions, t, tabNotifications, visibleWorkspanLayouts, worktrees]);
   const workspanTabModels = useMemo(
     () => buildWorkspanTabModels(visibleWorkspanLayouts, sessions, projectById, tabNotifications, t, worktrees),

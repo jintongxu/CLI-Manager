@@ -7,6 +7,7 @@ import { formatTerminalTabContext } from "../lib/currentWorkPresentation";
 import { useSortable, SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CURRENT_WORK_DRAG_PREFIX, DND_SORTABLE_TRANSITION } from "../../workspace/api/dragInteraction";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "../../../shared/ui/context-menu";
 
 interface CurrentWorkTabBarProps {
   sessions: TerminalSession[];
@@ -19,6 +20,7 @@ interface CurrentWorkTabBarProps {
   onActivate: (sessionId: string) => void;
   onToggleSelected: (sessionId: string) => void;
   onRemove: (sessionId: string) => void;
+  onRename: (session: TerminalSession) => void;
   onClear: () => void;
   onExit: () => void;
   label: string;
@@ -26,6 +28,7 @@ interface CurrentWorkTabBarProps {
   clearLabel: string;
   selectedLabel: (count: number) => string;
   removeLabel: (title: string) => string;
+  renameLabel: string;
   statusLabels: { hidden: string; sshDisconnected: string; worktreeMissing: string };
   contextLabels: TerminalTabContextLabels;
   compact?: boolean;
@@ -45,11 +48,13 @@ interface SortableCurrentWorkItemProps {
   onActivate: (sessionId: string) => void;
   onToggleSelected: (sessionId: string) => void;
   onRemove: (sessionId: string) => void;
+  onRename: (session: TerminalSession) => void;
+  renameLabel: string;
 }
 
 function SortableCurrentWorkItem({
-  session, active, selected, notification, project, worktree, selectedLabel, removeLabel,
-  statusLabels, contextLabels, onActivate, onToggleSelected, onRemove,
+  session, active, selected, notification, project, worktree, selectedLabel, removeLabel, renameLabel,
+  statusLabels, contextLabels, onActivate, onToggleSelected, onRemove, onRename,
 }: SortableCurrentWorkItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `${CURRENT_WORK_DRAG_PREFIX}${session.id}`,
@@ -60,7 +65,7 @@ function SortableCurrentWorkItem({
     },
     transition: DND_SORTABLE_TRANSITION,
   });
-  const context = formatTerminalTabContext(session, project, worktree);
+  const context = formatTerminalTabContext(session, project, worktree, contextLabels);
   const statusLabel = session.tabHidden
     ? statusLabels.hidden
     : session.worktreeId && worktree?.status !== "active"
@@ -77,7 +82,9 @@ function SortableCurrentWorkItem({
   } as CSSProperties;
 
   return (
-    <div
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
       ref={setNodeRef}
       style={style}
       className="ui-current-work-item ui-interactive inline-flex h-10 max-w-72 shrink-0 cursor-grab items-center rounded-lg active:cursor-grabbing"
@@ -120,14 +127,19 @@ function SortableCurrentWorkItem({
       >
         <X size={12} strokeWidth={2} aria-hidden="true" />
       </button>
-    </div>
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={() => onRename(session)}>{renameLabel}</ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
 export function CurrentWorkTabBar({
   sessions, activeSessionId, notifications, projects, worktrees, selectedSessionIds, tabStyle,
-  onActivate, onToggleSelected, onRemove, onClear, onExit, label, exitLabel,
-  clearLabel, selectedLabel, removeLabel, statusLabels, contextLabels, compact = false,
+  onActivate, onToggleSelected, onRemove, onRename, onClear, onExit, label, exitLabel,
+  clearLabel, selectedLabel, removeLabel, renameLabel, statusLabels, contextLabels, compact = false,
 }: CurrentWorkTabBarProps) {
   const projectById = new Map(projects.map((project) => [project.id, project]));
   const worktreeById = new Map(worktrees.map((worktree) => [worktree.id, worktree]));
@@ -157,11 +169,13 @@ export function CurrentWorkTabBar({
                 worktree={session.worktreeId ? worktreeById.get(session.worktreeId) ?? null : null}
                 selectedLabel={selectedLabel}
                 removeLabel={removeLabel}
+                renameLabel={renameLabel}
                 statusLabels={statusLabels}
                 contextLabels={contextLabels}
                 onActivate={onActivate}
                 onToggleSelected={onToggleSelected}
                 onRemove={onRemove}
+                onRename={onRename}
               />
             ))}
           </SortableContext>

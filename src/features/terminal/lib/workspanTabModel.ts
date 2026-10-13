@@ -28,6 +28,7 @@ export function buildWorkspanTabModels(
   worktrees: WorktreeRecord[] = [],
   labels: ProjectTabLabels = {
     unboundProject: translateCurrent("terminal.context.unboundProject"),
+    anonymousPi: translateCurrent("terminal.context.anonymousPi"),
     missingWorktree: translateCurrent("terminal.context.worktreeMissing"),
   },
 ): ProjectWorkspanTabModel[] {

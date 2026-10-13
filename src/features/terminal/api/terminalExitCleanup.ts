@@ -11,6 +11,7 @@ export interface TerminalExitCleanupOptions {
   closePty: boolean;
   closeAllPty: boolean;
   foregroundSessionIds: string[];
+  alwaysCloseSessionIds?: string[];
 }
 
 export interface TerminalExitCleanupDependencies {
@@ -39,16 +40,21 @@ export async function cleanupTerminalProcessesForExit(
     shutdownError: null,
   };
 
-  if (!options.closePty) return result;
+  const alwaysCloseSessionIds = [...new Set(options.alwaysCloseSessionIds ?? [])];
+  if (!options.closePty && alwaysCloseSessionIds.length === 0) return result;
 
-  if (options.closeAllPty) {
+  if (options.closePty && options.closeAllPty) {
     try {
       await dependencies.closeAll();
     } catch (error) {
       result.closeAllError = error;
     }
   } else {
-    for (const sessionId of options.foregroundSessionIds) {
+    const sessionIds = [...new Set([
+      ...(options.closePty ? options.foregroundSessionIds : []),
+      ...alwaysCloseSessionIds,
+    ])];
+    for (const sessionId of sessionIds) {
       try {
         await dependencies.close(sessionId);
       } catch (error) {

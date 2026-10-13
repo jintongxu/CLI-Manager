@@ -365,6 +365,11 @@ export function TerminalTabsView({
                       onActivate={activateCurrentWork}
                       onToggleSelected={toggleCurrentWorkSelection}
                       onRemove={toggleCurrentWork}
+                      onRename={(session) => window.setTimeout(() => {
+                        void prompt({ title: t("terminal.tab.rename"), initialValue: session.title }).then((title) => {
+                          if (title !== null) void handleSubmitTabEdit(session.id, title);
+                        });
+                      }, 0)}
                       onClear={clearCurrentWork}
                       onExit={leaveCurrentWork}
                       label={t("terminal.currentWork.title")}
@@ -372,8 +377,9 @@ export function TerminalTabsView({
                       clearLabel={t("terminal.currentWork.clear")}
                       selectedLabel={(count) => t("terminal.currentWork.selected", { count })}
                       statusLabels={{ hidden: t("terminal.currentWork.hidden"), sshDisconnected: t("terminal.currentWork.sshDisconnected"), worktreeMissing: t("terminal.currentWork.worktreeMissing") }}
-                      contextLabels={{ unboundProject: t("terminal.context.unboundProject"), missingWorktree: t("terminal.context.worktreeMissing"), defaultShell: t("terminal.context.defaultShell") }}
+                      contextLabels={{ unboundProject: t("terminal.context.unboundProject"), anonymousPi: t("terminal.context.anonymousPi"), missingWorktree: t("terminal.context.worktreeMissing"), defaultShell: t("terminal.context.defaultShell") }}
                       removeLabel={(title) => t("terminal.currentWork.removeNamed", { title })}
+                      renameLabel={t("terminal.tab.rename")}
                     />
                   ) : workspanEnabled ? (
                     <WorkspanTabBar
@@ -431,14 +437,19 @@ export function TerminalTabsView({
                           if (model.singleSession) void handleSubmitTabEdit(model.singleSession.id, title);
                         }}
                         menuStyle={splitPickerMenuStyle}
-                        menuContent={(getAnchor) => (
+                        menuContent={(getAnchor, startRename) => (
                           <>
                             {model.singleSession && (
-                              <ContextMenuItem onSelect={() => toggleCurrentWork(model.singleSession!.id)}>
-                                {currentWorkSessionIds.includes(model.singleSession.id)
-                                  ? t("terminal.currentWork.remove")
-                                  : t("terminal.currentWork.add")}
-                              </ContextMenuItem>
+                              <>
+                                <ContextMenuItem onSelect={() => toggleCurrentWork(model.singleSession!.id)}>
+                                  {currentWorkSessionIds.includes(model.singleSession.id)
+                                    ? t("terminal.currentWork.remove")
+                                    : t("terminal.currentWork.add")}
+                                </ContextMenuItem>
+                                <ContextMenuItem onSelect={() => window.setTimeout(startRename, 0)}>
+                                  {t("terminal.tab.rename")}
+                                </ContextMenuItem>
+                              </>
                             )}
                             <ContextMenuItem onSelect={() => handleCloseSessions(model.closeSessionIds, getAnchor())}>
                               {t("terminal.workspan.closeCurrent")}
@@ -535,6 +546,7 @@ export function TerminalTabsView({
                       onActivate={() => activateCurrentWork()}
                       onToggleSelected={() => undefined}
                       onRemove={() => undefined}
+                      onRename={() => undefined}
                       onClear={() => undefined}
                       onExit={() => activateCurrentWork()}
                       label={t("terminal.currentWork.title")}
@@ -542,8 +554,9 @@ export function TerminalTabsView({
                       clearLabel={t("terminal.currentWork.clear")}
                       selectedLabel={(count) => t("terminal.currentWork.selected", { count })}
                       statusLabels={{ hidden: t("terminal.currentWork.hidden"), sshDisconnected: t("terminal.currentWork.sshDisconnected"), worktreeMissing: t("terminal.currentWork.worktreeMissing") }}
-                      contextLabels={{ unboundProject: t("terminal.context.unboundProject"), missingWorktree: t("terminal.context.worktreeMissing"), defaultShell: t("terminal.context.defaultShell") }}
+                      contextLabels={{ unboundProject: t("terminal.context.unboundProject"), anonymousPi: t("terminal.context.anonymousPi"), missingWorktree: t("terminal.context.worktreeMissing"), defaultShell: t("terminal.context.defaultShell") }}
                       removeLabel={() => ""}
+                      renameLabel={t("terminal.tab.rename")}
                       compact
                     />
                   )}

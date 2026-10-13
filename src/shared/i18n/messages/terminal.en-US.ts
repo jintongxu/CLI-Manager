@@ -62,6 +62,7 @@ export const en: Record<keyof typeof zh, string> = {
   "terminal.context.branch": "Branch",
   "terminal.context.environment": "Environment",
   "terminal.context.unboundProject": "Unbound project",
+  "terminal.context.anonymousPi": "Independent anonymous Pi",
   "terminal.context.defaultShell": "Default shell",
   "terminal.context.projectRoot": "Project root",
   "terminal.context.switcher": "Switch project",

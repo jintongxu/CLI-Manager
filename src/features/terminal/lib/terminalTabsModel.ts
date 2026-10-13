@@ -136,6 +136,7 @@ export const SSH_CONNECTION_STATE_COLORS: Record<NonNullable<TerminalSession["co
 
 export interface TerminalTabContextLabels {
   unboundProject: string;
+  anonymousPi?: string;
   missingWorktree: string;
   defaultShell: string;
 }
@@ -324,7 +325,8 @@ export function buildTerminalTabContext(
   },
   siblingWorktrees: WorktreeRecord[] = [],
 ): TerminalTabContext {
-  const projectName = project?.name.trim() || labels.unboundProject;
+  const projectName = project?.name.trim()
+    || (session.kind === "ephemeral-pi" ? labels.anonymousPi ?? labels.unboundProject : labels.unboundProject);
   const activeWorktree = worktree?.status === "active" ? worktree : null;
   const unresolvedWorktree = Boolean(session.worktreeId && !activeWorktree);
   return {
