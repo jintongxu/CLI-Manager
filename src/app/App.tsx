@@ -56,6 +56,7 @@ import { translateCurrent, useI18n, type TranslationKey } from "../shared/i18n/i
 import { getOsPlatform } from "../shared/platform/shell";
 import { normalizeFontFamilyStack } from "../shared/platform/systemFonts";
 import { ALL_TERMINALS_SCOPE } from "../features/terminal/api/terminalScope";
+import { dispatchCurrentWorkTarget } from "../features/terminal/api/currentWorkEvents";
 import { cleanupTerminalProcessesForExit, resolveTerminalExitAction } from "../features/terminal/api/terminalExitCleanup";
 import { shouldIncludeDaemonExitTask } from "../features/terminal/api/terminalExitTask";
 import { requestSidebarToggle } from "../features/projects/api/sidebarCommands";
@@ -924,6 +925,7 @@ function App() {
       });
     }
     terminalStore.setActive(tabId);
+    dispatchCurrentWorkTarget(tabId);
 
     // 只在窗口未聚焦时才切换窗口，避免 PermissionRequest 等事件在用户专注其他工作时强制打断
     const isFocused = await isMainWindowFocused();

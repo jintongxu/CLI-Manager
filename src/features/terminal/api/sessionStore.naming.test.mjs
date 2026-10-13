@@ -27,6 +27,7 @@ function fixture(disk = {}) {
     if (id.includes("appPaths")) return { getCliManagerDataPaths: async () => ({ sessionsStorePath: "sessions.dev.json" }) };
     if (id.includes("singleFlight")) return { singleFlight: fn => fn };
     if (id === "./terminalWorkspan") return { migrateTerminalWorkspans: v => v ?? [], sanitizeTerminalWorkspans: v => v };
+    if (id === "../lib/currentWorkModel") return { sanitizeCurrentWorkPaneTree: value => value ?? null };
     throw new Error(id);
   } });
   return { api: exports.useSessionStore, disk, writes, fail(value) { fail = value; } };
@@ -60,6 +61,20 @@ test("current work saves ordered persistable session ids and restores active id"
   await reopened.api.getState().load();
   assert.deepEqual(reopened.api.getState().currentWorkSessionIds, ["b", "a"]);
   assert.equal(reopened.api.getState().currentWorkActiveSessionId, "a");
+});
+
+test("current work persists and reloads its independent pane layout", async () => {
+  const f = fixture();
+  const sessions = [{ id: "a" }, { id: "b" }];
+  const paneTree = { type: "split", id: "split", direction: "horizontal", ratio: 0.4,
+    first: { type: "leaf", id: "left", sessionIds: ["a"], activeSessionId: "a" },
+    second: { type: "leaf", id: "right", sessionIds: ["b"], activeSessionId: "b" } };
+  await f.api.getState().saveSessions(sessions);
+  await f.api.getState().saveCurrentWork(["a", "b"], "b", sessions, paneTree);
+  assert.deepEqual(f.disk.currentWorkPaneTree, paneTree);
+  const reopened = fixture(f.disk);
+  await reopened.api.getState().load();
+  assert.deepEqual(reopened.api.getState().currentWorkPaneTree, paneTree);
 });
 
 test("failed save is observable; retry saves full latest snapshot", async () => {

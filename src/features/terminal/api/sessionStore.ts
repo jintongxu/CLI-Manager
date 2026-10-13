@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { Store } from "@tauri-apps/plugin-store";
 import type { TerminalSession, PersistedSplit } from "../../../shared/types/index";
+import type { TerminalPaneNode } from "./terminalPaneTree";
+import { sanitizeCurrentWorkPaneTree } from "../lib/currentWorkModel";
 import { getCliManagerDataPaths } from "../../../shared/platform/appPaths";
 import { singleFlight } from "../../../shared/lib/singleFlight";
 import {
@@ -17,6 +19,7 @@ interface SessionStore {
   activeWorkspanId: string | null;
   currentWorkSessionIds: string[];
   currentWorkActiveSessionId: string | null;
+  currentWorkPaneTree: TerminalPaneNode | null;
   loaded: boolean;
 
   load: () => Promise<void>;
@@ -24,7 +27,7 @@ interface SessionStore {
   saveSplits: (splits: PersistedSplit[]) => Promise<void>;
   saveActiveSessionId: (id: string | null) => Promise<void>;
   saveWorkspans: (workspans: TerminalWorkspan[], activeWorkspanId: string | null, sessions: TerminalSession[]) => Promise<void>;
-  saveCurrentWork: (sessionIds: string[], activeSessionId: string | null, sessions: TerminalSession[]) => Promise<void>;
+  saveCurrentWork: (sessionIds: string[], activeSessionId: string | null, sessions: TerminalSession[], paneTree?: TerminalPaneNode | null) => Promise<void>;
   clear: () => Promise<void>;
 }
 
@@ -53,6 +56,7 @@ export const useSessionStore = create<SessionStore>(() => ({
   activeWorkspanId: null,
   currentWorkSessionIds: [],
   currentWorkActiveSessionId: null,
+  currentWorkPaneTree: null,
   loaded: false,
 
   load: singleFlight(async () => {
@@ -76,6 +80,10 @@ export const useSessionStore = create<SessionStore>(() => ({
       && currentWorkSessionIds.includes(storedCurrentWorkActiveSessionId)
       ? storedCurrentWorkActiveSessionId
       : currentWorkSessionIds[0] ?? null;
+    const currentWorkPaneTree = sanitizeCurrentWorkPaneTree(
+      await s.get<unknown>("currentWorkPaneTree"),
+      new Set(currentWorkSessionIds),
+    );
 
     useSessionStore.setState({
       sessions,
@@ -85,6 +93,7 @@ export const useSessionStore = create<SessionStore>(() => ({
       activeWorkspanId,
       currentWorkSessionIds,
       currentWorkActiveSessionId,
+      currentWorkPaneTree,
       loaded: true,
     });
   }),
@@ -130,17 +139,22 @@ export const useSessionStore = create<SessionStore>(() => ({
     });
   },
 
-  saveCurrentWork: async (sessionIds, activeSessionId, sessions) => {
+  saveCurrentWork: async (sessionIds, activeSessionId, sessions, paneTree) => {
     const s = await getStore();
     const validSessionIds = new Set(sessions.filter(isPersistableSession).map((session) => session.id));
     const currentWorkSessionIds = sessionIds.filter((id, index, ids) => validSessionIds.has(id) && ids.indexOf(id) === index);
     const currentWorkActiveSessionId = activeSessionId && currentWorkSessionIds.includes(activeSessionId)
       ? activeSessionId
       : currentWorkSessionIds[0] ?? null;
+    const currentWorkPaneTree = sanitizeCurrentWorkPaneTree(
+      paneTree ?? useSessionStore.getState().currentWorkPaneTree,
+      new Set(currentWorkSessionIds),
+    );
     await s.set("currentWorkSessionIds", currentWorkSessionIds);
     await s.set("currentWorkActiveSessionId", currentWorkActiveSessionId);
+    await s.set("currentWorkPaneTree", currentWorkPaneTree);
     await s.save();
-    useSessionStore.setState({ currentWorkSessionIds, currentWorkActiveSessionId });
+    useSessionStore.setState({ currentWorkSessionIds, currentWorkActiveSessionId, currentWorkPaneTree });
   },
 
   clear: async () => {
@@ -152,6 +166,7 @@ export const useSessionStore = create<SessionStore>(() => ({
     await s.set("activeWorkspanId", null);
     await s.set("currentWorkSessionIds", []);
     await s.set("currentWorkActiveSessionId", null);
+    await s.set("currentWorkPaneTree", null);
     useSessionStore.setState({
       sessions: [],
       splits: [],
@@ -160,6 +175,7 @@ export const useSessionStore = create<SessionStore>(() => ({
       activeWorkspanId: null,
       currentWorkSessionIds: [],
       currentWorkActiveSessionId: null,
+      currentWorkPaneTree: null,
     });
   },
 }));

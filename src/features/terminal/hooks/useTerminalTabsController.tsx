@@ -10,7 +10,7 @@ import {
 import { arrayMove } from "@dnd-kit/sortable";
 import { useTerminalStore } from "../state";
 import { useSessionStore } from "../api/sessionStore";
-import { CURRENT_WORK_ACTION_EVENT, type CurrentWorkAction } from "../api/currentWorkEvents";
+import { CURRENT_WORK_ACTION_EVENT, CURRENT_WORK_TARGET_EVENT, type CurrentWorkAction, type CurrentWorkTarget } from "../api/currentWorkEvents";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { updateWorkspaceLayout } from "../../../shared/lib/workspaceLayout";
 import { useWorktreeStore } from "../../projects/api/worktreeStore";
@@ -48,9 +48,7 @@ import { findWorktreeForSession, isSameProjectFileContext, projectWithWorktreePr
 import { ALL_TERMINALS_SCOPE, collectProjectIdsForGroup, sessionMatchesTerminalScope } from "../api/terminalScope";
 import { TERMINAL_FILE_NAVIGATION_REQUEST_EVENT, type TerminalFileNavigationRequest } from "../lib/terminalFileNavigation";
 import { consumeTerminalFileDragPanelSyncSuppression } from "../api/terminalFileDrag";
-import {
-  WORKSPAN_TABBAR_END_DROP_ID,
-} from "../../workspace/api/WorkspanTabBar";
+import { WORKSPAN_TABBAR_END_DROP_ID } from "../../workspace/api/WorkspanTabBar";
 import {
   normalizeTabMenuHex, TERMINAL_PANEL_SEMANTIC_COLORS, tabMenuHexToRgba,
   SPLIT_PICKER_OUTSIDE_GUARD_MS, type SplitPickerAnchor, type SplitPickerAlign, type SplitPickerState,
@@ -70,7 +68,8 @@ import { resolveNewTabSource } from "../api/terminalProjectSelection";
 import { buildTerminalProjectOptions, resolveWorkspanIdOrderByProjectMove } from "../api/terminalProjectTabsModel";
 import { useTerminalProjectSelection } from "./useTerminalProjectSelection";
 import { useWorkspanTabOverflow } from "./useWorkspanTabOverflow";
-
+import { useCurrentWorkSessionController } from "./useCurrentWorkSessionController";
+import { useCurrentWorkPortalTargets } from "./useCurrentWorkPortalTargets";
 export function useTerminalTabsController({
   fullscreen = false,
   onToggleFullscreen,
@@ -93,70 +92,42 @@ export function useTerminalTabsController({
     }))
   );
   const setActive = useTerminalStore((s) => s.setActive);
+  const createTerminalSession = useTerminalStore((s) => s.createSession);
+  const splitTerminal = useTerminalStore((s) => s.splitTerminal);
   const sessionStoreLoaded = useSessionStore((s) => s.loaded);
   const persistedCurrentWorkSessionIds = useSessionStore((s) => s.currentWorkSessionIds);
   const persistedCurrentWorkActiveSessionId = useSessionStore((s) => s.currentWorkActiveSessionId);
-  const saveCurrentWork = useSessionStore((s) => s.saveCurrentWork);
-  const [currentWorkMode, setCurrentWorkMode] = useState(false);
-  const [currentWorkPortalTarget, setCurrentWorkPortalTarget] = useState<HTMLElement | null>(null);
-  const [selectedCurrentWorkSessionIds, setSelectedCurrentWorkSessionIds] = useState<Set<string>>(new Set());
-  const [currentWorkSessionIds, setCurrentWorkSessionIds] = useState<string[]>(persistedCurrentWorkSessionIds);
-  const [currentWorkActiveSessionId, setCurrentWorkActiveSessionId] = useState<string | null>(persistedCurrentWorkActiveSessionId);
+  const persistedCurrentWorkPaneTree = useSessionStore((s) => s.currentWorkPaneTree);
+  const {
+    currentWorkMode, setCurrentWorkMode, currentWorkSessionIds, currentWorkActiveSessionId,
+    currentWorkPaneTree, currentWorkFullscreenPaneId,
+    selectedCurrentWorkSessionIds, addCurrentWorkSession, removeCurrentWorkSessions,
+    activateCurrentWorkSession, toggleCurrentWork, toggleCurrentWorkSelection, reorderCurrentWork,
+    splitCurrentWorkSessionToPaneEdge, moveCurrentWorkSessionToPane,
+    unsplitCurrentWorkPane, toggleCurrentWorkPaneFullscreen, setCurrentWorkSplitRatio, canSplitCurrentWorkSessionToPaneEdge, clearCurrentWork,
+  } = useCurrentWorkSessionController({
+    sessionStoreLoaded,
+    persistedSessionIds: persistedCurrentWorkSessionIds,
+    persistedActiveSessionId: persistedCurrentWorkActiveSessionId,
+    persistedPaneTree: persistedCurrentWorkPaneTree,
+  });
+  const {
+    registerPaneTarget: registerCurrentWorkPaneTarget,
+    sessionPortalTargets: currentWorkSessionPortalTargets,
+    visibleSessionIds: currentWorkVisibleSessionIds,
+  } = useCurrentWorkPortalTargets(currentWorkPaneTree);
   const currentWorkReturnRef = useRef<{ workspanId: string | null; sessionId: string | null } | null>(null);
-  useEffect(() => {
-    if (!sessionStoreLoaded) return;
-    setCurrentWorkSessionIds(persistedCurrentWorkSessionIds);
-    setCurrentWorkActiveSessionId(persistedCurrentWorkActiveSessionId);
-  }, [persistedCurrentWorkActiveSessionId, persistedCurrentWorkSessionIds, sessionStoreLoaded]);
-  useEffect(() => {
-    if (!currentWorkActiveSessionId || !currentWorkSessionIds.includes(currentWorkActiveSessionId)) {
-      setCurrentWorkActiveSessionId(currentWorkSessionIds[0] ?? null);
-    }
-  }, [currentWorkActiveSessionId, currentWorkSessionIds]);
-  const persistCurrentWork = useCallback((sessionIds: string[], activeId: string | null) => {
-    if (!sessionStoreLoaded) return;
-    void saveCurrentWork(sessionIds, activeId, sessions);
-  }, [saveCurrentWork, sessionStoreLoaded, sessions]);
-  const removeCurrentWorkSessions = useCallback((sessionIds: readonly string[]) => {
-    const remove = new Set(sessionIds);
-    const nextIds = currentWorkSessionIds.filter((id) => !remove.has(id));
-    const nextActive = nextIds.includes(currentWorkActiveSessionId ?? "") ? currentWorkActiveSessionId : nextIds[0] ?? null;
-    setCurrentWorkSessionIds(nextIds);
-    setCurrentWorkActiveSessionId(nextActive);
-    setSelectedCurrentWorkSessionIds(new Set());
-    persistCurrentWork(nextIds, nextActive);
-  }, [currentWorkActiveSessionId, currentWorkSessionIds, persistCurrentWork]);
-  const toggleCurrentWork = useCallback((sessionId: string) => {
-    if (currentWorkSessionIds.includes(sessionId)) {
-      removeCurrentWorkSessions([sessionId]);
-      return;
-    }
-    const nextIds = [...currentWorkSessionIds, sessionId];
-    const nextActive = currentWorkActiveSessionId ?? sessionId;
-    setCurrentWorkSessionIds(nextIds);
-    setCurrentWorkActiveSessionId(nextActive);
-    persistCurrentWork(nextIds, nextActive);
-  }, [currentWorkActiveSessionId, currentWorkSessionIds, persistCurrentWork, removeCurrentWorkSessions]);
-  const reorderCurrentWork = useCallback((fromId: string, toId: string) => {
-    const fromIndex = currentWorkSessionIds.indexOf(fromId);
-    const toIndex = currentWorkSessionIds.indexOf(toId);
-    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
-    const nextIds = [...currentWorkSessionIds];
-    nextIds.splice(fromIndex, 1);
-    nextIds.splice(toIndex, 0, fromId);
-    setCurrentWorkSessionIds(nextIds);
-    persistCurrentWork(nextIds, currentWorkActiveSessionId);
-  }, [currentWorkActiveSessionId, currentWorkSessionIds, persistCurrentWork]);
-  const toggleCurrentWorkSelection = useCallback((sessionId: string) => {
-    setSelectedCurrentWorkSessionIds((selected) => {
-      const next = new Set(selected);
-      if (next.has(sessionId)) next.delete(sessionId); else next.add(sessionId);
-      return next;
-    });
-  }, []);
-  const clearCurrentWork = useCallback(() => {
-    removeCurrentWorkSessions(selectedCurrentWorkSessionIds.size ? [...selectedCurrentWorkSessionIds] : currentWorkSessionIds);
-  }, [currentWorkSessionIds, removeCurrentWorkSessions, selectedCurrentWorkSessionIds]);
+  const createSession = useCallback(async (...args: Parameters<typeof createTerminalSession>) => {
+    const sessionId = await createTerminalSession(...args);
+    const options = args[12];
+    if (!options?.sessionKind && !options?.transientBackground) addCurrentWorkSession(sessionId);
+    return sessionId;
+  }, [addCurrentWorkSession, createTerminalSession]);
+  const splitTerminalAndAdd = useCallback(async (...args: Parameters<typeof splitTerminal>) => {
+    const sessionId = await splitTerminal(...args);
+    if (sessionId) addCurrentWorkSession(sessionId);
+    return sessionId;
+  }, [addCurrentWorkSession, splitTerminal]);
   const activateCurrentWork = useCallback((sessionId?: string) => {
     const nextId = sessionId && currentWorkSessionIds.includes(sessionId)
       ? sessionId : currentWorkActiveSessionId ?? currentWorkSessionIds[0] ?? null;
@@ -167,11 +138,10 @@ export function useTerminalTabsController({
     setActiveWorkspaceTab("terminal");
     setCurrentWorkMode(true);
     if (nextId) {
+      activateCurrentWorkSession(nextId);
       setActive(nextId);
-      setCurrentWorkActiveSessionId(nextId);
-      persistCurrentWork(currentWorkSessionIds, nextId);
     }
-  }, [activeSessionId, activeWorkspanId, currentWorkActiveSessionId, currentWorkMode, currentWorkSessionIds, persistCurrentWork, setActive]);
+  }, [activateCurrentWorkSession, activeSessionId, activeWorkspanId, currentWorkActiveSessionId, currentWorkMode, currentWorkSessionIds, setActive]);
   const leaveCurrentWork = useCallback(() => {
     setCurrentWorkMode(false);
     const previous = currentWorkReturnRef.current;
@@ -181,11 +151,17 @@ export function useTerminalTabsController({
     if (previous.sessionId) setActive(previous.sessionId);
   }, [setActive]);
   useEffect(() => {
-    setSelectedCurrentWorkSessionIds((selected) => {
-      const next = new Set([...selected].filter((id) => currentWorkSessionIds.includes(id)));
-      return next.size === selected.size ? selected : next;
-    });
-  }, [currentWorkSessionIds]);
+    const handleCurrentWorkTarget = (event: Event) => {
+      if (!currentWorkMode) return;
+      const { sessionId } = (event as CustomEvent<CurrentWorkTarget>).detail;
+      if (!activateCurrentWorkSession(sessionId)) return;
+      useHistoryStore.getState().closeHistory();
+      setActiveWorkspaceTab("terminal");
+      setActive(sessionId);
+    };
+    window.addEventListener(CURRENT_WORK_TARGET_EVENT, handleCurrentWorkTarget);
+    return () => window.removeEventListener(CURRENT_WORK_TARGET_EVENT, handleCurrentWorkTarget);
+  }, [activateCurrentWorkSession, currentWorkMode, setActive]);
   useEffect(() => {
     const handleCurrentWorkAction = (event: Event) => {
       const action = (event as CustomEvent<CurrentWorkAction>).detail;
@@ -210,13 +186,11 @@ export function useTerminalTabsController({
   const restoreWorkspanToSinglePane = useTerminalStore((s) => s.restoreWorkspanToSinglePane);
   const mergeWorkspanAtPaneEdge = useTerminalStore((s) => s.mergeWorkspanAtPaneEdge);
   const hideSession = useTerminalStore((s) => s.hideSession);
-  const createSession = useTerminalStore((s) => s.createSession);
   const reorderSessions = useTerminalStore((s) => s.reorderSessions);
   const moveSessionToPane = useTerminalStore((s) => s.moveSessionToPane);
   const detachSessionToWorkspan = useTerminalStore((s) => s.detachSessionToWorkspan);
   const splitSessionToPaneEdge = useTerminalStore((s) => s.splitSessionToPaneEdge);
   const renameSession = useTerminalStore((s) => s.renameSession);
-  const splitTerminal = useTerminalStore((s) => s.splitTerminal);
   const unsplitTerminal = useTerminalStore((s) => s.unsplitTerminal);
   const hiddenBackgroundSessionIds = useTerminalStore((s) => s.hiddenBackgroundSessionIds);
   const hideBackgroundForSession = useTerminalStore((s) => s.hideBackgroundForSession);
@@ -242,7 +216,6 @@ export function useTerminalTabsController({
   const [isAppFocused, setIsAppFocused] = useState(() => document.visibilityState !== "hidden" && document.hasFocus());
   const tabNotifications = useMemo(() => buildAgentTaskNotifications(sessions, tabStatuses), [sessions, tabStatuses]);
   const hookNotifications = tabNotifications;
-
   useEffect(() => {
     const updateFocusState = () => {
       setIsAppFocused(document.visibilityState !== "hidden" && document.hasFocus());
@@ -330,7 +303,6 @@ export function useTerminalTabsController({
   const workspanDragHoverTimerRef = useRef<number | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: DND_ACTIVATION_CONSTRAINT }));
   const toolbarSensors = useSensors(useSensor(PointerSensor, { activationConstraint: DND_ACTIVATION_CONSTRAINT }));
-
   const projectById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects]);
   const worktreeById = useMemo(() => new Map(worktrees.map((worktree) => [worktree.id, worktree])), [worktrees]);
   const rejectUnsupportedCapability = useCallback((project: Project | null | undefined, capability: ProjectCapability) => {
@@ -402,7 +374,6 @@ export function useTerminalTabsController({
     if (!preferredScopedSessionId || preferredScopedSessionId === currentActiveSessionId) return;
     setActive(preferredScopedSessionId);
   }, [preferredScopedSessionId, projectScopedTerminalViewEnabled, visibleSessionIds, setActive, terminalScopeValue]);
-
   const panelSession = useMemo(() => {
     if (activeSession?.kind === "subagent-transcript" && activeSession.subagent) {
       return sessions.find((session) => session.id === activeSession.subagent!.parentSessionId) ?? activeSession;
@@ -452,8 +423,11 @@ export function useTerminalTabsController({
   const activateProjectTarget = useCallback((workspanId: string, sessionId?: string) => {
     setActiveWorkspaceTab("terminal");
     setActiveWorkspan(workspanId);
-    if (sessionId) setActive(sessionId);
-  }, [setActive, setActiveWorkspan]);
+    if (sessionId) {
+      addCurrentWorkSession(sessionId);
+      setActive(sessionId);
+    }
+  }, [addCurrentWorkSession, setActive, setActiveWorkspan]);
   const { selectedProjectKey, activateProject, activateWorkspanTab } = useTerminalProjectSelection(
     workspanTabModels, effectiveActiveSessionId, activateProjectTarget,
   );
@@ -462,7 +436,6 @@ export function useTerminalTabsController({
     updateWorkspanTabOverflow, onWorkspanRowChange,
   } = useWorkspanTabOverflow(workspanTabBarRef, workspanTabScrollRef,
     activeDragWorkspanIdRef, workspanEnabled && workspanTabBarVisible, effectiveActiveWorkspanId);
-
   const clearWorkspanDragHoverActivation = useCallback(() => {
     if (workspanDragHoverTimerRef.current !== null) {
       window.clearTimeout(workspanDragHoverTimerRef.current);
@@ -746,6 +719,7 @@ export function useTerminalTabsController({
       closeGitWorkspace();
       closeHistory();
       setActiveWorkspaceTab("terminal");
+      addCurrentWorkSession(existing.id);
       setActive(existing.id);
       return;
     }
@@ -764,16 +738,17 @@ export function useTerminalTabsController({
     closeGitWorkspace();
     closeHistory();
     setActiveWorkspaceTab("terminal");
-  }, [buildProjectSplitOptions, closeGitWorkspace, closeHistory, createSession, groups, handleOpenWorktreeDirectory, projectById, rejectMissingWorktree, sessions, setActive, t, useExternalTerminal]);
+  }, [addCurrentWorkSession, buildProjectSplitOptions, closeGitWorkspace, closeHistory, createSession, groups, handleOpenWorktreeDirectory, projectById, rejectMissingWorktree, sessions, setActive, t, useExternalTerminal]);
 
   const handleOpenWorktreeChanges = useCallback((sessionId: string) => {
     const session = sessions.find((item) => item.id === sessionId);
     if (rejectMissingSessionWorktree(session)) return;
     closeHistory();
     setActiveWorkspaceTab("terminal");
+    addCurrentWorkSession(sessionId);
     setActive(sessionId);
     openGitWorkspace();
-  }, [closeHistory, openGitWorkspace, rejectMissingSessionWorktree, sessions, setActive]);
+  }, [addCurrentWorkSession, closeHistory, openGitWorkspace, rejectMissingSessionWorktree, sessions, setActive]);
 
   const handleOpenWorktreeHistory = useCallback((project: Project, worktree: WorktreeRecord) => {
     if (rejectMissingWorktree(worktree)) return;
@@ -820,8 +795,9 @@ export function useTerminalTabsController({
   const handleActivateSession = useCallback((sessionId: string) => {
     closeHistory();
     setActiveWorkspaceTab("terminal");
+    addCurrentWorkSession(sessionId);
     setActive(sessionId);
-  }, [closeHistory, setActive]);
+  }, [addCurrentWorkSession, closeHistory, setActive]);
 
   const handleTogglePaneFullscreen = useCallback((paneId: string) => {
     if (activeFullscreenPaneId === paneId) {
@@ -1394,19 +1370,19 @@ export function useTerminalTabsController({
     const source = resolveNewTabSource(sessions, splitPicker.sessionId);
     const context = resolveTerminalCreationContext(source, sessions, projects, worktrees, groups);
     if (!context) return;
-    void splitTerminal(splitPicker.sessionId, splitPicker.direction, { ...context, startupCmd: "" });
+    void splitTerminalAndAdd(splitPicker.sessionId, splitPicker.direction, { ...context, startupCmd: "" });
     handleCloseSplitPicker();
     closeHistory();
     setActiveWorkspaceTab("terminal");
-  }, [closeHistory, groups, handleCloseSplitPicker, projects, sessions, splitPicker, splitTerminal, worktrees]);
+  }, [closeHistory, groups, handleCloseSplitPicker, projects, sessions, splitPicker, splitTerminalAndAdd, worktrees]);
 
   const handleSplitProject = useCallback((project: Project) => {
     if (!splitPicker) return;
-    void splitTerminal(splitPicker.sessionId, splitPicker.direction, withoutTerminalTitle(buildProjectSplitOptions(project, groups)));
+    void splitTerminalAndAdd(splitPicker.sessionId, splitPicker.direction, withoutTerminalTitle(buildProjectSplitOptions(project, groups)));
     handleCloseSplitPicker();
     closeHistory();
     setActiveWorkspaceTab("terminal");
-  }, [closeHistory, groups, handleCloseSplitPicker, splitPicker, splitTerminal]);
+  }, [closeHistory, groups, handleCloseSplitPicker, splitPicker, splitTerminalAndAdd]);
 
   const findPaneForSession = useCallback((sessionId: string) => {
     return allPanes.find((pane) => pane.sessionIds.includes(sessionId)) ?? null;
@@ -1473,12 +1449,20 @@ export function useTerminalTabsController({
     }
 
     const activeId = String(event.active.id);
-    if (parseCurrentWorkDragId(activeId)) return;
+    const currentWorkActiveId = parseCurrentWorkDragId(activeId) ?? (event.active.data.current?.type === "current-work" ? String(event.active.data.current.sessionId ?? "") : null);
+    const overId = String(event.over.id);
+    const dropTarget = parsePaneDropTarget(overId);
+    if (currentWorkActiveId) {
+      if (dropTarget?.type === "edge" && canSplitCurrentWorkSessionToPaneEdge(currentWorkActiveId, dropTarget.paneId)) {
+        updateActiveDropPreview({ paneId: dropTarget.paneId, edge: dropTarget.edge });
+      } else {
+        updateActiveDropPreview(null);
+      }
+      return;
+    }
     // Project chips only reorder against project chips: no pane/detach preview.
     if (parseProjectDragId(activeId)) return;
     const activeWorkspanId = parseWorkspanDragId(activeId);
-    const overId = String(event.over.id);
-    const dropTarget = parsePaneDropTarget(overId);
     if (activeWorkspanId) {
       hideWorkspanDetachPreview();
       const hoverTarget = resolveWorkspanDragHoverTarget(activeWorkspanId, overId);
@@ -1525,6 +1509,7 @@ export function useTerminalTabsController({
     updateActiveDropPreview(null);
   }, [
     activeWorkspanLayout,
+    canSplitCurrentWorkSessionToPaneEdge,
     canSplitSessionToPaneEdge,
     clearWorkspanDragHoverActivation,
     hideWorkspanDetachPreview,
@@ -1576,11 +1561,18 @@ export function useTerminalTabsController({
       }
       return;
     }
+    const dropTarget = parsePaneDropTarget(overId);
     const currentWorkActiveId = parseCurrentWorkDragId(activeId) ?? (active.data.current?.type === "current-work" ? String(active.data.current.sessionId ?? "") : null);
     if (currentWorkActiveId) {
       const currentWorkOverId = parseCurrentWorkDragId(overId) ?? (over.data.current?.type === "current-work" ? String(over.data.current.sessionId ?? "") : null);
       if (currentWorkOverId && currentWorkActiveId !== currentWorkOverId) {
         reorderCurrentWork(currentWorkActiveId, currentWorkOverId);
+        return;
+      }
+      if (dropTarget?.type === "edge") {
+        splitCurrentWorkSessionToPaneEdge(currentWorkActiveId, dropTarget.paneId, dropTarget.edge);
+      } else if (dropTarget?.type === "center") {
+        moveCurrentWorkSessionToPane(currentWorkActiveId, dropTarget.paneId);
       }
       return;
     }
@@ -1600,7 +1592,6 @@ export function useTerminalTabsController({
       return;
     }
 
-    const dropTarget = parsePaneDropTarget(overId);
     if (dropTarget?.type === "edge") {
       if (canSplitSessionToPaneEdge(activeId, dropTarget.paneId)) {
         splitSessionToPaneEdge(activeId, dropTarget.paneId, dropTarget.edge);
@@ -1625,7 +1616,7 @@ export function useTerminalTabsController({
     }
     moveSessionToPane(activeId, targetPane.id, overId);
     setActiveWorkspaceTab("terminal");
-  }, [activeWorkspanLayout, canSplitSessionToPaneEdge, clearDragState, detachSessionToWorkspan, findPaneForSession, mergeWorkspanAtPaneEdge, moveSessionToPane, orderWorkspans, reorderCurrentWork, reorderSessions, reorderWorkspans, scopedSessionIds, splitSessionToPaneEdge, workspanTabModels, workspans]);
+  }, [activeWorkspanLayout, canSplitSessionToPaneEdge, clearDragState, detachSessionToWorkspan, findPaneForSession, mergeWorkspanAtPaneEdge, moveCurrentWorkSessionToPane, moveSessionToPane, orderWorkspans, reorderCurrentWork, reorderSessions, reorderWorkspans, scopedSessionIds, splitCurrentWorkSessionToPaneEdge, splitSessionToPaneEdge, workspanTabModels, workspans]);
 
   const handleToolbarDragStart = useCallback((event: DragStartEvent) => {
     setActiveToolbarDragId(String(event.active.id));
@@ -1756,7 +1747,7 @@ export function useTerminalTabsController({
     layoutPanes: TerminalPaneLeaf[],
     layoutActiveSessionId: string | null,
     layoutVisible: boolean,
-    options?: { visibleIds?: Set<string>; onActivate?: (sessionId: string) => void; activeSessionId?: string | null; forceTabBar?: boolean; currentWorkSessionIds?: readonly string[]; onToggleCurrentWork?: (sessionId: string) => void; currentWorkPortalTarget?: HTMLElement | null },
+    options?: { visibleIds?: Set<string>; onActivate?: (sessionId: string) => void; activeSessionId?: string | null; forceTabBar?: boolean; currentWorkSessionIds?: readonly string[]; onToggleCurrentWork?: (sessionId: string) => void; currentWorkPortalTargets?: ReadonlyMap<string, HTMLElement>; currentWorkVisibleSessionIds?: ReadonlySet<string> },
   ) => {
     const paneVisibleSessionIds = options?.visibleIds ?? visibleSessionIds;
     const visiblePaneSessionCount = pane.sessionIds.filter((sessionId) => paneVisibleSessionIds.has(sessionId)).length;
@@ -1813,7 +1804,8 @@ export function useTerminalTabsController({
         onOpenWorktreeDirectory={handleOpenWorktreeDirectory}
         currentWorkSessionIds={options?.currentWorkSessionIds}
         onToggleCurrentWork={options?.onToggleCurrentWork}
-        currentWorkPortalTarget={options?.currentWorkPortalTarget}
+        currentWorkPortalTargets={options?.currentWorkPortalTargets}
+        currentWorkVisibleSessionIds={options?.currentWorkVisibleSessionIds}
         currentWorkActiveSessionId={options?.activeSessionId}
         hideTabBar={!options?.forceTabBar && workspanEnabled && layoutPanes.length <= 1 && visiblePaneSessionCount <= 1}
       />
@@ -1866,7 +1858,8 @@ export function useTerminalTabsController({
     toggleCurrentWork,
     currentWorkSessionIds,
     currentWorkActiveSessionId,
-    currentWorkPortalTarget,
+    currentWorkSessionPortalTargets,
+    currentWorkVisibleSessionIds,
   ]);
 
   const hasScopedTerminalFilter = projectScopedTerminalViewEnabled && terminalScopeValue.kind !== "all";
@@ -1979,8 +1972,15 @@ export function useTerminalTabsController({
     currentWorkMode,
     currentWorkSessionIds,
     currentWorkActiveSessionId,
-    currentWorkPortalTarget,
-    setCurrentWorkPortalTarget,
+    currentWorkPaneTree,
+    currentWorkFullscreenPaneId,
+    currentWorkSessionPortalTargets,
+    activeDropPreview,
+    currentWorkVisibleSessionIds,
+    registerCurrentWorkPaneTarget,
+    unsplitCurrentWorkPane,
+    toggleCurrentWorkPaneFullscreen,
+    setCurrentWorkSplitRatio,
     selectedCurrentWorkSessionIds,
     toggleCurrentWorkSelection,
     reorderCurrentWork,

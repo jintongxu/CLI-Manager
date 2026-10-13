@@ -36,8 +36,8 @@ import {
 } from "../types/terminalStoreTypes";
 import {
   buildWorkspanMirror, persistWorkspanState, persistCommittedLaunch, createFileEditorSessionId,
-  clearProjectEditorWorkspacesIfUnused, isPersistableSession, hasBackendPty,
-  releaseRemoteHistoryConsumer,
+  clearProjectEditorWorkspacesIfUnused, isPersistableSession, hasBackendPty, remapCurrentWorkSessionIds,
+  persistRestoredCurrentWork, releaseRemoteHistoryConsumer,
 } from "../lib/terminalStoreLayout";
 import { normalizeRemotePathForCompare } from "../lib/subagentTranscriptModel";
 import {
@@ -1803,14 +1803,14 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         });
 
         // 更新 sessionStore 的持久化数据（使用新 ID）
-        const updatedPersistedSessions = restoredSessions.map((s) => ({
-          ...s,
-          id: s.id, // 已经是新 ID
-        }));
+        const updatedPersistedSessions = restoredSessions.map((s) => ({ ...s, id: s.id }));
+        const currentWork = remapCurrentWorkSessionIds(sessionStore.currentWorkSessionIds, sessionStore.currentWorkActiveSessionId, newIdMap, restoredSessionIds);
+
         await sessionStore.saveSessions(updatedPersistedSessions);
         await sessionStore.saveSplits([]);
         await sessionStore.saveActiveSessionId(mirror.activeSessionId);
         await sessionStore.saveWorkspans(workspans, mirror.activeWorkspanId, updatedPersistedSessions);
+        await persistRestoredCurrentWork(currentWork.sessionIds, currentWork.activeSessionId, updatedPersistedSessions, newIdMap);
 
         // 显示恢复结果提示
         if (skippedSessions.length > 0) {

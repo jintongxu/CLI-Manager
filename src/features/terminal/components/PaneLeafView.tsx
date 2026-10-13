@@ -65,7 +65,8 @@ export interface PaneLeafViewProps {
   onOpenWorktreeDirectory: (worktree: WorktreeRecord) => void;
   currentWorkSessionIds?: readonly string[];
   onToggleCurrentWork?: (sessionId: string) => void;
-  currentWorkPortalTarget?: HTMLElement | null;
+  currentWorkPortalTargets?: ReadonlyMap<string, HTMLElement>;
+  currentWorkVisibleSessionIds?: ReadonlySet<string>;
   currentWorkActiveSessionId?: string | null;
   hideTabBar?: boolean;
 }
@@ -121,7 +122,8 @@ export function PaneLeafView({
   onOpenWorktreeDirectory,
   currentWorkSessionIds = [],
   onToggleCurrentWork,
-  currentWorkPortalTarget,
+  currentWorkPortalTargets,
+  currentWorkVisibleSessionIds,
   currentWorkActiveSessionId,
   hideTabBar = false,
 }: PaneLeafViewProps) {
@@ -208,7 +210,7 @@ export function PaneLeafView({
       <div
         className={`ui-terminal-pane-content relative min-h-0 flex-1 overflow-hidden${isPiPane ? " ui-terminal-pane-content--pi" : ""}`}
         onPointerDownCapture={() => {
-          const focusSessionId = currentWorkPortalTarget && currentWorkActiveSessionId
+          const focusSessionId = currentWorkPortalTargets?.size && currentWorkActiveSessionId
             ? currentWorkActiveSessionId
             : effectivePaneActiveSessionId;
           if (focusSessionId && focusSessionId !== useTerminalStore.getState().activeSessionId) {
@@ -216,7 +218,7 @@ export function PaneLeafView({
           }
         }}
         onFocusCapture={() => {
-          const focusSessionId = currentWorkPortalTarget && currentWorkActiveSessionId
+          const focusSessionId = currentWorkPortalTargets?.size && currentWorkActiveSessionId
             ? currentWorkActiveSessionId
             : effectivePaneActiveSessionId;
           if (focusSessionId && focusSessionId !== activeSessionId) {
@@ -225,13 +227,18 @@ export function PaneLeafView({
         }}
       >
         {paneSessions.map((session) => {
+          const currentWorkPortalTarget = currentWorkPortalTargets?.get(session.id) ?? null;
           const shouldPortalCurrentWork = Boolean(currentWorkPortalTarget && currentWorkSessionIds?.includes(session.id));
-          const isCurrentWorkActive = Boolean(currentWorkPortalTarget && currentWorkActiveSessionId === session.id);
+          const isCurrentWorkVisible = Boolean(shouldPortalCurrentWork && currentWorkVisibleSessionIds?.has(session.id));
+          const isCurrentWorkActive = Boolean(shouldPortalCurrentWork && currentWorkActiveSessionId === session.id);
           const sessionElement = (
           <div
             key={session.id}
             className={`absolute inset-0${isPiPane ? " ui-terminal-session--pi" : ""}`}
-            style={{ display: (shouldPortalCurrentWork ? isCurrentWorkActive : session.id === effectivePaneActiveSessionId) ? "block" : "none" }}
+            style={{ display: (shouldPortalCurrentWork ? isCurrentWorkVisible : session.id === effectivePaneActiveSessionId) ? "block" : "none" }}
+            onPointerDownCapture={() => {
+              if (shouldPortalCurrentWork && session.id !== currentWorkActiveSessionId) onActivateSession(session.id);
+            }}
           >
             {session.kind === "file-editor" ? (
               <Suspense fallback={null}>
@@ -247,7 +254,7 @@ export function PaneLeafView({
                 <SubagentTranscriptView
                   sessionId={session.id}
                   title={session.title}
-                  isVisible={isCurrentWorkActive || (!historyActive && isLayoutVisible && session.id === effectivePaneActiveSessionId)}
+                  isVisible={isCurrentWorkVisible || (!historyActive && isLayoutVisible && session.id === effectivePaneActiveSessionId)}
                 />
               </Suspense>
             ) : session.remoteHandoff ? (
@@ -256,7 +263,7 @@ export function PaneLeafView({
               <XTermTerminal
                 sessionId={session.id}
                 isActive={isCurrentWorkActive || (!historyActive && isLayoutVisible && !session.tabHidden && session.id === activeSessionId)}
-                isVisible={isCurrentWorkActive || (!historyActive && isLayoutVisible && session.id === effectivePaneActiveSessionId)}
+                isVisible={isCurrentWorkVisible || (!historyActive && isLayoutVisible && session.id === effectivePaneActiveSessionId)}
                 fontSize={fontSize}
                 fontFamily={fontFamily}
                 resolvedTheme={resolvedTheme}
@@ -414,7 +421,8 @@ export function arePaneLeafViewPropsEqual(prevProps: PaneLeafViewProps, nextProp
   if (prevProps.terminalBackgroundImagePath !== nextProps.terminalBackgroundImagePath) return false;
   if (prevProps.hideTabBar !== nextProps.hideTabBar) return false;
   if (prevProps.currentWorkSessionIds !== nextProps.currentWorkSessionIds) return false;
-  if (prevProps.currentWorkPortalTarget !== nextProps.currentWorkPortalTarget) return false;
+  if (prevProps.currentWorkPortalTargets !== nextProps.currentWorkPortalTargets) return false;
+  if (prevProps.currentWorkVisibleSessionIds !== nextProps.currentWorkVisibleSessionIds) return false;
   if (prevProps.currentWorkActiveSessionId !== nextProps.currentWorkActiveSessionId) return false;
   if (prevProps.onToggleCurrentWork !== nextProps.onToggleCurrentWork) return false;
   if (prevProps.paneMarkerSettings !== nextProps.paneMarkerSettings) return false;

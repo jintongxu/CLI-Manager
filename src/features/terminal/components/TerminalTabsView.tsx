@@ -25,6 +25,7 @@ import { buildTerminalTabHoverInfo, terminalTabCollisionDetection } from "../lib
 import { TerminalCurrentContext } from "./TerminalCurrentContext";
 import { SortableWorkspanTab } from "./SortableTerminalTabs";
 import { TerminalTabDragOverlay } from "./TerminalTabDragOverlay";
+import { CurrentWorkPaneTarget } from "./CurrentWorkPaneTarget";
 import { SplitProjectPicker, TerminalCloseConfirmBubble } from "./TerminalTabDialogs";
 import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
 import { CurrentWorkTabBar } from "./CurrentWorkTabBar";
@@ -132,15 +133,24 @@ export function TerminalTabsView({
   currentWorkMode,
   currentWorkSessionIds,
   currentWorkActiveSessionId,
-  currentWorkPortalTarget,
-  setCurrentWorkPortalTarget,
+  currentWorkPaneTree,
+  currentWorkFullscreenPaneId,
+  currentWorkSessionPortalTargets,
+  activeDropPreview,
+  currentWorkVisibleSessionIds,
+  registerCurrentWorkPaneTarget,
+  unsplitCurrentWorkPane,
+  toggleCurrentWorkPaneFullscreen,
+  setCurrentWorkSplitRatio,
   selectedCurrentWorkSessionIds,
   toggleCurrentWorkSelection,
+  removeCurrentWorkSessions,
   clearCurrentWork,
   activateCurrentWork,
   leaveCurrentWork,
   toggleCurrentWork,
 }: ReturnType<typeof useTerminalTabsController>) {
+  const currentWorkHasSplit = currentWorkPaneTree?.type === "split";
   return (
     <div
       className="ui-terminal-tabs-shell flex h-full min-h-0 flex-col"
@@ -350,7 +360,9 @@ export function TerminalTabsView({
                 onDragCancel={clearDragState}
                 onDragEnd={handleDragEnd}
               >
-                <TerminalCurrentContext models={workspanTabModels} workspanId={effectiveActiveWorkspanId} sessionId={currentContextSessionId} />
+                {!currentWorkMode && (
+                  <TerminalCurrentContext models={workspanTabModels} workspanId={effectiveActiveWorkspanId} sessionId={currentContextSessionId} />
+                )}
                 <WorkspanTerminalLayout
                   position={workspanTabBarPosition}
                   tabBarVisible={workspanTabBarVisible}
@@ -374,6 +386,7 @@ export function TerminalTabsView({
                       statusLabels={{ hidden: t("terminal.currentWork.hidden"), sshDisconnected: t("terminal.currentWork.sshDisconnected"), worktreeMissing: t("terminal.currentWork.worktreeMissing") }}
                       contextLabels={{ unboundProject: t("terminal.context.unboundProject"), missingWorktree: t("terminal.context.worktreeMissing"), defaultShell: t("terminal.context.defaultShell") }}
                       removeLabel={(title) => t("terminal.currentWork.removeNamed", { title })}
+                      compact={Boolean(currentWorkHasSplit)}
                     />
                   ) : workspanEnabled ? (
                     <WorkspanTabBar
@@ -572,23 +585,47 @@ export function TerminalTabsView({
                             layout.visiblePanes,
                             layoutActiveSessionId,
                             layoutVisible && layout.visiblePaneIds.has(pane.id),
-                            { currentWorkSessionIds, onToggleCurrentWork: toggleCurrentWork, activeSessionId: currentWorkMode ? currentWorkActiveSessionId : undefined, currentWorkPortalTarget: currentWorkMode ? currentWorkPortalTarget : null },
+                            { currentWorkSessionIds, onToggleCurrentWork: toggleCurrentWork, onActivate: currentWorkMode ? activateCurrentWork : undefined, activeSessionId: currentWorkMode ? currentWorkActiveSessionId : undefined, currentWorkPortalTargets: currentWorkMode ? currentWorkSessionPortalTargets : undefined, currentWorkVisibleSessionIds: currentWorkMode ? currentWorkVisibleSessionIds : undefined },
                           )}
                           fullscreenLeafId={layoutVisible ? activeFullscreenPaneId : null}
                         />
                       </div>
                     );
                   })}
-                  {currentWorkMode && (
-                    <div
-                      ref={setCurrentWorkPortalTarget}
-                      className="absolute inset-0 min-h-0 min-w-0 overflow-hidden"
-                    >
-                      {!currentWorkActiveSessionId && (
-                        <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm opacity-70">
-                          {t("terminal.currentWork.empty")}
-                        </div>
-                      )}
+                  {currentWorkMode && currentWorkPaneTree && (
+                    <SplitTerminalView
+                      node={currentWorkPaneTree}
+                      visibleNode={currentWorkPaneTree}
+                      fullscreenLeafId={currentWorkFullscreenPaneId}
+                      onSplitRatioChange={setCurrentWorkSplitRatio}
+                      renderLeaf={(pane) => {
+                        const paneSession = pane.activeSessionId
+                          ? sessions.find((session) => session.id === pane.activeSessionId)
+                          : undefined;
+                        if (!paneSession) return null;
+                        return (
+                          <CurrentWorkPaneTarget
+                            paneId={pane.id}
+                            activeDropPreview={activeDropPreview}
+                            session={paneSession}
+                            project={paneSession.projectId ? projectById.get(paneSession.projectId) : undefined}
+                            worktree={paneSession.worktreeId ? worktrees.find((worktree) => worktree.id === paneSession.worktreeId) ?? null : null}
+                            active={paneSession.id === currentWorkActiveSessionId}
+                            showHeader={Boolean(currentWorkHasSplit)}
+                            fullscreen={currentWorkFullscreenPaneId === pane.id}
+                            onActivate={activateCurrentWork}
+                            onRestoreSinglePane={() => unsplitCurrentWorkPane(pane.id)}
+                            onToggleFullscreen={() => toggleCurrentWorkPaneFullscreen(pane.id)}
+                            onRemove={(sessionId) => removeCurrentWorkSessions([sessionId])}
+                            registerTarget={registerCurrentWorkPaneTarget}
+                          />
+                        );
+                      }}
+                    />
+                  )}
+                  {currentWorkMode && !currentWorkPaneTree && (
+                    <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm opacity-70">
+                      {t("terminal.currentWork.empty")}
                     </div>
                   )}
                 </div>

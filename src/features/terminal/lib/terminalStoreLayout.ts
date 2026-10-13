@@ -8,6 +8,7 @@ import { useFileExplorerStore } from "../../files/api/fileExplorerStore";
 import { resolveVisibleTerminalFocus } from "./terminalTabVisibility";
 import { type TerminalWorkspan } from "../api/terminalWorkspan";
 import { type SplitTerminalOptions, type TerminalStore } from "../types/terminalStoreTypes";
+import { remapCurrentWorkPaneTreeSessionIds } from "./currentWorkModel";
 
 export function buildWorkspanMirror(
   workspans: TerminalWorkspan[],
@@ -35,6 +36,21 @@ export function persistWorkspanState(
   void useSessionStore.getState().saveWorkspans(workspans, activeWorkspanId, sessions).catch((err) => {
     logError("Failed to persist terminal workspans", err);
   });
+}
+
+export async function persistRestoredCurrentWork(
+  sessionIds: string[],
+  activeSessionId: string | null,
+  sessions: TerminalSession[],
+  sessionIdMap: Record<string, string>,
+): Promise<void> {
+  const store = useSessionStore.getState();
+  await store.saveCurrentWork(
+    sessionIds,
+    activeSessionId,
+    sessions,
+    remapCurrentWorkPaneTreeSessionIds(store.currentWorkPaneTree, sessionIdMap),
+  );
 }
 
 // Committed PTYs must finish startup even when snapshot persistence fails.
@@ -77,6 +93,24 @@ export function hasBackendPty(session: TerminalSession): boolean {
 
 export function createSplitSessionTitle(options?: SplitTerminalOptions) {
   return options?.title ?? "Split Terminal";
+}
+
+export function remapCurrentWorkSessionIds(
+  sessionIds: string[],
+  activeSessionId: string | null,
+  idMap: Record<string, string>,
+  restoredSessionIds: Set<string>,
+): { sessionIds: string[]; activeSessionId: string | null } {
+  const remappedSessionIds = sessionIds
+    .map((sessionId) => idMap[sessionId])
+    .filter((sessionId): sessionId is string => Boolean(sessionId) && restoredSessionIds.has(sessionId));
+  const remappedActiveSessionId = activeSessionId ? idMap[activeSessionId] : undefined;
+  return {
+    sessionIds: remappedSessionIds,
+    activeSessionId: remappedActiveSessionId && remappedSessionIds.includes(remappedActiveSessionId)
+      ? remappedActiveSessionId
+      : remappedSessionIds[0] ?? null,
+  };
 }
 
 export function releaseRemoteHistoryConsumer(session: TerminalSession | undefined): void {
