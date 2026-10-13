@@ -23,6 +23,7 @@ import { SidebarTerminalList } from "./SidebarTerminalList";
 import { resolveNodeAppearance } from "../api/nodeAppearance";
 import { resolveCliToolIconKey } from "../../../shared/lib/cliTools";
 import { useWorktreeDepsRunnerStore } from "../api/worktreeDepsRunner";
+import { useWorktreeStore } from "../api/worktreeStore";
 
 // 右键只打开项目菜单，避免浏览器先把树节点焦点移走。
 export function preventSecondaryPointerFocus(event: ReactPointerEvent<HTMLElement>) {
@@ -139,6 +140,7 @@ function TreeNodeItemImpl({
   const compact = density === "compact";
   const installingWorktreeId = node.type === "worktree" ? node.worktree.id : "";
   const depsInstalling = useWorktreeDepsRunnerStore((s) => Boolean(installingWorktreeId && s.tasks[installingWorktreeId]));
+  const deletingWorktree = useWorktreeStore((s) => Boolean(installingWorktreeId && s.deletingWorktreeIds[installingWorktreeId]));
   const indentBase = compact ? 6 : 8;
   const indentStep = compact ? 14 : 16;
   const paddingLeft = indentBase + depth * indentStep;
@@ -223,11 +225,11 @@ function TreeNodeItemImpl({
               <AlertTriangle size={12} strokeWidth={1.5} />
             </span>
           )}
-          {depsInstalling && (
+          {(depsInstalling || deletingWorktree) && (
             <span
               className="inline-flex shrink-0 items-center justify-center"
-              title={t("worktree.deps.installing", { name: getWorktreeDisplayName(worktree) })}
-              aria-label={t("worktree.deps.installing", { name: getWorktreeDisplayName(worktree) })}
+              title={t(deletingWorktree ? "worktree.deletion.inProgress" : "worktree.deps.installing", { name: getWorktreeDisplayName(worktree) })}
+              aria-label={t(deletingWorktree ? "worktree.deletion.inProgress" : "worktree.deps.installing", { name: getWorktreeDisplayName(worktree) })}
             >
               <RefreshCw size={12} strokeWidth={2} className="animate-spin" />
             </span>

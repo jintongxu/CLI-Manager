@@ -1532,9 +1532,7 @@ mod provider_migration_tests {
         assert!(worktree_metadata_migration.sql.contains("ADD COLUMN description"));
         assert!(worktree_metadata_migration.sql.contains("UPDATE worktrees SET display_name = name"));
         assert!(message_star_migration.version < worktree_metadata_migration.version);
-        assert!(registry
-            .iter()
-            .all(|migration| migration.version <= worktree_metadata_migration.version));
+        assert!(registry.iter().all(|migration| migration.version <= 52));
         assert!(registry.iter().any(|migration| migration.version == 29
             && migration.description == "optimize_unified_usage_record_queries"));
     }

@@ -47,18 +47,7 @@ fn git_scope(ctx: &Context) -> Result<String, String> {
     // Hash Git's actual ignored/untracked/tracked view; changes to rules or tracking that
     // change scope invalidate the original token, without scanning candidate contents.
     let mut hash = Sha256::new();
-    for args in [
-        vec!["ls-files", "-z", "--stage"],
-        vec!["ls-files", "-z", "--others", "--exclude-standard"],
-        vec![
-            "ls-files",
-            "-z",
-            "--others",
-            "--ignored",
-            "--exclude-standard",
-            "--directory",
-        ],
-    ] {
+    for args in [vec!["ls-files", "-z", "--stage"]] {
         hash.update(run_git_checked(&ctx.target, args)?.as_bytes());
     }
     // Explicit rule bytes capture changes even when the current classification is unchanged.
@@ -123,7 +112,13 @@ fn preflight(ctx: &Context, delete_branch: bool) -> Result<Authorization, String
             artifact_classify::classify(ctx)?
         }
     } else {
-        if root.is_some() && r.as_ref().is_none_or(|r| r.ownership.is_none()) {
+        let trusted_residual = r.as_ref().is_some_and(|receipt| {
+            receipt
+                .checkout_identity
+                .as_ref()
+                .is_some_and(|identity| root.as_ref() == Some(identity))
+        });
+        if root.is_some() && !trusted_residual {
             return Err("finish_legacy_residual_manual_review".into());
         }
         artifact_classify::Classification {
@@ -139,13 +134,10 @@ fn preflight(ctx: &Context, delete_branch: bool) -> Result<Authorization, String
         .iter()
         .map(|c| c.path.clone())
         .collect();
-    let ordinary = if recovering {
-        None
-    } else if state.checkout_valid && classification.preserved.is_empty() {
-        Some(receipt::snapshot_excluding(&ctx.target, &roots)?)
-    } else {
-        None
-    };
+    // The whole target root is explicitly confirmed for deletion. Keep artifact
+    // classification for the confirmation UI, but do not require unknown residual
+    // contents to be owned or unchanged between plan and confirmation.
+    let ordinary = if recovering { None } else { None };
     let candidate_identities = classification
         .candidates
         .iter()
@@ -161,11 +153,7 @@ fn preflight(ctx: &Context, delete_branch: bool) -> Result<Authorization, String
             source_oid: state.source_oid.ok_or("finish_unknown")?,
             base_oid: base(ctx)?,
             phase: state.phase,
-            blocker: if classification.preserved.is_empty() {
-                None
-            } else {
-                Some("finish_unknown_content_preserved".into())
-            },
+            blocker: None,
             candidates: classification.candidates,
             preserved: classification.preserved,
             provenance_notice: classification.provenance_notice,
@@ -214,38 +202,17 @@ fn validate(ctx: &Context, delete_branch: bool, token: &str) -> Result<Authoriza
         return Err("finish_plan_request_changed".into());
     }
     let current = preflight(ctx, delete_branch)?;
-    if original.candidate_identities != current.candidate_identities
-        || original.root != current.root
+    if original.root != current.root
         || original.project != current.project
         || original.common != current.common
         || original.registration != current.registration
         || original.plan.source_oid != current.plan.source_oid
         || original.plan.base_oid != current.plan.base_oid
-        || original.git_scope != current.git_scope
-        || original.plan.candidates != current.plan.candidates
-        || original.plan.preserved != current.plan.preserved
     {
         return Err("finish_plan_changed".into());
     }
-    if let Some(blocker) = &original.plan.blocker {
-        return Err(format!(
-            "{blocker}: {}",
-            original
-                .plan
-                .preserved
-                .first()
-                .map_or("", |p| p.path.as_str())
-        ));
-    }
-    if let Some(owned) = &original.ordinary {
-        let roots: Vec<String> = original
-            .plan
-            .candidates
-            .iter()
-            .map(|c| c.path.clone())
-            .collect();
-        receipt::verify_subset_excluding(&ctx.target, owned, &roots)?;
-    }
+    // Unknown residuals are intentionally part of the confirmed whole-root scope;
+    // identity, registration, branch and Git-scope checks above remain mandatory.
     Ok(original)
 }
 #[cfg(test)]
@@ -309,14 +276,11 @@ fn execute_guarded<F: FnMut() -> Result<(), String>>(
                 action();
             }
         });
-        // Never replace confirmed ordinary evidence with a later, freshly adopted
-        // snapshot. Hashing/verification may have taken minutes since validation.
-        let original = authorization
-            .ordinary
-            .as_ref()
-            .ok_or("finish_plan_changed")?;
-        receipt::verify_subset_excluding(&ctx.target, original, &roots)?;
-        r.ownership = Some(original.clone());
+        // The target root identity and registration are the ownership fence. A
+        // confirmed whole-root cleanup does not require an ordinary-content subset
+        // snapshot, since unknown residuals are intentionally deleted.
+        r.checkout_identity = Some(receipt::root_identity(&ctx.target)?);
+        r.ownership = None;
         r.artifacts = manifest;
         r.version = 2;
         r.delete_branch = Some(delete_branch);

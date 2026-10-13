@@ -490,8 +490,11 @@ impl DirectoryEvidence {
         }
         let i = shard(rel);
         let owned = read_shard(dir, i, &m.shards[i])?;
-        let value = owned.get(rel).filter(|v| v.starts_with("dir:"))
-            .cloned().ok_or("finish_artifact_manifest_corrupt")?;
+        let value = owned
+            .get(rel)
+            .filter(|v| v.starts_with("dir:"))
+            .cloned()
+            .ok_or("finish_artifact_manifest_corrupt")?;
         if self.0.len() >= 256 {
             self.0.clear();
         }
@@ -500,7 +503,10 @@ impl DirectoryEvidence {
     }
 }
 fn safe_parents(
-    ctx: &Context, path: &Path, dir: &Path, m: &Manifest,
+    ctx: &Context,
+    path: &Path,
+    dir: &Path,
+    m: &Manifest,
     evidence: &mut DirectoryEvidence,
 ) -> Result<(), String> {
     for parent in path.ancestors().skip(1).take_while(|p| *p != ctx.target) {
@@ -539,7 +545,14 @@ fn remove_dirs(
         return Err("finish_artifact_changed".into());
     }
     for item in fs::read_dir(path).map_err(io_error)? {
-        remove_dirs(ctx, &item.map_err(io_error)?.path(), dir, m, depth + 1, evidence)?;
+        remove_dirs(
+            ctx,
+            &item.map_err(io_error)?.path(),
+            dir,
+            m,
+            depth + 1,
+            evidence,
+        )?;
     }
     fs::remove_dir(path).map_err(io_error)
 }

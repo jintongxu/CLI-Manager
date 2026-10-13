@@ -17,6 +17,7 @@ interface WorktreeFinishDialogProps {
   worktree: WorktreeRecord | null;
   open: boolean;
   onClose: () => void;
+  onForceDelete?: (project: Project, worktree: WorktreeRecord) => void;
 }
 
 type Step = "review" | "merge" | "cleanup" | "done";
@@ -203,7 +204,7 @@ function cleanupPlanText(plan: CleanupPlan, t: Translate): string {
   ].join("\n\n");
 }
 
-export function WorktreeFinishDialog({ project, worktree, open, onClose }: WorktreeFinishDialogProps) {
+export function WorktreeFinishDialog({ project, worktree, open, onClose, onForceDelete }: WorktreeFinishDialogProps) {
   const { t } = useI18n();
   const inspectFinish = useWorktreeStore(state => state.inspectFinish);
   const finishMerge = useWorktreeStore(state => state.finishMerge);
@@ -287,6 +288,11 @@ export function WorktreeFinishDialog({ project, worktree, open, onClose }: Workt
     : authority?.unknown ? formatFinishError("finish_unknown", t) : null;
   const canCommit = !!authority && canReviewFinish(authority) && changes.length > 0 && commitMessage.trim().length > 0 && !busy && !loadingChanges && !failure;
   const mergeBlockedByRestore = !authority || !canReviewFinish(authority) || loadingChanges;
+  const legacyResidualForceDelete = error?.code === "legacy"
+    && !!authority
+    && !authority.unknown
+    && (authority.merged || authority.outcome === "no_diff")
+    && !!onForceDelete;
 
   if (!project || !worktree) return null;
 
@@ -468,6 +474,18 @@ export function WorktreeFinishDialog({ project, worktree, open, onClose }: Workt
                   {t("worktree.finish.forceMerge")}
                 </Button>
               )}
+              {legacyResidualForceDelete && (
+                <div className="mt-3 space-y-2">
+                  <p>{t("worktree.finish.legacyResidualForceDelete")}</p>
+                  <Button
+                    variant="destructive"
+                    onClick={() => { onForceDelete(project, worktree); }}
+                    disabled={busy}
+                  >
+                    {t("worktree.finish.forceDelete")}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -487,7 +505,7 @@ export function WorktreeFinishDialog({ project, worktree, open, onClose }: Workt
         contentClassName="max-w-[620px] max-h-[85vh] overflow-auto [&_p]:whitespace-pre-wrap"
         message={cleanupConfirmation ? [
           cleanupConfirmation.plan ? cleanupPlanText(cleanupConfirmation.plan, t) : t("worktree.finish.databasePending"),
-          ...(cleanupConfirmation.plan?.preserved.length ? [t("worktree.finish.plan.wholeRootWarning")] : []),
+          ...(cleanupConfirmation.plan ? [t("worktree.finish.plan.wholeRootWarning")] : []),
           t("worktree.finish.sessionsMessage", { count: cleanupConfirmation.sessionIds.length }),
           t("worktree.finish.plan.sessions") + ": " + (cleanupConfirmation.sessionIds.join(", ") || t("worktree.finish.plan.none")),
         ].join("\n\n") : ""}

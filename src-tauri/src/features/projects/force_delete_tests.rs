@@ -34,6 +34,7 @@ fn fixture() -> (tempfile::TempDir, FinishRequest) {
             worktree_id: "force-test".into(),
             project_path: main.to_str().unwrap().into(),
             worktree_path: target.to_str().unwrap().into(),
+            root_identity: String::new(),
             branch: "wt/task".into(),
             base_branch: "main".into(),
         },
@@ -102,10 +103,12 @@ fn force_delete_nonempty_unknown_residual_and_missing_sql_retry() {
     let (_temp, req) = fixture();
     unregister(&req);
     let target = Path::new(&req.worktree_path);
-    fs::write(target.join("unknown"), "must confirm").unwrap();
+    fs::create_dir(target.join("unknown-dir")).unwrap();
+    fs::write(target.join("unknown-dir").join("unknown"), "must confirm").unwrap();
     let auth = inspect_force(&req).unwrap();
-    assert!(target.join("unknown").exists());
+    assert!(target.join("unknown-dir").join("unknown").exists());
     assert!(execute(&req, &auth).unwrap().done);
+    assert!(!target.exists());
     assert!(branch_state(&context(req.clone()).unwrap(), false)
         .unwrap()
         .is_none());
@@ -417,16 +420,35 @@ fn force_delete_prune_rechecked_after_removal_preserves_other_registration() {
         &["worktree", "add", "-b", "wt/other", other.to_str().unwrap()],
     );
     let auth = inspect_force(&req).unwrap();
-    let err = execute_with_remover(&req, &auth.token, &auth.confirmed_path, |path| {
+    let error = execute_with_remover(&req, &auth.token, &auth.confirmed_path, |path| {
         unlink_tree(path)?;
         fs::remove_dir_all(&other)
     })
     .unwrap_err();
-    assert_eq!(err, "force_delete_unrelated_prune");
-    assert!(worktree_path_registered(project, &other).unwrap());
-    assert!(worktree_path_registered(project, Path::new(&req.worktree_path)).unwrap());
+    assert_eq!(error, "force_delete_unrelated_prune");
+    assert!(!worktree_path_registered(project, Path::new(&req.worktree_path)).unwrap());
     git(project, &["rev-parse", "wt/task"]);
     git(project, &["rev-parse", "wt/other"]);
+}
+
+#[test]
+fn force_delete_persisted_root_identity_rejects_replaced_root() {
+    let (_temp, mut req) = fixture();
+    req.root_identity = "replacement-root".into();
+    assert!(matches!(
+        inspect_force(&req),
+        Err(error) if error == "finish_root_replaced"
+    ));
+}
+
+#[test]
+fn force_delete_registered_missing_git_file_and_branch_complete() {
+    let (_temp, req) = fixture();
+    fs::remove_file(Path::new(&req.worktree_path).join(".git")).unwrap();
+    let auth = inspect_force(&req).unwrap();
+    assert!(!auth.path_missing && auth.delete_branch && auth.branch_oid.is_some());
+    assert!(execute(&req, &auth).unwrap().done);
+    assert!(!Path::new(&req.worktree_path).exists());
 }
 
 #[test]

@@ -76,8 +76,10 @@ function worktreeHarness(dragging=false, disabled=false) {
  const actions={selectedWorktreeIds:new Set(),collapsedIds:new Set(),providerBadges:{},getTerminals:()=>[],
  onSelectWorktree:()=>calls.push(['select']),onOpenWorktree:()=>calls.push(['open']),onContextMenuWorktree:()=>calls.push(['menu'])};
  const deps={...h.deps,React,useState:()=>[null,()=>{}],useEffect:()=>{},useRef:()=>({current:null}),memo:f=>f,
- useI18n:()=>({t:k=>k}),useTreeActions:()=>actions,getWorktreeDisplayName:w=>w.name,
- worktreeTerminalsCollapseId:id=>`terminals:${id}`,WorktreeIcon:()=>null,Play:()=>null,AlertTriangle:()=>null,WorktreeTerminalSummary:()=>null,
+ useI18n:()=>({t:k=>k}),useTreeActions:()=>actions,getWorktreeDisplayName:w=>w.name,getWorktreeSidebarLabel:w=>w.name,
+ worktreeTerminalsCollapseId:id=>`terminals:${id}`,WorktreeIcon:()=>null,Play:()=>null,AlertTriangle:()=>null,RefreshCw:()=>null,WorktreeTerminalSummary:()=>null,
+ useWorktreeDepsRunnerStore:(selector)=>selector({tasks:{}}),
+ useWorktreeStore:(selector)=>selector({deletingWorktreeIds:{}}),
  useProjectStore:{getState:()=>store},useSettingsStore:{getState:()=>({worktreeOrderByProject:map})},
  ...order,...logic};
  const c=load('../components/TreeNodeItem.tsx',deps);

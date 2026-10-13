@@ -37,6 +37,7 @@ pub(super) fn fixture() -> (tempfile::TempDir, Context) {
         worktree_id: "test-id".into(),
         project_path: main.to_str().unwrap().into(),
         worktree_path: wt.to_str().unwrap().into(),
+        root_identity: String::new(),
         branch: "wt/task".into(),
         base_branch: "main".into(),
     })
@@ -47,10 +48,16 @@ pub(super) fn fixture() -> (tempfile::TempDir, Context) {
 #[test]
 fn finish_normal_and_ack_keeps_receipt() {
     let (_temp, ctx) = fixture();
+    fs::write(
+        ctx.target.join("unknown-residual"),
+        "delete after confirmation",
+    )
+    .unwrap();
     assert!(inspect(&ctx).unwrap().checkout_valid);
     let merged = merge(&ctx, false).unwrap();
     assert!(merged.merged && merged.cleanup_ready);
     assert!(cleanup(&ctx, true).unwrap().done);
+    assert!(!ctx.target.exists());
     assert!(inspect(&ctx).unwrap().done);
     assert!(ack(&ctx).unwrap().done);
     assert!(load(&ctx).unwrap().unwrap().acknowledged);
@@ -82,6 +89,27 @@ fn finish_unregistered_residual_restart_and_deleted_branch() {
     let state = inspect(&restarted).unwrap();
     assert!(!state.checkout_valid && state.cleanup_ready && state.merged);
     assert!(cleanup(&restarted, true).unwrap().done);
+    assert!(!restarted.target.exists());
+}
+
+#[test]
+fn finish_request_rejects_replaced_root_identity() {
+    let (_temp, ctx) = fixture();
+    let mut request = ctx.request.clone();
+    request.root_identity = "replacement-root".into();
+    assert!(matches!(context(request), Err(error) if error == "finish_root_replaced"));
+}
+
+#[test]
+fn finish_registered_missing_git_file_cleans_directory_and_branch() {
+    let (_temp, ctx) = fixture();
+    merge(&ctx, false).unwrap();
+    fs::remove_file(ctx.target.join(".git")).unwrap();
+    let state = cleanup(&ctx, true).unwrap();
+    assert!(state.done);
+    assert!(!ctx.target.exists());
+    assert!(!worktree_path_registered(&ctx.project, &ctx.target).unwrap());
+    assert!(tip(&ctx).unwrap().is_none());
 }
 
 #[test]
@@ -266,18 +294,27 @@ fn startup_same_base_fixture() -> (tempfile::TempDir, Context) {
     git(&main, &["config", "user.email", "test@example.com"]);
     git(&main, &["config", "user.name", "Tests"]);
     git(&main, &["config", "core.autocrlf", "false"]);
-    fs::write(main.join("base"), "base
-").unwrap();
+    fs::write(
+        main.join("base"),
+        "base
+",
+    )
+    .unwrap();
     git(&main, &["add", "."]);
     git(&main, &["commit", "-m", "base"]);
-    git(&main, &["worktree", "add", "-b", "wt/task", wt.to_str().unwrap()]);
+    git(
+        &main,
+        &["worktree", "add", "-b", "wt/task", wt.to_str().unwrap()],
+    );
     let ctx = context(FinishRequest {
         worktree_id: "startup-status".into(),
         project_path: main.to_str().unwrap().into(),
         worktree_path: wt.to_str().unwrap().into(),
+        root_identity: String::new(),
         branch: "wt/task".into(),
         base_branch: "main".into(),
-    }).unwrap();
+    })
+    .unwrap();
     (temp, ctx)
 }
 
@@ -285,10 +322,17 @@ fn startup_same_base_fixture() -> (tempfile::TempDir, Context) {
 fn startup_status_same_base_clean_tracked_untracked_without_receipt() {
     for dirty in [None, Some("base"), Some("untracked")] {
         let (_temp, ctx) = startup_same_base_fixture();
-        assert_eq!(git(&ctx.target, &["rev-parse", "HEAD"]), git(&ctx.project, &["rev-parse", "main"]));
+        assert_eq!(
+            git(&ctx.target, &["rev-parse", "HEAD"]),
+            git(&ctx.project, &["rev-parse", "main"])
+        );
         if let Some(file) = dirty {
-            fs::write(ctx.target.join(file), "unfinished work
-").unwrap();
+            fs::write(
+                ctx.target.join(file),
+                "unfinished work
+",
+            )
+            .unwrap();
         }
         let before = git(&ctx.target, &["status", "--porcelain"]);
         let registration = git(&ctx.project, &["worktree", "list", "--porcelain"]);
@@ -299,24 +343,40 @@ fn startup_status_same_base_clean_tracked_untracked_without_receipt() {
             assert_eq!(state.outcome.as_deref(), Some("merged"));
             assert!(!state.cleanup_pending && !state.done && !state.unknown);
             assert_eq!(state.cleanup_ready, dirty.is_none());
-            assert_eq!(state.blocker.as_deref(), dirty.map(|_| "finish_dirty_checkout"));
+            assert_eq!(
+                state.blocker.as_deref(),
+                dirty.map(|_| "finish_dirty_checkout")
+            );
             assert!(load(&restarted).unwrap().is_none());
             assert!(!ctx.common.join("cli-manager-finish").exists());
         }
         assert_eq!(git(&ctx.target, &["status", "--porcelain"]), before);
-        assert_eq!(git(&ctx.project, &["worktree", "list", "--porcelain"]), registration);
-        assert_eq!(fs::read_to_string(ctx.target.join(dirty.unwrap_or("base"))).unwrap(),
-            if dirty.is_some() { "unfinished work
-" } else { "base
-" });
+        assert_eq!(
+            git(&ctx.project, &["worktree", "list", "--porcelain"]),
+            registration
+        );
+        assert_eq!(
+            fs::read_to_string(ctx.target.join(dirty.unwrap_or("base"))).unwrap(),
+            if dirty.is_some() {
+                "unfinished work
+"
+            } else {
+                "base
+"
+            }
+        );
     }
 }
 
 #[test]
 fn startup_status_novel_tip_historical_merge_and_prepared_dirty() {
     let (_temp, ctx) = fixture();
-    fs::write(ctx.target.join("untracked"), "unfinished
-").unwrap();
+    fs::write(
+        ctx.target.join("untracked"),
+        "unfinished
+",
+    )
+    .unwrap();
     let novel = inspect(&ctx).unwrap();
     assert!(novel.checkout_valid && !novel.merged && !novel.cleanup_pending);
     assert_eq!(novel.blocker.as_deref(), Some("finish_dirty_checkout"));
@@ -334,8 +394,11 @@ fn startup_status_novel_tip_historical_merge_and_prepared_dirty() {
     assert!(state.checkout_valid && !state.cleanup_pending && !state.done);
     assert_eq!(state.blocker.as_deref(), Some("finish_dirty_checkout"));
     assert_eq!(load(&ctx).unwrap().unwrap().phase, "prepared");
-    assert_eq!(fs::read_to_string(ctx.target.join("untracked")).unwrap(), "unfinished
-");
+    assert_eq!(
+        fs::read_to_string(ctx.target.join("untracked")).unwrap(),
+        "unfinished
+"
+    );
 }
 
 #[test]

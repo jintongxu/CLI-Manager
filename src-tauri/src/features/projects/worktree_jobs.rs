@@ -144,29 +144,44 @@ impl WorktreeDeleteQueue {
             .find(|j| j.id == id)
             .ok_or("worktree_job_not_found")?;
         if let Some(expected) = expected_state {
-            if job.state != expected { return Err("worktree_job_state_changed".into()); }
+            if job.state != expected {
+                return Err("worktree_job_state_changed".into());
+            }
         }
         if job.state == "completed" || job.state == "needsReconfirmation" {
             return Err("worktree_job_terminal".into());
         }
         if let Some(value) = state {
-            if !matches!(value.as_str(), "queued" | "running" | "retryWait" | "completed" | "needsReconfirmation") {
+            if !matches!(
+                value.as_str(),
+                "queued" | "running" | "retryWait" | "completed" | "needsReconfirmation"
+            ) {
                 return Err("worktree_job_state_invalid".into());
             }
             let legal = match value.as_str() {
                 "running" => matches!(job.state.as_str(), "queued" | "retryWait"),
                 "retryWait" => job.state == "running",
                 "completed" => job.state == "running" && phase.as_deref() == Some("completed"),
-                "needsReconfirmation" => matches!(job.state.as_str(), "running" | "retryWait") && phase.as_deref() == Some("needsReconfirmation"),
+                "needsReconfirmation" => {
+                    matches!(job.state.as_str(), "queued" | "running" | "retryWait")
+                        && phase.as_deref() == Some("needsReconfirmation")
+                }
                 "queued" => matches!(job.state.as_str(), "queued" | "running" | "retryWait"),
                 _ => false,
             };
-            if !legal { return Err("worktree_job_transition_invalid".into()); }
-            if value == "running" { job.attempts = job.attempts.saturating_add(1); }
+            if !legal {
+                return Err("worktree_job_transition_invalid".into());
+            }
+            if value == "running" {
+                job.attempts = job.attempts.saturating_add(1);
+            }
             job.state = value;
         }
         if let Some(value) = phase {
-            if !matches!(value.as_str(), "queued" | "closingSessions" | "retryWait" | "completed" | "needsReconfirmation") {
+            if !matches!(
+                value.as_str(),
+                "queued" | "closingSessions" | "retryWait" | "completed" | "needsReconfirmation"
+            ) {
                 return Err("worktree_job_phase_invalid".into());
             }
             job.phase = value;
@@ -240,8 +255,21 @@ mod tests {
 
     #[test]
     fn queue_states_are_closed() {
-        for state in ["queued", "running", "retryWait", "completed", "needsReconfirmation"] {
-            assert!(["queued", "running", "retryWait", "completed", "needsReconfirmation"].contains(&state));
+        for state in [
+            "queued",
+            "running",
+            "retryWait",
+            "completed",
+            "needsReconfirmation",
+        ] {
+            assert!([
+                "queued",
+                "running",
+                "retryWait",
+                "completed",
+                "needsReconfirmation",
+            ]
+            .contains(&state));
         }
     }
 }

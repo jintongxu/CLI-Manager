@@ -5,6 +5,7 @@ export interface FinishRequest {
   worktreeId: string;
   projectPath: string;
   worktreePath: string;
+  rootIdentity: string;
   branch: string;
   baseBranch: string;
 }
@@ -58,7 +59,7 @@ export function assertSameCleanupPlan(original: CleanupPlan, validated: CleanupP
 }
 export function finishRequest(worktree: WorktreeRecord, projectPath: string): FinishRequest {
   return { worktreeId: worktree.id, projectPath, worktreePath: worktree.path,
-    branch: worktree.branch, baseBranch: worktree.base_branch };
+    rootIdentity: worktree.root_identity, branch: worktree.branch, baseBranch: worktree.base_branch };
 }
 // pending 仅表示恢复入口，不允许作为普通 checkout 启动路径。
 export function finishStatus(state: FinishState): WorktreeStatus {
