@@ -237,6 +237,8 @@ function storeHarness() {
   const api = load('src/features/projects/api/worktreeStore.ts', {
     '@tauri-apps/api/core': { invoke: async (command, args) => {
       calls.push(command);
+      if (command === 'git_worktree_delete_jobs') return [];
+      if (command === 'git_worktree_delete_job_update') return {};
       if (command === 'git_worktree_finish_inspect' && inspectError) throw Error(inspectError);
       assert.equal(args.req.worktreeId, 'w1');
       if (command === 'git_worktree_finish_cleanup_confirmed') state = pending({ done: true, checkoutValid: false });
@@ -260,7 +262,6 @@ function storeHarness() {
     './worktreeForceDelete': force,
     './worktreeFinish': finish,
     '../../../shared/lib/worktreeLaunchAdmission': admission,
-    '../../../shared/platform/logger': { logInfo: () => {}, logWarn: () => {} },
     '../../terminal/api/backgroundOperationStore': { useBackgroundOperationStore: { getState: () => ({ start: () => {}, succeed: () => {}, fail: () => {} }) } },
   });
   api.useWorktreeStore.getState().worktrees = [{ ...record }];
@@ -447,6 +448,9 @@ test('lifecycle matrix keeps historical dirty and prepared checkouts active, tru
     assert.equal(finish.finishStatus(state), 'pending');
     assert.equal(finish.canReviewFinish(state), false);
   }
+  // Historical ancestry without a durable cleanup receipt remains unknown/missing;
+  // it must not manufacture cleanup-pending progress after an interrupted delete.
+  assert.equal(finish.finishStatus(initial({ checkoutValid: false, unknown: true, outcome: 'merged', merged: true })), 'missing');
   assert.equal(finish.finishStatus(initial({ checkoutValid: false, unknown: true })), 'missing');
   assert.equal(finish.finishStatus(pending({ checkoutValid: false, unknown: true })), 'pending');
 });
@@ -479,6 +483,8 @@ function startupHarness(storedStatus = 'pending') {
   } };
   const native = { invoke: async (command, args) => {
     calls.push(['invoke', command, args]);
+    if (command === 'git_worktree_delete_jobs') return [];
+    if (command === 'git_worktree_delete_job_update') return {};
     assert.equal(command, 'git_worktree_finish_inspect');
     assert.equal(JSON.stringify(args.req), JSON.stringify(finish.finishRequest(record, 'D:/main')));
     if (error) throw Error(error); return state;
@@ -508,6 +514,7 @@ function startupHarness(storedStatus = 'pending') {
     async startup() {
       await projectApi.useProjectStore.getState().fetchAll('startup');
       await worktreeApi.useWorktreeStore.getState().loadWorktrees();
+      await worktreeApi.useWorktreeStore.getState().resumeWorktreeDeleteJobs();
       await worktreeApi.useWorktreeStore.getState().markMissingWorktrees();
     } };
 }
@@ -517,7 +524,7 @@ function assertStartupStatus(h, status) {
   assert.equal(h.project.tree[0].worktrees[0].status, status);
 }
 function assertInspectionOnly(h, sessions) {
-  assert.ok(h.calls.filter(call => call[0] === 'invoke').every(call => call[1] === 'git_worktree_finish_inspect'));
+  assert.ok(h.calls.filter(call => call[0] === 'invoke').every(call => ['git_worktree_finish_inspect', 'git_worktree_delete_jobs'].includes(call[1])));
   assert.equal(h.calls.some(call => call[0] === 'close'), false);
   assert.equal(JSON.stringify(h.sessions), sessions);
 }

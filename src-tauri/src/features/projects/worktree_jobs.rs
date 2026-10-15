@@ -47,7 +47,10 @@ pub struct WorktreeDeleteQueue {
 
 impl WorktreeDeleteQueue {
     pub fn load() -> Result<Self, String> {
-        let path = crate::app_paths::cli_manager_data_dir()?.join("worktree-delete-jobs.json");
+        Self::load_from_path(crate::app_paths::cli_manager_data_dir()?.join("worktree-delete-jobs.json"))
+    }
+
+    fn load_from_path(path: PathBuf) -> Result<Self, String> {
         let file = if path.is_file() {
             match fs::read(&path)
                 .ok()
@@ -251,6 +254,42 @@ mod tests {
     #[test]
     fn mode_is_serializable() {
         assert!(serde_json::to_string(&WorktreeDeleteMode::Force).is_ok());
+    }
+
+    #[test]
+    fn recovery_transition_requires_fresh_confirmation_for_each_mode() {
+        let request = super::super::finish::FinishRequest {
+            worktree_id: "worktree-test".into(),
+            project_path: "D:/project".into(),
+            worktree_path: "D:/project-worktree".into(),
+            root_identity: "root".into(),
+            branch: "wt/test".into(),
+            base_branch: "master".into(),
+        };
+        for mode in [
+            WorktreeDeleteMode::Finish,
+            WorktreeDeleteMode::Discard,
+            WorktreeDeleteMode::Force,
+        ] {
+            let path = std::env::temp_dir().join(format!(
+                "cli-manager-worktree-job-{}.json",
+                Uuid::new_v4()
+            ));
+            let queue = WorktreeDeleteQueue::load_from_path(path.clone()).expect("queue");
+            let job = queue.enqueue(request.clone(), mode.clone(), true).expect("enqueue");
+            queue.update(&job.id, Some("queued".into()), Some("running".into()), Some("closingSessions".into()), None).expect("start");
+            drop(queue);
+
+            let reloaded = WorktreeDeleteQueue::load_from_path(path.clone()).expect("reload");
+            let persisted = reloaded.list().expect("list").pop().expect("persisted job");
+            assert_eq!(persisted.mode, mode);
+            assert_eq!(persisted.state, "running");
+            let recovered = reloaded.update(&job.id, Some("running".into()), Some("needsReconfirmation".into()), Some("needsReconfirmation".into()), Some("restart_requires_confirmation".into())).expect("recover");
+            assert_eq!(recovered.state, "needsReconfirmation");
+            assert_eq!(recovered.phase, "needsReconfirmation");
+            assert!(reloaded.update(&job.id, Some("needsReconfirmation".into()), Some("running".into()), Some("closingSessions".into()), None).is_err());
+            let _ = std::fs::remove_file(path);
+        }
     }
 
     #[test]

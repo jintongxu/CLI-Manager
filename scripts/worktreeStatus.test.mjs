@@ -18,7 +18,7 @@ function nodes(tree, type) {
 }
 function harness() {
   let cursor = 0, slots = [], effects = [], dirty = false, props, tree, language = 'en', closes = 0;
-  let inspect = async () => initial();
+  let inspect = async () => initial(), jobs = [];
   const calls = [];
   const react = {
     useState(value) {
@@ -35,7 +35,12 @@ function harness() {
   };
   const jsx = (type, props) => ({ type, props });
   const service = load('src/features/projects/api/worktreeStatus.ts', { '@tauri-apps/api/core': {
-    invoke: (command, args) => { calls.push([command, args]); assert.equal(command, 'git_worktree_finish_inspect'); return inspect(args.req); },
+    invoke: (command, args) => {
+      calls.push([command, args]);
+      if (command === 'git_worktree_delete_jobs') return jobs;
+      assert.equal(command, 'git_worktree_finish_inspect');
+      return inspect(args.req);
+    },
   } });
   const component = load('src/features/projects/api/WorktreeStatusDialog.tsx', {
     react, 'react/jsx-runtime': { jsx, jsxs: jsx }, './worktreeFinish': finish, './worktreeStatus': service,
@@ -48,7 +53,7 @@ function harness() {
   const h = {
     calls, service,
     props: { open: true, project: { id: 'p1', path: 'D:/main' }, worktree: record, onClose: () => closes++ },
-    inspect(fn) { inspect = fn; }, language(value) { language = value; }, get closes() { return closes; },
+    inspect(fn) { inspect = fn; }, jobs(value) { jobs = value; }, language(value) { language = value; }, get closes() { return closes; },
     render(next = props) {
       props = next;
       for (let pass = 0; pass < 20; pass++) {
@@ -92,10 +97,22 @@ test('actual read-only component classifies all finish states without SQL, sessi
     if (state.blocker === 'finish_legacy_residual_manual_review') {
       const forceDelete = h.nodes('Button').find(node => node.props.children.endsWith(':worktree.statusView.forceDelete'));
       assert.ok(forceDelete);
+      assert.match(JSON.stringify(h.nodes('DialogFooter')[0]), /worktree\.statusView\.forceDelete/);
+    } else {
+      assert.doesNotMatch(JSON.stringify(h.nodes('DialogFooter')[0]), /worktree\.statusView\.forceDelete/);
     }
-    assert.equal(h.calls.length, 1);
-    assert.equal(JSON.stringify(h.calls[0][1]), JSON.stringify({ req: finish.finishRequest(record, 'D:/main') }));
+    assert.equal(h.calls.filter(call => call[0] === 'git_worktree_finish_inspect').length, 1);
+    const finishCall = h.calls.find(call => call[0] === 'git_worktree_finish_inspect');
+    assert.equal(JSON.stringify(finishCall[1]), JSON.stringify({ req: finish.finishRequest(record, 'D:/main') }));
   }
+});
+
+test('latest durable delete job uses journal order to break equal timestamp ties', () => {
+  const req = finish.finishRequest(record, 'D:/main');
+  const earlier = { request: req, mode: 'discard', state: 'needsReconfirmation', phase: 'needsReconfirmation', updatedAtMs: 7, lastError: 'old' };
+  const later = { ...earlier, mode: 'force', state: 'completed', lastError: null };
+  assert.equal(harness().service.latestWorktreeDeleteJob([earlier, later], record.id), later);
+  assert.equal(harness().service.latestWorktreeDeleteJob([later, earlier], record.id), earlier);
 });
 
 test('known blockers provide human guidance with raw code; unsupported fields are never guessed', () => {
@@ -121,14 +138,14 @@ test('refresh clears old result; error retry restores authority without stale sn
   h.language('zh'); h.render(); assert.match(h.text(), /zh:worktree.statusView.error/);
   h.inspect(async () => initial({ outcome: 'no_diff' })); h.refresh(); await flush(); h.render();
   assert.match(h.text(), /summary.noDiff/); assert.equal(h.text().includes('denied'), false);
-  assert.equal(h.calls.length, 3);
+  assert.equal(h.calls.filter(call => call[0] === 'git_worktree_finish_inspect').length, 3);
 });
 
 test('same identity object/language refresh preserves cycle; overlapping inspect responses use request generation', async () => {
   const h = harness(), old = deferred(), latest = deferred();
   h.inspect(() => old.promise); h.render(h.props);
   h.language('zh'); h.render({ ...h.props, project: { ...h.props.project }, worktree: { ...record, display_name: '新名称' } });
-  assert.equal(h.calls.length, 1); assert.match(h.text(), /新名称/);
+  assert.equal(h.calls.filter(call => call[0] === 'git_worktree_delete_jobs').length, 1); assert.match(h.text(), /新名称/);
   h.inspect(() => latest.promise); h.refresh(); h.render();
   latest.resolve(initial({ sourceOid: 'latest-proof', outcome: 'no_diff' })); await flush(); h.render();
   old.resolve(initial({ sourceOid: 'stale-proof' })); await flush(); h.render();
@@ -144,7 +161,7 @@ test('close/reopen same target and changed identity ignore late success/failure;
   h.render({ ...h.props, open: false });
   h.inspect(async () => initial({ sourceOid: 'reopened-proof' })); h.render(h.props); await flush(); h.render();
   assert.ok(h.text().includes('reopened-proof'));
-  const late = deferred(); h.inspect(() => late.promise); h.refresh(); h.render();
+  const late = deferred(); h.inspect(() => late.promise); h.refresh(); h.render(); await flush(); h.render();
   h.inspect(async () => initial({ sourceOid: 'new-target' }));
   const next = { ...h.props, project: { ...h.props.project, path: 'D:/other' }, worktree: { ...record, id: 'w2', path: 'D:/two' } };
   h.render(next); await flush(); h.render(); late.reject(Error('old-error')); await flush(); h.render();
@@ -156,19 +173,21 @@ test('close/reopen same target and changed identity ignore late success/failure;
   h.nodes('Dialog')[0].props.onOpenChange(false); assert.equal(h.closes, 2);
 });
 
-test('every request identity field initiates fresh inspection; record-status-only changes do not', async () => {
+test('every request identity field and status-only recovery change initiates fresh inspection', async () => {
   for (const patch of [{ id: 'other' }, { path: 'D:/new' }, { branch: 'wt/new' }, { base_branch: 'main' }]) {
     const h = harness(); h.render(h.props); await flush(); h.render();
-    h.render({ ...h.props, worktree: { ...record, ...patch } }); await flush(); h.render(); assert.equal(h.calls.length, 2);
+    h.render({ ...h.props, worktree: { ...record, ...patch } }); await flush(); h.render(); assert.equal(h.calls.filter(call => call[0] === 'git_worktree_finish_inspect').length, 2);
   }
   for (const patch of [{ id: 'new-project' }, { path: 'D:/new-main' }]) {
     const h = harness(); h.render(h.props); await flush(); h.render();
     h.render({ ...h.props, project: { ...h.props.project, ...patch } }); await flush(); h.render();
-    assert.equal(h.calls.length, 2);
+    assert.equal(h.calls.filter(call => call[0] === 'git_worktree_finish_inspect').length, 2);
   }
   const h = harness(); h.render(h.props); await flush(); h.render();
-  h.render({ ...h.props, worktree: { ...record, status: 'pending' } }); assert.equal(h.calls.length, 1);
-  assert.match(h.text(), /record.pending/);
+  h.jobs([{ request: finish.finishRequest(record, 'D:/main'), mode: 'discard', state: 'needsReconfirmation', phase: 'needsReconfirmation', updatedAtMs: 1, lastError: 'restart_requires_confirmation' }]);
+  h.render({ ...h.props, worktree: { ...record, status: 'missing' } }); await flush(); h.render();
+  assert.equal(h.calls.filter(call => call[0] === 'git_worktree_finish_inspect').length, 1);
+  assert.match(h.text(), /record.missing/); assert.match(h.text(), /restart_requires_confirmation/);
 });
 
 test('actual Sidebar status callback is non-dangerous, before Finish and available for active/missing/pending', () => {

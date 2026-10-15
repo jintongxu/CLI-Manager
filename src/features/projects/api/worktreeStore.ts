@@ -126,7 +126,28 @@ async function runWorktreeWithRetry(task: () => Promise<void>, onRetry: (error: 
 }
 
 type WorktreeDeleteMode = "finish" | "discard" | "force";
-interface WorktreeDeleteJob { id: string; request: ReturnType<typeof finishRequest>; mode: WorktreeDeleteMode; deleteBranch: boolean; state: string; phase: string; }
+interface WorktreeDeleteJob { id: string; request: ReturnType<typeof finishRequest>; mode: WorktreeDeleteMode; state: string; phase: string; updatedAtMs: number; lastError: string | null; }
+
+function latestWorktreeDeleteJobs(jobs: WorktreeDeleteJob[]): WorktreeDeleteJob[] {
+  const latest = new Map<string, WorktreeDeleteJob>();
+  for (const job of jobs) {
+    const current = latest.get(job.request.worktreeId);
+    if (!current || job.updatedAtMs >= current.updatedAtMs) latest.set(job.request.worktreeId, job);
+  }
+  return [...latest.values()];
+}
+
+async function setRecoveredWorktreeStatus(worktreeId: string, status: WorktreeRecord["status"]): Promise<void> {
+  const now = Date.now().toString();
+  // Fail closed in memory before attempting persistence. A transient SQL error
+  // must not expose an interrupted destructive operation as an active checkout.
+  useWorktreeStore.setState((state) => ({
+    worktrees: state.worktrees.map((item) => item.id === worktreeId ? { ...item, status, updated_at: now } : item),
+  }));
+  useProjectStore.getState().setWorktreeStatusLocal(worktreeId, status);
+  const db = await getDb();
+  await db.execute("UPDATE worktrees SET status = $1, updated_at = $2 WHERE id = $3", [status, now, worktreeId]);
+}
 
 function enqueueWorktreeOperation(
   worktree: WorktreeRecord,
@@ -162,7 +183,7 @@ function enqueueWorktreeOperation(
       }
       await invoke("git_worktree_delete_job_update", { id: job.id, expectedState: "running", state: "completed", phase: "completed", error: null });
     } catch (error) {
-      const retryable = !isWorktreeRetryExhausted(error) && isRetryableWorktreeError(error);
+      const retryable = retryTransient && !isWorktreeRetryExhausted(error) && isRetryableWorktreeError(error);
       await invoke("git_worktree_delete_job_update", { id: job.id, expectedState: "running", state: retryable ? "retryWait" : "needsReconfirmation", phase: retryable ? "retryWait" : "needsReconfirmation", error: String(error) }).catch(() => undefined);
       if (!retryable && onTerminalFailure) await onTerminalFailure(error).catch((cleanupError) => logWarn("worktree terminal failure recovery failed", cleanupError));
       throw error;
@@ -381,24 +402,51 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
 
   resumeWorktreeDeleteJobs: async () => {
     const jobs = await invoke<WorktreeDeleteJob[]>("git_worktree_delete_jobs");
-    for (const job of jobs.filter((item) => ["queued", "running", "retryWait"].includes(item.state))) {
+    for (const job of latestWorktreeDeleteJobs(jobs).filter((item) => ["queued", "running", "retryWait", "needsReconfirmation"].includes(item.state))) {
       const worktree = get().worktrees.find((item) => item.id === job.request.worktreeId);
+      if (["queued", "running", "retryWait"].includes(job.state)) {
+        await invoke("git_worktree_delete_job_update", {
+          id: job.id,
+          expectedState: job.state,
+          state: "needsReconfirmation",
+          phase: "needsReconfirmation",
+          error: "restart_requires_confirmation",
+        }).catch(() => undefined);
+      }
       if (!worktree) continue;
-      if (job.mode === "force" || job.mode === "finish") {
-        await invoke("git_worktree_delete_job_update", { id: job.id, expectedState: job.state, state: "needsReconfirmation", phase: "needsReconfirmation", error: "restart_requires_confirmation" }).catch(() => undefined);
-        continue;
-      }
-      if (job.mode === "discard") {
-        // Persisted destructive work is terminalized on restart. A fresh user
-        // confirmation must submit a new discard job; never resume deletion here.
-        await invoke("git_worktree_delete_job_update", { id: job.id, expectedState: job.state, state: "needsReconfirmation", phase: "needsReconfirmation", error: "restart_requires_confirmation" }).catch(() => undefined);
-      }
+      // A destructive operation must never resume after restart. Discard has
+      // already invalidated the checkout from the runtime's perspective;
+      // finish/force remain pending until a fresh confirmation resolves them.
+      await setRecoveredWorktreeStatus(worktree.id, job.mode === "discard" ? "missing" : "pending").catch((error) => {
+        logWarn("failed to persist Worktree deletion recovery status", error);
+      });
     }
   },
 
   markMissingWorktrees: async () => {
-    // Startup reads authority only; never resume cleanup or close sessions.
+    // Do not run finish inspection against an interrupted delete operation:
+    // its residual filesystem state is not evidence of a finish/merge failure.
+    let jobs: WorktreeDeleteJob[];
+    try {
+      jobs = await invoke<WorktreeDeleteJob[]>("git_worktree_delete_jobs");
+    } catch (error) {
+      logWarn("worktree deletion job inspection failed during startup", error);
+      for (const worktree of get().worktrees) {
+        if (worktree.status !== "pending") await setRecoveredWorktreeStatus(worktree.id, "pending").catch(() => undefined);
+      }
+      return;
+    }
+    const recovering = new Map(latestWorktreeDeleteJobs(jobs)
+      .filter((job) => job.state !== "completed")
+      .map((job) => [job.request.worktreeId, job]));
     for (const worktree of get().worktrees) {
+      const recoveryJob = recovering.get(worktree.id);
+      if (recoveryJob) {
+        await setRecoveredWorktreeStatus(worktree.id, recoveryJob.mode === "discard" ? "missing" : "pending").catch((error) => {
+          logWarn("failed to persist Worktree deletion recovery status during inspection", error);
+        });
+        continue;
+      }
       try { await get().inspectFinish(worktree); }
       catch (err) { logWarn("worktree validity inspection failed", err); }
     }
@@ -476,6 +524,9 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
             sessionIds: [...new Set([...useTerminalStore.getState().sessions.filter(item => item.worktreeId === worktree.id || isWithinWorktree(item.cwd, worktree.path)).map(item => item.id), ...freshPlan.sessionIds])],
           }, undefined, false);
         } finally { await get().releaseFinishCleanup(freshPlan).catch(() => undefined); }
+      }, true, async () => {
+        // Cleanup remains recoverable only through a fresh confirmation.
+        await setRecoveredWorktreeStatus(worktree.id, "pending");
       });
       return;
     }
@@ -546,7 +597,11 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
           if (String(error).includes("force_delete_database_failed")) gitCompleted = true;
           throw error;
         }
-      }, false);
+      }, false, async () => {
+        // Force-delete failures remain pending until the user performs a new
+        // identity check and confirmation; never fall through finish inspect.
+        await setRecoveredWorktreeStatus(worktree.id, "pending");
+      });
       return;
     }
     return withFinishLock(worktree.id, async () => {
@@ -785,11 +840,7 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
     const removal = enqueueWorktreeOperation(worktree, finishRequest(worktree, project.path), "discard", deleteBranch, removalTask, true, async () => {
       // Discard is independent of finish receipts. A failed/partial destructive
       // removal must not call inspectFinish and surface legacy merge blockers.
-      const db = await getDb();
-      const now = Date.now().toString();
-      await db.execute("UPDATE worktrees SET status = $1, updated_at = $2 WHERE id = $3", ["missing", now, worktree.id]);
-      set((state) => ({ worktrees: state.worktrees.map((item) => item.id === worktree.id ? { ...item, status: "missing", updated_at: now } : item) }));
-      useProjectStore.getState().setWorktreeStatusLocal(worktree.id, "missing");
+      await setRecoveredWorktreeStatus(worktree.id, "missing");
     });
     inFlightWorktreeRemovals.set(worktree.id, removal);
     void removal.finally(() => {

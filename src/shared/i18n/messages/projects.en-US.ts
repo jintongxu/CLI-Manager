@@ -84,6 +84,7 @@ export const en: Record<keyof typeof zh, string> = {
   "worktree.statusView.guidance.branchInUse": "The branch is in use. Review other checkouts before refreshing; do not force-delete the branch.",
   "worktree.statusView.guidance.identity": "Path, checkout or recovery identity cannot be safely verified. Review ownership manually and back up data before refreshing.",
   "worktree.statusView.guidance.generic": "Inspection could not confirm a safe state. Preserve the directory, branch and stash; review the raw code manually and refresh. Do not assume a merge.",
+  "worktree.statusView.guidance.recovery": "A deletion operation was interrupted or the app restarted and now requires reconfirmation. Review the directory and branch, then run the intended cleanup, discard, or force-delete action again; deletion never resumes automatically.",
   "worktree.menu.forceDelete": "Force delete Worktree…",
   "worktree.forceDelete.retry": "Inspect again",
   "worktree.forceDelete.title": "Force delete Worktree",
