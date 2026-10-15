@@ -20,7 +20,7 @@ export function WorktreeStatusDialog({ open, project, worktree, onClose, onForce
   const latest = useRef({ open, project, worktree });
   latest.current = { open, project, worktree };
   const identity = project && worktree ? JSON.stringify([
-    project.id, project.path, worktree.id, worktree.path, worktree.branch, worktree.base_branch,
+    project.id, project.path, worktree.id, worktree.path, worktree.branch, worktree.base_branch, worktree.status,
   ]) : '';
 
   const refresh = async () => {
@@ -93,16 +93,16 @@ export function WorktreeStatusDialog({ open, project, worktree, onClose, onForce
           <p>{t(`worktree.statusView.guidance.${worktreeStatusGuidance(raw)}`)}</p>
           <p className="mt-2 text-text-muted">{t('worktree.statusView.raw')}</p>
           <pre className="whitespace-pre-wrap break-all select-text">{raw}</pre>
-          {legacyResidual && <Button
-            className="mt-3"
-            variant="destructive"
-            onClick={() => { close(); onForceDelete(project, worktree); }}
-          >
-            {t('worktree.statusView.forceDelete')}
-          </Button>}
+
         </div>}
       </div>
       <DialogFooter>
+        {legacyResidual && <Button
+          variant="destructive"
+          onClick={() => { close(); onForceDelete(project, worktree); }}
+        >
+          {t('worktree.statusView.forceDelete')}
+        </Button>}
         <Button variant="outline" onClick={close}>{t('common.close')}</Button>
         <Button onClick={() => void refresh()} disabled={loading}>{t('worktree.statusView.refresh')}</Button>
       </DialogFooter>

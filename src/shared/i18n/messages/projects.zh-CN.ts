@@ -81,6 +81,7 @@ export const zh = {
   "worktree.statusView.guidance.branchInUse": "分支仍被使用。先核对其他 checkout 再刷新；不要强行删除分支。",
   "worktree.statusView.guidance.identity": "路径、checkout 或恢复记录身份无法安全验证。人工核对归属并备份数据后再刷新。",
   "worktree.statusView.guidance.generic": "检查未能确认安全状态。保留目录、分支和 stash，按底层代码人工检查后刷新；不要猜测已合并。",
+  "worktree.statusView.guidance.recovery": "删除操作在应用重启或中断后等待重新确认。先检查目录与分支，再重新执行对应的清理、丢弃或强制删除；不会自动继续删除。",
   "worktree.menu.forceDelete": "强制删除 Worktree…",
   "worktree.forceDelete.retry": "重新预检",
   "worktree.forceDelete.title": "强制删除 Worktree",

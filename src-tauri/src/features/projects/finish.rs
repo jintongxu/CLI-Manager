@@ -433,12 +433,16 @@ fn inspect(ctx: &Context) -> Result<FinishState, String> {
             }
         }
     } else if state.outcome.is_some() {
-        state.cleanup_pending = true;
-        if worktree_root_metadata(&ctx.target)?.is_none() {
-            state.cleanup_ready = true;
-            state.unknown = false;
-        } else {
+        // Historical ancestry without a durable finish receipt is evidence that
+        // the commit reached base, not evidence that this Worktree was ever
+        // authorized for cleanup. Keep it unknown and require the explicit
+        // discard/force-delete path instead of presenting cleanup recovery.
+        state.unknown = true;
+        if worktree_root_metadata(&ctx.target)?.is_some() {
             state.blocker = Some("finish_legacy_residual_manual_review".into());
+        } else {
+            state.cleanup_pending = false;
+            state.cleanup_ready = false;
         }
     }
     Ok(state)
