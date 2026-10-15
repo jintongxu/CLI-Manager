@@ -56,11 +56,26 @@ test("open selects exact project/worktree scope, closes competing workspaces, re
       closeGitWorkspace: () => calls.push(["git-close"]),
       closeHistory: () => calls.push(["history-close"]),
       reopenSession: (id) => calls.push(["reopen", id]),
+      onOpen: (id) => calls.push(["current-work-target", id]),
     });
     assert.deepEqual(calls, [["scope", worktreeId
       ? { kind: "worktree", projectId: "p1", worktreeId }
-      : { kind: "project", projectId: "p1" }], ["git-close"], ["history-close"], ["reopen", "original"]]);
+      : { kind: "project", projectId: "p1" }], ["git-close"], ["history-close"], ["reopen", "original"], ["current-work-target", "original"]]);
     assert.equal(item.tabHidden, true); // Domain delegates; it does not replace/mutate the retained identity.
+  }
+});
+
+test("open does not dispatch a target for non-PTY or incomplete sessions", () => {
+  for (const item of [session("pseudo", { kind: "transcript" }), session("no-project", { projectId: undefined })]) {
+    const calls = [];
+    domain.openSidebarTerminal(item, {
+      selectScope: () => calls.push("scope"),
+      closeGitWorkspace: () => calls.push("git-close"),
+      closeHistory: () => calls.push("history-close"),
+      reopenSession: () => calls.push("reopen"),
+      onOpen: () => calls.push("current-work-target"),
+    });
+    assert.deepEqual(calls, []);
   }
 });
 
@@ -548,6 +563,7 @@ test("actual hook delegates only renameSession against live store, not activatio
     react: { useCallback: (fn) => fn }, sonner: { toast: {} },
     "../../terminal/state": { useTerminalStore: Object.assign((selector) => selector(store), { getState: () => store }) },
     "../../history/index": {}, "../../git/api/gitWorkspaceStore": {},
+    "../../terminal/api/currentWorkEvents": { dispatchCurrentWorkTarget: () => assert.fail("rename hook must not open a terminal") },
     "../../../shared/i18n/index": { useI18n: () => ({ t: (key) => key }) },
     "../lib/sidebarTerminals": domain,
   };

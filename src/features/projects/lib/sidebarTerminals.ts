@@ -14,6 +14,7 @@ export function openSidebarTerminal(session: TerminalSession, actions: {
   closeHistory: () => void;
   closeGitWorkspace: () => void;
   reopenSession: (id: string) => void;
+  onOpen?: (id: string) => void;
 }): void {
   if ((session.kind ?? "pty") !== "pty" || !session.projectId) return;
   actions.selectScope(session.worktreeId
@@ -22,6 +23,7 @@ export function openSidebarTerminal(session: TerminalSession, actions: {
   actions.closeGitWorkspace();
   actions.closeHistory(); // Existing workspace controller switches back to terminal when history closes.
   actions.reopenSession(session.id);
+  actions.onOpen?.(session.id);
 }
 
 export async function deleteSidebarTerminal(id: string, actions: {

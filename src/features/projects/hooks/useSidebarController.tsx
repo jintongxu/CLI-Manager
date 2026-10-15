@@ -13,6 +13,7 @@ import { useTerminalStore } from "../../terminal/state";
 import { summarizeProjectTerminalStates, type SidebarTerminalState } from "../lib/sidebarTerminals";
 import { useFileExplorerStore } from "../../files/api/fileExplorerStore";
 import { useHistoryStore } from "../../history/index";
+import { dispatchCurrentWorkTarget } from "../../terminal/api/currentWorkEvents";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { createDefaultWorktreeTaskName, isWorktreeCreateInProgressError, useWorktreeStore } from "../api/worktreeStore";
 import { useWorktreeDepsRunnerStore } from "../api/worktreeDepsRunner";
@@ -371,13 +372,13 @@ export function useSidebarController({
   );
 
   const activateFirstWorktreeSession = useCallback(
-    (worktreeId: string): boolean => {
+    (worktreeId: string): string | null => {
       const session = sessions.find((item) => item.worktreeId === worktreeId && (item.kind ?? "pty") === "pty" && item.transientBackground !== true);
-      if (!session) return false;
+      if (!session) return null;
       if (session.id !== activeSessionId) {
         setActiveSession(session.id);
       }
-      return true;
+      return session.id;
     },
     [activeSessionId, sessions, setActiveSession]
   );
@@ -945,8 +946,10 @@ export function useSidebarController({
     if (projectScopedTerminalViewEnabled) {
       onTerminalScopeChange?.({ kind: "worktree", projectId: worktree.project_id, worktreeId: worktree.id });
     }
-    if (activateFirstWorktreeSession(worktree.id)) {
+    const sessionId = activateFirstWorktreeSession(worktree.id);
+    if (sessionId) {
       closeHistory();
+      dispatchCurrentWorkTarget(sessionId);
     }
   }, [activateFirstWorktreeSession, closeHistory, onTerminalScopeChange, projectScopedTerminalViewEnabled, visibleWorktreeIds]);
 
