@@ -32,7 +32,7 @@ import {
 } from "../api/terminalWorkspan";
 import {
   type SessionStatus, type TabNotificationState, type DaemonSessionMeta, type TerminalStore,
-  type WindowWithPtyOrphanTimer, type ResolvedPtyLaunch,
+  type ResolvedPtyLaunch,
 } from "../types/terminalStoreTypes";
 import {
   buildWorkspanMirror, persistWorkspanState, persistCommittedLaunch, createFileEditorSessionId,
@@ -48,8 +48,7 @@ import {
 } from "../lib/terminalLaunch";
 import {
   PTY_OUTPUT_ACTIVITY_UPDATE_INTERVAL_MS, formatTerminalCreateError, resolveDaemonAttachTaskStatus,
-  resolveDaemonAttachUpdatedAt, resolveAttachedDaemonSession, PTY_ORPHAN_RECONCILE_INTERVAL_MS,
-  TERMINAL_STORE_IN_TAURI, summarizeStartupCmd, logTerminalExitStatus, buildTabStatusUpdate,
+  resolveDaemonAttachUpdatedAt, resolveAttachedDaemonSession, summarizeStartupCmd, logTerminalExitStatus, buildTabStatusUpdate,
   applyPtyStatusToSessions, isCliManagerSyncArtifactText,
 } from "../lib/terminalStatus";
 import { create } from "zustand";
@@ -62,26 +61,12 @@ import { createTerminalRuntime } from "./terminalRuntime";
 import { reserveWorktreeLaunch } from "../../../shared/lib/worktreeLaunchAdmission";
 
 import { assignTerminalTitle, terminalPurpose, validTitleNaming } from "../lib/terminalSessionNaming";
+import { createWorktreeSessionAdmission } from "../lib/worktreeSessionAdmission";
+import { startPtyOrphanReconcileHeartbeat } from "../lib/ptyOrphanReconcile";
 
 let restoreInProgress = false;
 let pendingNamingSessions: TerminalSession[] = [];
-
-function startPtyOrphanReconcileHeartbeat() {
-  if (!TERMINAL_STORE_IN_TAURI || typeof window === "undefined") return;
-  const host = window as WindowWithPtyOrphanTimer;
-  if (host.__CLI_MANAGER_PTY_ORPHAN_RECONCILE_TIMER__) return;
-  host.__CLI_MANAGER_PTY_ORPHAN_RECONCILE_TIMER__ = setInterval(() => {
-    const activeSessionIds = useTerminalStore
-      .getState()
-      .sessions
-      .filter(hasBackendPty)
-      .map((session) => session.id);
-    if (activeSessionIds.length === 0) return;
-    void invoke("pty_reconcile_active_sessions", { activeSessionIds }).catch((err) => {
-      logError("pty_reconcile_active_sessions invoke failed", { activeSessionIds: activeSessionIds.length, err });
-    });
-  }, PTY_ORPHAN_RECONCILE_INTERVAL_MS);
-}
+const worktreeSessionAdmission = createWorktreeSessionAdmission();
 
 export const useTerminalStore = create<TerminalStore>((set, get, api) => {
   const { actions: runtimeActions,
@@ -279,8 +264,6 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       const os = await getOsPlatform();
       const resumeProject = project;
       const recordedProviderId = lockedSession.remoteHandoff.providerId?.trim() || null;
-      // 与 restoreSessions 一致：不复用持久化快照（可能已 release/GC，也不反映当前覆盖状态），
-      // 一律 release 后按当前 scope 重新解析；recordedProviderId 非空时作为显式恢复。
       const handoffAgent = lockedSession.remoteHandoff.agent ?? "codex";
       if (sshHandoff && handoffAgent !== "codex") {
         throw new Error("handoff_ssh_agent_unsupported");
@@ -331,7 +314,6 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         remotePath: launch.remotePath ?? lockedSession.remotePath,
         connectionState: sshHandoff ? "connecting" : lockedSession.connectionState,
         disconnectReason: undefined,
-        // 不回退到旧快照：旧 snapshotId 可能已被 release/GC，且不反映当前覆盖状态。
         providerSnapshot: launch.providerSnapshot ?? undefined,
         extensionSnapshotId: launch.extensionSnapshotId ?? undefined,
         extensionPolicyRevision: launch.extensionPolicyRevision,
@@ -498,13 +480,30 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
     },
 
     createSession: async (projectId, cwd, title, startupCmd, envVars, shell, paneId, worktreeId, sshHostId, cliSessionId, remoteHistoryConsumerId, remoteHistorySourceInstanceId, options) => {
+      const ordinaryWorktree = Boolean(worktreeId) && !options?.sessionKind && !options?.transientBackground;
+      const admission = ordinaryWorktree ? worktreeSessionAdmission.begin(worktreeId!, get().sessions) : null;
+      if (admission && "existingId" in admission) {
+        get().setActive(admission.existingId);
+        return admission.existingId;
+      }
+      if (admission && !("token" in admission) && "promise" in admission) return admission.promise;
+      const admissionToken = admission && "token" in admission ? admission.token : undefined;
       if (worktreeId && !useProjectStore.getState().worktrees.some(item => item.id === worktreeId && item.status === "active")) {
+        worktreeSessionAdmission.reject(worktreeId!, admissionToken, new Error("finish_invalid_checkout"));
+        worktreeSessionAdmission.finish(worktreeId, admissionToken);
         throw new Error("finish_invalid_checkout");
       }
       const launchScope = cwd ?? (worktreeId
         ? useProjectStore.getState().worktrees.find(item => item.id === worktreeId)?.path
         : useProjectStore.getState().projects.find(item => item.id === projectId)?.path);
-      const releaseLaunch = reserveWorktreeLaunch(sshHostId ? undefined : launchScope);
+      let releaseLaunch: () => void;
+      try {
+        releaseLaunch = reserveWorktreeLaunch(sshHostId ? undefined : launchScope);
+      } catch (error) {
+        worktreeSessionAdmission.reject(worktreeId!, admissionToken, error);
+        worktreeSessionAdmission.finish(worktreeId, admissionToken);
+        throw error;
+      }
       try {
         const sessionKind = options?.sessionKind;
         const transientBackground = options?.transientBackground === true && sessionKind !== "ephemeral-pi";
@@ -593,12 +592,14 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         }
 
         const state = get();
-        assignTerminalTitle(session, title, terminalPurpose(resolvedShell, startupCmd === "" ? "" : launchStartupCmd, launch.environmentType), [...pendingNamingSessions, ...useSessionStore.getState().sessions, ...state.sessions]);
+        const projectName = session.projectId
+          ? useProjectStore.getState().projects.find((project) => project.id === session.projectId)?.name
+          : undefined;
+        assignTerminalTitle(session, title, terminalPurpose(resolvedShell, startupCmd === "" ? "" : launchStartupCmd, launch.environmentType), [...pendingNamingSessions, ...useSessionStore.getState().sessions, ...state.sessions], projectName);
         const newSessions = [...state.sessions, session];
         let workspans: TerminalWorkspan[];
         let activeWorkspanId: string | null;
         if (transientBackground) {
-          // 后台任务会话不挂 pane 树：无 XTerm 挂载、无布局/焦点参与，杜绝退出后的协议回写。
           workspans = state.workspans;
           activeWorkspanId = state.activeWorkspanId;
         } else {
@@ -635,7 +636,6 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
           statusListeners: { ...state.statusListeners, [sessionId]: unlisten },
         });
 
-        // 临时 Pi 会话与后台任务会话只存在于当前运行，不写入会话恢复数据。
         if (sessionKind !== "ephemeral-pi" && !transientBackground) {
           await persistCommittedLaunch(sessionId, [
             () => queueSshSessionPersistence(newSessions),
@@ -666,10 +666,16 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
           }
         }
 
+        if (ordinaryWorktree) worktreeSessionAdmission.resolve(worktreeId!, admissionToken, sessionId);
         return sessionId;
-      } finally { releaseLaunch(); }
+      } catch (error) {
+        if (ordinaryWorktree) worktreeSessionAdmission.reject(worktreeId!, admissionToken, error);
+        throw error;
+      } finally {
+        worktreeSessionAdmission.finish(worktreeId, admissionToken);
+        releaseLaunch();
+      }
     },
-
     closeSession: async (id, requireBackendClose = false) => {
       const initialState = get();
       const ptySessionIds = [id];
@@ -694,15 +700,11 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         subagentCloseTimers.delete(id);
       }
       stopSubagentTranscriptRetry(id, "session_closed");
-      // 关闭父 Tab 时连带丢弃它名下尚未落地的子 Agent 面板登记（没有 UI 可清，只清缓冲与定时器）。
       if (!isTranscript) {
         clearPendingSubagentPanesForParent(id);
       }
 
-      // Backend closure and pane cleanup can interleave with unrelated Store changes.
       const state = get();
-      // 必须在 set sessions 之前记录原索引，否则后续 findIndex 永远返回 -1，
-      // 导致 persistedSplits 永远清不掉（历史 bug）。
       const closedIndex = state.sessions.findIndex((s) => s.id === id);
       const remaining = state.sessions.filter((s) => s.id !== id);
       const newStatuses = { ...state.sessionStatuses };
@@ -711,7 +713,6 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       const newTabStatuses = { ...state.tabStatuses };
       const newTabStatusDetails = { ...state.tabStatusDetails };
       const newPtyOutputActivityAt = { ...state.ptyOutputActivityAt };
-      // 丢弃待落地面板会写 store，必须重新取快照，否则过期快照会把刚清掉的缓冲写回来。
       const newSubagentTranscripts = { ...get().subagentTranscripts };
       delete newSubagentTranscripts[id];
       const owner = findWorkspanBySession(state.workspans, id);
@@ -801,7 +802,6 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         }
       }
     },
-
     setActive: (id) => {
       const state = get();
       const owner = findWorkspanBySession(state.workspans, id);
@@ -1997,4 +1997,4 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
   };
 });
 
-startPtyOrphanReconcileHeartbeat();
+startPtyOrphanReconcileHeartbeat(() => useTerminalStore.getState().sessions.filter(hasBackendPty).map((session) => session.id));

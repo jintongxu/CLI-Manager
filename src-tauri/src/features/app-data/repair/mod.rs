@@ -8,7 +8,9 @@ use crate::{
     MIGRATION_ADD_SSH_ATTACHMENT_ROOT_VERSION, MIGRATION_ADD_USAGE_ERROR_DETAIL_DESCRIPTION,
     MIGRATION_ADD_USAGE_ERROR_DETAIL_SQL, MIGRATION_ADD_USAGE_ERROR_DETAIL_VERSION,
     MIGRATION_ADD_WORKTREE_ISOLATION_DESCRIPTION, MIGRATION_ADD_WORKTREE_ISOLATION_SQL,
-    MIGRATION_ADD_WORKTREE_ISOLATION_VERSION, MIGRATION_BACKFILL_REQUEST_LOG_PROJECT_PATH_SQL,
+    MIGRATION_ADD_WORKTREE_ISOLATION_VERSION, MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_DESCRIPTION,
+    MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_SQL, MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_VERSION,
+    MIGRATION_BACKFILL_REQUEST_LOG_PROJECT_PATH_SQL,
     MIGRATION_BACKFILL_REQUEST_LOG_PROJECT_PATH_VERSION,
     MIGRATION_CREATE_SESSION_FAVORITE_SNAPSHOTS_DESCRIPTION,
     MIGRATION_CREATE_SESSION_FAVORITE_SNAPSHOTS_SQL,
@@ -47,6 +49,8 @@ const REQUEST_LOG_PROJECT_PATH_BACKFILL_DESCRIPTION: &str = "backfill_request_lo
 const REQUEST_LOG_PROJECT_PATH_BACKFILL_BATCH_SIZE: i64 = 2_000;
 const REQUEST_LOG_PROJECT_PATH_BACKFILL_YIELD_MS: u64 = 10;
 static REQUEST_LOG_PROJECT_PATH_BACKFILL_LOCK: tokio::sync::Mutex<()> =
+    tokio::sync::Mutex::const_new(());
+static WORKTREE_ROOT_IDENTITY_REPAIR_LOCK: tokio::sync::Mutex<()> =
     tokio::sync::Mutex::const_new(());
 
 const FAVORITE_SNAPSHOT_COLUMNS: [&str; 11] = [
@@ -185,6 +189,10 @@ pub async fn db_repair_known_migration_drift(
 
     let mut conn = open_cli_manager_db(&db_path).await?;
     let mut result = repair_known_migration_drift(&mut conn).await?;
+    if ensure_worktree_root_identity(&mut conn).await? {
+        result.repaired = true;
+        result.status = append_repair_status(&result.status, "repaired_worktree_root_identity");
+    }
     if reconcile_legacy_node_appearance_v33_migration(&mut conn).await? {
         result.repaired = true;
         result.status = append_repair_status(
@@ -341,6 +349,151 @@ async fn reconcile_legacy_node_appearance_v33_migration(
 /// 的漂移，前者会让外观读写一直报 `no such column: color`，后者会让 sqlx 重放 ALTER 撞
 /// `duplicate column name`。这里在每次打开数据库前主动把两种漂移都补齐：
 /// 缺列就补列，版本未登记时按同一 checksum 登记，让 sqlx 跳过重放。
+// 在 SQLx Database.load 前补齐 Worktree 根身份列及 v52 登记。
+// 物理列存在而 marker 缺失时只补登记；未知 marker 校验和不覆盖，直接拒绝启动。
+async fn ensure_worktree_root_identity(conn: &mut SqliteConnection) -> Result<bool, String> {
+    let _guard = WORKTREE_ROOT_IDENTITY_REPAIR_LOCK.lock().await;
+    if !table_exists(conn, SQLX_MIGRATIONS_TABLE).await? {
+        return Ok(false);
+    }
+    let worktree_exists = table_exists(conn, "worktrees").await?;
+    let marker = sqlx::query(
+        "SELECT description, success, checksum
+         FROM _sqlx_migrations
+         WHERE version = ?1
+         LIMIT 1",
+    )
+    .bind(MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_VERSION)
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(|err| format!("worktree_root_identity_marker_query_failed: {err}"))?;
+
+    if !worktree_exists {
+        if marker.is_some() {
+            return Err("worktree_root_identity_schema_missing".to_string());
+        }
+        return Ok(false);
+    }
+
+    let column = table_columns(conn, "worktrees").await?;
+    let has_column = column.contains("root_identity");
+    if let Some(marker) = marker.as_ref() {
+        let description: String = marker
+            .try_get("description")
+            .map_err(|err| format!("worktree_root_identity_marker_description_failed: {err}"))?;
+        let checksum: Vec<u8> = marker
+            .try_get("checksum")
+            .map_err(|err| format!("worktree_root_identity_marker_checksum_failed: {err}"))?;
+        if description != MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_DESCRIPTION
+            || checksum != migration_checksum(MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_SQL)
+        {
+            return Err("worktree_root_identity_migration_checksum_mismatch".to_string());
+        }
+    }
+
+    if has_column {
+        let definition = sqlx::query(
+            "SELECT type, \"notnull\", dflt_value
+             FROM pragma_table_info('worktrees')
+             WHERE name = 'root_identity'",
+        )
+        .fetch_optional(&mut *conn)
+        .await
+        .map_err(|err| format!("worktree_root_identity_schema_query_failed: {err}"))?;
+        let Some(definition) = definition else {
+            return Err("worktree_root_identity_schema_missing".to_string());
+        };
+        let column_type: String = definition
+            .try_get("type")
+            .map_err(|err| format!("worktree_root_identity_schema_type_failed: {err}"))?;
+        let not_null: i64 = definition
+            .try_get("notnull")
+            .map_err(|err| format!("worktree_root_identity_schema_nullability_failed: {err}"))?;
+        let default_value: Option<String> = definition
+            .try_get("dflt_value")
+            .map_err(|err| format!("worktree_root_identity_schema_default_failed: {err}"))?;
+        if !column_type.eq_ignore_ascii_case("TEXT")
+            || not_null == 0
+            || default_value.as_deref() != Some("''")
+        {
+            return Err("worktree_root_identity_schema_mismatch".to_string());
+        }
+    }
+
+    let marker_success = marker
+        .as_ref()
+        .map(|row| row.try_get::<i64, _>("success"))
+        .transpose()
+        .map_err(|err| format!("worktree_root_identity_marker_success_failed: {err}"))?;
+    if has_column && marker_success == Some(1) {
+        return Ok(false);
+    }
+
+    sqlx::query("BEGIN IMMEDIATE")
+        .execute(&mut *conn)
+        .await
+        .map_err(|err| format!("worktree_root_identity_repair_begin_failed: {err}"))?;
+    let result = async {
+        if !has_column {
+            sqlx::query(MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_SQL)
+                .execute(&mut *conn)
+                .await
+                .map_err(|err| format!("worktree_root_identity_repair_alter_failed: {err}"))?;
+        } else {
+            sqlx::query("UPDATE worktrees SET root_identity = '' WHERE root_identity IS NULL")
+                .execute(&mut *conn)
+                .await
+                .map_err(|err| format!("worktree_root_identity_repair_default_failed: {err}"))?;
+        }
+        match marker_success {
+            Some(0) => {
+                sqlx::query(
+                    "UPDATE _sqlx_migrations
+                     SET description = ?1, checksum = ?2, success = 1
+                     WHERE version = ?3",
+                )
+                .bind(MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_DESCRIPTION)
+                .bind(migration_checksum(MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_SQL))
+                .bind(MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_VERSION)
+                .execute(&mut *conn)
+                .await
+                .map_err(|err| format!("worktree_root_identity_repair_marker_failed: {err}"))?;
+            }
+            None => {
+                sqlx::query(
+                    "INSERT INTO _sqlx_migrations
+                         (version, description, installed_on, success, checksum, execution_time)
+                     VALUES (?1, ?2, CURRENT_TIMESTAMP, 1, ?3, 0)",
+                )
+                .bind(MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_VERSION)
+                .bind(MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_DESCRIPTION)
+                .bind(migration_checksum(MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_SQL))
+                .execute(&mut *conn)
+                .await
+                .map_err(|err| format!("worktree_root_identity_repair_register_failed: {err}"))?;
+            }
+            Some(1) => {}
+            Some(_) => return Err("worktree_root_identity_marker_success_invalid".to_string()),
+        }
+        Ok::<(), String>(())
+    }
+    .await;
+
+    match result {
+        Ok(()) => {
+            sqlx::query("COMMIT")
+                .execute(&mut *conn)
+                .await
+                .map_err(|err| format!("worktree_root_identity_repair_commit_failed: {err}"))?;
+            Ok(true)
+        }
+        Err(err) => {
+            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+            Err(err)
+        }
+    }
+}
+
 // 在短事务中补齐项目与分组外观列及对应迁移登记。
 async fn ensure_node_appearance_columns(conn: &mut SqliteConnection) -> Result<bool, String> {
     if !table_exists(conn, SQLX_MIGRATIONS_TABLE).await?

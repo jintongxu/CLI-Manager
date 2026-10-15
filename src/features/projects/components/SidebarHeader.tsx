@@ -1,4 +1,4 @@
-import { ChevronRight, Filter, FolderPlus, Plus } from "../../../shared/ui/icons";
+import { ChevronRight, FolderPlus, Plus } from "../../../shared/ui/icons";
 import { useI18n } from "../../../shared/i18n/index";
 import type { WorkspaceDockSide } from "../../../shared/lib/workspaceLayout";
 
@@ -7,14 +7,8 @@ export type ProjectListFilter = "all" | "open" | "pinned";
 interface SidebarHeaderProps {
   collapsed: boolean;
   density: "compact" | "comfortable";
-  projectFilter: ProjectListFilter;
-  showProjectFilter: boolean;
-  totalProjectCount: number;
-  openProjectCount: number;
-  pinnedProjectCount: number;
   dockSide: WorkspaceDockSide;
   onToggleCollapse: () => void;
-  onProjectFilterChange: (filter: ProjectListFilter) => void;
   onCreateGroup: () => void;
   onCreateProject: () => void;
 }
@@ -22,14 +16,8 @@ interface SidebarHeaderProps {
 export function SidebarHeader({
   collapsed,
   density,
-  projectFilter,
-  showProjectFilter,
-  totalProjectCount,
-  openProjectCount,
-  pinnedProjectCount,
   dockSide,
   onToggleCollapse,
-  onProjectFilterChange,
   onCreateGroup,
   onCreateProject,
 }: SidebarHeaderProps) {
@@ -37,17 +25,6 @@ export function SidebarHeader({
   const compact = density === "compact";
   const collapseIconClassName = dockSide === "right" ? "" : "rotate-180";
   const expandIconClassName = dockSide === "right" ? "rotate-180" : "";
-  // 收起侧边栏只有一个筛选按钮，用下一状态提示保持三态筛选可发现。
-  const nextFilter: ProjectListFilter = projectFilter === "all"
-    ? "open"
-    : projectFilter === "open"
-      ? "pinned"
-      : "all";
-  const nextFilterTitle = nextFilter === "all"
-    ? t("sidebar.filter.showAll")
-    : nextFilter === "open"
-      ? t("sidebar.filter.showOpen")
-      : t("sidebar.filter.showPinned");
   if (collapsed) {
     return (
       <div className={`flex flex-col items-center ${compact ? "gap-1 px-1.5 pb-1.5 pt-2.5" : "gap-1.5 px-2 pb-2 pt-3"}`}>
@@ -59,19 +36,6 @@ export function SidebarHeader({
         >
           <ChevronRight size={14} strokeWidth={1.8} className={expandIconClassName} />
         </button>
-        {showProjectFilter && (
-          <button
-            onClick={() => onProjectFilterChange(nextFilter)}
-            className={`ui-flat-action ui-toolbar-button-compact px-0 ${compact ? "h-7 w-7" : "h-8 w-8"} ${
-              projectFilter !== "all" ? "text-primary" : ""
-            }`}
-            title={nextFilterTitle}
-            aria-label={nextFilterTitle}
-            data-filter={projectFilter}
-          >
-            <Filter size={14} strokeWidth={1.7} />
-          </button>
-        )}
         <button
           onClick={onCreateGroup}
           className={`ui-flat-action ui-toolbar-button-compact px-0 ${compact ? "h-7 w-7" : "h-8 w-8"}`}
@@ -123,37 +87,6 @@ export function SidebarHeader({
         </div>
       </div>
 
-      {showProjectFilter && (
-        <div
-          className={`mt-1 flex bg-transparent ${compact ? "mx-2" : "mx-2.5"}`}
-          role="group"
-          aria-label={t("sidebar.projects")}
-        >
-          {(["all", "open", "pinned"] as const).map((filter) => {
-            const active = projectFilter === filter;
-            const label = filter === "all"
-              ? t("sidebar.filter.all", { count: totalProjectCount })
-              : filter === "open"
-                ? t("sidebar.filter.open", { count: openProjectCount })
-                : t("sidebar.filter.pinned", { count: pinnedProjectCount });
-            return (
-              <button
-                key={filter}
-                type="button"
-                className={`ui-focus-ring h-7 min-w-0 flex-1 rounded-lg px-2 text-[11px] font-medium transition-colors ${
-                  active
-                    ? "bg-surface-container-high text-primary"
-                    : "text-text-muted hover:bg-surface-container-high hover:text-on-surface"
-                }`}
-                aria-pressed={active}
-                onClick={() => onProjectFilterChange(filter)}
-              >
-                <span className="block truncate">{label}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }

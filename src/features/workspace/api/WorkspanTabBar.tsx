@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { useEffect, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -17,9 +17,9 @@ export type WorkspanContextOption = {
   failed?: number;
 };
 import type { ProjectWorkspanTabModel } from "../../terminal/api/terminalProjectSelection";
-import { selectProjectTabGroups, resolveStatusWorkspanTarget, countVisibleTabStatuses } from "../../terminal/api/terminalProjectSelection";
+import { selectProjectTabGroups } from "../../terminal/api/terminalProjectSelection";
 import { displayedProjectTerminalIds } from "../../terminal/api/terminalProjectHide";
-import { buildWorktreeBadges, buildGlobalWorktreeBadges, type TerminalWorktreeBadge } from "../../terminal/api/terminalWorktreeBadge";
+import { buildWorktreeBadges, type TerminalWorktreeBadge } from "../../terminal/api/terminalWorktreeBadge";
 import type { TerminalProjectOption, WorkspanTabGroupDescriptor } from "../../terminal/api/terminalProjectTabsModel";
 import { describeWorkspanTabGroup, formatWorkspanGroupTitle } from "../../terminal/api/terminalProjectTabsModel";
 import type { TabNotificationState } from "../../terminal/state";
@@ -147,28 +147,20 @@ export function WorkspanTabBar({
   currentWorkCount = 0, onActivateCurrentWork,
 }: WorkspanTabBarProps) {
   const { t } = useI18n();
-  const [statusFilter, setStatusFilter] = useState<TabNotificationState | "all">("all");
+  const statusFilter: TabNotificationState | "all" = "all";
   const labels = {
     root: t("terminal.context.badgeMain"), missing: t("terminal.context.badgeMissing"),
     cross: t("terminal.context.badgeCross"), mixed: t("terminal.context.badgeMixed"),
   };
-  const badges = statusFilter === "all" ? buildWorktreeBadges(models, selectedProjectKey, labels)
-    : buildGlobalWorktreeBadges(models, labels);
-  const activateResult = (model: ProjectWorkspanTabModel) => {
-    if (statusFilter === "all") onActivate(model.workspan.id);
-    else {
-      const target = resolveStatusWorkspanTarget(model, statusFilter, notifications);
-      if (target) onActivate(target.workspanId, target.sessionId);
-    }
-  };
+  const badges = buildWorktreeBadges(models, selectedProjectKey, labels);
+  const activateResult = (model: ProjectWorkspanTabModel) => onActivate(model.workspan.id);
   const groups = selectProjectTabGroups(models, selectedProjectKey, statusFilter, notifications);
   const visibleModels = groups.flatMap((group) => group.models);
   const hiddenIds = new Set(overflow.hiddenIds);
   const hiddenGroups = groups.map(({ group, models: items }) => ({ group,
     models: items.filter(({ workspan }) => hiddenIds.has(workspan.id)) })).filter(({ models: items }) => items.length);
   const selectedOption = contextOptions.find((option) => option.key === selectedProjectKey);
-  const statusSummary = statusFilter === "all" ? selectedOption ?? { running: 0, done: 0, failed: 0 }
-    : countVisibleTabStatuses(models, notifications);
+  const statusSummary = selectedOption ?? { running: 0, done: 0, failed: 0 };
   const universe = models.flatMap((model) => describeWorkspanTabGroup(model.members).contexts);
   const groupLabel = (group: WorkspanTabGroupDescriptor) => formatWorkspanGroupTitle(group, universe, {
     root: t("terminal.context.rootDirectory"), missing: t("terminal.context.worktreeMissing"),
@@ -202,22 +194,6 @@ export function WorkspanTabBar({
             <span>{t("terminal.currentWork.shortTitle", { count: currentWorkCount })}</span>
           </button>
         )}
-        <div className="ui-workspan-status-filter inline-flex shrink-0 items-center gap-0.5">
-          {(["all", "running", "done", "failed"] as const).map((filter) => (
-            <button
-              key={filter}
-              type="button"
-              className="ui-workspan-status-filter-button"
-              data-selected={statusFilter === filter ? "true" : "false"}
-              aria-pressed={statusFilter === filter}
-              aria-label={filter === "all" ? t("terminal.status.all") : t(`terminal.status.${filter}` as never)}
-              onClick={() => setStatusFilter(filter)}
-              title={filter === "all" ? t("terminal.status.all") : t(`terminal.status.${filter}` as never)}
-            >
-              {filter === "all" ? t("terminal.status.all") : filter === "running" ? "●" : filter === "done" ? "✓" : "!"}
-            </button>
-          ))}
-        </div>
         <SortableContext items={contextOptions.map((option) => `${PROJECT_DRAG_PREFIX}${option.key}`)} strategy={horizontalListSortingStrategy}>
         {contextOptions.map((option) => {
           const projectLabel = contextOptions.some((other) => other.key !== option.key
@@ -242,7 +218,7 @@ export function WorkspanTabBar({
                 aria-selected={option.key === selectedProjectKey}
                 aria-label={`${projectLabel}; ${t("terminal.status.running")}: ${option.running}; ${t("terminal.status.done")}: ${option.done}; ${t("terminal.status.failed")}: ${option.failed}; ${t("terminal.status.attention")}: ${option.attention}`}
                 title={projectLabel}
-                onClick={() => { setStatusFilter("all"); onActivateProject(option.key); }}
+                onClick={() => onActivateProject(option.key)}
               >
                 <span className="truncate">{projectLabel}</span>
                 <span className="ui-workspan-context-status inline-flex shrink-0 items-center gap-0.5" title={t("terminal.status.summary")}>

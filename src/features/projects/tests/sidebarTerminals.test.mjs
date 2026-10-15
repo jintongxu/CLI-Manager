@@ -326,10 +326,9 @@ test("expanded, compact, collapsed and pinned callsites expose retained lists an
   const projectTree = source("../components/ProjectTree.tsx");
   const pinned = source("../components/PinnedProjectSection.tsx");
   const hook = source("../hooks/useSidebarTerminals.ts");
-  assert.match(nodes, /SidebarTerminalList projectId=\{project.id\} worktreeId=\{worktree.id\}/);
-  assert.match(nodes, /SidebarTerminalList projectId=\{p.id\} depth=\{depth \+ 1\} compact=\{compact\}/);
+  assert.doesNotMatch(nodes, /SidebarTerminalList projectId=\{project.id\} worktreeId=\{worktree.id\}/);
   assert.match(projectTree, /SidebarProjectTerminals projectId=\{p.id\} compact/);
-  assert.match(projectTree, /SidebarTerminalList projectId=\{child.project.id\} worktreeId=\{child.worktree.id\}/);
+  assert.doesNotMatch(projectTree, /SidebarTerminalList projectId=\{child.project.id\} worktreeId=\{child.worktree.id\}/);
   assert.match(pinned, /SidebarProjectTerminals projectId=\{project.id\}/);
   assert.match(hook, /reopenSession: store.reopenSession/);
   assert.match(hook, /closeSession: \(sessionId\) => useTerminalStore.getState\(\).closeSession\(sessionId\)/);
@@ -387,7 +386,7 @@ function collapseHarness(language = "en-US") {
     });
     return exports;
   }
-  for (const name of ["WorktreeTerminalSummary", "WorktreeTerminalsToggle", "SidebarWorktreeTerminals", "SidebarProjectTerminals"]) {
+  for (const name of ["SidebarProjectTerminals"]) {
     modules[`./${name}`] = load(name);
   }
   const node = load("TreeNodeItem").TreeNodeItem;
@@ -411,8 +410,6 @@ function collapseHarness(language = "en-US") {
     flyoutSource.indexOf("function findNodeById(")) + "\nexports.render = renderFlyoutNodes;", ts.ModuleKind.CommonJS), {
     exports: flyoutExports, require: (id) => modules[id],
     WorktreeIcon: noop, getWorktreeDisplayName: (w) => w.name, getWorktreeSidebarLabel: (w) => w.short_label || w.name,
-    WorktreeTerminalsToggle: modules["./WorktreeTerminalsToggle"].WorktreeTerminalsToggle,
-    WorktreeTerminalSummary: modules["./WorktreeTerminalSummary"].WorktreeTerminalSummary,
     SidebarTerminalList: modules["./SidebarTerminalList"].SidebarTerminalList,
     worktreeTerminalsCollapseId: context.worktreeTerminalsCollapseId,
   });
@@ -424,76 +421,24 @@ function collapseHarness(language = "en-US") {
 const toggleButtons = (tree) => descendants(tree).filter((el) => el.type === "button" && typeof el.props["aria-expanded"] === "boolean");
 const lists = (tree) => descendants(tree).filter((el) => el.type === "ul").map((el) => el.props["data-scope"]);
 
-test("actual worktree rows and pinned/narrow shortcuts share independent namespaced folds, including hidden PTYs", () => {
+test("linked Worktree rows stay flat while project shortcuts retain only main terminals", () => {
   for (const language of ["zh-CN", "en-US"]) {
     const h = collapseHarness(language);
-    const key = h.context.worktreeTerminalsCollapseId("w1");
-    assert.equal(key, "worktree-terminals:w1");
-    assert.notEqual(key, h.context.worktreeListCollapseId("w1"));
-    h.actions.collapsedIds.add(h.context.worktreeListCollapseId("p1"));
     for (const density of ["comfortable", "compact"]) {
-      assert.equal(toggleButtons(h.row("w1", density)).length, 1);
-      assert.equal(toggleButtons(h.row("empty", density)).length, 0);
-      assert.deepEqual(lists(h.row("w1", density)), ["w1"]);
+      assert.equal(toggleButtons(h.row("w1", density)).length, 0);
+      assert.deepEqual(lists(h.row("w1", density)), []);
     }
     for (const compact of [false, true]) {
-      assert.equal(toggleButtons(h.shortcuts(compact)).length, 2);
-      assert.deepEqual(lists(h.shortcuts(compact)), ["main", "w1", "w2"]);
-      assert.ok(!renderToStaticMarkup(h.shortcuts(compact)).includes("empty"));
+      assert.equal(toggleButtons(h.shortcuts(compact)).length, 0);
+      assert.deepEqual(lists(h.shortcuts(compact)), ["main"]);
+      assert.ok(!renderToStaticMarkup(h.shortcuts(compact)).includes("w1"));
     }
-    const button = toggleButtons(h.row("w1"))[0];
-    assert.equal(button.props.title, catalogs[language]["sidebar.terminals.collapseWorktree"]);
-    assert.equal(button.props["aria-label"], button.props.title);
-    assert.ok(!button.props.className.includes("hidden"));
-    button.props.onClick({ stopPropagation() {} });
-    assert.deepEqual(h.calls, [["toggle", key]]);
-    assert.deepEqual(lists(h.row("w1", "compact", true)), []); // Search force expansion must not override it.
-    assert.deepEqual(lists(h.row("w2")), ["w2"]);
-    for (const compact of [false, true]) {
-      const tree = h.shortcuts(compact);
-      assert.deepEqual(lists(tree), ["main", "w2"]);
-      assert.ok(renderToStaticMarkup(tree).includes("w1")); // Folded label is still reachable.
-      const folded = toggleButtons(tree)[0];
-      assert.equal(folded.props["aria-expanded"], false);
-      assert.equal(folded.props.title, catalogs[language]["sidebar.terminals.expandWorktree"]);
-    }
-    toggleButtons(h.shortcuts())[0].props.onClick({ stopPropagation() {} });
-    assert.deepEqual(lists(h.row("w1")), ["w1"]);
-    assert.ok(h.actions.collapsedIds.has(h.context.worktreeListCollapseId("p1")));
     h.setSessions([session("main")]);
-    assert.equal(toggleButtons(h.row("w1")).length, 0);
-    assert.equal(toggleButtons(h.shortcuts()).length, 0);
     assert.deepEqual(lists(h.shortcuts()), ["main"]);
     h.setSessions([session("added", { kind: "pty", worktreeId: "w1" })]);
-    assert.equal(toggleButtons(h.row("w1")).length, 1);
+    assert.deepEqual(lists(h.shortcuts()), ["main"]);
+    assert.equal(toggleButtons(h.row("w1")).length, 0);
   }
-});
-
-test("actual toggle event guards isolate selection/open/context/drag/focus and preserve single native Enter/Space activation", () => {
-  const h = collapseHarness();
-  for (const tree of [h.row("w1"), h.shortcuts(true)]) {
-    const button = toggleButtons(tree)[0];
-    for (const name of ["onDoubleClick", "onPointerDown", "onMouseDown", "onFocus", "onContextMenu", "onKeyDown", "onKeyUp"]) {
-      let stopped = false, prevented = false;
-      button.props[name]({ stopPropagation: () => { stopped = true; }, preventDefault: () => { prevented = true; } });
-      assert.equal(stopped, true, name);
-      assert.equal(prevented, name === "onContextMenu", name);
-    }
-    for (const key of ["Enter", " ", "ArrowDown", "Delete", "F10", "a"]) {
-      const before = h.calls.length;
-      let prevented = false;
-      const event = { key, stopPropagation() {}, preventDefault: () => { prevented = true; } };
-      button.props.onKeyDown(event);
-      button.props.onKeyUp(event);
-      assert.equal(h.calls.length, before); // No custom key toggle, native click is the single activation.
-      assert.equal(prevented, false);
-      if (["Enter", " "].includes(key)) {
-        button.props.onClick(event); // Model browser's native activation click.
-        assert.equal(h.calls.length, before + 1);
-      }
-    }
-  }
-  assert.ok(h.calls.every(([kind, key]) => kind === "toggle" && key === "worktree-terminals:w1"));
 });
 
 test("rename actions snapshot current title, recheck exact PTY identity and preserve hidden/active/handoff metadata", () => {
@@ -634,108 +579,31 @@ test("shared resolver exhaustively preserves remote > lifecycle > notification >
       }
 });
 
-function summaryHarness(language) {
-  const store = { sessions: [], sessionStatuses: {}, tabNotifications: {} };
-  const selected = [];
-  const modules = {
-    "react/jsx-runtime": awaitJsx,
-    "../lib/sidebarTerminals": domain,
-    "../../../shared/ui/icons": icons,
-    "../../terminal/state": { useTerminalStore: (selector) => { selected.push(selector(store)); return selector(store); } },
-    "../../../shared/i18n/index": { useI18n: () => ({ t: (key, args) => {
-      let value = catalogs[language][key]; assert.ok(value, key);
-      for (const [key, arg] of Object.entries(args ?? {})) value = value.replace(`{${key}}`, arg);
-      return value;
-    } }) },
-  };
-  const exports = {};
-  vm.runInNewContext(transpile(source("../components/WorktreeTerminalSummary.tsx"), ts.ModuleKind.CommonJS), {
-    exports, require: (id) => { assert.ok(modules[id], id); return modules[id]; },
-  });
-  return { store, selected, render: (worktreeId = "w1", compact = false) =>
-    exports.WorktreeTerminalSummary({ projectId: "p1", worktreeId, compact }) };
-}
-
-test("summary counts hidden/legacy PTYs once, excludes pseudo/main/other WT, updates read-only inputs, zero is null", () => {
-  for (const language of ["zh-CN", "en-US"]) for (const compact of [false, true]) {
-    const h = summaryHarness(language);
-    assert.equal(h.render(), null);
-    h.store.sessions = [session("running", { worktreeId: "w1" }), session("idle", { worktreeId: "w1", tabHidden: true }),
-      session("wait", { worktreeId: "w1", tabHidden: true, kind: "pty" }),
-      session("done", { worktreeId: "w1" }), session("failed", { worktreeId: "w1" }),
-      session("remote", { worktreeId: "w1", remoteHandoff: { phase: "running" } }),
-      session("other", { worktreeId: "w2", cwd: "same" }), session("main"),
-      ...["pi", "file-editor", "transcript", "synced-history"].map((kind) => session(kind, { kind, worktreeId: "w1" }))];
-    h.store.sessionStatuses = { failed: "error", remote: "error" };
-    h.store.tabNotifications = { running: "running", wait: "attention", done: "done", failed: "done", remote: "attention" };
-    const before = structuredClone(h.store);
-    const result = domain.summarizeWorktreeTerminals(h.store.sessions, "p1", "w1", h.store.sessionStatuses, h.store.tabNotifications);
-    assert.equal(result.total, 6);
-    assert.equal(result.total, Object.values(result.counts).reduce((a, b) => a + b));
-    assert.deepEqual(result.counts, { running: 1, wait: 1, completed: 1, failed: 1, remote: 1, idle: 1 });
-    const tree = h.render("w1", compact);
-    assert.equal(tree.props["data-density"], compact ? "compact" : "comfortable");
-    assert.equal(tree.props.title, tree.props["aria-label"]);
-    assert.equal(tree.props["aria-label"], [catalogs[language]["sidebar.terminals.summaryTotal"].replace("{count}", "6"),
-      ...domain.sidebarTerminalStates.map((state) => `${catalogs[language][`sidebar.terminals.${state}`]}: 1`),
-      catalogs[language]["sidebar.terminals.summaryHiddenIncluded"]].join(" · "));
-    assert.equal((renderToStaticMarkup(tree).match(/data-icon="Terminal"/g) ?? []).length, 1);
-    assert.equal(tree.props.role, "img");
-    assert.ok(tree.props.title.includes(catalogs[language]["sidebar.terminals.summaryTotal"].replace("{count}", "6")));
-    assert.ok(tree.props.title.includes(catalogs[language]["sidebar.terminals.summaryHiddenIncluded"]));
-    for (const state of domain.sidebarTerminalStates) assert.ok(tree.props.title.includes(`${catalogs[language][`sidebar.terminals.${state}`]}: 1`));
-    const tokens = summaryTokens(tree);
-    assert.equal(tokens.length, 7);
-    assert.equal(tokenText(tokens[0]), "6");
-    assert.equal(tokens[0].props.title, catalogs[language]["sidebar.terminals.summaryTotal"].replace("{count}", "6"));
-    assert.equal(tokens[0].props.children[0].type, icons.Terminal);
-    assert.equal(tokens[0].props.children[0].props["aria-hidden"], "true");
-    domain.sidebarTerminalStates.forEach((state, index) => {
-      assert.equal(tokenText(tokens[index + 1]), `${glyphs[state]}1`);
-      assert.equal(tokens[index + 1].props.title, catalogs[language][`sidebar.terminals.summary.${state}`].replace("{count}", "1"));
-    });
-    assert.equal(descendants(tree).find((el) => el.props.className === "worktree-terminal-summary-text").props["aria-hidden"], "true");
-    assert.ok(!tokens.map(tokenText).join("").includes("Σ"));
-    assert.ok(descendants(tree).every((el) => el.type !== "button" && !el.props.onClick));
-    assert.deepEqual(h.store, before);
-    assert.ok(h.selected.includes(h.store.sessions) && h.selected.includes(h.store.sessionStatuses) && h.selected.includes(h.store.tabNotifications));
-    const other = h.render("w2");
-    assert.deepEqual(summaryTokens(other).map(tokenText), ["1", "○1"]);
-    h.store.sessions.push(session("otherDone", { worktreeId: "w2" }));
-    h.store.tabNotifications.otherDone = "done";
-    assert.deepEqual(summaryTokens(h.render("w2")).map(tokenText), ["2", "✓1", "○1"]);
-    assert.ok(!other.props.title.includes(`${catalogs[language]["sidebar.terminals.failed"]}: 0`));
-    h.store.tabNotifications = { ...h.store.tabNotifications, wait: "done" };
-    assert.ok(h.render().props.title.includes(`${catalogs[language]["sidebar.terminals.completed"]}: 2`));
-    h.store.sessionStatuses = { ...h.store.sessionStatuses, done: "error" };
-    assert.ok(h.render().props.title.includes(`${catalogs[language]["sidebar.terminals.failed"]}: 2`));
-    h.store.sessions = h.store.sessions.filter((s) => s.worktreeId !== "w1");
-    assert.equal(h.render(), null);
-  }
+test("worktree terminal status aggregation remains available to the terminal list domain", () => {
+  const sessions = [session("running", { worktreeId: "w1" }), session("hidden", { worktreeId: "w1", tabHidden: true })];
+  const result = domain.summarizeWorktreeTerminals(sessions, "p1", "w1", {}, { running: "running" });
+  assert.equal(result.total, 2);
+  assert.deepEqual(result.counts, { running: 1, wait: 0, completed: 0, failed: 0, remote: 0, idle: 1 });
 });
 
-test("actual tree and shortcut summaries stay mounted through independent folds at both densities/languages", () => {
+test("actual tree and shortcut rows keep terminal lists while Worktree rows omit summaries", () => {
   for (const language of ["zh-CN", "en-US"]) for (const compact of [false, true]) {
     const h = collapseHarness(language);
-    const ids = (tree) => descendants(tree).filter((el) => el.props["data-worktree-summary"])
-      .map((el) => el.props["data-worktree-summary"]);
-    assert.deepEqual(ids(h.row("w1", compact ? "compact" : "comfortable")), ["w1"]);
-    assert.deepEqual(ids(h.row("empty")), []);
-    assert.deepEqual(ids(h.shortcuts(compact)), ["w1", "w2"]);
-    toggleButtons(h.row("w1"))[0].props.onClick({ stopPropagation() {} });
+    const summaries = (tree) => descendants(tree).filter((el) => el.props["data-worktree-summary"]);
+    assert.deepEqual(summaries(h.row("w1", compact ? "compact" : "comfortable")), []);
+    assert.deepEqual(summaries(h.row("empty")), []);
+    assert.deepEqual(summaries(h.shortcuts(compact)), []);
     assert.deepEqual(lists(h.row("w1")), []);
-    assert.deepEqual(ids(h.row("w1", compact ? "compact" : "comfortable")), ["w1"]);
-    assert.deepEqual(ids(h.shortcuts(compact)), ["w1", "w2"]);
-    assert.deepEqual(lists(h.shortcuts(compact)), ["main", "w2"]);
-    assert.ok(descendants(h.shortcuts(compact)).filter((el) => el.props["data-worktree-summary"])
-      .every((el) => el.props.title.includes(catalogs[language]["sidebar.terminals.summaryHiddenIncluded"])));
+    assert.deepEqual(summaries(h.row("w1", compact ? "compact" : "comfortable")), []);
+    assert.deepEqual(lists(h.shortcuts(compact)), ["main"]);
   }
 });
 
-test("group flyout and all shortcut entrances use exact WT summary with fixed columns and deterministic tiers", () => {
+test("group flyout and all shortcut entrances retain Worktree lists without row summaries", () => {
   const flyout = source("../components/ProjectTree.tsx");
-  assert.match(flyout, /WorktreeTerminalSummary projectId=\{child.project.id\} worktreeId=\{child.worktree.id\} compact/);
-  assert.match(flyout, /SidebarWorktreeTerminals key=\{worktree.id\}/);
+  assert.doesNotMatch(flyout, /WorktreeTerminalSummary/);
+  assert.doesNotMatch(flyout, /SidebarWorktreeTerminals|WorktreeTerminalsToggle/);
+  assert.match(flyout, /SidebarTerminalList projectId=\{p.id\} depth=\{depth \+ 1\} compact/);
   assert.match(flyout, /SidebarProjectTerminals projectId=\{p.id\} compact/);
   assert.match(source("../components/PinnedProjectSection.tsx"), /SidebarProjectTerminals projectId=\{project.id\}/);
   const css = source("../styles/sidebar-terminals.css");
@@ -751,10 +619,10 @@ test("group flyout and all shortcut entrances use exact WT summary with fixed co
   assert.doesNotMatch(rule(".worktree-terminal-heading"), /flex-wrap: wrap;/);
   assert.match(rule(".worktree-terminal-title-line"), /flex-wrap: nowrap;[\s\S]*min-width: 0;[\s\S]*white-space: nowrap;/);
   assert.match(rule(".worktree-terminal-title"), /flex: 1 1 0;[\s\S]*min-width: 0;[\s\S]*text-overflow: ellipsis;[\s\S]*white-space: nowrap;/);
-  assert.match(rule(".worktree-terminal-summary"), /max-width: 100%;[\s\S]*overflow: hidden;[\s\S]*text-overflow: ellipsis;[\s\S]*white-space: nowrap;/);
-  assert.match(rule(".worktree-terminal-summary-text"), /white-space: nowrap;[\s\S]*overflow-wrap: normal;[\s\S]*word-break: normal;/);
+  assert.doesNotMatch(source("../components/TreeNodeItem.tsx"), /WorktreeTerminalSummary/);
+  assert.doesNotMatch(source("../components/SidebarProjectTerminals.tsx"), /SidebarWorktreeTerminals/);
+  assert.doesNotMatch(source("../components/TreeNodeItem.tsx"), /WorktreeTerminalsToggle|worktreeTerminalsCollapseId/);
   assert.match(source("../components/SidebarTerminalList.tsx"), /resolveSidebarTerminalState\(session/);
-  assert.doesNotMatch(source("../components/WorktreeTerminalSummary.tsx"), /getState|onClick|<button|useEffect|invoke|setItem/);
 });
 
 
@@ -767,25 +635,13 @@ test("mock-rendered rows keep empty toggle slots inert and title/badges separate
       if (folded) h.actions.collapsedIds.add(h.context.worktreeTerminalsCollapseId("w1"));
       for (const tree of [h.row("w1", density), h.row("empty", density), h.flyout("w1"), h.flyout("empty")]) {
         const elements = descendants(tree);
-        const slot = elements.find((el) => hasClass(el, "worktree-terminal-toggle-slot"));
-        assert.equal(elements.filter((el) => hasClass(el, "worktree-terminal-toggle-slot")).length, 1);
-        const button = toggleButtons(slot)[0];
-        if (button) assert.equal(button.props["aria-expanded"], !folded);
-        else {
-          const placeholder = React.Children.toArray(slot.props.children)[0];
-          assert.equal(placeholder.type, "span");
-          assert.equal(placeholder.props["aria-hidden"], "true");
-          assert.equal(placeholder.props.tabIndex, undefined);
-          assert.equal(placeholder.props.onClick, undefined);
-          assert.equal(React.Children.count(placeholder.props.children), 0);
-        }
+        assert.equal(elements.filter((el) => hasClass(el, "worktree-terminal-toggle-slot")).length, 0);
         const heading = elements.find((el) => hasClass(el, "worktree-terminal-heading"));
         const tiers = React.Children.toArray(heading.props.children);
         assert.ok(hasClass(tiers[0], "worktree-terminal-title-line"));
         assert.ok(descendants(tiers[0]).some((el) => hasClass(el, "worktree-terminal-title")));
         assert.ok(!descendants(tiers[0]).some((el) => el.props["data-worktree-summary"]));
-        assert.equal(tiers.length, button ? 2 : 1);
-        if (button) assert.equal(tiers[1].props["data-worktree-summary"], "w1");
+        assert.equal(tiers.length, 1);
         const actions = elements.find((el) => hasClass(el, "ui-tree-item-actions"));
         if (actions) {
           assert.ok(hasClass(actions, "flex"));
@@ -797,9 +653,9 @@ test("mock-rendered rows keep empty toggle slots inert and title/badges separate
       assert.ok(renderToStaticMarkup(mainTitle).includes("gpt-5.6"));
       for (const heading of descendants(h.shortcuts(density === "compact")).filter((el) => hasClass(el, "worktree-terminal-heading"))) {
         const tiers = React.Children.toArray(heading.props.children);
-        assert.equal(tiers.length, 2);
+        assert.equal(tiers.length, 1);
         assert.ok(hasClass(tiers[0], "worktree-terminal-title-line"));
-        assert.ok(tiers[1].props["data-worktree-summary"]);
+        assert.ok(!descendants(heading).some((el) => el.props["data-worktree-summary"]));
       }
     }
   }
@@ -870,13 +726,7 @@ test("ordinary shell row and no-Agent summary hide all task state while retainin
     assert.equal(result.total, 2); assert.equal(Object.values(result.counts).reduce((a,b) => a+b), 0);
     assert.equal(actualDomain.summarizeProjectTerminalStates(items, {}, {}, sources).size, 0);
     assert.equal(actualDomain.resolveSidebarTerminalState(items[0], "running", "running", sources.plain), null);
-    const h = summaryHarness(language); h.store.sessions = items; h.store.tabStatuses = sources;
-    const rendered = h.render();
-    assert.deepEqual(summaryTokens(rendered).map(tokenText), ["2"]);
-    assert.equal(summaryTokens(rendered)[0].props.children[0].type, icons.Terminal);
-    assert.equal(rendered.props.title, rendered.props["aria-label"]);
-    assert.equal(rendered.props.title, [catalogs[language]["sidebar.terminals.summaryTotal"].replace("{count}", "2"),
-      catalogs[language]["sidebar.terminals.summaryHiddenIncluded"]].join(" · "));
+    assert.equal(domain.summarizeWorktreeTerminals(items, "p1", "w1", {}, {}, sources).total, 2);
     const row = renderList(language, { items: [session("plain", { isAgentSession: false, tabHidden: true })], notifications: { plain: "running" } });
     assert.equal(descendants(row.tree).filter(el => el.props.className === "sidebar-terminal-status").length, 0);
     const button = descendants(row.tree).find((el) => el.type === "button");

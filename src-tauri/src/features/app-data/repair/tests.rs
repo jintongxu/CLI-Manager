@@ -199,6 +199,108 @@ async fn marks_frontend_created_ssh_group_schema_as_migrated() {
 }
 
 #[tokio::test]
+// 验证 v52 缺列且 marker 缺失时仅补齐列和登记，旧记录使用空身份默认值。
+async fn worktree_root_identity_repair_adds_column_and_marker_idempotently() {
+    let mut conn = SqliteConnection::connect(":memory:").await.unwrap();
+    create_migration_table(&mut conn).await;
+    create_complete_feature_schema(&mut conn).await;
+    conn.execute("INSERT INTO projects (id, cli_args, worktree_strategy, worktree_root) VALUES ('p', '', 'disabled', '')")
+        .await
+        .unwrap();
+    conn.execute("INSERT INTO worktrees (id, project_id, name, branch, path, created_at, updated_at) VALUES ('w', 'p', 'task', 'wt/task', '/tmp/task', '1', '1')")
+        .await
+        .unwrap();
+
+    assert!(ensure_worktree_root_identity(&mut conn).await.unwrap());
+    let identity: String = sqlx::query_scalar("SELECT root_identity FROM worktrees WHERE id = 'w'")
+        .fetch_one(&mut conn)
+        .await
+        .unwrap();
+    assert_eq!(identity, "");
+    let marker: (String, Vec<u8>) = sqlx::query_as(
+        "SELECT description, checksum FROM _sqlx_migrations WHERE version = ?1 AND success = 1",
+    )
+    .bind(MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_VERSION)
+    .fetch_one(&mut conn)
+    .await
+    .unwrap();
+    assert_eq!(marker.0, MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_DESCRIPTION);
+    assert_eq!(
+        marker.1,
+        migration_checksum(MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_SQL)
+    );
+    assert!(!ensure_worktree_root_identity(&mut conn).await.unwrap());
+}
+
+#[tokio::test]
+// 验证 v52 列定义漂移 fail-closed，不把可疑旧列当作有效身份列。
+async fn worktree_root_identity_repair_rejects_schema_drift() {
+    let mut conn = SqliteConnection::connect(":memory:").await.unwrap();
+    create_migration_table(&mut conn).await;
+    create_complete_feature_schema(&mut conn).await;
+    conn.execute("ALTER TABLE worktrees ADD COLUMN root_identity TEXT DEFAULT 'legacy'")
+        .await
+        .unwrap();
+
+    assert_eq!(
+        ensure_worktree_root_identity(&mut conn).await.unwrap_err(),
+        "worktree_root_identity_schema_mismatch"
+    );
+}
+
+#[tokio::test]
+// 验证 v52 marker checksum 漂移 fail-closed，不覆盖未知登记。
+async fn worktree_root_identity_repair_rejects_marker_checksum_drift() {
+    let mut conn = SqliteConnection::connect(":memory:").await.unwrap();
+    create_migration_table(&mut conn).await;
+    create_complete_feature_schema(&mut conn).await;
+    conn.execute("ALTER TABLE worktrees ADD COLUMN root_identity TEXT NOT NULL DEFAULT ''")
+        .await
+        .unwrap();
+    insert_migration_row(
+        &mut conn,
+        MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_VERSION,
+        MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_DESCRIPTION,
+        "not-the-registered-sql",
+    )
+    .await;
+
+    assert_eq!(
+        ensure_worktree_root_identity(&mut conn).await.unwrap_err(),
+        "worktree_root_identity_migration_checksum_mismatch"
+    );
+}
+
+#[tokio::test]
+// 验证 v52 已登记但列缺失时补列且不重复插入 marker。
+async fn worktree_root_identity_repair_handles_registered_marker_without_column() {
+    let mut conn = SqliteConnection::connect(":memory:").await.unwrap();
+    create_migration_table(&mut conn).await;
+    create_complete_feature_schema(&mut conn).await;
+    insert_migration_row(
+        &mut conn,
+        MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_VERSION,
+        MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_DESCRIPTION,
+        MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_SQL,
+    )
+    .await;
+
+    assert!(ensure_worktree_root_identity(&mut conn).await.unwrap());
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM _sqlx_migrations WHERE version = ?1 AND success = 1",
+    )
+    .bind(MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_VERSION)
+    .fetch_one(&mut conn)
+    .await
+    .unwrap();
+    assert_eq!(count, 1);
+    assert!(table_columns(&mut conn, "worktrees")
+        .await
+        .unwrap()
+        .contains("root_identity"));
+}
+
+#[tokio::test]
 // 验证内联快照补丁迁出到临时文件并替换为完整文件元数据。
 async fn migrates_replay_snapshot_inline_patch_to_file_metadata() {
     let mut conn = SqliteConnection::connect(":memory:").await.unwrap();

@@ -30,6 +30,7 @@ const naming = load("../lib/terminalSessionNaming.ts", {
   normalizeShellKey: (shell) => shell,
 });
 const agent = load("../../agents/api/agentTerminal.ts");
+const worktreeAdmission = load("../lib/worktreeSessionAdmission.ts");
 
 test("terminal renderer refreshes after the idle threshold but not before it", () => {
   const threshold = rendererPolicy.TERMINAL_IDLE_RENDER_REFRESH_MS;
@@ -59,7 +60,8 @@ function fixture(sessions = [], workspans = [], daemon = [], projects = [], work
     async saveSplits(value) { this.splits = value; },
   };
   const dependencies = {
-    ...metadata, ...pane, ...workspan, ...visibility, ...layout, ...currentWork, ...naming,
+    ...metadata, ...pane, ...workspan, ...visibility, ...layout, ...currentWork, ...naming, ...worktreeAdmission,
+    startPtyOrphanReconcileHeartbeat() {},
     resolveNextSessionIdForShortcut: pane.getNextSessionIdForShortcut,
     unsplitPaneLeaf: pane.unsplitPaneLeaf,
     terminalProcessManager: {
@@ -738,14 +740,11 @@ test("ordinary new context reaches actual create action as fresh project CLI, wh
       cliSessionId: "old", startupCmd: plainShell ? "" : "codex resume old", isAgentSession: !plainShell });
     const context = contextApi.resolveTerminalCreationContext(source, [source], [project], [worktree], []);
     const f = fixture([source], [span("w", "p", "a")], [], [project], [worktree], { startupHandledByLaunch: false });
-    await f.api.getState().createSession(context.projectId, context.cwd, undefined, context.startupCmd,
+    const reused = await f.api.getState().createSession(context.projectId, context.cwd, undefined, context.startupCmd,
       context.envVars, context.shell, undefined, context.worktreeId, context.sshHostId);
-    const created = f.api.getState().sessions.find(s => s.id === "recreated");
-    assert.equal(created.cliSessionId, undefined);
-    assert.equal(created.isAgentSession, !plainShell);
-    assert.equal(created.title, plainShell ? "PowerShell · 1" : "Codex · 1");
-    const write = f.calls.find(([kind]) => kind === "write");
-    assert.equal(Boolean(write), !plainShell);
-    if (write) { assert.ok(write[2].includes("codex")); assert.ok(!write[2].includes("resume")); }
+    assert.equal(reused, "a");
+    assert.equal(f.api.getState().sessions.length, 1);
+    assert.equal(f.api.getState().sessions[0].title, "Custom");
+    assert.equal(f.calls.some(([kind]) => kind === "create" || kind === "write"), false);
   }
 });

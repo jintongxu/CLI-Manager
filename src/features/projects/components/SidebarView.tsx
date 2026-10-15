@@ -43,10 +43,7 @@ export function SidebarView({
   appConfirmDialog,
   sidebarCollapsed,
   projectFilter,
-  sidebarProjectFilterVisible,
   projects,
-  pinnedProjects,
-  openProjectIds,
   toggleSidebarCollapsed,
   setProjectFilter,
   ensureSidebarExpanded,
@@ -63,7 +60,6 @@ export function SidebarView({
   newGroupParentId,
   projectScopedTerminalViewEnabled,
   terminalScope,
-  handleSelectAllTerminalScope,
   handleCreateGroup,
   handleCancelNewGroup,
   setInitialLoading,
@@ -215,14 +211,8 @@ export function SidebarView({
         <SidebarHeader
           collapsed={compactMode ? false : sidebarCollapsed}
           density={sidebarDensity}
-          projectFilter={projectFilter}
-          showProjectFilter={sidebarProjectFilterVisible}
-          totalProjectCount={projects.length}
-          openProjectCount={openProjectIds.size}
-          pinnedProjectCount={pinnedProjects.length}
           onToggleCollapse={toggleSidebarCollapsed}
           dockSide={dockSide}
-          onProjectFilterChange={setProjectFilter}
           onCreateGroup={() => {
             ensureSidebarExpanded();
             setNewGroupParentId("__root__");
@@ -250,7 +240,6 @@ export function SidebarView({
                 newGroupParentId={newGroupParentId}
                 projectScopedTerminalViewEnabled={projectScopedTerminalViewEnabled}
                 terminalScope={terminalScope}
-                onSelectAllTerminalScope={handleSelectAllTerminalScope}
                 onCreateRootGroup={(name, appearance) => handleCreateGroup(null, name, appearance)}
                 onCancelRootGroup={handleCancelNewGroup}
                 onQuickAddProject={() => {

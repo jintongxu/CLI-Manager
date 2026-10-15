@@ -32,18 +32,27 @@ export function validTitleNaming(value: TerminalSession["titleNaming"]): Termina
 }
 
 /** Call after all asynchronous admission checks, immediately before synchronous commit. */
-export function assignTerminalTitle(session: TerminalSession, title: string | undefined, purpose: string, existing: TerminalSession[]): void {
+export function assignTerminalTitle(
+  session: TerminalSession,
+  title: string | undefined,
+  purpose: string,
+  existing: TerminalSession[],
+  projectName?: string,
+): void {
   if (title !== undefined) {
     session.title = title;
     session.titleNaming = { source: "task" };
     return;
   }
+  // Root project terminals use a stable project label. Linked Worktrees retain
+  // their CLI/Shell purpose labels (and their independent naming scope).
+  const base = !session.worktreeId && projectName?.trim() ? projectName.trim() : purpose;
   const scope = terminalNamingScope(session);
   let maximum = 0;
   for (const candidate of existing) {
     const naming = validTitleNaming(candidate.titleNaming);
-    if (terminalNamingScope(candidate) === scope && naming?.base === purpose && Number.isSafeInteger(naming.ordinal) && naming.ordinal! > maximum) maximum = naming.ordinal!;
+    if (terminalNamingScope(candidate) === scope && naming?.base === base && Number.isSafeInteger(naming.ordinal) && naming.ordinal! > maximum) maximum = naming.ordinal!;
   }
-  session.titleNaming = { source: "auto", base: purpose, ordinal: maximum + 1 };
-  session.title = `${purpose} · ${maximum + 1}`;
+  session.titleNaming = { source: "auto", base, ordinal: maximum + 1 };
+  session.title = `${base} · ${maximum + 1}`;
 }

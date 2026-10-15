@@ -12,13 +12,10 @@ import { WorktreeIcon } from "../../../shared/ui/WorktreeIcon";
 import { TreeNodeItem } from "./TreeNodeItem";
 import { SidebarTerminalList } from "./SidebarTerminalList";
 import { SidebarProjectTerminals } from "./SidebarProjectTerminals";
-import { SidebarWorktreeTerminals } from "./SidebarWorktreeTerminals";
-import { WorktreeTerminalSummary } from "./WorktreeTerminalSummary";
-import { WorktreeTerminalsToggle } from "./WorktreeTerminalsToggle";
 import { NewGroupRow } from "./NewGroupRow";
 import { NodeAppearanceIcon } from "../api/NodeAppearanceIcon";
 import { resolveNodeAppearance } from "../api/nodeAppearance";
-import { useTreeActions, worktreeListCollapseId, worktreeTerminalsCollapseId, type TreeActions } from "./TreeContext";
+import { useTreeActions, worktreeListCollapseId, type TreeActions } from "./TreeContext";
 import { useI18n } from "../../../shared/i18n/index";
 import { toast } from "sonner";
 import { countProjectsInNode } from "../api/projectStore";
@@ -38,7 +35,6 @@ interface ProjectTreeProps {
   newGroupParentId: string | null;
   projectScopedTerminalViewEnabled: boolean;
   terminalScope: TerminalScope;
-  onSelectAllTerminalScope: () => void;
   onCreateRootGroup: (name: string, appearance?: { icon: string; color: string }) => void;
   onCancelRootGroup: () => void;
   onQuickAddProject: () => void;
@@ -255,7 +251,6 @@ export function ProjectTree({
   newGroupParentId,
   projectScopedTerminalViewEnabled,
   terminalScope,
-  onSelectAllTerminalScope,
   onCreateRootGroup,
   onCancelRootGroup,
   onQuickAddProject,
@@ -292,11 +287,9 @@ export function ProjectTree({
   const visibleNodes = useMemo(
     () => {
       const nodes = flattenVisibleTree(filteredTree, searchActive ? new Set<string>() : actions.collapsedIds, null, [], (id) => actions.getTerminals(id).length > 0);
-      return projectScopedTerminalViewEnabled && !pinnedFilterActive
-        ? [{ key: "scope:all", kind: "all-terminals", parentGroupKey: null } satisfies VisibleTreeNode, ...nodes]
-        : nodes;
+      return nodes;
     },
-    [actions.collapsedIds, actions.getTerminals, filteredTree, pinnedFilterActive, projectScopedTerminalViewEnabled, searchActive]
+    [actions.collapsedIds, actions.getTerminals, filteredTree, searchActive]
   );
   const visibleNodeIndex = useMemo(() => {
     const map = new Map<string, number>();
@@ -315,8 +308,6 @@ export function ProjectTree({
     if (visibleNodeIndex.has(projectKey)) return projectKey;
     return null;
   }, [actions.selectedId, projectScopedTerminalViewEnabled, terminalScope, visibleNodeIndex]);
-  const allTerminalsSelected =
-    projectScopedTerminalViewEnabled && terminalScope.kind === "all";
   const projectById = useMemo(() => {
     const map = new Map<string, Extract<TNode, { type: "project" }>>();
     const walk = (nodes: TNode[]) => {
@@ -548,10 +539,6 @@ export function ProjectTree({
 
     if (event.key === "Enter") {
       event.preventDefault();
-      if (current.kind === "all-terminals") {
-        onSelectAllTerminalScope();
-        return;
-      }
       if (current.kind === "group" && current.groupId) {
         actions.onSelectGroupScope(current.groupId);
         if (!forceExpanded) actions.toggleCollapsed(current.groupId);
@@ -588,10 +575,6 @@ export function ProjectTree({
 
     if (event.key === " " || event.key === "Spacebar") {
       event.preventDefault();
-      if (current.kind === "all-terminals") {
-        onSelectAllTerminalScope();
-        return;
-      }
       if (current.kind === "project" && current.projectId) {
         const projectNode = projectById.get(current.projectId);
         if (projectNode?.type === "project") {
@@ -622,7 +605,6 @@ export function ProjectTree({
     actions,
     focusTreeItem,
     focusedNodeKey,
-    onSelectAllTerminalScope,
     openSearch,
     projectById,
     worktreeById,
@@ -640,7 +622,7 @@ export function ProjectTree({
   const showOpenFilterEmptyState = tree.length === 0 && projectFilter === "open" && !loadError && !searchActive;
   const hasFilteredEmptyState = filteredTree.length === 0 && (searchActive || projectFilter === "open");
   const shouldFillTreeArea = !hasFilteredEmptyState && (
-    filteredTree.length > 0 || projectScopedTerminalViewEnabled || newGroupParentId === "__root__"
+    filteredTree.length > 0 || newGroupParentId === "__root__"
   );
 
   // 侧栏分区滚动（用户 2026-09-15 决议）：置顶区与项目列表各自独立滚动，
@@ -822,31 +804,6 @@ export function ProjectTree({
                 focusTreeContainer();
               }}
             >
-              {projectScopedTerminalViewEnabled && (
-                <div
-                  role="treeitem"
-                  data-tree-key="scope:all"
-                  aria-level={1}
-                  aria-selected={allTerminalsSelected}
-                  tabIndex={focusedNodeKey === "scope:all" ? 0 : -1}
-                  onFocus={() => setFocusedNodeKey("scope:all")}
-                >
-                  <button
-                    type="button"
-                    className={`ui-tree-node ui-tree-project ui-focus-ring flex w-full items-center rounded-lg ${
-                      density === "compact" ? "gap-1.5 py-1 text-[12px]" : "gap-2 py-1.5 text-[13px]"
-                    }`}
-                    data-selected={allTerminalsSelected ? "true" : "false"}
-                    style={{ paddingLeft: density === "compact" ? 6 : 8, paddingRight: density === "compact" ? 8 : 10 }}
-                    onClick={onSelectAllTerminalScope}
-                  >
-                    <span className="ui-tree-leading-icon">
-                      <Terminal size={14} strokeWidth={1.5} />
-                    </span>
-                    <span className="truncate font-medium">{t("sidebar.tree.allTerminals")}</span>
-                  </button>
-                </div>
-              )}
               {filteredTree.map((node) => (
                 <TreeNodeItem
                   key={nodeKey(node)}
@@ -1078,11 +1035,6 @@ function renderFlyoutNodes(nodes: TNode[], depth: number, actions: TreeActions, 
       return (
         <div key={`wt:${child.worktree.id}`}>
         <div className="flex items-center">
-        <span className="worktree-terminal-toggle-slot">
-          {actions.getTerminals(child.project.id, child.worktree.id).length > 0 ? (
-            <WorktreeTerminalsToggle worktreeId={child.worktree.id} />
-          ) : <span aria-hidden="true" />}
-        </span>
         <button
           className="ui-collapsed-flyout-item flex min-w-0 w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-[12px] text-on-surface"
           style={{ paddingLeft: padLeft }}
@@ -1100,13 +1052,9 @@ function renderFlyoutNodes(nodes: TNode[], depth: number, actions: TreeActions, 
             <span className="worktree-terminal-title-line">
               <span className="worktree-terminal-title truncate">{getWorktreeSidebarLabel(child.worktree)}</span>
             </span>
-            <WorktreeTerminalSummary projectId={child.project.id} worktreeId={child.worktree.id} compact />
           </span>
         </button>
         </div>
-        {!actions.collapsedIds.has(worktreeTerminalsCollapseId(child.worktree.id)) && (
-          <SidebarTerminalList projectId={child.project.id} worktreeId={child.worktree.id} depth={depth + 1} compact />
-        )}
         </div>
       );
     }
@@ -1143,9 +1091,6 @@ function renderFlyoutNodes(nodes: TNode[], depth: number, actions: TreeActions, 
         )}
       </button>
       <SidebarTerminalList projectId={p.id} depth={depth + 1} compact />
-      {(child.worktrees ?? []).map((worktree) => (
-        <SidebarWorktreeTerminals key={worktree.id} projectId={p.id} worktree={worktree} depth={depth + 1} compact />
-      ))}
       </div>
     );
   });

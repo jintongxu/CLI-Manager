@@ -5,9 +5,7 @@ import { CSS } from "@dnd-kit/utilities";
 import type { TreeNode as TNode } from "../../../shared/types/index";
 import { countProjectsInNode, type ProviderBadge } from "../api/projectStore";
 import { getWorktreeDisplayName, getWorktreeSidebarLabel } from "../api/worktreeMetadata";
-import { useTreeActions, worktreeListCollapseId, worktreeTerminalsCollapseId } from "./TreeContext";
-import { WorktreeTerminalSummary } from "./WorktreeTerminalSummary";
-import { WorktreeTerminalsToggle } from "./WorktreeTerminalsToggle";
+import { useTreeActions, worktreeListCollapseId } from "./TreeContext";
 import { ChevronRight, AlertTriangle, Link2, Pin, Play, RefreshCw, Sparkles } from "../../../shared/ui/icons";
 import { VendorIcon, inferVendor } from "../../../shared/ui/VendorIcon";
 import { WorktreeIcon } from "../../../shared/ui/WorktreeIcon";
@@ -151,9 +149,6 @@ function TreeNodeItemImpl({
     const isSelected = actions.selectedId === worktree.id;
     const isMultiSelected = actions.selectedWorktreeIds.has(worktree.id);
     const providerBadge = actions.providerBadges[`wt:${worktree.id}`];
-    const hasTerminals = actions.getTerminals(project.id, worktree.id).length > 0;
-    const terminalsOpen = !actions.collapsedIds.has(worktreeTerminalsCollapseId(worktree.id));
-
     return (
       <div
         ref={setNodeRef}
@@ -201,11 +196,6 @@ function TreeNodeItemImpl({
           onDoubleClick={() => { if (!isDragging) actions.onOpenWorktree(project, worktree); }}
           onContextMenu={(e) => actions.onContextMenuWorktree(e, project, worktree)}
         >
-          <span className="worktree-terminal-toggle-slot">
-            {hasTerminals ? <WorktreeTerminalsToggle worktreeId={worktree.id} /> : (
-              <span aria-hidden="true" />
-            )}
-          </span>
           <span className="ui-tree-leading-icon ui-worktree-tree-icon" title={worktree.branch}>
             <WorktreeIcon className="h-4 w-4" />
           </span>
@@ -214,7 +204,6 @@ function TreeNodeItemImpl({
               <span className="worktree-terminal-title truncate font-medium">{getWorktreeSidebarLabel(worktree)}</span>
               {providerBadge && <ProviderBadgeChip badge={providerBadge} />}
             </span>
-            <WorktreeTerminalSummary projectId={project.id} worktreeId={worktree.id} compact={compact} />
           </span>
           {worktree.status !== "active" && (
             <span
@@ -251,9 +240,6 @@ function TreeNodeItemImpl({
             </button>
           </span>
         </div>
-        {hasTerminals && terminalsOpen && (
-          <SidebarTerminalList projectId={project.id} worktreeId={worktree.id} depth={depth + 1} compact={compact} />
-        )}
       </div>
     );
   }

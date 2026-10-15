@@ -77,7 +77,7 @@ function worktreeHarness(dragging=false, disabled=false) {
  onSelectWorktree:()=>calls.push(['select']),onOpenWorktree:()=>calls.push(['open']),onContextMenuWorktree:()=>calls.push(['menu'])};
  const deps={...h.deps,React,useState:()=>[null,()=>{}],useEffect:()=>{},useRef:()=>({current:null}),memo:f=>f,
  useI18n:()=>({t:k=>k}),useTreeActions:()=>actions,getWorktreeDisplayName:w=>w.name,getWorktreeSidebarLabel:w=>w.name,
- worktreeTerminalsCollapseId:id=>`terminals:${id}`,WorktreeIcon:()=>null,Play:()=>null,AlertTriangle:()=>null,RefreshCw:()=>null,WorktreeTerminalSummary:()=>null,
+ worktreeTerminalsCollapseId:id=>`terminals:${id}`,WorktreeIcon:()=>null,Play:()=>null,AlertTriangle:()=>null,RefreshCw:()=>null,
  useWorktreeDepsRunnerStore:(selector)=>selector({tasks:{}}),
  useWorktreeStore:(selector)=>selector({deletingWorktreeIds:{}}),
  useProjectStore:{getState:()=>store},useSettingsStore:{getState:()=>({worktreeOrderByProject:map})},
@@ -125,8 +125,7 @@ test('collision filter precedes candidate selection, WT dispatch precedes legacy
  const hook=source('../hooks/useSidebarTreeDrag.ts');assert.ok(hook.indexOf('dispatchWorktreeDrag(event')<hook.indexOf('overId.startsWith("into:")'));
  assert.match(source('../components/TreeNodeItem.tsx'),/SortableContext items=\{projectWorktrees.map/);
  assert.doesNotMatch(source('../components/TreeNodeItem.tsx'),/ui-worktree-short-chip|>\s*WT\s*</);
- assert.match(source('../components/SidebarProjectTerminals.tsx'),/useSettingsStore\(\(s\) => s.worktreeOrderByProject\)/);
- assert.match(source('../components/SidebarProjectTerminals.tsx'),/orderProjectWorktrees\(worktrees, projectId, order\)/);
+ assert.doesNotMatch(source('../components/SidebarProjectTerminals.tsx'),/useSettingsStore|orderProjectWorktrees|SidebarWorktreeTerminals/);
 });
 
 test('real closestCenter geometry keeps near-origin and return-to-origin drops a no-op', async () => {

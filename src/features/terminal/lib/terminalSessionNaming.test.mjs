@@ -39,3 +39,14 @@ test("scope, pending metadata, custom reservation, malformed/legacy exclusion an
   assign(other, undefined, "Pi", [old]);
   assert.equal(other.title, "Pi · 1");
 });
+test("root project terminals use project name while worktrees keep purpose", () => {
+  const root = { id: "root", projectId: "p", title: "", titleNaming: undefined };
+  assign(root, undefined, "PowerShell", [], "Demo");
+  assert.equal(root.title, "Demo · 1");
+  const second = { id: "second", projectId: "p", title: "", titleNaming: undefined };
+  assign(second, undefined, "PowerShell", [root], "Demo");
+  assert.equal(second.title, "Demo · 2");
+  const worktree = { id: "wt", projectId: "p", worktreeId: "w", title: "", titleNaming: undefined };
+  assign(worktree, undefined, "PowerShell", [], "Demo");
+  assert.equal(worktree.title, "PowerShell · 1");
+});

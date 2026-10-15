@@ -119,8 +119,7 @@ export function useTerminalTabsController({
   const currentWorkReturnRef = useRef<{ workspanId: string | null; sessionId: string | null } | null>(null);
   const createSession = useCallback(async (...args: Parameters<typeof createTerminalSession>) => {
     const sessionId = await createTerminalSession(...args);
-    const options = args[12];
-    if (!options?.sessionKind && !options?.transientBackground) addCurrentWorkSession(sessionId);
+    if (!args[12]?.sessionKind && !args[12]?.transientBackground) addCurrentWorkSession(sessionId);
     return sessionId;
   }, [addCurrentWorkSession, createTerminalSession]);
   const splitTerminalAndAdd = useCallback(async (...args: Parameters<typeof splitTerminal>) => {

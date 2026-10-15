@@ -123,7 +123,6 @@ export function useSidebarController({
   const useExternalTerminal = useSettingsStore((s) => s.useExternalTerminal);
   const projectWorktreeConfigEnabled = useSettingsStore((s) => s.projectWorktreeConfigEnabled);
   const sidebarDensity = useSettingsStore((s) => s.sidebarDensity);
-  const sidebarProjectFilterVisible = useSettingsStore((s) => s.sidebarProjectFilterVisible);
   const sidebarToolbarVisibility = useSettingsStore((s) => s.sidebarToolbarVisibility);
   const confirmBeforeClosingTerminalTab = useSettingsStore((s) => s.confirmBeforeClosingTerminalTab);
   const updateSetting = useSettingsStore((s) => s.update);
@@ -307,12 +306,6 @@ export function useSidebarController({
     () => projectFilter === "open" ? filterTreeForOpenTerminals(tree, openProjectIds, openWorktreeIds) : tree,
     [openProjectIds, openWorktreeIds, projectFilter, tree]
   );
-
-  useEffect(() => {
-    if (!sidebarProjectFilterVisible && projectFilter !== "all") {
-      setProjectFilter("all");
-    }
-  }, [projectFilter, sidebarProjectFilterVisible]);
 
   // 可见项目的扁平顺序（跳过已折叠分组的子项），供 Shift 范围多选取区间
   const visibleProjectIds = useMemo(() => {
@@ -1754,7 +1747,6 @@ export function useSidebarController({
     appConfirmDialog,
     sidebarCollapsed,
     projectFilter,
-    sidebarProjectFilterVisible,
     projects,
     pinnedProjects,
     openProjectIds,
