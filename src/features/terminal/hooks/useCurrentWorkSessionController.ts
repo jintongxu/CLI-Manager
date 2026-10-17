@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSessionStore } from "../api/sessionStore";
+import { CURRENT_WORK_SESSION_CREATED_EVENT, type CurrentWorkTarget } from "../api/currentWorkEvents";
 import { useTerminalStore } from "../state";
 import { activateCurrentWorkSession, appendCurrentWorkSession, createCurrentWorkLayoutIdFactory } from "../lib/currentWorkModel";
 import {
@@ -148,6 +149,13 @@ export function useCurrentWorkSessionController({
     const next = appendCurrentWorkSession(sessionIdsRef.current, activeSessionIdRef.current, sessionId);
     updateMembership(next.sessionIds, next.activeSessionId);
   }, [removeSessions, updateMembership]);
+  useEffect(() => {
+    const handleSessionCreated = (event: Event) => {
+      addSession((event as CustomEvent<CurrentWorkTarget>).detail.sessionId);
+    };
+    window.addEventListener(CURRENT_WORK_SESSION_CREATED_EVENT, handleSessionCreated);
+    return () => window.removeEventListener(CURRENT_WORK_SESSION_CREATED_EVENT, handleSessionCreated);
+  }, [addSession]);
   const reorder = useCallback((fromId: string, toId: string) => {
     const nextIds = [...sessionIdsRef.current];
     const fromIndex = nextIds.indexOf(fromId);

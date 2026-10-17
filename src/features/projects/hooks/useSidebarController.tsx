@@ -13,7 +13,7 @@ import { useTerminalStore } from "../../terminal/state";
 import { summarizeProjectTerminalStates, type SidebarTerminalState } from "../lib/sidebarTerminals";
 import { useFileExplorerStore } from "../../files/api/fileExplorerStore";
 import { useHistoryStore } from "../../history/index";
-import { dispatchCurrentWorkTarget } from "../../terminal/api/currentWorkEvents";
+import { dispatchCurrentWorkSessionCreated, dispatchCurrentWorkTarget } from "../../terminal/api/currentWorkEvents";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { createDefaultWorktreeTaskName, isWorktreeCreateInProgressError, useWorktreeStore } from "../api/worktreeStore";
 import { useWorktreeDepsRunnerStore } from "../api/worktreeDepsRunner";
@@ -672,7 +672,7 @@ export function useSidebarController({
     if (rejectMissingWorktree(worktree)) return false;
     const projectOptions = projectWithWorktreeProviderOverrides(project, worktree);
     const options = buildProjectSplitOptions(projectOptions);
-    await createSession(
+    const sessionId = await createSession(
       options.projectId,
       worktree.path,
       title,
@@ -682,6 +682,7 @@ export function useSidebarController({
       targetPaneId,
       worktree.id,
     );
+    dispatchCurrentWorkSessionCreated(sessionId);
     closeHistory();
     return true;
   };
@@ -731,12 +732,13 @@ export function useSidebarController({
       const worktree = await worktreeCreationAttempts.current.run(`${project.id}:${taskName}`,
         () => createWorktreeForProject(project, { taskName, displayName, description, shortLabel: normalizeWorktreeShortLabel(shortLabel) }), async worktree => {
           const options = buildProjectSplitOptions(project);
-          await splitTerminal(activeSessionId, direction, {
+          const sessionId = await splitTerminal(activeSessionId, direction, {
             ...withoutTerminalTitle(options),
             cwd: worktree.path,
             title: getWorktreeSidebarLabel(worktree),
             worktreeId: worktree.id,
           });
+          if (sessionId) dispatchCurrentWorkSessionCreated(sessionId);
           closeHistory();
       });
       toast.success(t("worktree.toast.created"), { description: worktree.path });
