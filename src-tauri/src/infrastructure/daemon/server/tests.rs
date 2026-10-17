@@ -222,6 +222,31 @@ fn websocket_writer_sends_binary_terminal_output() {
 }
 
 #[test]
+// 通过回环 WebSocket 验证 daemon 独立保活使用 transport Ping，不占用应用层 JSON 控制帧。
+fn websocket_writer_sends_transport_keepalive_ping() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        let socket = tungstenite::accept(stream).unwrap();
+        let writer_stream = socket.get_ref().try_clone().unwrap();
+        let writer = ClientWriter::new(ClientTransport::WebSocket(Mutex::new(
+            WebSocket::from_raw_socket(writer_stream, Role::Server, None),
+        )));
+        writer.send_transport_ping(Vec::new()).unwrap();
+        drop(socket);
+    });
+
+    let stream = TcpStream::connect(address).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(3)))
+        .unwrap();
+    let (mut client, _) = tungstenite::client("ws://127.0.0.1/pty", stream).unwrap();
+    assert!(matches!(client.read().unwrap(), Message::Ping(payload) if payload.is_empty()));
+    server.join().unwrap();
+}
+
+#[test]
 // 在回环 NDJSON 连接认证后发送未知类型，验证错误只返回通用消息，不回显测试敏感文本。
 fn ndjson_redacts_unknown_frame_types() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();

@@ -72,6 +72,7 @@ const CLIENT_OUTPUT_HIGH_WATERMARK: usize = 100_000;
 const CLIENT_OUTPUT_LOW_WATERMARK: usize = 5_000;
 const CLIENT_OUTPUT_QUEUE_MAX_BYTES: usize = 2 * 1024 * 1024;
 const CLIENT_CONTROL_QUEUE_MAX_FRAMES: usize = 256;
+const WEBSOCKET_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(10);
 
 struct ClientHandle {
     writer: Arc<ClientWriter>,
@@ -1242,6 +1243,19 @@ impl DaemonServer {
             );
         }
         log::debug!("daemon websocket client connected ({peer}, id={client_id})");
+        let keepalive_writer = Arc::clone(&writer);
+        std::thread::spawn(move || {
+            while !keepalive_writer.is_closed() {
+                std::thread::sleep(WEBSOCKET_KEEPALIVE_INTERVAL);
+                if keepalive_writer.is_closed() {
+                    break;
+                }
+                if keepalive_writer.send_transport_ping(Vec::new()).is_err() {
+                    keepalive_writer.close();
+                    break;
+                }
+            }
+        });
 
         while let Some(message) = read_websocket_client_message(&mut socket) {
             match message {

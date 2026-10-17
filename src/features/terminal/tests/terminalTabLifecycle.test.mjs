@@ -44,6 +44,8 @@ test("terminal idle recovery is shared by keyboard forwarding and paste input", 
   const controller = readFileSync(new URL("../hooks/useXTermController.ts", import.meta.url), "utf8");
   const input = readFileSync(new URL("../hooks/useTerminalInput.ts", import.meta.url), "utf8");
   assert.match(controller, /onInputActivity: \(terminal\) => terminalInputActivityRef\.current\(terminal\)/);
+  assert.match(controller, /visibilityRestoreFallbackTimerRef/);
+  assert.match(controller, /window\.setTimeout\(refresh, 250\)/);
   assert.match(input, /onInputActivity\?\.\(terminal\);[\s\S]*terminalProcessManager\.write/);
   assert.match(input, /const pasteText = \(terminal: Terminal, text: string\) =>[\s\S]*onInputActivity\?\.\(terminal\);[\s\S]*terminal\.paste/);
 });

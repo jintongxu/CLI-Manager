@@ -105,6 +105,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
   const visibilityRestoreRevealTimerRef = useRef<number | null>(null);
   const visibilityRestoreRevealRafRef = useRef<number | null>(null);
   const visibilityRestoreFallbackRafRef = useRef<number | null>(null);
+  const visibilityRestoreFallbackTimerRef = useRef<number | null>(null);
   const codexCursorShowTimerRef = useRef<number | null>(null);
   const terminalInputActivityRef = useRef<(terminal: Terminal) => void>(() => {});
   const terminalRendererActivityAtRef = useRef(Date.now());
@@ -636,6 +637,10 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
       window.cancelAnimationFrame(visibilityRestoreFallbackRafRef.current);
       visibilityRestoreFallbackRafRef.current = null;
     }
+    if (visibilityRestoreFallbackTimerRef.current !== null) {
+      window.clearTimeout(visibilityRestoreFallbackTimerRef.current);
+      visibilityRestoreFallbackTimerRef.current = null;
+    }
   };
 
   const finishVisibilityRestoreReveal = () => {
@@ -646,14 +651,26 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
   };
 
   const scheduleVisibilityRestoreFallbackRefresh = () => {
-    visibilityRestoreFallbackRafRef.current = window.requestAnimationFrame(() => {
-      visibilityRestoreFallbackRafRef.current = window.requestAnimationFrame(() => {
+    const refresh = () => {
+      if (visibilityRestoreFallbackRafRef.current !== null) {
+        window.cancelAnimationFrame(visibilityRestoreFallbackRafRef.current);
         visibilityRestoreFallbackRafRef.current = null;
-        if (!visibilityRestorePendingRef.current || !isVisibleRef.current) return;
-        markViewportRefreshNeeded();
-        scheduleFit(true, true);
-      });
+      }
+      if (visibilityRestoreFallbackTimerRef.current !== null) {
+        window.clearTimeout(visibilityRestoreFallbackTimerRef.current);
+        visibilityRestoreFallbackTimerRef.current = null;
+      }
+      if (!visibilityRestorePendingRef.current || !isVisibleRef.current) return;
+      markViewportRefreshNeeded();
+      scheduleFit(true, true);
+    };
+    visibilityRestoreFallbackRafRef.current = window.requestAnimationFrame(() => {
+      visibilityRestoreFallbackRafRef.current = window.requestAnimationFrame(refresh);
     });
+    // Native windows may suspend both rAF callbacks while minimized or
+    // occluded. The timer makes restore recoverable without requiring another
+    // resize or a user click inside the terminal.
+    visibilityRestoreFallbackTimerRef.current = window.setTimeout(refresh, 250);
   };
 
   const beginVisibilityRestoreReveal = (deferViewportRefresh = false) => {
