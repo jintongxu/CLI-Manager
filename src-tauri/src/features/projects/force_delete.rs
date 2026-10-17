@@ -321,6 +321,19 @@ fn clear_readonly(path: &Path, meta: &fs::Metadata) -> io::Result<()> {
             permissions.set_readonly(false);
             fs::set_permissions(path, permissions)?;
         }
+        // Git/Windows tooling can leave hidden/system/archive bits on stale
+        // entries; clear only attributes on this exact identity-bound tree.
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Storage::FileSystem::{SetFileAttributesW, FILE_ATTRIBUTE_NORMAL};
+        let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+        wide.push(0);
+        let attributes = FILE_ATTRIBUTE_NORMAL;
+        if unsafe { SetFileAttributesW(wide.as_ptr(), attributes) } == 0 {
+            let error = io::Error::last_os_error();
+            if error.kind() != io::ErrorKind::NotFound {
+                return Err(error);
+            }
+        }
     }
     Ok(())
 }

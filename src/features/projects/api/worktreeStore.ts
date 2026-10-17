@@ -1,4 +1,10 @@
-import { WorktreeCreationError } from "./worktreeCreationRecovery";
+import {
+  beginWorktreeCreationMarker,
+  completeWorktreeCreationMarker,
+  reconcileWorktreeCreationMarkers,
+  updateWorktreeCreationMarker,
+  WorktreeCreationError,
+} from "./worktreeCreationRecovery";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { create } from "zustand";
@@ -154,7 +160,7 @@ function enqueueWorktreeOperation(
   req: ReturnType<typeof finishRequest>,
   mode: WorktreeDeleteMode,
   deleteBranch: boolean,
-  task: () => Promise<void>,
+  task: (markGitCompleted: () => Promise<void>) => Promise<void>,
   retryTransient = true,
   onTerminalFailure?: (error: unknown) => Promise<void>,
 ): Promise<void> {
@@ -174,12 +180,28 @@ function enqueueWorktreeOperation(
     try {
       if (retryTransient) {
         await runWorktreeWithRetry(
-          task,
+          () => task(async () => {
+            await invoke("git_worktree_delete_job_update", {
+              id: job.id,
+              expectedState: "running",
+              state: "running",
+              phase: "gitCompleted",
+              error: null,
+            });
+          }),
           async (error) => { await invoke("git_worktree_delete_job_update", { id: job.id, expectedState: "running", state: "retryWait", phase: "retryWait", error: String(error) }).catch(() => undefined); },
           async () => { await invoke("git_worktree_delete_job_update", { id: job.id, expectedState: "retryWait", state: "running", phase: "closingSessions", error: null }).catch(() => undefined); },
         );
       } else {
-        await task();
+        await task(async () => {
+          await invoke("git_worktree_delete_job_update", {
+            id: job.id,
+            expectedState: "running",
+            state: "running",
+            phase: "gitCompleted",
+            error: null,
+          });
+        });
       }
       await invoke("git_worktree_delete_job_update", { id: job.id, expectedState: "running", state: "completed", phase: "completed", error: null });
     } catch (error) {
@@ -310,6 +332,7 @@ export function isWorktreeCreateInProgressError(error: unknown): boolean {
 
 function mapCreateResultToRecord(
   projectId: string,
+  recordId: string,
   result: GitWorktreeCreateResult,
   displayName: string,
   description: string,
@@ -317,7 +340,7 @@ function mapCreateResultToRecord(
 ): Omit<WorktreeRecord, "label_ordinal"> {
   const ts = Date.now().toString();
   return {
-    id: crypto.randomUUID(),
+    id: recordId,
     project_id: projectId,
     name: result.name,
     display_name: displayName,
@@ -393,6 +416,25 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
     try {
       const worktrees = await db.select<WorktreeRecord[]>("SELECT * FROM worktrees ORDER BY created_at DESC");
       set({ worktrees, loaded: true });
+      const unresolved = reconcileWorktreeCreationMarkers(worktrees);
+      for (const marker of unresolved) {
+        if (!marker.worktreePath || !marker.branch || !marker.rootIdentity) {
+          logWarn("worktree creation recovery marker lacks an exact target", marker);
+          continue;
+        }
+        try {
+          await invoke("git_worktree_remove", {
+            projectPath: marker.projectPath,
+            worktreePath: marker.worktreePath,
+            rootIdentity: marker.rootIdentity,
+            branch: marker.branch,
+            deleteBranch: true,
+          });
+          completeWorktreeCreationMarker(marker.recordId);
+        } catch (error) {
+          logWarn("worktree creation recovery cleanup deferred", { marker, error });
+        }
+      }
     } catch (err) {
       if (!isMissingWorktreesTableError(err)) throw err;
       logWarn("worktree table is not available yet", err);
@@ -404,6 +446,22 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
     const jobs = await invoke<WorktreeDeleteJob[]>("git_worktree_delete_jobs");
     for (const job of latestWorktreeDeleteJobs(jobs).filter((item) => ["queued", "running", "retryWait", "needsReconfirmation"].includes(item.state))) {
       const worktree = get().worktrees.find((item) => item.id === job.request.worktreeId);
+      if (job.state === "running" && job.phase === "gitCompleted") {
+        if (!worktree) {
+          await invoke("git_worktree_delete_job_update", { id: job.id, expectedState: "running", state: "completed", phase: "completed", error: null }).catch((error) => logWarn("failed to finalize completed Worktree deletion job", { job, error }));
+          continue;
+        }
+        try {
+          const db = await getDb();
+          await db.execute("DELETE FROM worktrees WHERE id = $1", [worktree.id]);
+          set((state) => ({ worktrees: state.worktrees.filter((item) => item.id !== worktree.id) }));
+          useProjectStore.getState().removeWorktreeLocal(worktree.id);
+          await invoke("git_worktree_delete_job_update", { id: job.id, expectedState: "running", state: "completed", phase: "completed", error: null });
+          continue;
+        } catch (error) {
+          logWarn("failed to converge Worktree database after Git deletion", { job, error });
+        }
+      }
       if (["queued", "running", "retryWait"].includes(job.state)) {
         await invoke("git_worktree_delete_job_update", {
           id: job.id,
@@ -507,12 +565,13 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
     if (background) {
       const project = useProjectStore.getState().projects.find((item) => item.id === worktree.project_id);
       if (!project) throw new Error("project_not_found");
-      enqueueWorktreeOperation(worktree, finishRequest(worktree, project.path), "finish", deleteBranch, async () => {
+      enqueueWorktreeOperation(worktree, finishRequest(worktree, project.path), "finish", deleteBranch, async (markGitCompleted) => {
         await stopWorktreeProcesses(worktree);
         const state = await get().inspectFinish(worktree);
         if (state.blocker || state.unknown) throw new Error(state.blocker || "finish_cleanup_not_ready");
         if (state.done) {
           await get().finishCleanup(worktree, deleteBranch, { plan: null, sessionIds: useTerminalStore.getState().sessions.filter(item => item.worktreeId === worktree.id).map(item => item.id) }, undefined, false);
+          await markGitCompleted();
           return;
         }
         const freshPlan = await get().planFinishCleanup(worktree, deleteBranch);
@@ -523,7 +582,13 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
             plan: freshPlan,
             sessionIds: [...new Set([...useTerminalStore.getState().sessions.filter(item => item.worktreeId === worktree.id || isWithinWorktree(item.cwd, worktree.path)).map(item => item.id), ...freshPlan.sessionIds])],
           }, undefined, false);
+        } catch (error) {
+          if (String(error).includes("finish_database_failed")) {
+            await markGitCompleted().catch((markError) => logWarn("failed to persist finish Git completion", markError));
+          }
+          throw error;
         } finally { await get().releaseFinishCleanup(freshPlan).catch(() => undefined); }
+        await markGitCompleted();
       }, true, async () => {
         // Cleanup remains recoverable only through a fresh confirmation.
         await setRecoveredWorktreeStatus(worktree.id, "pending");
@@ -577,7 +642,7 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
       const project = useProjectStore.getState().projects.find((item) => item.id === worktree.project_id);
       if (!project) throw new Error("project_not_found");
       let gitCompleted = false;
-      enqueueWorktreeOperation(worktree, finishRequest(worktree, project.path), "force", true, async () => {
+      enqueueWorktreeOperation(worktree, finishRequest(worktree, project.path), "force", true, async (markGitCompleted) => {
         await stopWorktreeProcesses(worktree);
         if (gitCompleted) {
           const db = await getDb();
@@ -593,8 +658,12 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
         try {
           await get().forceDelete(worktree, fresh, fresh.confirmedPath, undefined, false);
           gitCompleted = true;
+          await markGitCompleted();
         } catch (error) {
-          if (String(error).includes("force_delete_database_failed")) gitCompleted = true;
+          if (String(error).includes("force_delete_database_failed")) {
+            gitCompleted = true;
+            await markGitCompleted().catch((markError) => logWarn("failed to persist force-delete Git completion", markError));
+          }
           throw error;
         }
       }, false, async () => {
@@ -616,7 +685,7 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
         return finishRequest(current, project.path);
       },
       sessionIds: () => useTerminalStore.getState().sessions.filter(item => item.worktreeId === worktree.id || isWithinWorktree(item.cwd, worktree.path)).map(item => item.id),
-      closeSession: id => useTerminalStore.getState().closeSession(id),
+      closeSession: id => useTerminalStore.getState().closeSession(id, true),
       releaseSessions: waitForSessionRelease,
       deleteRecord: async () => { const db = await getDb(); await db.execute("DELETE FROM worktrees WHERE id = $1", [worktree.id]); },
       removeLocal: () => {
@@ -654,6 +723,13 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
       throw new Error(WORKTREE_CREATE_IN_PROGRESS);
     }
     inFlightWorktreeCreates.add(creationKey);
+    const recordId = crypto.randomUUID();
+    let gitCreated = false;
+    beginWorktreeCreationMarker({
+      recordId,
+      projectPath: project.path,
+      taskName,
+    });
     try {
       await preflightShortLabel(project.id, shortLabel);
       const result = await invoke<GitWorktreeCreateResult>("git_worktree_create", {
@@ -663,10 +739,29 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
           worktreeRoot: project.worktree_root.trim() || null,
         },
       });
-      const pendingRecord = mapCreateResultToRecord(project.id, result, displayName, description, shortLabel);
+      gitCreated = true;
+      updateWorktreeCreationMarker(recordId, {
+        worktreePath: result.path,
+        branch: result.branch,
+        rootIdentity: result.rootIdentity,
+      });
+      const pendingRecord = mapCreateResultToRecord(project.id, recordId, result, displayName, description, shortLabel);
+      // The marker is the durable compensation record for a Git success followed
+      // by a database failure. Roll back only this exact, identity-bound target.
       try { await saveWorktreeRecord(pendingRecord); }
       catch (error) {
-        // Git succeeded: retain all objects; do not attempt unsafe rollback.
+        try {
+          await invoke("git_worktree_remove", {
+            projectPath: project.path,
+            worktreePath: result.path,
+            rootIdentity: result.rootIdentity,
+            branch: result.branch,
+            deleteBranch: true,
+          });
+          completeWorktreeCreationMarker(recordId);
+        } catch (rollbackError) {
+          logWarn("worktree creation rollback deferred to startup recovery", rollbackError);
+        }
         throw new WorktreeCreationError("save", pendingRecord, metadataWriteError(error));
       }
       let record: WorktreeRecord;
@@ -678,12 +773,16 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
       } catch (error) {
         throw new WorktreeCreationError("readback", pendingRecord, error);
       }
+      completeWorktreeCreationMarker(recordId);
       // The inserted record is authoritative for the new row. Refresh the full
       // project tree in the background so terminal creation is not blocked by it.
       set((state) => ({ worktrees: [record, ...state.worktrees.filter(item => item.id !== record.id)] }));
       useProjectStore.getState().addWorktreeLocal(record);
       void useProjectStore.getState().fetchAll("interactive").catch(() => {});
       return record;
+    } catch (error) {
+      if (!gitCreated) completeWorktreeCreationMarker(recordId);
+      throw error;
     } finally {
       inFlightWorktreeCreates.delete(creationKey);
     }
@@ -812,7 +911,7 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
     const project = useProjectStore.getState().projects.find((item) => item.id === worktree.project_id);
     if (!project) return Promise.reject(new Error("project_not_found"));
     let gitCompleted = false;
-    const removalTask = async () => {
+    const removalTask = async (markGitCompleted: () => Promise<void>) => {
     logInfo("Worktree discard started", { worktreeId: worktree.id, path: worktree.path });
       // Explicit discard remains destructive, but cannot close sessions or mutate
       // Git while a finish/commit operation owns this Worktree.
@@ -828,6 +927,7 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
           deleteBranch,
         });
         gitCompleted = true;
+        await markGitCompleted();
       }
       const db = await getDb();
       await db.execute("DELETE FROM worktrees WHERE id = $1", [worktree.id]);
@@ -837,7 +937,9 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
         void useProjectStore.getState().fetchAll("interactive").catch(() => {});
       }); } finally { releaseLaunchBarrier(); }
     };
-    const removal = enqueueWorktreeOperation(worktree, finishRequest(worktree, project.path), "discard", deleteBranch, removalTask, true, async () => {
+    const removal = enqueueWorktreeOperation(worktree, finishRequest(worktree, project.path), "discard", deleteBranch, async (markGitCompleted) => {
+      await removalTask(markGitCompleted);
+    }, true, async () => {
       // Discard is independent of finish receipts. A failed/partial destructive
       // removal must not call inspectFinish and surface legacy merge blockers.
       await setRecoveredWorktreeStatus(worktree.id, "missing");

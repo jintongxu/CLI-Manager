@@ -162,7 +162,7 @@ impl WorktreeDeleteQueue {
                 return Err("worktree_job_state_invalid".into());
             }
             let legal = match value.as_str() {
-                "running" => matches!(job.state.as_str(), "queued" | "retryWait"),
+                "running" => matches!(job.state.as_str(), "queued" | "running" | "retryWait"),
                 "retryWait" => job.state == "running",
                 "completed" => job.state == "running" && phase.as_deref() == Some("completed"),
                 "needsReconfirmation" => {
@@ -183,7 +183,7 @@ impl WorktreeDeleteQueue {
         if let Some(value) = phase {
             if !matches!(
                 value.as_str(),
-                "queued" | "closingSessions" | "retryWait" | "completed" | "needsReconfirmation"
+                "queued" | "closingSessions" | "gitCompleted" | "retryWait" | "completed" | "needsReconfirmation"
             ) {
                 return Err("worktree_job_phase_invalid".into());
             }
@@ -282,6 +282,8 @@ mod tests {
 
             let reloaded = WorktreeDeleteQueue::load_from_path(path.clone()).expect("reload");
             let persisted = reloaded.list().expect("list").pop().expect("persisted job");
+            let git_completed = reloaded.update(&job.id, Some("running".into()), Some("running".into()), Some("gitCompleted".into()), None).expect("git complete");
+            assert_eq!(git_completed.phase, "gitCompleted");
             assert_eq!(persisted.mode, mode);
             assert_eq!(persisted.state, "running");
             let recovered = reloaded.update(&job.id, Some("running".into()), Some("needsReconfirmation".into()), Some("needsReconfirmation".into()), Some("restart_requires_confirmation".into())).expect("recover");
@@ -298,6 +300,7 @@ mod tests {
             "queued",
             "running",
             "retryWait",
+            "gitCompleted",
             "completed",
             "needsReconfirmation",
         ] {
@@ -305,6 +308,7 @@ mod tests {
                 "queued",
                 "running",
                 "retryWait",
+                "gitCompleted",
                 "completed",
                 "needsReconfirmation",
             ]

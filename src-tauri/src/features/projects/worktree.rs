@@ -18,7 +18,7 @@ use std::time::Duration;
 
 const WORKTREE_BRANCH_PREFIX: &str = "wt/";
 const MAX_TASK_NAME_LEN: usize = 64;
-const WORKTREE_REMOVE_RETRY_ATTEMPTS: usize = 5;
+const WORKTREE_REMOVE_RETRY_ATTEMPTS: usize = 20;
 const WORKTREE_REMOVE_RETRY_DELAY_MS: u64 = 250;
 const RESERVED_WINDOWS_NAMES: &[&str] = &[
     "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
@@ -452,7 +452,9 @@ where
                         || is_retryable_worktree_remove_error(&err.to_string())) =>
             {
                 last_error = err.to_string();
-                thread::sleep(Duration::from_millis(WORKTREE_REMOVE_RETRY_DELAY_MS));
+                let delay = WORKTREE_REMOVE_RETRY_DELAY_MS
+                    .saturating_mul(1u64 << attempt.min(5));
+                thread::sleep(Duration::from_millis(delay.min(2_000)));
             }
             Err(err) => return Err(format!("remove_stale_worktree_dir_failed: {err}")),
         }
@@ -484,10 +486,23 @@ fn worktree_root_metadata(path: &Path) -> Result<Option<fs::Metadata>, String> {
     }
 }
 
+// 普通丢弃专用的保守删除器：只处理普通目录/文件和 Unix symlink，
+// 不复用强制删除模块的属性清理与删除策略。
 fn remove_worktree_tree(path: &Path) -> io::Result<()> {
-    // Use the same explicit symlink/reparse-safe walker as finish and force
-    // delete; never delegate recursive removal to remove_dir_all.
-    finish::force_delete::unlink_tree(path)
+    let meta = fs::symlink_metadata(path)?;
+    if meta.file_type().is_symlink() {
+        return fs::remove_file(path);
+    }
+    if meta.is_dir() {
+        for entry in fs::read_dir(path)? {
+            remove_worktree_tree(&entry?.path())?;
+        }
+        fs::remove_dir(path)
+    } else if meta.is_file() {
+        fs::remove_file(path)
+    } else {
+        Err(io::Error::other("worktree_remove_unsupported_entry"))
+    }
 }
 
 pub(crate) fn worktree_root_identity(path: &Path) -> Result<String, String> {
@@ -757,20 +772,33 @@ fn cleanup_empty_worktree_parent(worktree_path: &Path) {
     }
 }
 
-// 仅清理未登记的空目录或缺失登记，并按请求删除残留分支。
+// 清理未登记残留：有匹配的持久化根身份时允许安全 walker 删除非空目录；
+// 没有身份凭据时仍只允许删除空目录，避免把外部目录当作 Worktree。
 fn cleanup_stale_unregistered_worktree(
     project_path: &Path,
     target_path: &Path,
+    root_identity: &str,
     branch: &str,
     delete_branch: bool,
 ) -> Result<String, String> {
     let mut output = String::new();
     if let Some(metadata) = worktree_root_metadata(target_path)? {
-        if unsafe_worktree_link(&metadata) || !metadata.is_dir() || !is_empty_dir(target_path)? {
+        if unsafe_worktree_link(&metadata) || !metadata.is_dir() {
             return Err("worktree_not_registered".to_string());
         }
-        remove_worktree_path_with_retry(target_path, |path| fs::remove_dir(path))?;
-        output.push_str("removed_stale_empty_worktree_dir");
+        if !root_identity.is_empty() {
+            if worktree_root_identity(target_path)? != root_identity {
+                return Err("worktree_root_replaced".to_string());
+            }
+            remove_worktree_path_with_retry(target_path, remove_worktree_tree)?;
+            output.push_str("removed_stale_registered_worktree_dir");
+        } else {
+            if !is_empty_dir(target_path)? {
+                return Err("worktree_not_registered".to_string());
+            }
+            remove_worktree_path_with_retry(target_path, |path| fs::remove_dir(path))?;
+            output.push_str("removed_stale_empty_worktree_dir");
+        }
     } else {
         output.push_str(&run_git_checked(project_path, ["worktree", "prune"])?);
     }
@@ -1394,6 +1422,7 @@ pub async fn git_worktree_remove(
                 let output = cleanup_stale_unregistered_worktree(
                     &project_path,
                     &target_path,
+                    &root_identity,
                     &branch,
                     delete_branch,
                 )?;

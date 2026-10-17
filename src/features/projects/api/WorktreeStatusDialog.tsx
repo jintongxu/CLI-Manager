@@ -56,7 +56,9 @@ export function WorktreeStatusDialog({ open, project, worktree, onClose, onForce
   const state = current?.state;
   const loading = !current || current.loading;
   const raw = current?.error ?? state?.blocker;
-  const legacyResidual = raw?.split(':')[0].trim() === 'finish_legacy_residual_manual_review';
+  const rawCode = raw?.split(':')[0].trim();
+  const legacyResidual = rawCode === 'finish_legacy_residual_manual_review';
+  const unregisteredResidual = rawCode === 'worktree_not_registered';
   const summaryKey: TranslationKey = loading ? 'worktree.statusView.loading'
     : current?.error ? 'worktree.statusView.error'
     : state ? `worktree.statusView.summary.${worktreeStatusSummary(state)}` : 'worktree.statusView.summary.unknown';
@@ -97,7 +99,7 @@ export function WorktreeStatusDialog({ open, project, worktree, onClose, onForce
         </div>}
       </div>
       <DialogFooter>
-        {legacyResidual && <Button
+        {(legacyResidual || unregisteredResidual) && <Button
           variant="destructive"
           onClick={() => { close(); onForceDelete(project, worktree); }}
         >

@@ -7,6 +7,7 @@ import {
   type TerminalProcessTraits,
 } from "../transport/PtyHostSocket";
 import { writeResourceDiagnostic } from "../../../shared/platform/resourceDiagnosticsLog";
+import { TerminalWriteGate } from "./terminalWriteGate";
 
 const OUTPUT_BACKLOG_WARN_BYTES = 4 * 1024 * 1024;
 const OUTPUT_BACKLOG_WARN_FRAMES = 1024;
@@ -138,6 +139,7 @@ export class TerminalProcessManager {
   private readonly deferredStartups = new Map<string, Promise<void>>();
   private readonly processTraits = new Map<string, TerminalProcessTraits>();
   private readonly interactivePriorityAt = new Map<string, number>();
+  private readonly writeGate = new TerminalWriteGate();
 
   create(request: TerminalCreateRequest): Promise<string> {
     return invoke<PreparedTerminalCreate>("pty_prepare_create", request).then(async (prepared) => {
@@ -169,7 +171,7 @@ export class TerminalProcessManager {
     if (data.includes("\r")) {
       this.interactivePriorityAt.set(sessionId, Date.now());
     }
-    return ptyHostSocket.write(sessionId, data);
+    return this.writeGate.enqueue(sessionId, () => ptyHostSocket.write(sessionId, data));
   }
 
   // 调度器调用：回车后首个可见写优先一次，消费即清除；超时或隐藏终端不命中。
@@ -218,7 +220,7 @@ export class TerminalProcessManager {
   }
 
   writeBinary(sessionId: string, data: string): Promise<void> {
-    return ptyHostSocket.writeBinary(sessionId, data);
+    return this.writeGate.enqueue(sessionId, () => ptyHostSocket.writeBinary(sessionId, data));
   }
 
   setTerminalColors(sessionId: string, colors: TerminalColors): Promise<void> {
@@ -246,7 +248,9 @@ export class TerminalProcessManager {
   }
 
   close(sessionId: string, requireBackendClose = false): Promise<void> {
+    this.writeGate.beginClose(sessionId);
     const clear = () => {
+      this.writeGate.finishClose(sessionId);
       this.clearOutputState(sessionId);
       this.mountedDisplays.delete(sessionId);
       this.deferredStartups.delete(sessionId);
@@ -254,8 +258,18 @@ export class TerminalProcessManager {
       this.interactivePriorityAt.delete(sessionId);
       forgetTerminalQuerySession(sessionId);
     };
-    const closed = ptyHostSocket.close(sessionId, requireBackendClose);
-    return requireBackendClose ? closed.then(clear) : closed.finally(clear);
+    const closed = this.writeGate.waitForWrites(sessionId)
+      .then(() => ptyHostSocket.close(sessionId, requireBackendClose));
+    if (requireBackendClose) {
+      return closed.then(clear, (error) => {
+        // A strict close failure keeps the visible session alive so the caller
+        // can retry; release the gate for that retry instead of leaving input
+        // permanently suppressed.
+        this.writeGate.finishClose(sessionId);
+        throw error;
+      });
+    }
+    return closed.finally(clear);
   }
 
   closeAll(): Promise<void> {
