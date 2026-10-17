@@ -3,6 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { logInfo, logWarn } from "../../../shared/platform/logger";
 import { writeResourceDiagnostic } from "../../../shared/platform/resourceDiagnosticsLog";
 import type { TerminalBinaryFrame } from "../../../shared/types/terminalFrame";
+import { shouldExpirePtyHostHeartbeat } from "./ptyHostHeartbeat";
 export type { TerminalBinaryFrame } from "../../../shared/types/terminalFrame";
 
 const BINARY_PROTOCOL_VERSION = 1;
@@ -169,7 +170,9 @@ export class PtyHostSocket {
   private readonly closedSessions = new Set<string>();
   private heartbeatTimer: number | null = null;
   private reconnectTimer: number | null = null;
+  private heartbeatVisibilityListenerAttached = false;
   private lastPongAt = 0;
+  private lastHeartbeatCheckAt = 0;
   private connectedFeatures = new Set<string>();
   private transportMode: "websocket" | "legacy" | null = null;
   private legacyOutputUnlisten: UnlistenFn | null = null;
@@ -1061,10 +1064,22 @@ export class PtyHostSocket {
   private startHeartbeat(): void {
     this.stopHeartbeat();
     this.lastPongAt = Date.now();
+    this.lastHeartbeatCheckAt = this.lastPongAt;
+    this.attachHeartbeatVisibilityListeners();
     this.heartbeatTimer = window.setInterval(() => {
       const socket = this.socket;
       if (!socket || socket.readyState !== WebSocket.OPEN) return;
-      if (Date.now() - this.lastPongAt > HEARTBEAT_TIMEOUT_MS) {
+      const now = Date.now();
+      const callbackDelayed = now - this.lastHeartbeatCheckAt > HEARTBEAT_INTERVAL_MS * 2;
+      this.lastHeartbeatCheckAt = now;
+      if (this.isHeartbeatSuspended() || callbackDelayed) {
+        // Chromium throttles background/minimized WebView timers. A delayed
+        // callback must not turn an otherwise healthy daemon into a false
+        // heartbeat timeout when the window is restored.
+        this.lastPongAt = Date.now();
+        return;
+      }
+      if (shouldExpirePtyHostHeartbeat(this.lastPongAt, now, HEARTBEAT_TIMEOUT_MS, callbackDelayed)) {
         const error = new Error(`PtyHost heartbeat timed out after ${HEARTBEAT_TIMEOUT_MS}ms`);
         this.handleDisconnect(error, socket, {
           cause: "heartbeat-timeout",
@@ -1078,10 +1093,56 @@ export class PtyHostSocket {
   }
 
   private stopHeartbeat(): void {
-    if (this.heartbeatTimer === null) return;
-    window.clearInterval(this.heartbeatTimer);
-    this.heartbeatTimer = null;
+    if (this.heartbeatTimer !== null) {
+      window.clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+    this.detachHeartbeatVisibilityListeners();
   }
+
+  private isHeartbeatSuspended(): boolean {
+    // Only document visibility indicates WebView timer throttling. Window focus
+    // can move to a dialog or another pane while the app remains fully alive;
+    // suspending the shared socket heartbeat for that state would be unsafe.
+    return typeof document !== "undefined" && document.visibilityState === "hidden";
+  }
+
+  private attachHeartbeatVisibilityListeners(): void {
+    if (this.heartbeatVisibilityListenerAttached || typeof document === "undefined") return;
+    document.addEventListener("visibilitychange", this.handleHeartbeatVisibilityChange);
+    window.addEventListener("blur", this.handleHeartbeatVisibilityChange);
+    window.addEventListener("focus", this.handleHeartbeatVisibilityChange);
+    this.heartbeatVisibilityListenerAttached = true;
+  }
+
+  private detachHeartbeatVisibilityListeners(): void {
+    if (!this.heartbeatVisibilityListenerAttached || typeof document === "undefined") return;
+    document.removeEventListener("visibilitychange", this.handleHeartbeatVisibilityChange);
+    window.removeEventListener("blur", this.handleHeartbeatVisibilityChange);
+    window.removeEventListener("focus", this.handleHeartbeatVisibilityChange);
+    this.heartbeatVisibilityListenerAttached = false;
+  }
+
+  private handleHeartbeatVisibilityChange = (): void => {
+    const now = Date.now();
+    this.lastHeartbeatCheckAt = now;
+    if (this.isHeartbeatSuspended()) {
+      this.lastPongAt = now;
+      return;
+    }
+    this.lastPongAt = now;
+    const socket = this.socket;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    try {
+      this.send({ type: "ping", id: this.nextRequestId++ });
+    } catch (error) {
+      this.handleDisconnect(error instanceof Error ? error : new Error(String(error)), socket, {
+        cause: "error",
+        authenticated: true,
+      });
+      socket.close();
+    }
+  };
 
   private clearSession(sessionId: string): void {
     this.attachedSessions.delete(sessionId);

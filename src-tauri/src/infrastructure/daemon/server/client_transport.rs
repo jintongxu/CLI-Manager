@@ -27,6 +27,9 @@ pub(super) enum ClientWireFrame {
         rows: u16,
         data: Vec<u8>,
     },
+    TransportPing {
+        payload: Vec<u8>,
+    },
 }
 
 impl ClientTransport {
@@ -41,6 +44,9 @@ impl ClientTransport {
                     .map_err(|err| err.to_string()),
                 ClientWireFrame::BinaryTerminal { .. } => {
                     Err("binary terminal frame is unavailable on ndjson transport".to_string())
+                }
+                ClientWireFrame::TransportPing { .. } => {
+                    Err("transport ping is unavailable on ndjson transport".to_string())
                 }
             },
             Self::WebSocket(socket) => {
@@ -89,6 +95,9 @@ impl ClientTransport {
                         .send(Message::Text(
                             encode_frame(frame).trim_end().to_string().into(),
                         ))
+                        .map_err(|err| err.to_string()),
+                    ClientWireFrame::TransportPing { payload } => socket
+                        .send(Message::Ping(payload.clone().into()))
                         .map_err(|err| err.to_string()),
                 }
             }
@@ -242,6 +251,11 @@ impl ClientWriter {
                 };
                 if let Err(err) = transport.send_frame(&frame) {
                     log::debug!("daemon client writer stopped: {err}");
+                    let (lock, changed) = &*thread_shared;
+                    if let Ok(mut state) = lock.lock() {
+                        state.closed = true;
+                        changed.notify_all();
+                    }
                     break;
                 }
             }
@@ -318,6 +332,19 @@ impl ClientWriter {
         });
         changed.notify_one();
         Ok(())
+    }
+
+    pub(super) fn is_closed(&self) -> bool {
+        let (lock, _) = &*self.shared;
+        lock.lock().map(|state| state.closed).unwrap_or(true)
+    }
+
+    // 入队一个低成本 WebSocket transport ping；控制队列优先于输出队列。
+    pub(super) fn send_transport_ping(&self, payload: Vec<u8>) -> Result<(), String> {
+        if !self.websocket {
+            return Err("transport ping is unavailable on ndjson transport".to_string());
+        }
+        self.send_control(ClientWireFrame::TransportPing { payload })
     }
 
     // 只设置共享关闭标记并唤醒写线程，不等待线程退出，也不直接操作 socket。
