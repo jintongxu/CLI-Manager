@@ -13,6 +13,7 @@ const load = (path, require) => {
   return exports;
 };
 const terminalProject = load("./terminalProject.ts", () => ({ getWorktreeDisplayName: (worktree) => worktree.name }));
+const { shouldAddSessionToCurrentWork } = load("./anonymousPiSession.ts", () => ({}));
 const { resolveTerminalCreationContext: resolve, withoutTerminalTitle } = load("./terminalCreationContext.ts", (id) => {
   if (id === "./terminalProject") return terminalProject;
   if (id.endsWith("groupPath")) return { resolveProjectPath: (project) => project.remote_path || project.path };
@@ -23,6 +24,13 @@ const project = { id: "p", path: "/repo", shell: "bash", env_vars: '{"PROJECT":"
 const worktree = { id: "w", project_id: "p", path: "/repo-w", status: "active" };
 const source = { id: "s", projectId: "p", worktreeId: "w", cwd: "/repo-w", title: "Custom", titleNaming: { kind: "custom" }, startupCmd: "codex resume old", cliSessionId: "old", shell: "zsh", envVars: { LOCAL: "yes" }, sshHostId: "host" };
 const plain = (value) => JSON.parse(JSON.stringify(value));
+
+test("current-work admission includes anonymous Pi but excludes background sessions", () => {
+  assert.equal(shouldAddSessionToCurrentWork({ sessionKind: "ephemeral-pi" }, false), false);
+  assert.equal(shouldAddSessionToCurrentWork({ sessionKind: "ephemeral-pi" }, true), true);
+  assert.equal(shouldAddSessionToCurrentWork(undefined, true), true);
+  assert.equal(shouldAddSessionToCurrentWork({ transientBackground: true }, true), false);
+});
 
 test("ordinary creation inherits environment, not title, naming or startup identity", () => {
   const context = resolve(source, [source], [project], [worktree], []);
