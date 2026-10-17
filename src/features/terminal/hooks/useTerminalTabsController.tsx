@@ -24,7 +24,7 @@ import type { TerminalPaneLeaf, TerminalPaneSplitDirection } from "../api/termin
 import { type BackgroundTaskMeta } from "../components/BackgroundTasksPanel";
 import { TERMINAL_SIDE_PANEL_TAB_ORDER, type TerminalSidePanelTab } from "../components/TerminalSidePanel";
 import { openWindowsTerminal } from "../api/externalTerminal";
-import { createAnonymousPiSessionHandler } from "../api/anonymousPiSession";
+import { createAnonymousPiSessionHandler, shouldAddSessionToCurrentWork } from "../api/anonymousPiSession";
 import { resolveProjectPath } from "../../projects/api/groupPath";
 import { normalizeDirectCodexStartupCommand } from "../../projects/api/projectStartupCommand";
 import {
@@ -119,9 +119,9 @@ export function useTerminalTabsController({
   const currentWorkReturnRef = useRef<{ workspanId: string | null; sessionId: string | null } | null>(null);
   const createSession = useCallback(async (...args: Parameters<typeof createTerminalSession>) => {
     const sessionId = await createTerminalSession(...args);
-    if (!args[12]?.sessionKind && !args[12]?.transientBackground) addCurrentWorkSession(sessionId);
+    if (shouldAddSessionToCurrentWork(args[12], currentWorkMode)) addCurrentWorkSession(sessionId);
     return sessionId;
-  }, [addCurrentWorkSession, createTerminalSession]);
+  }, [addCurrentWorkSession, createTerminalSession, currentWorkMode]);
   const splitTerminalAndAdd = useCallback(async (...args: Parameters<typeof splitTerminal>) => {
     const sessionId = await splitTerminal(...args);
     if (sessionId) addCurrentWorkSession(sessionId);
