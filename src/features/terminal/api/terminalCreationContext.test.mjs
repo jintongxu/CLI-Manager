@@ -63,6 +63,13 @@ test("pane edge parsing preserves current-work pane IDs containing colons", () =
   });
 });
 
+test("worktree split creation dispatches its session into current work", () => {
+  const sidebar = readFileSync(new URL("../../projects/hooks/useSidebarController.tsx", import.meta.url), "utf8");
+  const createSplit = sidebar.slice(sidebar.indexOf("const createAndSplitWorktree"), sidebar.indexOf("const openProjectInternal"));
+  assert.match(createSplit, /const sessionId = await splitTerminal/);
+  assert.match(createSplit, /if \(sessionId\) dispatchCurrentWorkSessionCreated\(sessionId\)/);
+});
+
 test("current-work drag keeps tab sorting and supports pane edge splitting", () => {
   const tabs = readFileSync(new URL("../hooks/useTerminalTabsController.tsx", import.meta.url), "utf8");
   const dragOver = tabs.slice(tabs.indexOf("const handleDragOver ="), tabs.indexOf("const handleDragEnd ="));
