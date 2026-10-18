@@ -34,6 +34,24 @@ export function createTerminalTabLifecycle(
       await persistence.saveActiveSessionId(current.activeSessionId);
       await persistence.saveWorkspans(current.workspans, current.activeWorkspanId, current.sessions);
     },
+    showSessions: async (ids: readonly string[]): Promise<void> => {
+      const visibleIds = new Set(ids);
+      const state = get();
+      const sessions = state.sessions.map((item) => visibleIds.has(item.id) && item.tabHidden ? { ...item, tabHidden: false } : item);
+      if (sessions.every((session, index) => session === state.sessions[index])) return;
+      set({ sessions });
+      await saveSessions(sessions);
+    },
+    inheritSessionTitle: (id: string, title: string): void => {
+      const trimmed = title.trim();
+      if (!trimmed) return;
+      const sessions = get().sessions.map((session) => {
+        if (session.id !== id || session.titleNaming?.source === "custom" || session.titleNaming?.source === "task") return session;
+        return session.title === trimmed ? session : { ...session, title: trimmed, titleNaming: { source: "task" as const } };
+      });
+      set({ sessions });
+      void saveSessions(sessions);
+    },
     reopenSession: (id: string): void => {
       // Explicit navigation is the only path that clears tabHidden. No create/attach.
       get().setActive(id);

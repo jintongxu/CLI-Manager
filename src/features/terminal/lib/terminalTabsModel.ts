@@ -107,6 +107,8 @@ export type SplitPickerState = {
 
 export type TerminalCloseConfirmState = {
   sessionIds: string[];
+  protectedSessionIds?: string[];
+  destroy?: boolean;
   x: number;
   y: number;
   align: SplitPickerAlign;

@@ -677,16 +677,18 @@ export function useSidebarController({
     if (rejectMissingWorktree(worktree)) return false;
     const projectOptions = projectWithWorktreeProviderOverrides(project, worktree);
     const options = buildProjectSplitOptions(projectOptions);
+    const inheritedTitle = title ?? getWorktreeSidebarLabel(worktree);
     const sessionId = await createSession(
       options.projectId,
       worktree.path,
-      title,
+      inheritedTitle,
       startupCmd ?? options.startupCmd,
       options.envVars,
       options.shell,
       targetPaneId,
       worktree.id,
     );
+    useTerminalStore.getState().inheritSessionTitle(sessionId, inheritedTitle);
     dispatchCurrentWorkSessionCreated(sessionId);
     closeHistory();
     return true;
@@ -1001,7 +1003,7 @@ export function useSidebarController({
   }, [projects, selectedWorktreeIds, worktrees]);
 
   const handleOpenWorktree = useCallback((project: Project, worktree: WorktreeRecord) => {
-    void openWorktreeSession(project, worktree).then((opened) => {
+    void openWorktreeSession(project, worktree, undefined, undefined, getWorktreeSidebarLabel(worktree)).then((opened) => {
       if (opened) void maybeInstallWorktreeDeps(project, worktree);
     });
   }, []);

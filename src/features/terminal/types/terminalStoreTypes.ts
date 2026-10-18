@@ -217,6 +217,7 @@ export interface TerminalStore {
   /** Explicit destructive deletion, including hidden sessions. */
   closeSession: (id: string, requireBackendClose?: boolean) => Promise<void>;
   hideSession: (id: string) => Promise<void>;
+  showSessions: (ids: readonly string[]) => Promise<void>;
   reopenSession: (id: string) => void;
   setActive: (id: string) => void;
   setWorkspanModeEnabled: (enabled: boolean) => void;
@@ -253,6 +254,7 @@ export interface TerminalStore {
   detachSessionToWorkspan: (sessionId: string, insertAt?: number) => void;
   splitSessionToPaneEdge: (sessionId: string, targetPaneId: string, edge: TerminalPaneDropEdge) => void;
   renameSession: (id: string, title: string) => void;
+  inheritSessionTitle: (id: string, title: string) => void;
   splitTerminal: (sessionId: string, direction: TerminalPaneSplitDirection, options?: SplitTerminalOptions) => Promise<string | null>;
   openFileEditorPane: (project: Project) => string;
   openSyncedHistoryPane: (group: SyncedHistoryGroup, project?: Project) => Promise<string>;

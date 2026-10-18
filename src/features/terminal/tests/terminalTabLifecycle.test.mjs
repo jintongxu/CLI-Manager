@@ -21,6 +21,7 @@ const pane = load("../api/terminalPaneTree.ts");
 const workspan = load("../api/terminalWorkspan.ts", pane);
 const visibility = load("../lib/terminalTabVisibility.ts", pane);
 const currentWork = load("../lib/currentWorkModel.ts");
+const batchClose = load("../api/terminalBatchClose.ts");
 const layout = load("../lib/terminalStoreLayout.ts", { ...visibility, ...currentWork });
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const rendererPolicy = load("../types/xTermModel.ts");
@@ -31,6 +32,17 @@ const naming = load("../lib/terminalSessionNaming.ts", {
 });
 const agent = load("../../agents/api/agentTerminal.ts");
 const worktreeAdmission = load("../lib/worktreeSessionAdmission.ts");
+
+test("close-other batch never calls close for current-work protected sessions", async () => {
+  const closed = [];
+  await batchClose.closeTerminalSessions(
+    ["outside-a", "current-a", "outside-b", "current-b"],
+    ["current-a", "current-b"],
+    async (sessionId) => closed.push(sessionId),
+    () => assert.fail("close should not fail"),
+  );
+  assert.deepEqual(closed, ["outside-a", "outside-b"]);
+});
 
 test("terminal renderer refreshes after the idle threshold but not before it", () => {
   const threshold = rendererPolicy.TERMINAL_IDLE_RENDER_REFRESH_MS;
@@ -289,7 +301,7 @@ test("render contracts keep backing trees and xterm mounted even after the last 
   assert.match(view, /visibleSessions\.length === 0/);
   assert.match(leaf, /paneSessions\.map\(\(session\)/);
   assert.match(leaf, /<XTermTerminal/);
-  assert.match(controller, /await hideSession\(sessionId\)/);
+  assert.match(controller, /closeTerminalSessions\(sessionIds, protectedSessionIds, destroy \? destroySession : hideSession/);
   assert.match(controller, /visibleSessionIds=\{visibleSessionIds\}/);
   assert.match(controller, /!isHideableTerminalSession\(session\)/);
 });

@@ -110,6 +110,8 @@ export function TerminalTabsView({
   activateWorkspanTab,
   handleHideProjectTerminals,
   handleCloseSessions,
+  closeOtherTerminals,
+  canCloseOtherTerminals,
   projectById,
   projects,
   worktrees,
@@ -383,10 +385,13 @@ export function TerminalTabsView({
                         });
                       }, 0)}
                       onClear={clearCurrentWork}
+                      onCloseOtherTerminals={closeOtherTerminals}
+                      canCloseOtherTerminals={canCloseOtherTerminals}
                       onExit={leaveCurrentWork}
                       label={t("terminal.currentWork.title")}
                       exitLabel={t("terminal.currentWork.exit")}
                       clearLabel={t("terminal.currentWork.clear")}
+                      closeOtherLabel={t("terminal.currentWork.closeOtherTerminals")}
                       selectedLabel={(count) => t("terminal.currentWork.selected", { count })}
                       statusLabels={{ hidden: t("terminal.currentWork.hidden"), sshDisconnected: t("terminal.currentWork.sshDisconnected"), worktreeMissing: t("terminal.currentWork.worktreeMissing") }}
                       contextLabels={{ unboundProject: t("terminal.context.unboundProject"), anonymousPi: t("terminal.context.anonymousPi"), missingWorktree: t("terminal.context.worktreeMissing"), defaultShell: t("terminal.context.defaultShell") }}
@@ -561,10 +566,13 @@ export function TerminalTabsView({
                       onRemove={() => undefined}
                       onRename={() => undefined}
                       onClear={() => undefined}
+                      onCloseOtherTerminals={() => undefined}
+                      canCloseOtherTerminals={false}
                       onExit={() => activateCurrentWork()}
                       label={t("terminal.currentWork.title")}
                       exitLabel={t("terminal.currentWork.open")}
                       clearLabel={t("terminal.currentWork.clear")}
+                      closeOtherLabel={t("terminal.currentWork.closeOtherTerminals")}
                       selectedLabel={(count) => t("terminal.currentWork.selected", { count })}
                       statusLabels={{ hidden: t("terminal.currentWork.hidden"), sshDisconnected: t("terminal.currentWork.sshDisconnected"), worktreeMissing: t("terminal.currentWork.worktreeMissing") }}
                       contextLabels={{ unboundProject: t("terminal.context.unboundProject"), anonymousPi: t("terminal.context.anonymousPi"), missingWorktree: t("terminal.context.worktreeMissing"), defaultShell: t("terminal.context.defaultShell") }}

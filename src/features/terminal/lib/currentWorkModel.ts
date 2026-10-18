@@ -12,6 +12,16 @@ export interface CurrentWorkSessionState {
   activeSessionId: string | null;
 }
 
+export function collectOtherSessionIds(
+  sessions: readonly { id: string; tabHidden?: boolean }[],
+  currentWorkSessionIds: readonly string[],
+): string[] {
+  const currentWorkIds = new Set(currentWorkSessionIds);
+  return sessions
+    .filter((session) => !session.tabHidden && !currentWorkIds.has(session.id))
+    .map((session) => session.id);
+}
+
 export function appendCurrentWorkSession(
   sessionIds: readonly string[],
   activeSessionId: string | null,

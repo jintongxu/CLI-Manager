@@ -40,6 +40,8 @@ import { useHistoryStore } from "../../history/index";
 import { useGitWorkspaceStore } from "../../git/api/gitWorkspaceStore";
 import { useSaveSessionToSidebar } from "../../projects/api/useSaveSessionToSidebar";
 import { shouldConfirmTerminalTabClose, TERMINAL_TAB_CLOSE_REQUEST_EVENT, type TerminalTabCloseRequestDetail } from "../api/terminalCloseConfirm";
+import { closeTerminalSessions, excludeProtectedSessionIds } from "../api/terminalBatchClose";
+import { useCloseOtherTerminals } from "./useCloseOtherTerminals";
 import type { Project, TerminalSession, WorktreeRecord } from "../../../shared/types/index";
 import type { NativeProviderAppType } from "../../settings/api/nativeProviderTypes";
 import { getTerminalTheme, isLightTerminalTheme } from "../../../shared/lib/terminalThemes";
@@ -68,7 +70,7 @@ import { resolveNewTabSource } from "../api/terminalProjectSelection";
 import { buildTerminalProjectOptions, resolveWorkspanIdOrderByProjectMove } from "../api/terminalProjectTabsModel";
 import { useTerminalProjectSelection } from "./useTerminalProjectSelection";
 import { useWorkspanTabOverflow } from "./useWorkspanTabOverflow";
-import { useCurrentWorkSessionController } from "./useCurrentWorkSessionController";
+import { useCurrentWorkSessionController } from "./useCurrentWorkSessionController"; import { collectOtherSessionIds } from "../lib/currentWorkModel";
 import { useCurrentWorkPortalTargets } from "./useCurrentWorkPortalTargets";
 export function useTerminalTabsController({
   fullscreen = false,
@@ -100,7 +102,7 @@ export function useTerminalTabsController({
   const persistedCurrentWorkPaneTree = useSessionStore((s) => s.currentWorkPaneTree);
   const {
     currentWorkMode, setCurrentWorkMode, currentWorkSessionIds, currentWorkActiveSessionId,
-    currentWorkPaneTree, currentWorkFullscreenPaneId,
+    currentWorkPaneTree, currentWorkFullscreenPaneId, currentWorkSessionIdsRef,
     selectedCurrentWorkSessionIds, addCurrentWorkSession, removeCurrentWorkSessions,
     activateCurrentWorkSession, toggleCurrentWork, toggleCurrentWorkSelection, reorderCurrentWork,
     splitCurrentWorkSessionToPaneEdge, moveCurrentWorkSessionToPane,
@@ -185,6 +187,8 @@ export function useTerminalTabsController({
   const restoreWorkspanToSinglePane = useTerminalStore((s) => s.restoreWorkspanToSinglePane);
   const mergeWorkspanAtPaneEdge = useTerminalStore((s) => s.mergeWorkspanAtPaneEdge);
   const hideSession = useTerminalStore((s) => s.hideSession);
+  const destroySession = useTerminalStore((s) => s.closeSession);
+  const showSessions = useTerminalStore((s) => s.showSessions);
   const reorderSessions = useTerminalStore((s) => s.reorderSessions);
   const moveSessionToPane = useTerminalStore((s) => s.moveSessionToPane);
   const detachSessionToWorkspan = useTerminalStore((s) => s.detachSessionToWorkspan);
@@ -848,23 +852,16 @@ export function useTerminalTabsController({
       (sessionId, err) => logError("Failed to hide project terminal", { sessionId, err }));
   }, [hideSession]);
 
-  const closeSessionIds = useCallback((sessionIds: string[]) => {
-    void (async () => {
-      for (const sessionId of sessionIds) {
-        try {
-          await hideSession(sessionId);
-        } catch (err) {
-          logError("Failed to close terminal session", { sessionId, err });
-        }
-      }
-    })();
-  }, [hideSession]);
-
-  const closeSessionsWithDirtyGuard = useCallback(async (sessionIds: string[]) => {
+  const closeSessionIds = useCallback((sessionIds: string[], protectedSessionIds: readonly string[] = [], destroy = false) => {
+    void closeTerminalSessions(sessionIds, protectedSessionIds, destroy ? destroySession : hideSession,
+      (sessionId, err) => logError("Failed to close terminal session", { sessionId, err }));
+  }, [destroySession, hideSession]);
+  const closeSessionsWithDirtyGuard = useCallback(async (sessionIds: string[], protectedSessionIds: readonly string[] = [], destroy = false) => {
+    const closeableSessionIds = excludeProtectedSessionIds(sessionIds, protectedSessionIds);
     const currentSessions = useTerminalStore.getState().sessions;
     const fileStore = useFileExplorerStore.getState();
     const fileProjects = currentSessions
-      .filter((session) => sessionIds.includes(session.id) && session.kind === "file-editor")
+      .filter((session) => closeableSessionIds.includes(session.id) && session.kind === "file-editor")
       .map((session) => session.fileEditor?.project)
       .filter((project): project is Project => Boolean(project))
       .filter((project, index, projects) => (
@@ -890,10 +887,9 @@ export function useTerminalTabsController({
       if (!confirmed) return;
     }
 
-    closeSessionIds(sessionIds);
+    closeSessionIds(closeableSessionIds, protectedSessionIds, destroy);
   }, [closeSessionIds, confirm, t]);
-
-  const handleCloseSessions = useCallback((sessionIds: string[], anchor?: SplitPickerAnchor) => {
+  const handleCloseSessions = useCallback((sessionIds: string[], anchor?: SplitPickerAnchor, protectedSessionIds: readonly string[] = [], destroy = false) => {
     const uniqueSessionIds = Array.from(new Set(sessionIds)).filter((sessionId) => sessions.some((session) => session.id === sessionId));
     if (uniqueSessionIds.length === 0) return;
 
@@ -903,7 +899,7 @@ export function useTerminalTabsController({
     }).length;
 
     if (!shouldConfirmTerminalTabClose(terminalSessionCount)) {
-      void closeSessionsWithDirtyGuard(uniqueSessionIds);
+      void closeSessionsWithDirtyGuard(uniqueSessionIds, protectedSessionIds, destroy);
       return;
     }
 
@@ -911,21 +907,26 @@ export function useTerminalTabsController({
     armCloseConfirmOutsideGuard();
     setCloseConfirm({
       sessionIds: uniqueSessionIds,
+      protectedSessionIds: [...protectedSessionIds],
+      destroy,
       ...position,
     });
   }, [armCloseConfirmOutsideGuard, closeSessionsWithDirtyGuard, findCloseConfirmAnchor, resolveCloseConfirmAnchor, sessions]);
-
+  const otherTerminalIds = collectOtherSessionIds(sessions, currentWorkSessionIds);
+  const closeOtherTerminals = useCloseOtherTerminals({
+    currentWorkSessionIdsRef,
+    confirm,
+    showSessions,
+    closeSessions: closeSessionsWithDirtyGuard,
+  }); const canCloseOtherTerminals = currentWorkSessionIds.length > 0 && otherTerminalIds.length > 0;
   const confirmCloseSessions = useCallback(() => {
     if (!closeConfirm) return;
     const sessionIds = closeConfirm.sessionIds;
     setCloseConfirm(null);
-    void closeSessionsWithDirtyGuard(sessionIds);
-  }, [closeConfirm, closeSessionsWithDirtyGuard]);
-
-  const cancelCloseSessions = useCallback(() => {
+    void closeSessionsWithDirtyGuard(sessionIds, closeConfirm.protectedSessionIds, closeConfirm.destroy);
+  }, [closeConfirm, closeSessionsWithDirtyGuard]); const cancelCloseSessions = useCallback(() => {
     setCloseConfirm(null);
   }, []);
-
   useEffect(() => {
     const handleCloseRequest = (event: Event) => {
       const detail = (event as CustomEvent<TerminalTabCloseRequestDetail>).detail;
@@ -940,9 +941,7 @@ export function useTerminalTabsController({
 
     window.addEventListener(TERMINAL_TAB_CLOSE_REQUEST_EVENT, handleCloseRequest);
     return () => window.removeEventListener(TERMINAL_TAB_CLOSE_REQUEST_EVENT, handleCloseRequest);
-  }, [activeSessionId, findCloseConfirmAnchor, handleCloseSessions]);
-
-  const ensureStatsPanelAllowed = useCallback(async () => {
+  }, [activeSessionId, findCloseConfirmAnchor, handleCloseSessions]); const ensureStatsPanelAllowed = useCallback(async () => {
     try {
       const settings = useSettingsStore.getState();
       const [hookStatus, openCodeStatus] = await Promise.all([
@@ -1955,6 +1954,8 @@ export function useTerminalTabsController({
     activateWorkspanTab,
     handleHideProjectTerminals,
     handleCloseSessions,
+    closeOtherTerminals,
+    canCloseOtherTerminals,
     projectById,
     projects,
     worktrees,

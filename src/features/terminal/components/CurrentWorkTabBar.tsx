@@ -22,10 +22,13 @@ interface CurrentWorkTabBarProps {
   onRemove: (sessionId: string) => void;
   onRename: (session: TerminalSession) => void;
   onClear: () => void;
+  onCloseOtherTerminals: () => void;
+  canCloseOtherTerminals: boolean;
   onExit: () => void;
   label: string;
   exitLabel: string;
   clearLabel: string;
+  closeOtherLabel: string;
   selectedLabel: (count: number) => string;
   removeLabel: (title: string) => string;
   renameLabel: string;
@@ -68,7 +71,7 @@ function SortableCurrentWorkItem({
   const context = formatTerminalTabContext(session, project, worktree, contextLabels);
   const statusLabel = session.tabHidden
     ? statusLabels.hidden
-    : session.worktreeId && worktree?.status !== "active"
+    : session.worktreeId && worktree?.status === "missing"
       ? statusLabels.worktreeMissing
       : session.environmentType === "ssh" && (session.connectionState === "disconnected" || session.connectionState === "failed")
         ? statusLabels.sshDisconnected
@@ -138,8 +141,8 @@ function SortableCurrentWorkItem({
 
 export function CurrentWorkTabBar({
   sessions, activeSessionId, notifications, projects, worktrees, selectedSessionIds, tabStyle,
-  onActivate, onToggleSelected, onRemove, onRename, onClear, onExit, label, exitLabel,
-  clearLabel, selectedLabel, removeLabel, renameLabel, statusLabels, contextLabels, compact = false,
+  onActivate, onToggleSelected, onRemove, onRename, onClear, onCloseOtherTerminals, canCloseOtherTerminals, onExit, label, exitLabel,
+  clearLabel, closeOtherLabel, selectedLabel, removeLabel, renameLabel, statusLabels, contextLabels, compact = false,
 }: CurrentWorkTabBarProps) {
   const projectById = new Map(projects.map((project) => [project.id, project]));
   const worktreeById = new Map(worktrees.map((worktree) => [worktree.id, worktree]));
@@ -187,7 +190,18 @@ export function CurrentWorkTabBar({
           <span className="sr-only">{clearLabel}</span>
         </button>
       )}
-      <button type="button" className="ui-current-work-exit ui-focus-ring shrink-0 rounded-md px-2 py-1 text-xs opacity-80 hover:opacity-100" style={tabStyle} onClick={onExit}>
+      <button type="button" className="ui-current-work-close-others ui-focus-ring shrink-0 rounded-md px-2 py-1 text-xs opacity-80 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40" onClick={onCloseOtherTerminals} title={closeOtherLabel} aria-label={closeOtherLabel} disabled={!canCloseOtherTerminals}>
+        <X size={13} aria-hidden="true" />
+        <span className="sr-only">{closeOtherLabel}</span>
+      </button>
+      <button
+        type="button"
+        className="ui-current-work-exit ui-focus-ring shrink-0 rounded-md px-2 py-1 text-xs opacity-80 hover:opacity-100"
+        style={tabStyle}
+        onPointerDown={(event) => event.stopPropagation()}
+        onMouseDown={(event) => event.stopPropagation()}
+        onClick={(event) => { event.stopPropagation(); onExit(); }}
+      >
         {exitLabel}
       </button>
     </div>
