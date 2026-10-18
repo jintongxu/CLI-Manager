@@ -205,7 +205,7 @@ function TreeNodeItemImpl({
               {providerBadge && <ProviderBadgeChip badge={providerBadge} />}
             </span>
           </span>
-          {worktree.status !== "active" && (
+          {worktree.status !== "active" && !worktree.creation_pending && (
             <span
               className="ui-tree-warning-chip inline-flex shrink-0 items-center justify-center rounded-full"
               title={t(worktree.status === "pending" ? "worktree.status.pending" : "worktree.status.missing")}
@@ -214,7 +214,16 @@ function TreeNodeItemImpl({
               <AlertTriangle size={12} strokeWidth={1.5} />
             </span>
           )}
-          {(depsInstalling || deletingWorktree) && (
+          {worktree.creation_pending && (
+            <span
+              className="inline-flex shrink-0 items-center justify-center"
+              title={t("worktree.status.creating")}
+              aria-label={t("worktree.status.creating")}
+            >
+              <RefreshCw size={12} strokeWidth={2} className="animate-spin" />
+            </span>
+          )}
+          {(depsInstalling || deletingWorktree) && !worktree.creation_pending && (
             <span
               className="inline-flex shrink-0 items-center justify-center"
               title={t(deletingWorktree ? "worktree.deletion.inProgress" : "worktree.deps.installing", { name: getWorktreeDisplayName(worktree) })}

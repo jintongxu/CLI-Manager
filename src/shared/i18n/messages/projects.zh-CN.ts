@@ -99,6 +99,7 @@ export const zh = {
 
   "worktree.finish.reinspect": "重新检查恢复状态",
   "worktree.status.pending": "待完成恢复",
+  "worktree.status.creating": "正在创建 Worktree…",
   "worktree.finish.sessionsTitle": "确认完成清理",
   "worktree.finish.sessionsMessage": "是否关闭 {count} 个关联终端会话，并删除整个目标 Worktree 目录（包括所有未知残留内容）及其分支？确认后将再次进行安全检查。",
   "worktree.finish.sessionsChanged": "关联会话列表已变化，未关闭未确认的新会话。请重新检查并确认清理。",

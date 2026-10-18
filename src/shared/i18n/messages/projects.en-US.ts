@@ -102,6 +102,7 @@ export const en: Record<keyof typeof zh, string> = {
 
   "worktree.finish.reinspect": "Recheck recovery state",
   "worktree.status.pending": "Pending finish recovery",
+  "worktree.status.creating": "Creating Worktree…",
   "worktree.finish.sessionsTitle": "Confirm finish cleanup",
   "worktree.finish.sessionsMessage": "Close {count} associated terminal sessions and delete the entire target Worktree directory (including all unknown residual contents) and its branch? Cleanup safety will be checked again after confirmation.",
   "worktree.finish.sessionsChanged": "The associated session list changed. No unconfirmed new sessions were closed. Review and confirm cleanup again.",

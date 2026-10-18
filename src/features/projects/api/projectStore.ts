@@ -241,8 +241,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         }
 
         if (fetchVersion !== localWorktreeMutationVersion) return;
-        const tree = buildTree(groups, projects, get().searchQuery, worktrees);
-        set({ groups, projects, worktrees, tree, projectHealth, loaded: true });
+        // Keep optimistic creation rows visible while the Git/SQLite operation runs.
+        const pending = get().worktrees.filter((item) => item.creation_pending && !worktrees.some((row) => row.id === item.id));
+        const mergedWorktrees = [...pending, ...worktrees];
+        const tree = buildTree(groups, projects, get().searchQuery, mergedWorktrees);
+        set({ groups, projects, worktrees: mergedWorktrees, tree, projectHealth, loaded: true });
         if (policy.refreshProviderBadges) {
           // 供应商徽标刷新不阻塞项目树加载，失败也静默
           void get().refreshProviderBadges();

@@ -293,6 +293,8 @@ export interface SshConfigImportPreview {
 export type WorktreeStatus = "active" | "missing" | "pending";
 
 export interface WorktreeRecord {
+  /** True while Git/SQLite creation continues after the row is shown optimistically. */
+  creation_pending?: boolean;
   /** Independent alias; empty selects the immutable default Wn. */
   short_label: string;
   /** Project-local positive number allocated by SQLite, never by UI ordering. */

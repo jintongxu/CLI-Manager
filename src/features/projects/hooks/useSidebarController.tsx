@@ -15,7 +15,7 @@ import { useFileExplorerStore } from "../../files/api/fileExplorerStore";
 import { useHistoryStore } from "../../history/index";
 import { dispatchCurrentWorkSessionCreated, dispatchCurrentWorkTarget } from "../../terminal/api/currentWorkEvents";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
-import { createDefaultWorktreeTaskName, isWorktreeCreateInProgressError, useWorktreeStore } from "../api/worktreeStore";
+import { createDefaultWorktreeTaskName, createPendingWorktreeRecord, isWorktreeCreateInProgressError, useWorktreeStore } from "../api/worktreeStore";
 import { useWorktreeDepsRunnerStore } from "../api/worktreeDepsRunner";
 import { getWorktreeSidebarLabel } from "../api/worktreeMetadata";
 import { useExternalSessionSyncStore } from "../../history/api/externalSessionSyncStore";
@@ -116,6 +116,7 @@ export function useSidebarController({
   const tabNotifications = useTerminalStore((s) => s.tabNotifications);
   const taskSources = useTerminalStore((s) => s.tabStatuses);
   const createWorktreeForProject = useWorktreeStore((s) => s.createWorktreeForProject);
+  const removeWorktreeLocal = useWorktreeStore((s) => s.removeWorktreeLocal);
   const shouldIsolateNewSession = useWorktreeStore((s) => s.shouldIsolateNewSession);
   const validateProjectGit = useWorktreeStore((s) => s.validateProjectGit);
 
@@ -663,6 +664,10 @@ export function useSidebarController({
   };
 
   const rejectMissingWorktree = (worktree: WorktreeRecord): boolean => {
+    if (worktree.creation_pending) {
+      toast.info(t("worktree.status.creating"), { description: worktree.display_name });
+      return true;
+    }
     if (worktree.status === "active") return false;
     toast.error(t(worktree.status === "pending" ? "worktree.status.pending" : "worktree.status.missing"), { description: worktree.path });
     return true;
@@ -710,46 +715,60 @@ export function useSidebarController({
   const worktreeCreationAttempts = useRef(new WorktreeCreationAttempts());
   const worktreePromptActionsRef = useRef(new Set<string>());
 
-  const createAndOpenWorktree = async (project: Project, targetPaneId?: string, displayName?: string, description = "", taskName?: string, shortLabel = "") => {
-    try {
-      const worktree = await worktreeCreationAttempts.current.run(`${project.id}:${taskName}`,
-        () => createWorktreeForProject(project, { taskName, displayName, description, shortLabel: normalizeWorktreeShortLabel(shortLabel) }),
-        worktree => openWorktreeSession(project, worktree, targetPaneId, undefined, getWorktreeSidebarLabel(worktree)));
-      toast.success(t("worktree.toast.created"), { description: worktree.path });
-      void maybeInstallWorktreeDeps(project, worktree);
-      setWorktreePrompt(null);
-    } catch (err) {
-      if (isWorktreeCreateInProgressError(err)) return;
-      logError("Failed to create worktree", err);
-      if (worktreeCreationPhase(err)) setWorktreePrompt(null);
-      toast.error(t("worktree.toast.createFailed"), { description: worktreeCreationErrorDescription(err, t), duration: Infinity });
-    }
+  const createAndOpenWorktree = (project: Project, targetPaneId?: string, displayName?: string, description = "", taskName?: string, shortLabel = "") => {
+    const input = { taskName, displayName, description, shortLabel: normalizeWorktreeShortLabel(shortLabel) };
+    const placeholder = createPendingWorktreeRecord(project.id, input);
+    useProjectStore.getState().addWorktreeLocal(placeholder);
+    setWorktreePrompt(null);
+    void worktreeCreationAttempts.current.run(`${project.id}:${taskName}`,
+      () => createWorktreeForProject(project, { ...input, placeholderId: placeholder.id }),
+      worktree => openWorktreeSession(project, worktree, targetPaneId, undefined, getWorktreeSidebarLabel(worktree)))
+      .then((worktree) => {
+        toast.success(t("worktree.toast.created"), { description: worktree.path });
+        void maybeInstallWorktreeDeps(project, worktree);
+      })
+      .catch((err) => {
+        if (isWorktreeCreateInProgressError(err)) return;
+        logError("Failed to create worktree", err);
+        if (worktreeCreationPhase(err) !== "terminal") {
+          removeWorktreeLocal(placeholder.id);
+          void fetchAll("interactive");
+        }
+        toast.error(t("worktree.toast.createFailed"), { description: worktreeCreationErrorDescription(err, t), duration: Infinity });
+      });
   };
 
-  const createAndSplitWorktree = async (project: Project, direction: TerminalPaneSplitDirection, displayName?: string, description = "", taskName?: string, shortLabel = "") => {
+  const createAndSplitWorktree = (project: Project, direction: TerminalPaneSplitDirection, displayName?: string, description = "", taskName?: string, shortLabel = "") => {
     if (!activeSessionId) return;
-    try {
-      const worktree = await worktreeCreationAttempts.current.run(`${project.id}:${taskName}`,
-        () => createWorktreeForProject(project, { taskName, displayName, description, shortLabel: normalizeWorktreeShortLabel(shortLabel) }), async worktree => {
-          const options = buildProjectSplitOptions(project);
-          const sessionId = await splitTerminal(activeSessionId, direction, {
-            ...withoutTerminalTitle(options),
-            cwd: worktree.path,
-            title: getWorktreeSidebarLabel(worktree),
-            worktreeId: worktree.id,
-          });
-          if (sessionId) dispatchCurrentWorkSessionCreated(sessionId);
-          closeHistory();
+    const input = { taskName, displayName, description, shortLabel: normalizeWorktreeShortLabel(shortLabel) };
+    const placeholder = createPendingWorktreeRecord(project.id, input);
+    useProjectStore.getState().addWorktreeLocal(placeholder);
+    setWorktreePrompt(null);
+    void worktreeCreationAttempts.current.run(`${project.id}:${taskName}`,
+      () => createWorktreeForProject(project, { ...input, placeholderId: placeholder.id }), async worktree => {
+        const options = buildProjectSplitOptions(project);
+        const sessionId = await splitTerminal(activeSessionId, direction, {
+          ...withoutTerminalTitle(options),
+          cwd: worktree.path,
+          title: getWorktreeSidebarLabel(worktree),
+          worktreeId: worktree.id,
+        });
+        if (sessionId) dispatchCurrentWorkSessionCreated(sessionId);
+        closeHistory();
+      })
+      .then((worktree) => {
+        toast.success(t("worktree.toast.created"), { description: worktree.path });
+        void maybeInstallWorktreeDeps(project, worktree);
+      })
+      .catch((err) => {
+        if (isWorktreeCreateInProgressError(err)) return;
+        logError("Failed to create worktree split", err);
+        if (worktreeCreationPhase(err) !== "terminal") {
+          removeWorktreeLocal(placeholder.id);
+          void fetchAll("interactive");
+        }
+        toast.error(t("worktree.toast.createFailed"), { description: worktreeCreationErrorDescription(err, t), duration: Infinity });
       });
-      toast.success(t("worktree.toast.created"), { description: worktree.path });
-      void maybeInstallWorktreeDeps(project, worktree);
-      setWorktreePrompt(null);
-    } catch (err) {
-      if (isWorktreeCreateInProgressError(err)) return;
-      logError("Failed to create worktree split", err);
-      if (worktreeCreationPhase(err)) setWorktreePrompt(null);
-      toast.error(t("worktree.toast.createFailed"), { description: worktreeCreationErrorDescription(err, t), duration: Infinity });
-    }
   };
 
   const openProjectInternal = async (project: Project, targetPaneId?: string) => {

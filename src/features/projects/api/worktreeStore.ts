@@ -31,6 +31,8 @@ export interface GitWorktreeCreateResult {
 }
 
 export interface WorktreeCreateInput {
+  /** Reuse an optimistic sidebar row created before the Git operation starts. */
+  placeholderId?: string;
   /** Optional independent alias; empty leaves the display name as the visible label. */
   shortLabel?: string;
   /** User-facing task name. It may contain Unicode text. */
@@ -243,6 +245,7 @@ interface WorktreeStore {
   setWorktreeDeleting: (worktreeId: string, deleting: boolean) => void;
   loadWorktrees: () => Promise<void>;
   createWorktreeForProject: (project: Project, input?: WorktreeCreateInput | string) => Promise<WorktreeRecord>;
+  removeWorktreeLocal: (worktreeId: string) => void;
   renameWorktree: (worktreeId: string, displayName: string) => Promise<void>;
   updateWorktreeMetadata: (worktreeId: string, displayName: string, description: string, shortLabel?: string) => Promise<void>;
   shouldIsolateNewSession: (
@@ -297,6 +300,34 @@ export function createDefaultWorktreeTaskName(_projectId?: string): string {
   return `task-${mm}${dd}-${hh}${min}-${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
 }
 
+export function createPendingWorktreeRecord(
+  projectId: string,
+  input: WorktreeCreateInput,
+): WorktreeRecord {
+  const taskName = input.taskName || createDefaultWorktreeTaskName();
+  const displayName = normalizeWorktreeDisplayName(input.displayName?.trim() || taskName);
+  const now = Date.now().toString();
+  return {
+    creation_pending: true,
+    id: input.placeholderId || crypto.randomUUID(),
+    project_id: projectId,
+    name: taskName,
+    display_name: displayName,
+    description: normalizeWorktreeDescription(input.description ?? ""),
+    short_label: normalizeWorktreeShortLabel(input.shortLabel ?? ""),
+    branch: "",
+    path: "",
+    root_identity: "",
+    base_branch: "",
+    label_ordinal: 0,
+    deps_prompt_dismissed: 0,
+    provider_overrides: "{}",
+    status: "pending",
+    created_at: now,
+    updated_at: now,
+  };
+}
+
 export function sanitizeWorktreeTaskName(value: string): string {
   return value.trim().replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+/, "").slice(0, 64);
 }
@@ -340,6 +371,7 @@ function mapCreateResultToRecord(
 ): Omit<WorktreeRecord, "label_ordinal"> {
   const ts = Date.now().toString();
   return {
+    creation_pending: false,
     id: recordId,
     project_id: projectId,
     name: result.name,
@@ -409,6 +441,10 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
     else delete next[worktreeId];
     return { deletingWorktreeIds: next };
   }),
+  removeWorktreeLocal: (worktreeId) => {
+    set((state) => ({ worktrees: state.worktrees.filter((item) => item.id !== worktreeId) }));
+    useProjectStore.getState().removeWorktreeLocal(worktreeId);
+  },
   validatingProjects: {},
 
   loadWorktrees: async () => {
@@ -723,7 +759,7 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
       throw new Error(WORKTREE_CREATE_IN_PROGRESS);
     }
     inFlightWorktreeCreates.add(creationKey);
-    const recordId = crypto.randomUUID();
+    const recordId = requested.placeholderId || crypto.randomUUID();
     let gitCreated = false;
     beginWorktreeCreationMarker({
       recordId,
