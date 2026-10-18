@@ -315,7 +315,7 @@ export const zh = {
   "settings.general.disableWorkspanDevelopment": "关闭 Workspan开发",
   "settings.general.enableWorkspanDevelopment": "开启 Workspan开发",
   "settings.general.lowMemoryMode": "低内存模式",
-  "settings.general.lowMemoryModeDescription": "开启后，后台终端隐藏超过 10 秒会释放 WebGL/GPU 渲染资源；切回终端时可能出现轻微重绘，但不会重启终端或丢失内容。",
+  "settings.general.lowMemoryModeDescription": "开启后，后台终端隐藏超过 60 秒会释放终端滚动缓冲区、插件和 WebGL/GPU 渲染资源；切回终端时从快照恢复，PTY 与 Pi/CLI 进程继续运行。",
   "settings.general.disableLowMemoryMode": "关闭低内存模式",
   "settings.general.enableLowMemoryMode": "开启低内存模式",
   "settings.general.disableHardwareAcceleration": "禁用硬件加速",

@@ -331,7 +331,7 @@ export const en: Record<keyof typeof zh, string> = {
   "settings.general.disableWorkspanDevelopment": "Disable Workspan Development",
   "settings.general.enableWorkspanDevelopment": "Enable Workspan Development",
   "settings.general.lowMemoryMode": "Low Memory Mode",
-  "settings.general.lowMemoryModeDescription": "When enabled, hidden terminals release WebGL/GPU renderer resources after 10 seconds. Switching back may lightly repaint, but the terminal process and scrollback stay intact.",
+  "settings.general.lowMemoryModeDescription": "When enabled, hidden terminals release their scrollback buffer, addons, and WebGL/GPU renderer resources after 60 seconds. Switching back restores from a snapshot while the PTY and Pi/CLI process keep running.",
   "settings.general.disableLowMemoryMode": "Disable low memory mode",
   "settings.general.enableLowMemoryMode": "Enable low memory mode",
   "settings.general.disableHardwareAcceleration": "Disable Hardware Acceleration",
