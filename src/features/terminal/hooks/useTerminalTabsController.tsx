@@ -62,6 +62,7 @@ import { MemoPaneLeafView } from "../components/PaneLeafView";
 import { useTerminalToolbarRenderer } from "./useTerminalToolbarRenderer";
 import { useScopedTerminalEmptyState } from "./useScopedTerminalEmptyState";
 import { useTerminalVisibleLayouts } from "./useTerminalVisibleLayouts";
+import { useTerminalWorkspaceMode } from "./useTerminalWorkspaceMode";
 import { isHideableTerminalSession } from "../lib/terminalTabVisibility";
 import { buildWorkspanTabModels } from "../lib/workspanTabModel";
 import { buildGlobalWorktreeBadges } from "../api/terminalWorktreeBadge";
@@ -275,7 +276,7 @@ export function useTerminalTabsController({
   const closeGitWorkspace = useGitWorkspaceStore((s) => s.close);
   const [gitWorkspaceHeight, setGitWorkspaceHeight] = useState(420);
   const gitWorkspaceResizeCleanupRef = useRef<(() => void) | null>(null);
-  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<"terminal" | "history">("terminal");
+  const { setActiveWorkspaceTab, historyActive, editorActive, hasEditorWorkspace, switchToTerminalWorkspace, switchToEditorWorkspace } = useTerminalWorkspaceMode({ activeSessionId, sessions, historyOpen, closeHistory, addCurrentWorkSession, setActive });
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [splitPicker, setSplitPicker] = useState<SplitPickerState>(null);
   const [closeConfirm, setCloseConfirm] = useState<TerminalCloseConfirmState>(null);
@@ -452,7 +453,6 @@ export function useTerminalTabsController({
     }
     workspanDragHoverTargetRef.current = null;
   }, []);
-
   const scheduleWorkspanDragHoverActivation = useCallback((targetWorkspanId: string) => {
     if (workspanDragHoverTargetRef.current === targetWorkspanId) return;
     clearWorkspanDragHoverActivation();
@@ -463,15 +463,12 @@ export function useTerminalTabsController({
       activateWorkspanTab(targetWorkspanId);
     }, WORKSPAN_DRAG_AUTO_ACTIVATE_MS);
   }, [activateWorkspanTab, clearWorkspanDragHoverActivation]);
-
   useEffect(() => clearWorkspanDragHoverActivation, [clearWorkspanDragHoverActivation]);
-
   useEffect(() => () => {
     if (workspanDragOverflowFrameRef.current !== null) {
       window.cancelAnimationFrame(workspanDragOverflowFrameRef.current);
     }
   }, []);
-
   const terminalTheme = useMemo(
     () => getTerminalTheme(terminalThemeName, resolvedTheme, lightThemePalette, darkThemePalette),
     [darkThemePalette, lightThemePalette, resolvedTheme, terminalThemeName]
@@ -537,7 +534,6 @@ export function useTerminalTabsController({
     }),
     [panelCapabilities.files, panelCapabilities.history, panelCapabilities.statistics, panelGitSupported, terminalToolbarVisibility]
   );
-  const historyActive = historyOpen && activeWorkspaceTab === "history";
   const fullWorkspaceActive = historyActive;
   const statsPanelActive = sidePanelMerged ? sidePanelOpen && sidePanelTab === "stats" : statsOpen;
   const replayPanelActive = sidePanelMerged ? sidePanelOpen && sidePanelTab === "replay" : replayOpen;
@@ -547,18 +543,12 @@ export function useTerminalTabsController({
   const systemResourcesPanelActive = sidePanelMerged
     ? sidePanelOpen && sidePanelTab === "systemResources"
     : systemResourcesOpen;
-
   useEffect(() => {
     if (!sidePanelMerged || !sidePanelOpen || visibleSidePanelTabs.includes(sidePanelTab)) return;
     const nextTab = visibleSidePanelTabs[0];
     if (nextTab) setSidePanelTab(nextTab);
     else setSidePanelOpen(false);
   }, [sidePanelMerged, sidePanelOpen, sidePanelTab, visibleSidePanelTabs]);
-
-  useEffect(() => {
-    if (!historyOpen && activeWorkspaceTab === "history") setActiveWorkspaceTab("terminal");
-  }, [activeWorkspaceTab, historyOpen]);
-
   useEffect(() => {
     if (!gitWorkspaceOpen) return;
     closeHistory();
@@ -566,9 +556,7 @@ export function useTerminalTabsController({
     setGitOpen(false);
     if (sidePanelMerged && sidePanelTab === "git") setSidePanelOpen(false);
   }, [closeHistory, gitWorkspaceOpen, sidePanelMerged, sidePanelTab]);
-
   useEffect(() => () => gitWorkspaceResizeCleanupRef.current?.(), []);
-
   const beginGitWorkspaceResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     gitWorkspaceResizeCleanupRef.current?.();
@@ -587,7 +575,6 @@ export function useTerminalTabsController({
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", cleanup, { once: true });
   }, [gitWorkspaceHeight]);
-
   useEffect(() => {
     if (!terminalSidePanelSingleOpen || !historyOpen) return;
     setSidePanelOpen(false);
@@ -598,18 +585,14 @@ export function useTerminalTabsController({
     setSystemResourcesOpen(false);
     setProvidersOpen(false);
   }, [historyOpen, terminalSidePanelSingleOpen]);
-
   useEffect(() => {
     if (!historyOpen) return;
     setActiveWorkspaceTab("history");
   }, [focusGlobalSearchSeq, historyOpen]);
-
   useEffect(() => {
     if (!fullscreenPaneId || activeFullscreenPaneId) return;
-
     setFullscreenPaneId(null);
   }, [activeFullscreenPaneId, fullscreenPaneId, setFullscreenPaneId]);
-
   const clearSplitPickerOpenSchedule = useCallback(() => {
     if (splitPickerOpenFrameRef.current !== null) {
       window.cancelAnimationFrame(splitPickerOpenFrameRef.current);
@@ -620,27 +603,21 @@ export function useTerminalTabsController({
       splitPickerOpenTimerRef.current = null;
     }
   }, []);
-
   useEffect(() => clearSplitPickerOpenSchedule, [clearSplitPickerOpenSchedule]);
-
   const handleCloseSplitPicker = useCallback(() => {
     clearSplitPickerOpenSchedule();
     splitPickerOutsideGuardUntilRef.current = 0;
     setSplitPicker(null);
   }, [clearSplitPickerOpenSchedule]);
-
   const shouldIgnoreSplitPickerOutsideInteraction = useCallback(() => {
     return Date.now() < splitPickerOutsideGuardUntilRef.current;
   }, []);
-
   const armCloseConfirmOutsideGuard = useCallback(() => {
     closeConfirmOutsideGuardUntilRef.current = Date.now() + 180;
   }, []);
-
   const shouldIgnoreCloseConfirmOutsideInteraction = useCallback(() => {
     return Date.now() < closeConfirmOutsideGuardUntilRef.current;
   }, []);
-
   const handleNewTab = useCallback(async (sourceSessionId?: string) => {
     const sourceSession = resolveNewTabSource(sessions, sourceSessionId ?? activeSessionId);
     if (rejectMissingSessionWorktree(sourceSession)) return;
@@ -668,7 +645,6 @@ export function useTerminalTabsController({
   );
   const handleOpenScopedTerminal = useCallback(async () => {
     if (!scopedProject || useExternalTerminal) return;
-
     if (terminalScopeValue.kind === "worktree") {
       if (!scopedWorktree) return;
       if (rejectMissingWorktree(scopedWorktree)) return;
@@ -687,14 +663,12 @@ export function useTerminalTabsController({
       setActiveWorkspaceTab("terminal");
       return;
     }
-
     if (terminalScopeValue.kind !== "project") return;
     const options = buildProjectSplitOptions(scopedProject, groups);
     await createSession(options.projectId, options.cwd, undefined, options.startupCmd, options.envVars, options.shell);
     closeHistory();
     setActiveWorkspaceTab("terminal");
   }, [closeHistory, createSession, groups, rejectMissingWorktree, scopedProject, scopedWorktree, terminalScopeValue, useExternalTerminal]);
-
   const handleInstallWorktreeDeps = useCallback((project: Project, worktree: WorktreeRecord) => {
     if (rejectMissingWorktree(worktree)) return;
     const options = buildProjectSplitOptions(project, groups);
@@ -704,14 +678,12 @@ export function useTerminalTabsController({
       shell: options.shell,
     }, "manual");
   }, [groups, rejectMissingWorktree]);
-
   const handleOpenWorktreeDirectory = useCallback((worktree: WorktreeRecord) => {
     if (rejectMissingWorktree(worktree)) return;
     void invoke("open_folder_in_explorer", { path: worktree.path }).catch((err) =>
       toast.error(t("sidebar.toast.openDirectoryFailed"), { description: String(err) }),
     );
   }, [rejectMissingWorktree, t]);
-
   const handleOpenGitWorkspaceWorktree = useCallback(async (worktree: WorktreeRecord) => {
     if (rejectMissingWorktree(worktree)) return;
     const project = projectById.get(worktree.project_id);
@@ -748,7 +720,6 @@ export function useTerminalTabsController({
     closeHistory();
     setActiveWorkspaceTab("terminal");
   }, [addCurrentWorkSession, buildProjectSplitOptions, closeGitWorkspace, closeHistory, createSession, groups, handleOpenWorktreeDirectory, projectById, rejectMissingWorktree, sessions, setActive, t, useExternalTerminal]);
-
   const handleOpenWorktreeChanges = useCallback((sessionId: string) => {
     const session = sessions.find((item) => item.id === sessionId);
     if (rejectMissingSessionWorktree(session)) return;
@@ -758,7 +729,6 @@ export function useTerminalTabsController({
     setActive(sessionId);
     openGitWorkspace();
   }, [addCurrentWorkSession, closeHistory, openGitWorkspace, rejectMissingSessionWorktree, sessions, setActive]);
-
   const handleOpenWorktreeHistory = useCallback((project: Project, worktree: WorktreeRecord) => {
     if (rejectMissingWorktree(worktree)) return;
     if (terminalSidePanelSingleOpen) {
@@ -777,7 +747,6 @@ export function useTerminalTabsController({
       scopedProjectPath: worktree.path,
     });
   }, [groups, openHistory, rejectMissingWorktree, terminalSidePanelSingleOpen]);
-
   const handleDuplicateSession = useCallback((session: TerminalSession) => {
     if (rejectMissingSessionWorktree(session)) return;
     void createSession(
@@ -795,7 +764,6 @@ export function useTerminalTabsController({
       setActiveWorkspaceTab("terminal");
     }).catch(() => {});
   }, [closeHistory, createSession, rejectMissingSessionWorktree]);
-
   const handleSaveSessionToSidebar = useCallback((session: TerminalSession) => {
     const project = session.projectId ? projectById.get(session.projectId) ?? null : null;
     void saveSessionToSidebar(session, project);
@@ -809,64 +777,53 @@ export function useTerminalTabsController({
   const handleOpenEmergencyTerminal = recoveryHandlers.emergency;
   const handleRebuildSession = recoveryHandlers.rebuild;
   const handleHardKillSession = recoveryHandlers.hardKill;
-
   const handleActivateSession = useCallback((sessionId: string) => {
     closeHistory();
     setActiveWorkspaceTab("terminal");
     addCurrentWorkSession(sessionId);
     setActive(sessionId);
   }, [addCurrentWorkSession, closeHistory, setActive]);
-
   const handleTogglePaneFullscreen = useCallback((paneId: string) => {
     if (activeFullscreenPaneId === paneId) {
       setFullscreenPaneId(null);
       return;
     }
-
     const targetPane = allPanes.find((pane) => pane.id === paneId);
     if (!targetPane) return;
-
     if (targetPane.activeSessionId && targetPane.activeSessionId !== activeSessionId) {
       handleActivateSession(targetPane.activeSessionId);
     } else {
       closeHistory();
       setActiveWorkspaceTab("terminal");
     }
-
     setFullscreenPaneId(paneId);
   }, [activeFullscreenPaneId, activeSessionId, allPanes, closeHistory, handleActivateSession, setFullscreenPaneId]);
-
   const handleRestoreWorkspanToSinglePane = useCallback((workspanId: string) => {
     if (workspanId === effectiveActiveWorkspanId && activeFullscreenPaneId) {
       handleTogglePaneFullscreen(activeFullscreenPaneId);
     }
     restoreWorkspanToSinglePane(workspanId);
   }, [activeFullscreenPaneId, effectiveActiveWorkspanId, handleTogglePaneFullscreen, restoreWorkspanToSinglePane]);
-
   const resolveCloseConfirmAnchor = useCallback((anchor?: SplitPickerAnchor) => {
     const rawX = anchor ? ("right" in anchor ? anchor.right : anchor.x) : window.innerWidth - 72;
     const rawY = anchor ? ("bottom" in anchor ? anchor.bottom : anchor.y) : 56;
     const align: SplitPickerAlign = anchor && "right" in anchor ? "end" : "start";
-
     return {
       x: Math.min(Math.max(rawX, 16), window.innerWidth - 16),
       y: Math.min(Math.max(rawY, 44), window.innerHeight - 16),
       align,
     };
   }, []);
-
   const findCloseConfirmAnchor = useCallback((sessionIds: string[]): SplitPickerAnchor | undefined => {
     const targetIds = new Set(sessionIds);
     const tab = Array.from(document.querySelectorAll<HTMLElement>("[data-terminal-tab-id]"))
       .find((node) => targetIds.has(node.dataset.terminalTabId ?? ""));
     return tab?.getBoundingClientRect();
   }, []);
-
   const handleHideProjectTerminals = useCallback((ids: string[]) => {
     void hideProjectTerminalSessions(ids, () => useTerminalStore.getState().sessions, hideSession,
       (sessionId, err) => logError("Failed to hide project terminal", { sessionId, err }));
   }, [hideSession]);
-
   const closeSessionIds = useCallback((sessionIds: string[], protectedSessionIds: readonly string[] = [], destroy = false) => {
     void closeTerminalSessions(sessionIds, protectedSessionIds, destroy ? destroySession : hideSession,
       (sessionId, err) => logError("Failed to close terminal session", { sessionId, err }));
@@ -889,7 +846,6 @@ export function useTerminalTabsController({
           .map((file) => ({ project: workspace.project, file }))
       ))
     ));
-
     if (dirtyFiles.length > 0) {
       const confirmed = await confirm({
         title: t("files.editor.unsavedTitle"),
@@ -901,23 +857,19 @@ export function useTerminalTabsController({
       });
       if (!confirmed) return;
     }
-
     closeSessionIds(closeableSessionIds, protectedSessionIds, destroy);
   }, [closeSessionIds, confirm, t]);
   const handleCloseSessions = useCallback((sessionIds: string[], anchor?: SplitPickerAnchor, protectedSessionIds: readonly string[] = [], destroy = false) => {
     const uniqueSessionIds = Array.from(new Set(sessionIds)).filter((sessionId) => sessions.some((session) => session.id === sessionId));
     if (uniqueSessionIds.length === 0) return;
-
     const terminalSessionCount = uniqueSessionIds.filter((sessionId) => {
       const session = sessions.find((item) => item.id === sessionId);
       return session && !isHideableTerminalSession(session) && session.kind !== "file-editor";
     }).length;
-
     if (!shouldConfirmTerminalTabClose(terminalSessionCount)) {
       void closeSessionsWithDirtyGuard(uniqueSessionIds, protectedSessionIds, destroy);
       return;
     }
-
     const position = resolveCloseConfirmAnchor(anchor ?? findCloseConfirmAnchor(uniqueSessionIds));
     armCloseConfirmOutsideGuard();
     setCloseConfirm({
@@ -953,7 +905,6 @@ export function useTerminalTabsController({
       if (requestedSessionIds.length === 0) return;
       handleCloseSessions(requestedSessionIds, findCloseConfirmAnchor(requestedSessionIds));
     };
-
     window.addEventListener(TERMINAL_TAB_CLOSE_REQUEST_EVENT, handleCloseRequest);
     return () => window.removeEventListener(TERMINAL_TAB_CLOSE_REQUEST_EVENT, handleCloseRequest);
   }, [activeSessionId, findCloseConfirmAnchor, handleCloseSessions]); const ensureStatsPanelAllowed = useCallback(async () => {
@@ -1003,7 +954,6 @@ export function useTerminalTabsController({
     }
     return true;
   }, [panelSession, projectById, t]);
-
   const handleToggleStatsPanel = useCallback(async () => {
     if (statsPanelActive) {
       if (ensureTerminalSidePanelVisible()) return;
@@ -1034,7 +984,6 @@ export function useTerminalTabsController({
       setStatsOpen(true);
     }
   }, [closeHistory, ensureStatsPanelAllowed, ensureTerminalSidePanelVisible, panelSession, projectById, rejectUnsupportedCapability, sidePanelMerged, statsPanelActive, terminalSidePanelSingleOpen]);
-
   const handleToggleSystemResourcesPanel = useCallback(() => {
     if (systemResourcesPanelActive) {
       if (ensureTerminalSidePanelVisible()) return;
@@ -1061,7 +1010,6 @@ export function useTerminalTabsController({
       setSystemResourcesOpen(true);
     }
   }, [closeHistory, ensureTerminalSidePanelVisible, sidePanelMerged, systemResourcesPanelActive, terminalSidePanelSingleOpen]);
-
   const handleToggleProviderPanel = useCallback(() => {
     if (providersPanelActive) {
       if (ensureTerminalSidePanelVisible()) return;
@@ -1089,7 +1037,6 @@ export function useTerminalTabsController({
       setProvidersOpen(true);
     }
   }, [closeHistory, ensureTerminalSidePanelVisible, providersPanelActive, sidePanelMerged, terminalSidePanelSingleOpen]);
-
   const handleOpenGitChangesPanel = useCallback(() => {
     const project = panelSession?.projectId ? projectById.get(panelSession.projectId) : null;
     if (project?.environment_type !== "ssh" && rejectUnsupportedCapability(project, "git")) return;
@@ -1114,7 +1061,6 @@ export function useTerminalTabsController({
     }
     setGitOpen(true);
   }, [closeGitWorkspace, closeHistory, ensureTerminalSidePanelVisible, panelSession, projectById, rejectUnsupportedCapability, sidePanelMerged, terminalSidePanelSingleOpen]);
-
   const handleToggleGitChangesPanel = useCallback(() => {
     if (gitPanelActive) {
       if (ensureTerminalSidePanelVisible()) return;
@@ -1128,7 +1074,6 @@ export function useTerminalTabsController({
     }
     handleOpenGitChangesPanel();
   }, [closeGitWorkspace, ensureTerminalSidePanelVisible, gitPanelActive, gitWorkspaceOpen, handleOpenGitChangesPanel, sidePanelMerged]);
-
   const handleToggleReplayPanel = useCallback(() => {
     if (replayPanelActive) {
       if (ensureTerminalSidePanelVisible()) return;
@@ -1161,7 +1106,6 @@ export function useTerminalTabsController({
       setReplayOpen(true);
     }
   }, [closeHistory, ensureTerminalSidePanelVisible, panelSession, projectById, rejectUnsupportedCapability, replayPanelActive, sidePanelMerged, terminalSidePanelSingleOpen]);
-
   const syncFilePanelProject = useCallback(async (project: Project) => {
     const preserveCurrentFilePanel = consumeTerminalFileDragPanelSyncSuppression();
     if (rejectUnsupportedCapability(project, "files")) return false;
@@ -1180,7 +1124,6 @@ export function useTerminalTabsController({
       return false;
     }
   }, [openFileProject, rejectUnsupportedCapability, t]);
-
   const closeFilesPanel = useCallback(() => {
     if (sidePanelMerged) {
       if (sidePanelTab === "files") setSidePanelOpen(false);
@@ -1188,7 +1131,6 @@ export function useTerminalTabsController({
     }
     setFilesOpen(false);
   }, [sidePanelMerged, sidePanelTab]);
-
   const openFilesPanelForProject = useCallback(async (project: Project): Promise<boolean> => {
     const allowed = await syncFilePanelProject(project);
     if (!allowed) return false;
@@ -1212,7 +1154,6 @@ export function useTerminalTabsController({
     setFilesOpen(true);
     return true;
   }, [closeHistory, ensureTerminalSidePanelVisible, sidePanelMerged, syncFilePanelProject, terminalSidePanelSingleOpen]);
-
   const handleToggleFilesPanel = useCallback(async () => {
     if (filesPanelActive) {
       if (ensureTerminalSidePanelVisible()) return;
@@ -1222,7 +1163,6 @@ export function useTerminalTabsController({
     if (!filePanelProject) return;
     void openFilesPanelForProject(filePanelProject);
   }, [closeFilesPanel, ensureTerminalSidePanelVisible, filePanelProject, filesPanelActive, openFilesPanelForProject]);
-
   useEffect(() => {
     const handleTerminalFileNavigation = (event: Event) => {
       const request = (event as CustomEvent<TerminalFileNavigationRequest>).detail;
@@ -1246,7 +1186,6 @@ export function useTerminalTabsController({
     window.addEventListener(TERMINAL_FILE_NAVIGATION_REQUEST_EVENT, handleTerminalFileNavigation);
     return () => window.removeEventListener(TERMINAL_FILE_NAVIGATION_REQUEST_EVENT, handleTerminalFileNavigation);
   }, [openFileEditorPane, openFilesPanelForProject, projectById, projects, revealFilePath, sessions, t, worktrees]);
-
   const handleSidePanelTabChange = useCallback((tab: TerminalSidePanelTab) => {
     const project = panelSession?.projectId ? projectById.get(panelSession.projectId) : null;
     if (tab === "stats") {
@@ -1268,7 +1207,6 @@ export function useTerminalTabsController({
     if (tab === "replay" && rejectUnsupportedCapability(project, "history")) return;
     setSidePanelTab(tab);
   }, [ensureStatsPanelAllowed, filePanelProject, panelSession, projectById, rejectUnsupportedCapability, syncFilePanelProject]);
-
   // 响应式约束：非合并模式下两个面板各占固定宽度，窗口过窄时会挤压终端。
   // 窗口 < 1100px 时退化为单面板，并随窗口缩小持续生效。
   useEffect(() => {
@@ -1316,7 +1254,6 @@ export function useTerminalTabsController({
     window.addEventListener("resize", enforce);
     return () => window.removeEventListener("resize", enforce);
   }, [filesOpen, gitOpen, providersOpen, replayOpen, sidePanelMerged, statsOpen, systemResourcesOpen, terminalSidePanelSingleOpen]);
-
   useEffect(() => {
     if (!filesPanelActive) return;
     if (!filePanelProject) {
@@ -1334,13 +1271,11 @@ export function useTerminalTabsController({
     filesPanelActive,
     syncFilePanelProject,
   ]);
-
   const handleOpenHistoryTab = useCallback(() => {
     if (historyOpen) {
       closeHistory();
       return;
     }
-
     if (terminalSidePanelSingleOpen) {
       setSidePanelOpen(false);
       setStatsOpen(false);
@@ -1360,7 +1295,6 @@ export function useTerminalTabsController({
       scopedProjectPath: activeWorktree?.path ?? null,
     });
   }, [activeSession, activeWorktree?.path, closeGitWorkspace, closeHistory, historyOpen, openHistory, projects, rejectUnsupportedCapability, terminalSidePanelSingleOpen]);
-
   const handleOpenSplitPicker = useCallback((sessionId: string, direction: TerminalPaneSplitDirection, anchor?: SplitPickerAnchor) => {
     clearSplitPickerOpenSchedule();
     const rawX = anchor ? ("right" in anchor ? anchor.right : anchor.x) : window.innerWidth - 24;
@@ -1377,7 +1311,6 @@ export function useTerminalTabsController({
       }, 0);
     });
   }, [clearSplitPickerOpenSchedule]);
-
   const handleSplitEmpty = useCallback(() => {
     if (!splitPicker) return;
     const source = resolveNewTabSource(sessions, splitPicker.sessionId);
@@ -1388,7 +1321,6 @@ export function useTerminalTabsController({
     closeHistory();
     setActiveWorkspaceTab("terminal");
   }, [closeHistory, groups, handleCloseSplitPicker, projects, sessions, splitPicker, splitTerminalAndAdd, worktrees]);
-
   const handleSplitProject = useCallback((project: Project) => {
     if (!splitPicker) return;
     void splitTerminalAndAdd(splitPicker.sessionId, splitPicker.direction, withoutTerminalTitle(buildProjectSplitOptions(project, groups)));
@@ -1396,31 +1328,26 @@ export function useTerminalTabsController({
     closeHistory();
     setActiveWorkspaceTab("terminal");
   }, [closeHistory, groups, handleCloseSplitPicker, splitPicker, splitTerminalAndAdd]);
-
   const findPaneForSession = useCallback((sessionId: string) => {
     return allPanes.find((pane) => pane.sessionIds.includes(sessionId)) ?? null;
   }, [allPanes]);
-
   const canSplitSessionToPaneEdge = useCallback((sessionId: string, targetPaneId: string) => {
     const sourcePane = findPaneForSession(sessionId);
     const targetPane = allPanes.find((pane) => pane.id === targetPaneId) ?? null;
     if (!sourcePane || !targetPane) return false;
     return sourcePane.id !== targetPane.id || sourcePane.sessionIds.length > 1;
   }, [allPanes, findPaneForSession]);
-
   const updateActiveDropPreview = useCallback((next: PaneDropPreview) => {
     setActiveDropPreview((current) => {
       if (!current || !next) return current === next ? current : next;
       return current.paneId === next.paneId && current.edge === next.edge ? current : next;
     });
   }, []);
-
   const hideWorkspanDetachPreview = useCallback(() => {
     setWorkspanDetachPreview((current) => (
       current.visible ? { ...current, targetId: null, visible: false } : current
     ));
   }, []);
-
   const clearDragState = useCallback(() => {
     const wasDraggingWorkspan = activeDragWorkspanIdRef.current !== null;
     activeDragWorkspanIdRef.current = null;
@@ -1437,7 +1364,6 @@ export function useTerminalTabsController({
       });
     }
   }, [clearWorkspanDragHoverActivation, hideWorkspanDetachPreview, updateActiveDropPreview, updateWorkspanTabOverflow]);
-
   const handleDragStart = useCallback((event: DragStartEvent) => {
     clearWorkspanDragHoverActivation();
     hideWorkspanDetachPreview();
@@ -1452,7 +1378,6 @@ export function useTerminalTabsController({
       return;
     }
   }, [clearWorkspanDragHoverActivation, currentWorkSessionIds, hideWorkspanDetachPreview, scopedSessionIds, workspans]);
-
   const handleDragOver = useCallback((event: DragOverEvent) => {
     if (!event.over) {
       clearWorkspanDragHoverActivation();
@@ -1460,7 +1385,6 @@ export function useTerminalTabsController({
       hideWorkspanDetachPreview();
       return;
     }
-
     const activeId = String(event.active.id);
     const currentWorkActiveId = parseCurrentWorkDragId(activeId) ?? (event.active.data.current?.type === "current-work" ? String(event.active.data.current.sessionId ?? "") : null);
     const overId = String(event.over.id);
@@ -1496,7 +1420,6 @@ export function useTerminalTabsController({
       updateActiveDropPreview(null);
       return;
     }
-
     const targetWorkspanId = parseWorkspanDragId(overId);
     if (!scopedSessionIds && (targetWorkspanId || overId === WORKSPAN_TABBAR_END_DROP_ID)) {
       const tabBarRect = workspanTabBarRef.current?.getBoundingClientRect();
@@ -1511,14 +1434,11 @@ export function useTerminalTabsController({
       updateActiveDropPreview(null);
       return;
     }
-
     hideWorkspanDetachPreview();
-
     if (dropTarget?.type === "edge" && canSplitSessionToPaneEdge(activeId, dropTarget.paneId)) {
       updateActiveDropPreview({ paneId: dropTarget.paneId, edge: dropTarget.edge });
       return;
     }
-
     updateActiveDropPreview(null);
   }, [
     activeWorkspanLayout,
@@ -1531,12 +1451,10 @@ export function useTerminalTabsController({
     scopedSessionIds,
     updateActiveDropPreview,
   ]);
-
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     clearDragState();
     if (!over) return;
-
     const activeId = String(active.id);
     const overId = String(over.id);
     const sourceProjectKey = parseProjectDragId(activeId);
@@ -1592,7 +1510,6 @@ export function useTerminalTabsController({
     if (active.id === over.id) return;
     const sourcePane = findPaneForSession(activeId);
     if (!sourcePane) return;
-
     const targetWorkspanId = parseWorkspanDragId(overId);
     if (targetWorkspanId || overId === WORKSPAN_TABBAR_END_DROP_ID) {
       if (scopedSessionIds) return;
@@ -1604,7 +1521,6 @@ export function useTerminalTabsController({
       setActiveWorkspaceTab("terminal");
       return;
     }
-
     if (dropTarget?.type === "edge") {
       if (canSplitSessionToPaneEdge(activeId, dropTarget.paneId)) {
         splitSessionToPaneEdge(activeId, dropTarget.paneId, dropTarget.edge);
@@ -1612,7 +1528,6 @@ export function useTerminalTabsController({
       }
       return;
     }
-
     if (dropTarget?.type === "center") {
       if (dropTarget.paneId !== sourcePane.id) {
         moveSessionToPane(activeId, dropTarget.paneId);
@@ -1620,7 +1535,6 @@ export function useTerminalTabsController({
       }
       return;
     }
-
     const targetPane = findPaneForSession(overId);
     if (!targetPane) return;
     if (targetPane.id === sourcePane.id) {
@@ -1630,30 +1544,23 @@ export function useTerminalTabsController({
     moveSessionToPane(activeId, targetPane.id, overId);
     setActiveWorkspaceTab("terminal");
   }, [activeWorkspanLayout, canSplitSessionToPaneEdge, clearDragState, detachSessionToWorkspan, findPaneForSession, mergeWorkspanAtPaneEdge, moveCurrentWorkSessionToPane, moveSessionToPane, orderWorkspans, reorderCurrentWork, reorderSessions, reorderWorkspans, scopedSessionIds, splitCurrentWorkSessionToPaneEdge, splitSessionToPaneEdge, workspanTabModels, workspans]);
-
   const handleToolbarDragStart = useCallback((event: DragStartEvent) => {
     setActiveToolbarDragId(String(event.active.id));
   }, []);
-
   const handleToolbarDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     setActiveToolbarDragId(null);
-
     if (!over || active.id === over.id) return;
-
     const oldIndex = terminalToolbarOrder.indexOf(String(active.id));
     const newIndex = terminalToolbarOrder.indexOf(String(over.id));
-
     if (oldIndex !== -1 && newIndex !== -1) {
       const newOrder = arrayMove(terminalToolbarOrder, oldIndex, newIndex);
       void updateSettings("terminalToolbarOrder", newOrder);
     }
   }, [terminalToolbarOrder, updateSettings]);
-
   const handleToolbarDragCancel = useCallback(() => {
     setActiveToolbarDragId(null);
   }, []);
-
   const refreshBackgroundTasks = useCallback(async () => {
     try {
       const tasks = await invoke<BackgroundTaskMeta[]>("pty_daemon_sessions");
@@ -1662,25 +1569,21 @@ export function useTerminalTabsController({
       setDaemonTasks([]);
     }
   }, []);
-
   useEffect(() => {
     void refreshBackgroundTasks();
     const timer = window.setInterval(() => void refreshBackgroundTasks(), 3000);
     return () => window.clearInterval(timer);
   }, [refreshBackgroundTasks]);
-
   const backgroundTasks = useMemo(() => {
     const openIds = new Set(sessions.map((session) => session.id));
     return daemonTasks.filter((task) => !openIds.has(task.sessionId));
   }, [daemonTasks, sessions]);
-
   const handleToggleGlobalFullscreen = useCallback(() => {
     if (activeFullscreenPaneId) {
       setFullscreenPaneId(null);
     }
     onToggleFullscreen?.();
   }, [activeFullscreenPaneId, onToggleFullscreen, setFullscreenPaneId]);
-
   const renderToolbarActions = useTerminalToolbarRenderer({
     t,
     fullscreen,
@@ -1722,7 +1625,6 @@ export function useTerminalTabsController({
     cpuResourceCardVisible,
     sidePanelMerged,
   });
-
   const handleSubmitTabEdit = useCallback(
     (sessionId: string, title: string) => {
       const trimmed = title.trim();
@@ -1731,13 +1633,11 @@ export function useTerminalTabsController({
         setEditingSessionId(null);
         return;
       }
-
       renameSession(sessionId, trimmed);
       setEditingSessionId(null);
     },
     [renameSession, sessions]
   );
-
   const handlePaneSubmitEdit = useCallback((sessionId: string, title: string) => {
     void handleSubmitTabEdit(sessionId, title);
   }, [handleSubmitTabEdit]);
@@ -1754,7 +1654,6 @@ export function useTerminalTabsController({
   const handlePaneDiscardWorktree = useCallback((project: Project, worktree: WorktreeRecord) => {
     setDiscardTarget({ project, worktree });
   }, []);
-
   const renderWorkspanLeaf = useCallback((
     pane: TerminalPaneLeaf,
     layoutPanes: TerminalPaneLeaf[],
@@ -1884,7 +1783,6 @@ export function useTerminalTabsController({
     currentWorkSessionPortalTargets,
     currentWorkVisibleSessionIds,
   ]);
-
   const hasScopedTerminalFilter = projectScopedTerminalViewEnabled && terminalScopeValue.kind !== "all";
   const scopedEmptyState = useScopedTerminalEmptyState({
     hasScopedTerminalFilter,
@@ -1895,10 +1793,13 @@ export function useTerminalTabsController({
     handleOpenScopedTerminal,
     scopedGroup,
   });
-
   return {
     fullscreen,
     historyActive,
+    editorActive,
+    hasEditorWorkspace,
+    switchToTerminalWorkspace,
+    switchToEditorWorkspace,
     terminalWellStyle,
     promptDialog,
     confirmDialog,

@@ -33,6 +33,10 @@ import { CurrentWorkTabBar } from "./CurrentWorkTabBar";
 export function TerminalTabsView({
   fullscreen,
   historyActive,
+  editorActive,
+  hasEditorWorkspace,
+  switchToTerminalWorkspace,
+  switchToEditorWorkspace,
   terminalWellStyle,
   promptDialog,
   confirmDialog,
@@ -266,7 +270,7 @@ export function TerminalTabsView({
                   filesTabDisabled={!filePanelProject}
                   systemResourcesEnabled
                   providerDefaultAppType={panelProviderAppType}
-                  filesPanelContent={<FileExplorerSidebar mode="panel" onClosePanel={closeFilesPanel} />}
+                  filesPanelContent={<FileExplorerSidebar mode="panel" onClosePanel={closeFilesPanel} editorActive={editorActive} hasEditorWorkspace={hasEditorWorkspace} onSwitchToTerminalWorkspace={switchToTerminalWorkspace} onSwitchToEditorWorkspace={switchToEditorWorkspace} />}
                   onTabChange={handleSidePanelTabChange}
                   onOpenProviderSettings={onOpenProviderSettings}
                 />
@@ -322,7 +326,7 @@ export function TerminalTabsView({
                   resizeLabel={t("terminal.panel.resizeFilesLabel")}
                   resizeTitle={t("terminal.panel.resizeFilesTitle")}
                 >
-                  <FileExplorerSidebar mode="panel" onClosePanel={closeFilesPanel} />
+                  <FileExplorerSidebar mode="panel" onClosePanel={closeFilesPanel} editorActive={editorActive} hasEditorWorkspace={hasEditorWorkspace} onSwitchToTerminalWorkspace={switchToTerminalWorkspace} onSwitchToEditorWorkspace={switchToEditorWorkspace} />
                 </ResizableTerminalPanelFrame>
               ) : null,
               !sidePanelMerged && systemResourcesOpen ? (

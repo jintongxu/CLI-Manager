@@ -15,7 +15,7 @@ import { clearEditorDecorations, useGitFileDecorations } from "../components/use
 import { useFileEditorSearchNavigation } from "../components/useFileEditorSearchNavigation";
 import { useFileEditorShortcuts } from "../components/useFileEditorShortcuts";
 import type { FileEditorPaneProps, PendingAction, MonacoEditor, MarkdownNavigationMode, PendingMarkdownNavigation } from "../types/fileEditorModel";
-import { isDarkHexColor } from "../lib/fileEditorTheme";
+import { getFileEditorTheme } from "../lib/fileEditorTheme";
 import { useFileEditorMarkdownNavigation } from "./useFileEditorMarkdownNavigation";
 configureMonaco();
 
@@ -81,9 +81,10 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
     () => visibleFile ? gitChanges.find((change) => change.path === visibleFile.path) ?? null : null,
     [gitChanges, visibleFile?.path]
   );
+  const isNewFile = activeGitChange?.status === "U" || activeGitChange?.status === "??" || activeGitChange?.status === "A";
   const language = useMemo(() => visibleFile ? languageFromPath(visibleFile.path) : "plaintext", [visibleFile]);
   const editorTheme = useMemo(
-    () => isDarkHexColor(terminalThemeBackground) ? "vs-dark" : "vs",
+    () => getFileEditorTheme(terminalThemeBackground),
     [terminalThemeBackground]
   );
 
@@ -114,7 +115,7 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
     decorationIdsRef: gitDecorationIdsRef,
     editorReadyNonce,
     project: editorProject,
-    change: activeGitChange,
+    change: isNewFile ? null : activeGitChange,
     filePath: visibleFile?.path ?? null,
     previewKind: visibleFile?.previewKind ?? null,
     previewMode,
@@ -248,7 +249,7 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
     }
   };
   return {
-    activeDiff, t, visibleFile, session, project, dirty, previewMode, setPreviewMode,
+    activeDiff, t, visibleFile, session, project, dirty, isNewFile, previewMode, setPreviewMode,
     copyActiveAiPath, copyActiveAiContext, save, requestClose, visibleFiles, activeFilePath,
     diffContext, diffWorkspace, setActiveFilePath, requestCloseFiles, editorProject, language,
     editorTheme, handleEditorMount, setActiveContent, handleMarkdownLinkActivate,

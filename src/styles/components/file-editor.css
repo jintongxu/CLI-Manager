@@ -42,6 +42,45 @@
   background-color: transparent;
 }
 
+.ui-file-readonly-badge {
+  display: inline-flex;
+  max-width: 92px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, #f0b429 38%, var(--border));
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: color-mix(in srgb, #f0b429 12%, transparent);
+  color: color-mix(in srgb, #f0b429 78%, var(--on-surface));
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-file-selection-count {
+  display: inline-flex;
+  min-width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--primary) 34%, var(--border));
+  border-radius: 999px;
+  padding: 0 6px;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: var(--on-surface);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.ui-file-selection-count[data-empty="true"] {
+  border-color: color-mix(in srgb, var(--on-surface) 14%, var(--border));
+  background: color-mix(in srgb, var(--on-surface) 5%, transparent);
+  color: var(--text-muted);
+}
+
 .ui-file-explorer-sidebar .ui-icon-action {
   border-color: color-mix(in srgb, var(--on-surface) 10%, transparent);
   background-color: color-mix(in srgb, var(--on-surface) 7%, transparent);
@@ -58,9 +97,15 @@
 
 .ui-file-editor-pane {
   --file-editor-border: color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 13%, transparent);
+  --file-editor-border-strong: color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 22%, transparent);
   --file-editor-muted: color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 62%, var(--terminal-theme-muted, #64748b) 38%);
-  background: var(--terminal-theme-background, var(--surface));
+  --file-editor-surface: var(--terminal-theme-background, var(--surface));
+  --file-editor-surface-raised: color-mix(in srgb, var(--file-editor-surface) 88%, var(--terminal-theme-foreground, #f8fafc) 7%);
+  --file-editor-surface-soft: color-mix(in srgb, var(--file-editor-surface) 94%, var(--terminal-theme-foreground, #f8fafc) 3%);
+  --file-editor-accent: var(--terminal-theme-accent, var(--primary, #60a5fa));
+  background: var(--file-editor-surface);
   color: var(--terminal-theme-foreground, var(--on-surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--file-editor-border) 72%, transparent);
 }
 
 .ui-file-editor-pane .text-on-surface,
@@ -77,32 +122,148 @@
 }
 
 .ui-file-editor-header {
-  background-color: color-mix(in srgb, var(--terminal-theme-background, #0c0e10) 84%, var(--terminal-theme-foreground, #f8fafc) 8%);
+  position: relative;
+  background:
+    linear-gradient(115deg, color-mix(in srgb, var(--file-editor-accent) 9%, transparent), transparent 42%),
+    var(--file-editor-surface-raised);
   border-bottom-color: var(--file-editor-border);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--file-editor-accent) 10%, transparent);
+}
+
+.ui-file-editor-new-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, #35c46b 44%, var(--file-editor-border));
+  border-radius: 999px;
+  padding: 1px 6px;
+  background: color-mix(in srgb, #35c46b 14%, transparent);
+  color: color-mix(in srgb, #35c46b 82%, var(--terminal-theme-foreground, #f8fafc));
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.ui-file-editor-header::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--file-editor-accent) 40%, transparent), transparent);
+  content: "";
+  pointer-events: none;
 }
 
 .ui-file-editor-tabs {
-  background-color: color-mix(in srgb, var(--terminal-theme-background, #0c0e10) 92%, var(--terminal-theme-foreground, #f8fafc) 5%);
+  gap: 2px;
+  padding-inline: 5px;
+  background-color: var(--file-editor-surface-soft);
   border-bottom-color: var(--file-editor-border);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--file-editor-foreground, var(--terminal-theme-foreground, #f8fafc)) 3%, transparent);
+}
+
+.ui-file-editor-tabs::-webkit-scrollbar {
+  height: 4px;
+}
+
+.ui-file-editor-tabs::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--file-editor-muted) 42%, transparent);
 }
 
 .ui-file-editor-tab {
+  position: relative;
+  border: 1px solid transparent;
   color: var(--file-editor-muted);
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 
 .ui-file-editor-tab:hover {
-  background-color: color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 10%, transparent);
+  border-color: var(--file-editor-border);
+  background-color: color-mix(in srgb, var(--file-editor-surface-raised) 84%, var(--file-editor-accent) 8%);
+  color: var(--terminal-theme-foreground, #f8fafc);
 }
 
 .ui-file-editor-tab[data-active="true"] {
-  background: color-mix(in srgb, var(--terminal-theme-selection, var(--terminal-theme-accent, #60a5fa)) 24%, var(--terminal-theme-background, #0c0e10) 76%) !important;
+  border-color: color-mix(in srgb, var(--file-editor-accent) 45%, var(--file-editor-border-strong));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--file-editor-accent) 22%, var(--file-editor-surface-raised)), var(--file-editor-surface-raised)) !important;
   color: var(--terminal-theme-foreground, #f8fafc) !important;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--file-editor-accent) 12%, transparent);
+}
+
+.ui-file-editor-tab[data-active="true"]::after {
+  position: absolute;
+  right: 8px;
+  bottom: -1px;
+  left: 8px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--file-editor-accent);
+  content: "";
+}
+
+.ui-file-editor-tab button:last-child {
+  color: var(--file-editor-muted);
+  transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+
+.ui-file-editor-tab button:last-child:hover {
+  background-color: color-mix(in srgb, var(--file-editor-accent) 20%, transparent);
+  color: var(--terminal-theme-foreground, #f8fafc);
 }
 
 .ui-file-editor-body,
 .ui-file-editor-image-preview {
-  background-color: var(--terminal-theme-background, var(--surface));
+  position: relative;
+  background:
+    radial-gradient(circle at 88% 8%, color-mix(in srgb, var(--file-editor-accent) 7%, transparent), transparent 28%),
+    var(--file-editor-surface);
   color: var(--terminal-theme-foreground, var(--on-surface));
+}
+
+.ui-file-editor-body > .monaco-editor,
+.ui-file-editor-body > .monaco-diff-editor {
+  background-color: transparent !important;
+}
+
+.ui-file-editor-body > .monaco-editor .overflow-guard,
+.ui-file-editor-body > .monaco-diff-editor .overflow-guard {
+  border-radius: 0;
+}
+
+.ui-file-editor-body > .monaco-editor .minimap,
+.ui-file-editor-body > .monaco-editor .minimap-shadow-visible,
+.ui-file-editor-body > .monaco-editor .decorationsOverviewRuler {
+  background-color: var(--file-editor-surface) !important;
+}
+
+.ui-file-editor-body > .monaco-editor .minimap-shadow-visible {
+  box-shadow: -6px 0 8px -8px color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 28%, transparent) !important;
+}
+
+.ui-file-editor-body > .monaco-editor .margin,
+.ui-file-editor-body > .monaco-diff-editor .margin {
+  background-color: color-mix(in srgb, var(--file-editor-surface) 94%, var(--terminal-theme-foreground, #f8fafc) 3%) !important;
+}
+
+.ui-file-editor-body > .monaco-editor .monaco-scrollable-element > .scrollbar > .slider,
+.ui-file-editor-body > .monaco-diff-editor .monaco-scrollable-element > .scrollbar > .slider {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--file-editor-muted) 38%, transparent) !important;
+}
+
+.ui-file-editor-body > .monaco-editor .monaco-scrollable-element > .scrollbar > .slider:hover,
+.ui-file-editor-body > .monaco-diff-editor .monaco-scrollable-element > .scrollbar > .slider:hover {
+  background: color-mix(in srgb, var(--file-editor-accent) 64%, transparent) !important;
+}
+
+.ui-file-editor-body > .flex.items-center.justify-center {
+  margin: 18px;
+  border: 1px dashed var(--file-editor-border-strong);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--file-editor-surface-raised) 58%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 4%, transparent);
 }
 
 .ui-file-editor-pane .ui-file-editor-search-line-highlight {
@@ -113,6 +274,12 @@
   background: color-mix(in srgb, var(--terminal-theme-accent, #60a5fa) 38%, transparent);
   color: var(--terminal-theme-foreground, #f8fafc);
   border-radius: 2px;
+}
+
+.ui-file-explorer-sidebar .ui-file-tree-row[data-file-drop-target-path]:hover {
+  outline: 1px solid color-mix(in srgb, var(--primary) 35%, transparent);
+  outline-offset: -1px;
+  background-color: color-mix(in srgb, var(--primary) 6%, transparent);
 }
 
 .ui-file-tree-status-badge {
@@ -134,21 +301,25 @@
 .ui-file-editor-pane .ui-file-editor-git-line-added,
 .ui-file-editor-pane .ui-file-editor-git-line-modified,
 .ui-file-editor-pane .ui-file-editor-git-line-deleted {
-  width: 5px !important;
-  margin-left: 3px;
-  border-radius: 2px;
+  width: 3px !important;
+  margin-left: 4px;
+  border-radius: 0 3px 3px 0;
+  opacity: 0.9;
 }
 
 .ui-file-editor-pane .ui-file-editor-git-line-added {
-  background: #35c46b;
+  background: color-mix(in srgb, #35c46b 82%, var(--file-editor-accent));
+  box-shadow: 1px 0 5px color-mix(in srgb, #35c46b 24%, transparent);
 }
 
 .ui-file-editor-pane .ui-file-editor-git-line-modified {
-  background: #4f8cff;
+  background: color-mix(in srgb, #4f8cff 82%, var(--file-editor-accent));
+  box-shadow: 1px 0 5px color-mix(in srgb, #4f8cff 24%, transparent);
 }
 
 .ui-file-editor-pane .ui-file-editor-git-line-deleted {
-  background: #f7768e;
+  background: color-mix(in srgb, #f7768e 82%, var(--file-editor-accent));
+  box-shadow: 1px 0 5px color-mix(in srgb, #f7768e 24%, transparent);
 }
 
 .ui-file-editor-markdown-preview {

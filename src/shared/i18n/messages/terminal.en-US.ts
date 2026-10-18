@@ -1,6 +1,9 @@
 import type { zh } from "./terminal.zh-CN";
 
 export const en: Record<keyof typeof zh, string> = {
+  "terminal.workspace.label": "Workspace",
+  "terminal.workspace.terminal": "Terminal",
+  "terminal.workspace.editor": "Editor",
   "terminal.context.current": "Current",
   "terminal.context.otherVisible": "Also visible",
   "terminal.context.hideDisplayedProjectTerminals": "Hide all unhidden ordinary terminals in project \"{project}\" matching the current filter (keep sessions and processes; do not delete)",

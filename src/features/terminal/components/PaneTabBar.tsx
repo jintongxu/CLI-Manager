@@ -153,10 +153,14 @@ export function PaneTabBar({
     for (const worktree of worktrees) next.set(worktree.id, worktree);
     return next;
   }, [worktrees]);
+  // File-editor sessions remain in the pane tree for PaneLeafView rendering, but
+  // are not terminal tabs. Keeping this filtering at the presentation boundary
+  // avoids changing session ownership, persistence, or PTY lifecycle behavior.
   const paneSessions = pane.sessionIds
     .map((id) => sessions.find((session) => session.id === id))
     .filter((session) => !visibleSessionIds || (session && visibleSessionIds.has(session.id)))
-    .filter((session): session is TerminalSession => Boolean(session));
+    .filter((session): session is TerminalSession => Boolean(session))
+    .filter((session) => session.kind !== "file-editor");
   const paneSessionIds = paneSessions.map((session) => session.id);
   const activePaneTabId =
     pane.activeSessionId && paneSessionIds.includes(pane.activeSessionId)

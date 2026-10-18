@@ -3,7 +3,6 @@ import { useEffect, type MutableRefObject } from "react";
 import { useGitTransportLease } from "../../git/api/useGitTransportLease";
 import { debugConsoleWarn } from "../../../shared/platform/debugConsole";
 import type { GitFileChange, Project, ProjectFilePreviewKind } from "../../../shared/types/index";
-import { STATUS_CONFIG } from "../../git/api/GitStatusIcon";
 
 type MonacoEditor = Parameters<OnMount>[0];
 type GitLineChangeKind = "added" | "modified" | "deleted";
@@ -78,12 +77,6 @@ function parseGitDiffLineMarkers(diffText: string, maxLine: number): GitLineMark
   return Array.from(markers.entries()).map(([lineNumber, kind]) => ({ lineNumber, kind }));
 }
 
-function decorationColor(kind: GitLineChangeKind): string {
-  if (kind === "added") return STATUS_CONFIG.A.color;
-  if (kind === "deleted") return STATUS_CONFIG.D.color;
-  return STATUS_CONFIG.M.color;
-}
-
 function makeGitLineDecorations(markers: GitLineMarker[]) {
   return markers.map((marker) => ({
     range: {
@@ -93,8 +86,9 @@ function makeGitLineDecorations(markers: GitLineMarker[]) {
       endColumn: 1,
     },
     options: {
+      // Keep the change marker in the gutter only; the overview ruler creates a
+      // second full-height color strip that competes with the editor surface.
       linesDecorationsClassName: `ui-file-editor-git-line-${marker.kind}`,
-      overviewRuler: { color: decorationColor(marker.kind), position: 4 },
     },
   }));
 }
