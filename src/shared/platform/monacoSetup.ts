@@ -1,6 +1,8 @@
 import { loader } from "@monaco-editor/react";
 import { getCurrentLanguage, type AppLanguage } from "../i18n/index";
 import { monaco, monacoEnglishNlsMessages } from "./monacoEnglishNls";
+
+export { monaco };
 import { monacoChineseNlsMessages } from "./monacoChineseNls";
 import { monacoTraditionalChineseNlsMessages } from "./monacoTraditionalChineseNls";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";

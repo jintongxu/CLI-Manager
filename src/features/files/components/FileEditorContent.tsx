@@ -153,10 +153,12 @@ export function FileEditorContent({
             onChange={(value) => onContentChange(value ?? "")}
             options={{
               automaticLayout: true,
+              overviewRulerLanes: 0,
+              hideCursorInOverviewRuler: true,
               fontFamily: effectiveUiFontFamily,
               fontSize,
               glyphMargin: true,
-              minimap: { enabled: true },
+              minimap: { enabled: false },
               scrollBeyondLastLine: false,
               wordWrap: "on",
             }}

@@ -1,4 +1,7 @@
 export const zh = {
+  "terminal.workspace.label": "工作区",
+  "terminal.workspace.terminal": "终端",
+  "terminal.workspace.editor": "编辑器",
   "terminal.context.current": "当前上下文",
   "terminal.context.otherVisible": "其他可见归属",
   "terminal.context.hideDisplayedProjectTerminals": "隐藏项目「{project}」当前筛选下所有未隐藏的普通终端（保留会话和进程，不删除）",

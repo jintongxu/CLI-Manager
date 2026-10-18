@@ -11,6 +11,8 @@ import {
 } from "react";
 import { getMaterialFileIcon, getMaterialFolderIcon } from "@baybreezy/file-extension-icon";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
 import { copyAiText } from "./aiClipboard";
@@ -49,7 +51,7 @@ import { Button } from "../../../shared/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from "../../../shared/ui/dialog";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "../../../shared/ui/context-menu";
 import { Portal } from "../../../shared/ui/Portal";
-import { ChevronRight, Copy, EyeOff, File, FileCode, Folder, FolderOpen, FolderPlus, Pencil, RefreshCw, Search, Trash2, Upload, X } from "../../../shared/ui/icons";
+import { ChevronRight, Copy, EyeOff, File, FileCode, Folder, FolderOpen, FolderPlus, Pencil, RefreshCw, Search, Terminal, Trash2, Upload, X } from "../../../shared/ui/icons";
 import { TERM } from "../../stats/api/termStatsUi";
 import { TerminalPanelHeader } from "../../terminal/api/TerminalPanelHeader";
 import { PathCopyMenu } from "./PathCopyMenu";
@@ -64,6 +66,10 @@ interface FileExplorerSidebarProps {
   mode?: "sidebar" | "panel";
   onClosePanel?: () => void;
   onBackToProjects?: () => void;
+  editorActive?: boolean;
+  hasEditorWorkspace?: boolean;
+  onSwitchToTerminalWorkspace?: () => void;
+  onSwitchToEditorWorkspace?: () => void;
 }
 
 type InputAction =
@@ -114,6 +120,27 @@ const SEARCH_MODES: Array<{ value: ProjectFileSearchMode; labelKey: TranslationK
   { value: "files", labelKey: "files.search.modeFiles" },
   { value: "content", labelKey: "files.search.modeCode" },
 ];
+
+const SYSTEM_OPEN_EXTENSIONS = new Set([
+  "exe", "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico",
+  "pdf", "mp4", "webm", "mov", "avi", "mkv", "mp3", "wav", "ogg", "m4a",
+]);
+
+function canOpenWithSystem(name: string): boolean {
+  const extension = name.toLowerCase().split(".").pop() ?? "";
+  return SYSTEM_OPEN_EXTENSIONS.has(extension);
+}
+
+async function openFileWithSystem(rootPath: string, relativePath: string, t: Translate) {
+  try {
+    await invoke("open_folder_in_explorer", {
+      path: joinProjectPath(rootPath, relativePath),
+      openFile: true,
+    });
+  } catch (err) {
+    toast.error(t("files.toast.openFileFailed"), { description: String(err) });
+  }
+}
 
 function getDisplayPathName(path: string): string {
   const normalized = path.trim().replace(/[\\/]+$/g, "");
@@ -374,6 +401,7 @@ function FileNode({
   getDisplayStatus,
   getGitChange,
   onOpenFile,
+  onOpenSystemFile,
   onOpenDiff,
   onInput,
   onConfirm,
@@ -401,6 +429,7 @@ function FileNode({
   getDisplayStatus: (entry: ProjectFileEntry) => FileDisplayStatus | null;
   getGitChange: (path: string) => GitFileChange | null;
   onOpenFile: (entry: ProjectFileEntry) => void;
+  onOpenSystemFile: (entry: ProjectFileEntry) => void;
   onOpenDiff: (change: GitFileChange) => void;
   onInput: (action: InputAction) => void;
   onConfirm: (action: ConfirmAction) => void;
@@ -475,6 +504,7 @@ function FileNode({
       getDisplayStatus={getDisplayStatus}
       getGitChange={getGitChange}
       onOpenFile={onOpenFile}
+      onOpenSystemFile={onOpenSystemFile}
       onOpenDiff={onOpenDiff}
       onInput={onInput}
       onConfirm={onConfirm}
@@ -568,6 +598,9 @@ function FileNode({
             onPointerMove={onFilePointerMove}
             onPointerUp={onFilePointerUp}
             onPointerCancel={onFilePointerCancel}
+            onDoubleClick={() => {
+              if (!readOnly && !isDir && canOpenWithSystem(displayEntry.name)) onOpenSystemFile(displayEntry);
+            }}
             onClick={(event) => {
               if (isTerminalFilePointerDragClickHandled(event.currentTarget)) return;
               if (event.ctrlKey || event.metaKey) {
@@ -647,6 +680,9 @@ function FileNode({
           </ContextMenuItem>}
           {project && (
             <>
+              {!readOnly && !isDir && canOpenWithSystem(displayEntry.name) && <ContextMenuItem onSelect={() => onOpenSystemFile(displayEntry)}>
+                <FileCode size={13} /> {t("files.menu.openWithSystem")}
+              </ContextMenuItem>}
               {!readOnly && <ContextMenuItem onSelect={() => void openFileBrowserFolder(project.path, displayEntry.path, t)}>
                 <FolderOpen size={13} /> {t("files.menu.openContainingFolder")}
               </ContextMenuItem>}
@@ -672,6 +708,7 @@ function FileTreeRows({
   getDisplayStatus,
   getGitChange,
   onOpenFile,
+  onOpenSystemFile,
   onOpenDiff,
   onInput,
   onConfirm,
@@ -699,6 +736,7 @@ function FileTreeRows({
   getDisplayStatus: (entry: ProjectFileEntry) => FileDisplayStatus | null;
   getGitChange: (path: string) => GitFileChange | null;
   onOpenFile: (entry: ProjectFileEntry) => void;
+  onOpenSystemFile: (entry: ProjectFileEntry) => void;
   onOpenDiff: (change: GitFileChange) => void;
   onInput: (action: InputAction) => void;
   onConfirm: (action: ConfirmAction) => void;
@@ -732,6 +770,7 @@ function FileTreeRows({
           getDisplayStatus={getDisplayStatus}
           getGitChange={getGitChange}
           onOpenFile={onOpenFile}
+          onOpenSystemFile={onOpenSystemFile}
           onOpenDiff={onOpenDiff}
           onInput={onInput}
           onConfirm={onConfirm}
@@ -759,7 +798,15 @@ function FileTreeRows({
   );
 }
 
-export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToProjects }: FileExplorerSidebarProps) {
+export function FileExplorerSidebar({
+  mode = "sidebar",
+  onClosePanel,
+  onBackToProjects,
+  editorActive = false,
+  hasEditorWorkspace = false,
+  onSwitchToTerminalWorkspace,
+  onSwitchToEditorWorkspace,
+}: FileExplorerSidebarProps) {
   const { t } = useI18n();
   const [menuPortalContainer, setMenuPortalContainer] = useState<HTMLDivElement | null>(null);
   const project = useFileExplorerStore((s) => s.project);
@@ -1140,10 +1187,11 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
   const toggleSearchControls = useCallback(() => {
     if (searchControlsVisible) {
       setSearchControlsVisible(false);
+      if (searchQuery.trim()) void setSearchQuery("");
       return;
     }
     revealSearchControls();
-  }, [revealSearchControls, searchControlsVisible]);
+  }, [revealSearchControls, searchControlsVisible, searchQuery, setSearchQuery]);
 
   const handleSidebarKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (isFileActionInput(event.target)) return;
@@ -1269,6 +1317,12 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
     if (project) openFileEditorPane(project);
   };
 
+  const requestOpenSystemFile = useCallback((entry: ProjectFileEntry) => {
+    if (!project || readOnly || entry.kind !== "file" || !canOpenWithSystem(entry.name)) return;
+    void openFileWithSystem(project.path, entry.path, t);
+  }, [project, readOnly, t]);
+  const onOpenSystemFile = requestOpenSystemFile;
+
   const requestOpenDiff = useCallback((change: GitFileChange) => {
     if (!project) return;
     openDiff(createGitDiffWorkspaceContext(project), {
@@ -1323,6 +1377,9 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
             onDragEnd={handleFileDragEnd}
             onDragOver={(event) => handleFileDragOver(event, entry)}
             onDrop={(event) => handleFileDrop(event, entry)}
+            onDoubleClick={() => {
+              if (!readOnly && entry.kind === "file" && canOpenWithSystem(entry.name)) onOpenSystemFile(entry);
+            }}
             onClick={(event) => {
               if (event.currentTarget.dataset.pointerDragHandled === "true") return;
               if (event.ctrlKey || event.metaKey) { event.preventDefault(); selectEntry(entry, true); return; }
@@ -1355,6 +1412,9 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
           <FileSelectionMenuItems entry={entry} onInput={openInput} onConfirm={setConfirmAction} />
           {!readOnly && <ContextMenuItem disabled={mutationBusy} onSelect={() => void pasteIntoTarget(parentPath(match.path))}>
             <Copy size={13} /> {t("files.menu.paste")}
+          </ContextMenuItem>}
+          {!readOnly && canOpenWithSystem(match.name) && <ContextMenuItem onSelect={() => onOpenSystemFile(entry)}>
+            <FileCode size={13} /> {t("files.menu.openWithSystem")}
           </ContextMenuItem>}
           {!readOnly && <ContextMenuItem onSelect={() => void openFileBrowserFolder(project.path, match.path, t)}>
             <FolderOpen size={13} /> {t("files.menu.openContainingFolder")}
@@ -1409,6 +1469,9 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
             data-ignored={entryIgnored ? "true" : "false"}
             data-file-drop-target-path={getDropTargetPath(entry)}
             draggable={false}
+            onDoubleClick={() => {
+              if (!readOnly && entry.kind === "file" && canOpenWithSystem(entry.name)) onOpenSystemFile(entry);
+            }}
             onClick={(event) => {
               if (isTerminalFilePointerDragClickHandled(event.currentTarget)) return;
               if (event.ctrlKey || event.metaKey) { event.preventDefault(); selectEntry(entry, true); return; }
@@ -1462,6 +1525,9 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
           {!readOnly && <ContextMenuItem disabled={mutationBusy} onSelect={() => void pasteIntoTarget(getPasteTargetPath(entry))}>
             <Copy size={13} /> {t("files.menu.paste")}
           </ContextMenuItem>}
+        {!readOnly && entry.kind === "file" && canOpenWithSystem(entry.name) && <ContextMenuItem onSelect={() => onOpenSystemFile(entry)}>
+          <FileCode size={13} /> {t("files.menu.openWithSystem")}
+        </ContextMenuItem>}
         {!readOnly && <ContextMenuItem onSelect={() => void openFileBrowserFolder(project.path, entry.path, t)}>
           <FolderOpen size={13} /> {t("files.menu.openContainingFolder")}
         </ContextMenuItem>}
@@ -1492,6 +1558,48 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
     void openFileBrowserFolder(project.path, "", t);
   }, [project, t]);
 
+  useEffect(() => {
+    if (!project || readOnly) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void getCurrentWebview().onDragDropEvent(async (event) => {
+      if (disposed || event.payload.type !== "drop" || event.payload.paths.length === 0) return;
+      const scaleFactor = await getCurrentWindow().scaleFactor().catch(() => window.devicePixelRatio || 1);
+      if (disposed) return;
+      const point = event.payload.position.toLogical(scaleFactor);
+      const target = document.elementFromPoint(point.x, point.y)?.closest<HTMLElement>("[data-file-drop-target-path]");
+      if (!target) return;
+      const targetParentPath = target.dataset.fileDropTargetPath ?? "";
+      const protectedSourcePaths = event.payload.paths;
+      const results = await Promise.allSettled(event.payload.paths.map((sourcePath) => {
+        const normalizedName = sourcePath.replace(/[\\/]+$/u, "").split(/[\\/]/).pop() ?? sourcePath;
+        return invoke("file_import_external", {
+          rootPath: project.path,
+          sourcePath,
+          targetParentPath,
+          name: normalizedName,
+          overwrite: false,
+          protectedSourcePaths,
+        });
+      }));
+      if (disposed) return;
+      const failures = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+      if (failures.length > 0) {
+        toast.error(t("files.toast.uploadFailed"), { description: String(failures[0].reason) });
+      } else {
+        toast.success(t("files.toast.uploaded"));
+      }
+      await refresh();
+    }).then((fn) => {
+      if (disposed) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [project, readOnly, refresh, t]);
+
   const renderRows = useMemo(() => {
     if (loading && tree.length === 0) {
       return <div className="px-3 py-8 text-center text-xs text-text-muted">{t("common.loading")}</div>;
@@ -1520,6 +1628,7 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
         getDisplayStatus={getDisplayStatus}
         getGitChange={getGitChange}
         onOpenFile={requestOpenFile}
+        onOpenSystemFile={requestOpenSystemFile}
         onOpenDiff={requestOpenDiff}
         onInput={openInput}
         onConfirm={setConfirmAction}
@@ -1575,6 +1684,15 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
   const hasHeaderExtras = searchControlsVisible || readOnly || Boolean(clipboard) || selectedEntries.length > 0 || mutationBusy;
   const headerActions = (
     <>
+      <span
+        className="ui-file-selection-count"
+        data-empty={selectedEntries.length === 0 ? "true" : "false"}
+        role="status"
+        aria-label={t("files.batch.selected", { count: selectedEntries.length })}
+        title={t("files.batch.selected", { count: selectedEntries.length })}
+      >
+        {selectedEntries.length}
+      </span>
       <button
         className="ui-file-tooltip ui-icon-action"
         data-tooltip={searchToggleLabel}
@@ -1584,6 +1702,16 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
       >
         {searchControlsVisible ? <EyeOff size={13} /> : <Search size={13} />}
       </button>
+      {readOnly && (
+        <span
+          className="ui-file-readonly-badge"
+          role="status"
+          aria-label={t("files.readOnly")}
+          title={t("files.readOnly")}
+        >
+          {t("files.readOnly")}
+        </span>
+      )}
       {readOnly && (
         <button
           type="button"
@@ -1640,8 +1768,6 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
         </div>
       )}
       {mutationBusy && <div role="status" className="mt-1 text-[10px] text-text-muted">{t("files.batch.working")}</div>}
-      {selectedEntries.length > 0 && <div role="status" className="mt-1 text-[10px] text-text-muted">{t("files.batch.selected", { count: selectedEntries.length })}</div>}
-      {readOnly && <div className="mt-1 text-[10px] text-text-muted">{t("files.readOnly")}</div>}
       {!readOnly && clipboard && <div className="mt-1 truncate text-[10px] text-text-muted">{clipboard.mode === "copy" ? t("files.clipboard.copy") : t("files.clipboard.move")}：{t("files.batch.clipboardCount", { count: clipboard.entries.length })}</div>}
     </>
   );
@@ -1678,6 +1804,33 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
       <LiveServerStatusBridge project={project} />
       {mode === "panel" ? (
         <>
+          {onSwitchToTerminalWorkspace && onSwitchToEditorWorkspace && (
+            <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1" role="tablist" aria-label={t("terminal.workspace.label")}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={!editorActive}
+                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-text-muted transition-colors hover:bg-surface-hover hover:text-on-surface data-[active=true]:bg-surface-selected data-[active=true]:text-on-surface"
+                data-active={!editorActive ? "true" : "false"}
+                onClick={onSwitchToTerminalWorkspace}
+              >
+                <Terminal size={13} />
+                {t("terminal.workspace.terminal")}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={editorActive}
+                disabled={!hasEditorWorkspace}
+                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-text-muted transition-colors hover:bg-surface-hover hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50 data-[active=true]:bg-surface-selected data-[active=true]:text-on-surface"
+                data-active={editorActive ? "true" : "false"}
+                onClick={onSwitchToEditorWorkspace}
+              >
+                <FileCode size={13} />
+                {t("terminal.workspace.editor")}
+              </button>
+            </div>
+          )}
           <TerminalPanelHeader
             icon={<Folder size={14} />}
             accent={TERM.blue}

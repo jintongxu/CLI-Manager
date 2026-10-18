@@ -32,10 +32,16 @@ export function buildWorkspanTabModels(
     missingWorktree: translateCurrent("terminal.context.worktreeMissing"),
   },
 ): ProjectWorkspanTabModel[] {
-  return layouts.map(({ workspan, sessionIds, closeSessionIds }) => {
+  return layouts.flatMap(({ workspan, sessionIds, closeSessionIds }) => {
+    // Editor sessions stay mounted in the pane tree, but workspan/terminal tab
+    // models represent ordinary terminal sessions only.
     const memberSessions = sessionIds
       .map((sessionId) => sessions.find((session) => session.id === sessionId))
-      .filter((session): session is TerminalSession => Boolean(session));
+      .filter((session): session is TerminalSession => Boolean(session))
+      .filter((session) => session.kind !== "file-editor");
+    const terminalSessionIds = memberSessions.map((session) => session.id);
+    const terminalCloseSessionIds = closeSessionIds.filter((sessionId) => terminalSessionIds.includes(sessionId));
+    if (memberSessions.length === 0) return [];
     const singleSession = memberSessions.length === 1 ? memberSessions[0] : null;
     const members = memberSessions.map((session) => resolveTerminalProjectMembership(session, sessions, projects, worktrees, labels));
     const projectMemberships = buildWorkspanProjectMemberships(members, workspan.activeSessionId);
@@ -44,11 +50,11 @@ export function buildWorkspanTabModels(
       projectKeys: projectMemberships.map((membership) => membership.projectKey),
       mixedProject: projectMemberships.length > 1,
       workspan,
-      sessionIds,
-      closeSessionIds,
+      sessionIds: terminalSessionIds,
+      closeSessionIds: terminalCloseSessionIds,
       singleSession,
       title: workspan.customTitle ?? singleSession?.title ?? translateCurrent("terminal.workspan.title", { count: memberSessions.length }),
-      notification: getWorkspanNotification(sessionIds, notifications),
+      notification: getWorkspanNotification(terminalSessionIds, notifications),
       vendor: singleSession ? (inferVendor(projects.get(singleSession.projectId!)?.cli_tool) ?? inferSessionVendor(singleSession)) : null,
       cliToolIcon: singleSession ? inferSessionCliToolIcon(singleSession, projects.get(singleSession.projectId!)) : null,
       contextKey: singleSession ? getTerminalTabScopeKey(singleSession) : null,
