@@ -19,6 +19,7 @@ import { terminalProcessManager } from "../../terminal/api/TerminalProcessManage
 import { resolveProjectPath } from "../../projects/api/groupPath";
 import { dispatchCurrentWorkAction } from "../../terminal/api/currentWorkEvents";
 import { useI18n } from "../../../shared/i18n/index";
+import { resolveAgentRuntimeKind } from "../../agents/api/agentCapabilities";
 
 export const useCommandPaletteStore = create<{
   isOpen: boolean;
@@ -211,20 +212,28 @@ export function CommandPalette() {
     }
 
     if (viewMode !== "compact") {
-      for (const t of templates) {
+      for (const template of templates) {
         result.push({
-          id: `template:${t.id}`,
-          label: t.name,
-          description: t.command,
-          category: "命令模板",
+          id: `template:${template.id}`,
+          label: template.name,
+          description: template.command,
+          category: template.template_type === "pi_prompt" ? t("commandTemplate.type.piPrompt") : t("commandTemplate.type.command"),
           action: () => {
-            const sid = useTerminalStore.getState().activeSessionId;
+            const state = useTerminalStore.getState();
+            const sid = state.activeSessionId;
+            const session = state.sessions.find((item) => item.id === sid);
+            const isPi = resolveAgentRuntimeKind(`${session?.cliTool ?? ""} ${session?.startupCmd ?? ""} ${session?.title ?? ""}`) === "pi";
+            if (template.template_type === "pi_prompt" && !isPi) {
+              toast.error(t("commandTemplate.piSessionRequired"));
+              return;
+            }
             if (sid) {
-              terminalProcessManager.write(sid, t.command + "\r").catch((err) => {
-                toast.error("执行模板命令失败", { description: String(err) });
-                logError("CommandPalette failed to run template", {
-                  templateId: t.id,
+              terminalProcessManager.write(sid, template.command + "\r").catch((err) => {
+                toast.error(template.template_type === "pi_prompt" ? t("commandTemplate.toast.sendFailed") : t("commandTemplate.toast.runFailed"), { description: String(err) });
+                logError("CommandPalette failed to execute template", {
+                  templateId: template.id,
                   sessionId: sid,
+                  templateType: template.template_type ?? "command",
                   err,
                 });
               });

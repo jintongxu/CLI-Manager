@@ -17,16 +17,20 @@ interface TemplateStore {
   pruneSessionTemplates: (activeSessionIds: string[]) => void;
 }
 
-export const useTemplateStore = create<TemplateStore>((set, get) => ({
+export const useTemplateStore = create<TemplateStore>((set, get) => {
+  let fetchGeneration = 0;
+
+  return {
   templates: [],
   sessionTemplates: {},
 
   fetchTemplates: async () => {
+    const generation = ++fetchGeneration;
     const db = await getDb();
     const templates = await db.select<CommandTemplate[]>(
       "SELECT * FROM command_templates ORDER BY sort_order, name"
     );
-    set({ templates });
+    if (generation === fetchGeneration) set({ templates });
   },
 
   getForProject: (projectId) => {
@@ -55,13 +59,14 @@ export const useTemplateStore = create<TemplateStore>((set, get) => ({
       session_id: null,
       name: input.name,
       command: input.command,
+      template_type: input.template_type ?? "command",
       description: input.description ?? "",
       sort_order: 0,
     };
     await db.execute(
-      `INSERT INTO command_templates (id, project_id, name, command, description, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [template.id, template.project_id, template.name, template.command, template.description, template.sort_order]
+      `INSERT INTO command_templates (id, project_id, name, command, template_type, description, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [template.id, template.project_id, template.name, template.command, template.template_type, template.description, template.sort_order]
     );
     await get().fetchTemplates();
     return template;
@@ -74,6 +79,7 @@ export const useTemplateStore = create<TemplateStore>((set, get) => ({
       session_id: sessionId,
       name: input.name,
       command: input.command,
+      template_type: input.template_type ?? "command",
       description: input.description ?? "",
       sort_order: 0,
     };
@@ -154,4 +160,5 @@ export const useTemplateStore = create<TemplateStore>((set, get) => ({
       return { sessionTemplates: next };
     });
   },
-}));
+  };
+});

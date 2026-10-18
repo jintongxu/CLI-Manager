@@ -3,8 +3,8 @@ import { useShallow } from "zustand/shallow";
 import { useTemplateStore } from "./templateStore";
 import { useTerminalStore } from "../../terminal/state";
 import { useProjectStore } from "../../projects/api/projectStore";
-import type { CommandTemplate, Project } from "../../../shared/types/index";
-import { Check, ChevronDown, Pencil, Play, Plus, Search, TerminalSquare, Trash2, X } from "../../../shared/ui/icons";
+import type { CommandTemplate, Project, TemplateType } from "../../../shared/types/index";
+import { Check, ChevronDown, Copy, MessageSquare, Pencil, Play, Plus, Search, TerminalSquare, Trash2, X } from "../../../shared/ui/icons";
 import { Popover, PopoverTrigger, PopoverContent } from "../../../shared/ui/popover";
 import { EmptyState } from "../../../shared/ui/EmptyState";
 import { Input } from "../../../shared/ui/input";
@@ -13,9 +13,12 @@ import { toast } from "sonner";
 import { logError } from "../../../shared/platform/logger";
 import { useI18n } from "../../../shared/i18n/index";
 import { terminalProcessManager } from "../../terminal/api/TerminalProcessManager";
+import { resolveAgentRuntimeKind } from "../../agents/api/agentCapabilities";
+import { copyTextToClipboard } from "../../../shared/platform/systemClipboard";
 
 type TemplateScope = "global" | "project" | "session";
 type ScopeFilter = "all" | TemplateScope;
+type TemplateTypeFilter = "all" | TemplateType;
 
 function resolveCommand(command: string, project?: Project): string {
   if (!project) return command;
@@ -29,6 +32,10 @@ function getTemplateScope(template: CommandTemplate): TemplateScope {
   if (template.session_id) return "session";
   if (template.project_id) return "project";
   return "global";
+}
+
+function getTemplateType(template: CommandTemplate): TemplateType {
+  return template.template_type ?? "command";
 }
 
 interface CommandTemplatePanelProps {
@@ -162,8 +169,11 @@ export function CommandTemplatePanel({
   const [pendingDeleteTemplate, setPendingDeleteTemplate] = useState<CommandTemplate | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>("all");
+  const [typeFilter, setTypeFilter] = useState<TemplateTypeFilter>("all");
+  const [expandedTemplateId, setExpandedTemplateId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [command, setCommand] = useState("");
+  const [templateType, setTemplateType] = useState<TemplateType>("command");
   const [description, setDescription] = useState("");
   const [scope, setScope] = useState<TemplateScope>("global");
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -183,6 +193,15 @@ export function CommandTemplatePanel({
     { value: "global", label: t("settings.templates.scope.global") },
     { value: "project", label: t("settings.templates.scope.project") },
     { value: "session", label: t("settings.templates.scope.session") },
+  ];
+  const typeFilterOptions: Array<{ value: TemplateTypeFilter; label: string }> = [
+    { value: "all", label: t("commandTemplate.filter.all") },
+    { value: "command", label: t("commandTemplate.type.command") },
+    { value: "pi_prompt", label: t("commandTemplate.type.piPrompt") },
+  ];
+  const templateTypeOptions: InlineSelectOption[] = [
+    { value: "command", label: t("commandTemplate.type.command") },
+    { value: "pi_prompt", label: t("commandTemplate.type.piPrompt") },
   ];
 
   useEffect(() => {
@@ -211,6 +230,9 @@ export function CommandTemplatePanel({
   }, [open, fetchTemplates]);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
+  const isPiSession = resolveAgentRuntimeKind(
+    `${activeSession?.cliTool ?? ""} ${activeSession?.startupCmd ?? ""} ${activeSession?.title ?? ""}`,
+  ) === "pi";
   const activeProject = activeSession?.projectId
     ? projects.find((p) => p.id === activeSession.projectId)
     : undefined;
@@ -221,17 +243,19 @@ export function CommandTemplatePanel({
     return visibleTemplates.filter((template) => {
       const templateScope = getTemplateScope(template);
       if (scopeFilter !== "all" && templateScope !== scopeFilter) return false;
+      if (typeFilter !== "all" && getTemplateType(template) !== typeFilter) return false;
       if (!query) return true;
       return [template.name, template.command, template.description]
         .filter(Boolean)
         .some((value) => value.toLowerCase().includes(query));
     });
-  }, [visibleTemplates, scopeFilter, searchQuery]);
+  }, [visibleTemplates, scopeFilter, typeFilter, searchQuery]);
 
   const resetForm = () => {
     setEditingTemplate(null);
     setName("");
     setCommand("");
+    setTemplateType("command");
     setDescription("");
     setScope("global");
     setProjectId(null);
@@ -252,6 +276,7 @@ export function CommandTemplatePanel({
     setEditingTemplate(template);
     setName(template.name);
     setCommand(template.command);
+    setTemplateType(getTemplateType(template));
     setDescription(template.description);
     setScope(getTemplateScope(template));
     setProjectId(template.project_id);
@@ -273,27 +298,39 @@ export function CommandTemplatePanel({
   };
 
   const handleRun = async (template: CommandTemplate) => {
-    if (!activeSessionId) return;
+    if (!activeSessionId || getTemplateType(template) !== "command") return;
     const resolved = resolveCommand(template.command, activeProject);
     try {
       await terminalProcessManager.write(activeSessionId, resolved + "\r");
       setOpen(false);
     } catch (err) {
       toast.error(t("commandTemplate.toast.runFailed"), { description: String(err) });
-      logError("Failed to run command template", {
-        templateId: template.id,
-        sessionId: activeSessionId,
-        err,
-      });
+      logError("Failed to run command template", { templateId: template.id, sessionId: activeSessionId, err });
     }
+  };
+
+  const handleSendPiPrompt = async (template: CommandTemplate) => {
+    if (!activeSessionId || getTemplateType(template) !== "pi_prompt" || !isPiSession) return;
+    const resolved = resolveCommand(template.command, activeProject);
+    try {
+      await terminalProcessManager.write(activeSessionId, resolved + "\r");
+      setOpen(false);
+    } catch (err) {
+      toast.error(t("commandTemplate.toast.sendFailed"), { description: String(err) });
+      logError("Failed to send Pi prompt template", { templateId: template.id, sessionId: activeSessionId, err });
+    }
+  };
+
+  const handleCopy = async (template: CommandTemplate) => {
+    await copyTextToClipboard(resolveCommand(template.command, activeProject));
+    toast.success(t("commandTemplate.toast.copySuccess"));
   };
 
   const handleSave = async () => {
     const nextName = name.trim();
     const nextCommand = command.trim();
     const nextDescription = description.trim();
-    const commandRequired = scope !== "global";
-    if (!nextName || (commandRequired && !nextCommand)) return;
+    if (!nextName || !nextCommand) return;
     if (!editingTemplate && scope === "project" && !projectId) return;
     if (!editingTemplate && scope === "session" && !activeSessionId) return;
 
@@ -303,12 +340,14 @@ export function CommandTemplatePanel({
           await updateSessionTemplate(editingTemplate.session_id, editingTemplate.id, {
             name: nextName,
             command: nextCommand,
+            template_type: templateType,
             description: nextDescription,
           });
         } else {
           await updateTemplate(editingTemplate.id, {
             name: nextName,
             command: nextCommand,
+            template_type: templateType,
             description: nextDescription,
           });
         }
@@ -318,6 +357,7 @@ export function CommandTemplatePanel({
           session_id: activeSessionId!,
           name: nextName,
           command: nextCommand,
+          template_type: templateType,
           description: nextDescription,
         });
       } else {
@@ -325,6 +365,7 @@ export function CommandTemplatePanel({
           project_id: scope === "project" ? projectId : null,
           name: nextName,
           command: nextCommand,
+          template_type: templateType,
           description: nextDescription,
         });
       }
@@ -353,15 +394,14 @@ export function CommandTemplatePanel({
     setPendingDeleteTemplate(null);
   };
 
-  const commandRequired = scope !== "global";
   const saveDisabled = name.trim().length === 0
-    || (commandRequired && command.trim().length === 0)
+    || command.trim().length === 0
     || (!editingTemplate && scope === "project" && !projectId)
     || (!editingTemplate && scope === "session" && !activeSessionId);
-  const emptyTitle = searchQuery || scopeFilter !== "all"
+  const emptyTitle = searchQuery || scopeFilter !== "all" || typeFilter !== "all"
     ? t("commandTemplate.emptySearchTitle")
     : t("commandTemplate.emptyTitle");
-  const emptyDescription = searchQuery || scopeFilter !== "all"
+  const emptyDescription = searchQuery || scopeFilter !== "all" || typeFilter !== "all"
     ? t("commandTemplate.emptySearchDescription")
     : t("commandTemplate.emptyDescription");
 
@@ -449,6 +489,20 @@ export function CommandTemplatePanel({
               </button>
             ))}
           </div>
+          <div className="command-template-panel__scope-tabs" role="tablist" aria-label={t("commandTemplate.typeFilterAria")}>
+            {typeFilterOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                role="tab"
+                aria-selected={typeFilter === option.value}
+                data-active={typeFilter === option.value ? "true" : "false"}
+                onClick={() => setTypeFilter(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {showForm && (
@@ -468,12 +522,19 @@ export function CommandTemplatePanel({
               onChange={(e) => setName(e.target.value)}
               className="h-7 text-xs"
             />
-            <Input
-              type="text"
-              placeholder={t("settings.templates.commandPlaceholder")}
+            <InlinePanelSelect
+              value={templateType}
+              options={templateTypeOptions}
+              onChange={(value) => setTemplateType(value as TemplateType)}
+              ariaLabel={t("commandTemplate.typeLabel")}
+            />
+            <textarea
+              placeholder={templateType === "pi_prompt" ? t("commandTemplate.promptPlaceholder") : t("settings.templates.commandPlaceholder")}
               value={command}
               onChange={(e) => setCommand(e.target.value)}
-              className="h-7 text-xs"
+              rows={templateType === "pi_prompt" ? 4 : 2}
+              className="ui-input ui-focus-ring min-h-7 w-full resize-y rounded-md px-2 py-1.5 text-xs text-on-surface outline-none"
+              aria-label={templateType === "pi_prompt" ? t("commandTemplate.promptLabel") : t("settings.templates.commandPlaceholder")}
             />
             <Input
               type="text"
@@ -556,19 +617,9 @@ export function CommandTemplatePanel({
               return (
                 <div
                   key={template.id}
-                  role="button"
-                  tabIndex={0}
                   className="command-template-panel__row ui-focus-ring"
-                  title={activeSessionId ? t("commandTemplate.runNamed", { name: template.name }) : t("commandTemplate.inactiveHint")}
-                  onClick={() => {
-                    void handleRun(template);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      void handleRun(template);
-                    }
-                  }}
+                  title={t("commandTemplate.previewNamed", { name: template.name })}
+                  onClick={() => setExpandedTemplateId((current) => current === template.id ? null : template.id)}
                 >
                   <span className="command-template-panel__row-icon">
                     <TerminalSquare size={18} strokeWidth={1.8} />
@@ -577,8 +628,9 @@ export function CommandTemplatePanel({
                     <span className="flex min-w-0 items-center gap-1.5">
                       <span className="truncate text-xs font-semibold text-on-surface">{template.name}</span>
                       <span className="command-template-panel__scope-pill">{scopeLabel(template)}</span>
+                      <span className="command-template-panel__scope-pill">{getTemplateType(template) === "pi_prompt" ? t("commandTemplate.type.piPrompt") : t("commandTemplate.type.command")}</span>
                     </span>
-                    <code className="block truncate pt-1 font-mono text-[10px] text-primary">{preview}</code>
+                    <code className={`${expandedTemplateId === template.id ? "whitespace-pre-wrap break-words" : "truncate"} block pt-1 font-mono text-[10px] text-primary`}>{preview}</code>
                   </span>
                   <span className="command-template-panel__actions" aria-hidden="false">
                     {pendingDeleteTemplate?.id === template.id ? (
@@ -611,18 +663,46 @@ export function CommandTemplatePanel({
                       </span>
                     ) : (
                       <>
+                        {getTemplateType(template) === "pi_prompt" ? (
+                          <button
+                            type="button"
+                            disabled={!isPiSession}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void handleSendPiPrompt(template);
+                            }}
+                            className="command-template-panel__icon-button command-template-panel__icon-button--run"
+                            aria-label={t("commandTemplate.sendPiNamed", { name: template.name })}
+                            title={isPiSession ? t("commandTemplate.sendPiNamed", { name: template.name }) : t("commandTemplate.piSessionRequired")}
+                          >
+                            <MessageSquare size={14} strokeWidth={1.9} />
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={!activeSessionId}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void handleRun(template);
+                            }}
+                            className="command-template-panel__icon-button command-template-panel__icon-button--run"
+                            aria-label={t("commandTemplate.runNamed", { name: template.name })}
+                            title={t("commandTemplate.runNamed", { name: template.name })}
+                          >
+                            <Play size={14} strokeWidth={1.9} />
+                          </button>
+                        )}
                         <button
                           type="button"
-                          disabled={!activeSessionId}
                           onClick={(event) => {
                             event.stopPropagation();
-                            void handleRun(template);
+                            void handleCopy(template);
                           }}
-                          className="command-template-panel__icon-button command-template-panel__icon-button--run"
-                          aria-label={t("commandTemplate.runNamed", { name: template.name })}
-                          title={t("commandTemplate.runNamed", { name: template.name })}
+                          className="command-template-panel__icon-button"
+                          aria-label={t("commandTemplate.copyNamed", { name: template.name })}
+                          title={t("commandTemplate.copyNamed", { name: template.name })}
                         >
-                          <Play size={14} strokeWidth={1.9} />
+                          <Copy size={14} strokeWidth={1.8} />
                         </button>
                         <button
                           type="button"

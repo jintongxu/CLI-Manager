@@ -137,7 +137,7 @@ const GROUP_SELECT = "SELECT id, name, parent_id, sort_order, icon, color, bound
 const SSH_HOST_GROUP_SELECT = "SELECT id, name, parent_id, sort_order, created_at FROM ssh_host_groups ORDER BY sort_order";
 const SSH_HOST_SELECT = "SELECT id, name, group_name, group_id, host, port, username, config_alias, auth_mode, jump_mode, jump_host_id, proxy_type, proxy_host, proxy_port, connect_timeout_sec, server_alive_interval_sec, server_alive_count_max, terminal_encoding, attachment_root, startup_script, notes, sort_order, created_at, updated_at FROM ssh_hosts ORDER BY sort_order";
 const LOCAL_SSH_HOST_FIELDS_SELECT = "SELECT id, identity_file, credential_ref, config_file, proxy_command FROM ssh_hosts";
-const TEMPLATE_SELECT = "SELECT id, project_id, name, command, description, sort_order FROM command_templates ORDER BY sort_order";
+const TEMPLATE_SELECT = "SELECT id, project_id, name, command, template_type, description, sort_order FROM command_templates ORDER BY sort_order";
 const WORKTREE_SELECT = "SELECT id, project_id, name, display_name, description, branch, path, base_branch, deps_prompt_dismissed, provider_overrides, status, created_at, updated_at, short_label, label_ordinal FROM worktrees WHERE status = 'active' ORDER BY created_at DESC";
 const MODEL_PRICE_COLUMNS = ["model", "input_per_1m", "output_per_1m", "cache_read_per_1m", "cache_creation_per_1m", "source", "source_model_id", "raw_json", "updated_at_ms", "synced_at_ms"] as const;
 const MODEL_PRICE_SELECT = `SELECT ${MODEL_PRICE_COLUMNS.join(", ")} FROM model_prices ORDER BY model COLLATE NOCASE`;
@@ -515,9 +515,9 @@ async function buildWorkspaceRestoreStatements(workspace: WorkspaceBackup): Prom
     item.provider_overrides ?? "{}", item.status === "missing" ? "missing" : "active", item.created_at ?? now, item.updated_at ?? now,
     item.short_label, item.label_ordinal,
   ]));
-  statements.push(...buildBatchInsertStatements("command_templates", ["id", "project_id", "name", "command", "description", "sort_order"], templates, (item) => [
+  statements.push(...buildBatchInsertStatements("command_templates", ["id", "project_id", "name", "command", "template_type", "description", "sort_order"], templates, (item) => [
     item.id, typeof item.project_id === "string" && projectIds.has(item.project_id) ? item.project_id : null,
-    item.name, item.command, item.description ?? "", integerOr(item.sort_order, 0),
+    item.name, item.command, item.template_type === "pi_prompt" ? "pi_prompt" : "command", item.description ?? "", integerOr(item.sort_order, 0),
   ]));
   return statements;
 }

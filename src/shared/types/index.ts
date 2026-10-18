@@ -603,12 +603,15 @@ export interface PersistedSplit {
   ratio: number;
 }
 
+export type TemplateType = "command" | "pi_prompt";
+
 export interface CommandTemplate {
   id: string;
   project_id: string | null;
   session_id?: string | null;
   name: string;
   command: string;
+  template_type?: TemplateType;
   description: string;
   sort_order: number;
 }
@@ -618,12 +621,14 @@ export interface CreateTemplateInput {
   session_id?: string | null;
   name: string;
   command: string;
+  template_type?: TemplateType;
   description?: string;
 }
 
 export interface UpdateTemplateInput {
   name?: string;
   command?: string;
+  template_type?: TemplateType;
   description?: string;
   sort_order?: number;
 }

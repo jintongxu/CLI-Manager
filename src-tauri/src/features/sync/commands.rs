@@ -29,7 +29,7 @@ const BACKUP_RESTORE_DELETE_STATEMENTS: [&str; 7] = [
 ];
 // 当前列清单必须与 src/stores/syncStore.ts 的 buildBatchInsertStatements 调用逐字一致（含顺序）。
 // 旧列清单继续放行，以便恢复新增绑定字段前生成的备份；缺失列由数据库默认值补齐。
-const BACKUP_RESTORE_INSERT_COLUMNS: [(&str, &str); 13] = [
+const BACKUP_RESTORE_INSERT_COLUMNS: [(&str, &str); 14] = [
     ("groups", "id,name,parent_id,sort_order,icon,color,bound_path,created_at"),
     ("groups", "id,name,parent_id,sort_order,icon,color,created_at"),
     (
@@ -67,6 +67,10 @@ const BACKUP_RESTORE_INSERT_COLUMNS: [(&str, &str); 13] = [
     (
         "worktrees",
         "id,project_id,name,branch,path,base_branch,deps_prompt_dismissed,provider_overrides,status,created_at,updated_at",
+    ),
+    (
+        "command_templates",
+        "id,project_id,name,command,template_type,description,sort_order",
     ),
     (
         "command_templates",
