@@ -7,7 +7,7 @@ import type { SyncedHistoryGroup } from "../../history/api/externalSessionGroupi
 import type { SshConnectionSpecPayload } from "../../remote/api/ssh";
 import type {
   TerminalClaudeProviderLaunchConfig, TerminalCodexProviderLaunchConfig,
-  TerminalGrokProviderLaunchConfig,
+  TerminalGrokProviderLaunchConfig, TerminalAttachResult,
 } from "../api/TerminalProcessManager";
 import type { TerminalExitNotificationState } from "../api/terminalExitTask";
 import type {
@@ -213,9 +213,36 @@ export interface TerminalStore {
   /** 仅运行态：XTerm 输出监听就绪后才可执行 daemon attach。 */
   daemonAttachPendingSessionIds: Set<string>;
   subagentTranscripts: Record<string, SubagentTranscriptContent>;
-  createSession: (projectId?: string, cwd?: string, title?: string, startupCmd?: string, envVars?: Record<string, string>, shell?: string, paneId?: string, worktreeId?: string, sshHostId?: string, cliSessionId?: string, remoteHistoryConsumerId?: string, remoteHistorySourceInstanceId?: string, options?: { sessionKind?: "ephemeral-pi"; transientBackground?: boolean; oneShot?: boolean }) => Promise<string>;
+  createSession: (
+    projectId?: string,
+    cwd?: string,
+    title?: string,
+    startupCmd?: string,
+    envVars?: Record<string, string>,
+    shell?: string,
+    paneId?: string,
+    worktreeId?: string,
+    sshHostId?: string,
+    cliSessionId?: string,
+    remoteHistoryConsumerId?: string,
+    remoteHistorySourceInstanceId?: string,
+    options?: {
+      sessionKind?: "ephemeral-pi";
+      transientBackground?: boolean;
+      oneShot?: boolean;
+      allowDuplicateWorktree?: boolean;
+      providerSnapshot?: TerminalSession["providerSnapshot"];
+      extensionSnapshotId?: string | null;
+      providerId?: string | null;
+    },
+  ) => Promise<string>;
   /** Explicit destructive deletion, including hidden sessions. */
   closeSession: (id: string, requireBackendClose?: boolean) => Promise<void>;
+  probeSession: (id: string) => Promise<TerminalAttachResult>;
+  interruptSession: (id: string) => Promise<void>;
+  hardKillSession: (id: string) => Promise<void>;
+  openEmergencyTerminal: (id: string) => Promise<string>;
+  rebuildSession: (id: string) => Promise<string>;
   hideSession: (id: string) => Promise<void>;
   reopenSession: (id: string) => void;
   setActive: (id: string) => void;
