@@ -72,6 +72,7 @@ import { useTerminalProjectSelection } from "./useTerminalProjectSelection";
 import { useWorkspanTabOverflow } from "./useWorkspanTabOverflow";
 import { useCurrentWorkSessionController } from "./useCurrentWorkSessionController"; import { collectOtherSessionIds } from "../lib/currentWorkModel";
 import { useCurrentWorkPortalTargets } from "./useCurrentWorkPortalTargets";
+import { createTerminalRecoveryHandlers } from "./terminalRecoveryController";
 export function useTerminalTabsController({
   fullscreen = false,
   onToggleFullscreen,
@@ -94,6 +95,11 @@ export function useTerminalTabsController({
     }))
   );
   const setActive = useTerminalStore((s) => s.setActive);
+  const probeSession = useTerminalStore((s) => s.probeSession);
+  const interruptSession = useTerminalStore((s) => s.interruptSession);
+  const openEmergencyTerminal = useTerminalStore((s) => s.openEmergencyTerminal);
+  const rebuildSession = useTerminalStore((s) => s.rebuildSession);
+  const hardKillSession = useTerminalStore((s) => s.hardKillSession);
   const createTerminalSession = useTerminalStore((s) => s.createSession);
   const splitTerminal = useTerminalStore((s) => s.splitTerminal);
   const sessionStoreLoaded = useSessionStore((s) => s.loaded);
@@ -794,6 +800,15 @@ export function useTerminalTabsController({
     const project = session.projectId ? projectById.get(session.projectId) ?? null : null;
     void saveSessionToSidebar(session, project);
   }, [projectById, saveSessionToSidebar]);
+  const recoveryHandlers = useMemo(() => createTerminalRecoveryHandlers({
+    t, confirm, sessions, setActive, probeSession, interruptSession,
+    openEmergencyTerminal, rebuildSession, hardKillSession,
+  }), [confirm, hardKillSession, interruptSession, openEmergencyTerminal, probeSession, rebuildSession, sessions, setActive, t]);
+  const handleProbeSession = recoveryHandlers.probe;
+  const handleInterruptSession = recoveryHandlers.interrupt;
+  const handleOpenEmergencyTerminal = recoveryHandlers.emergency;
+  const handleRebuildSession = recoveryHandlers.rebuild;
+  const handleHardKillSession = recoveryHandlers.hardKill;
 
   const handleActivateSession = useCallback((sessionId: string) => {
     closeHistory();
@@ -1786,6 +1801,11 @@ export function useTerminalTabsController({
         onCancelEdit={handlePaneCancelEdit}
         onNewTab={handlePaneNewTab}
         onDuplicateSession={handleDuplicateSession}
+        onProbeSession={handleProbeSession}
+        onInterruptSession={handleInterruptSession}
+        onOpenEmergencyTerminal={handleOpenEmergencyTerminal}
+        onRebuildSession={handleRebuildSession}
+        onHardKillSession={handleHardKillSession}
         onSaveSessionToSidebar={handleSaveSessionToSidebar}
         onOpenSplitPicker={handleOpenSplitPicker}
         onUnsplit={handlePaneUnsplit}
@@ -1821,6 +1841,11 @@ export function useTerminalTabsController({
     handlePaneDiscardWorktree,
     handlePaneFinishWorktree,
     handlePaneNewTab,
+    handleProbeSession,
+    handleInterruptSession,
+    handleOpenEmergencyTerminal,
+    handleRebuildSession,
+    handleHardKillSession,
     handlePaneSubmitEdit,
     handlePaneUnsplit,
     handleDuplicateSession,

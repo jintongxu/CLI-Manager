@@ -63,7 +63,7 @@ import { reserveWorktreeLaunch } from "../../../shared/lib/worktreeLaunchAdmissi
 import { assignTerminalTitle, terminalPurpose, validTitleNaming } from "../lib/terminalSessionNaming";
 import { createWorktreeSessionAdmission } from "../lib/worktreeSessionAdmission";
 import { startPtyOrphanReconcileHeartbeat } from "../lib/ptyOrphanReconcile";
-
+import { createTerminalRecoveryActions } from "./terminalRecoveryActions";
 let restoreInProgress = false;
 let pendingNamingSessions: TerminalSession[] = [];
 const worktreeSessionAdmission = createWorktreeSessionAdmission();
@@ -81,9 +81,10 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
     scheduleSaveActiveId,
   } = createTerminalRuntime(set, get, api);
   const tabLifecycle = createTerminalTabLifecycle(set, get, queueSshSessionPersistence);
-  return {
-    ...tabLifecycle,
+  const recoveryActions = createTerminalRecoveryActions(get, set, queueSshSessionPersistence);
+  return {    ...tabLifecycle,
     ...createTerminalSidebarMetadata(set, get, queueSshSessionPersistence),
+    ...recoveryActions,
     sessions: [],
     activeSessionId: null,
     paneTree: null,
@@ -480,7 +481,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
     },
 
     createSession: async (projectId, cwd, title, startupCmd, envVars, shell, paneId, worktreeId, sshHostId, cliSessionId, remoteHistoryConsumerId, remoteHistorySourceInstanceId, options) => {
-      const ordinaryWorktree = Boolean(worktreeId) && !options?.sessionKind && !options?.transientBackground;
+      const ordinaryWorktree = Boolean(worktreeId) && !options?.sessionKind && !options?.transientBackground && !options?.allowDuplicateWorktree;
       const admission = ordinaryWorktree ? worktreeSessionAdmission.begin(worktreeId!, get().sessions) : null;
       if (admission && "existingId" in admission) {
         get().setActive(admission.existingId);
@@ -513,7 +514,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         let launch: ResolvedPtyLaunch | null = null;
         let sessionId: string;
         try {
-          launch = await resolvePtyLaunch({ projectId, worktreeId, sshHostId, cwd, startupCmd, envVars: oneShot && startupCmd ? { ...(envVars ?? {}), CLI_MANAGER_ONE_SHOT_COMMAND: startupCmd } : envVars, shell, sessionKind }, os);
+          launch = await resolvePtyLaunch({ projectId, worktreeId, sshHostId, cwd, startupCmd, envVars: oneShot && startupCmd ? { ...(envVars ?? {}), CLI_MANAGER_ONE_SHOT_COMMAND: startupCmd } : envVars, shell, sessionKind, providerSnapshot: options?.providerSnapshot, extensionSnapshotId: options?.extensionSnapshotId, providerId: options?.providerId }, os);
           recordCrashActivity("terminal.session_create", {
             projectId: projectId ?? null,
             worktreeId: worktreeId ?? null,
@@ -1996,5 +1997,4 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
     appendSubagentTranscript: runtimeActions.appendSubagentTranscript,
   };
 });
-
 startPtyOrphanReconcileHeartbeat(() => useTerminalStore.getState().sessions.filter(hasBackendPty).map((session) => session.id));

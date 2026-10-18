@@ -109,6 +109,11 @@ export function useSidebarController({
   const createSession = useTerminalStore((s) => s.createSession);
   const splitTerminal = useTerminalStore((s) => s.splitTerminal);
   const closeSession = useTerminalStore((s) => s.closeSession);
+  const probeSession = useTerminalStore((s) => s.probeSession);
+  const interruptSession = useTerminalStore((s) => s.interruptSession);
+  const openEmergencyTerminal = useTerminalStore((s) => s.openEmergencyTerminal);
+  const rebuildSession = useTerminalStore((s) => s.rebuildSession);
+  const hardKillSession = useTerminalStore((s) => s.hardKillSession);
   const sessions = useTerminalStore((s) => s.sessions);
   const activeSessionId = useTerminalStore((s) => s.activeSessionId);
   const setActiveSession = useTerminalStore((s) => s.setActive);
@@ -1002,11 +1007,39 @@ export function useSidebarController({
     setDiscardTargets(items);
   }, [projects, selectedWorktreeIds, worktrees]);
 
+  const findWorktreeSession = useCallback((worktreeId: string) => sessions.find((session) => session.worktreeId === worktreeId && (session.kind ?? "pty") === "pty"), [sessions]);
   const handleOpenWorktree = useCallback((project: Project, worktree: WorktreeRecord) => {
     void openWorktreeSession(project, worktree, undefined, undefined, getWorktreeSidebarLabel(worktree)).then((opened) => {
       if (opened) void maybeInstallWorktreeDeps(project, worktree);
     });
   }, []);
+  const handleProbeWorktree = useCallback((worktree: WorktreeRecord) => {
+    const session = findWorktreeSession(worktree.id);
+    if (!session) { toast.info(t("terminal.recovery.sessionMissing")); return; }
+    void probeSession(session.id).then((result) => toast.info(t("terminal.recovery.status"), { description: result.attached ? `${result.alive ? t("terminal.status.running") : t("terminal.status.done")} · ${result.cwd ?? worktree.path}` : t("terminal.recovery.sessionMissing") })).catch(() => toast.error(t("terminal.recovery.failed")));
+  }, [findWorktreeSession, probeSession, t]);
+  const handleInterruptWorktree = useCallback((worktree: WorktreeRecord) => {
+    const session = findWorktreeSession(worktree.id);
+    if (!session) { toast.info(t("terminal.recovery.sessionMissing")); return; }
+    void interruptSession(session.id).then(() => toast.success(t("terminal.recovery.interrupted"))).catch(() => toast.error(t("terminal.recovery.failed")));
+  }, [findWorktreeSession, interruptSession, t]);
+  const handleEmergencyWorktree = useCallback((worktree: WorktreeRecord) => {
+    const session = findWorktreeSession(worktree.id);
+    if (!session) { toast.info(t("terminal.recovery.sessionMissing")); return; }
+    void openEmergencyTerminal(session.id).then(setActiveSession).catch(() => toast.error(t("terminal.recovery.failed")));
+  }, [findWorktreeSession, openEmergencyTerminal, setActiveSession, t]);
+  const handleRebuildWorktree = useCallback(async (worktree: WorktreeRecord) => {
+    const session = findWorktreeSession(worktree.id);
+    if (!session) { toast.info(t("terminal.recovery.sessionMissing")); return; }
+    if (!await confirm({ title: t("terminal.recovery.confirmRebuildTitle"), message: t("terminal.recovery.confirmRebuild", { title: session.title, path: worktree.path }), confirmText: t("terminal.recovery.rebuild"), danger: true })) return;
+    void rebuildSession(session.id).then(setActiveSession).catch(() => toast.error(t("terminal.recovery.failed")));
+  }, [confirm, findWorktreeSession, rebuildSession, setActiveSession, t]);
+  const handleHardKillWorktree = useCallback(async (worktree: WorktreeRecord) => {
+    const session = findWorktreeSession(worktree.id);
+    if (!session) { toast.info(t("terminal.recovery.sessionMissing")); return; }
+    if (!await confirm({ title: t("terminal.recovery.confirmHardKillTitle"), message: t("terminal.recovery.confirmHardKill", { title: session.title, path: worktree.path }), confirmText: t("terminal.recovery.hardKill"), danger: true })) return;
+    void hardKillSession(session.id).catch(() => toast.error(t("terminal.recovery.failed")));
+  }, [confirm, findWorktreeSession, hardKillSession, t]);
 
   const handleOpenProjectFiles = useCallback(async (project: Project) => {
     if (rejectUnsupportedCapability(project, "files")) return;
@@ -1836,6 +1869,11 @@ export function useSidebarController({
     handleRequestDeleteProject,
     handleOpenWorktree,
     handleNewWorktreeTerminal,
+    handleProbeWorktree,
+    handleInterruptWorktree,
+    handleEmergencyWorktree,
+    handleRebuildWorktree,
+    handleHardKillWorktree,
     rejectMissingWorktree,
     setFinishTarget,
     handleOpenWorktreeHistory,

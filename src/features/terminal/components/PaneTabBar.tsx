@@ -50,6 +50,11 @@ export interface PaneTabBarProps {
   onCancelEdit: () => void;
   onNewTab: () => void;
   onDuplicateSession: (session: TerminalSession) => void;
+  onProbeSession: (sessionId: string) => void;
+  onInterruptSession: (sessionId: string) => void;
+  onOpenEmergencyTerminal: (sessionId: string) => void;
+  onRebuildSession: (sessionId: string) => void;
+  onHardKillSession: (sessionId: string) => void;
   onSaveSessionToSidebar: (session: TerminalSession) => void;
   onOpenSplitPicker: (sessionId: string, direction: TerminalPaneSplitDirection, anchor?: SplitPickerAnchor) => void;
   onUnsplit: (sessionId: string) => void;
@@ -90,6 +95,11 @@ export function PaneTabBar({
   onCancelEdit,
   onNewTab,
   onDuplicateSession,
+  onProbeSession,
+  onInterruptSession,
+  onOpenEmergencyTerminal,
+  onRebuildSession,
+  onHardKillSession,
   onSaveSessionToSidebar,
   onOpenSplitPicker,
   onUnsplit,
@@ -435,6 +445,20 @@ export function PaneTabBar({
                   })()}
                   <ContextMenuItem onSelect={onNewTab}>{t("terminal.toolbar.newTerminal")}</ContextMenuItem>
                   <ContextMenuItem onSelect={() => onDuplicateSession(session)}>{t("terminal.tab.duplicate")}</ContextMenuItem>
+                  {(session.kind ?? "pty") === "pty" && (() => {
+                    const recoverySupported = session.environmentType !== "ssh" && !session.sshHostId;
+                    const recoveryTitle = recoverySupported ? undefined : t("terminal.recovery.unsupported");
+                    return (
+                      <>
+                        <ContextMenuSeparator />
+                        <ContextMenuItem disabled={!recoverySupported} title={recoveryTitle} onSelect={() => onProbeSession(session.id)}>{t("terminal.recovery.status")}</ContextMenuItem>
+                        <ContextMenuItem disabled={!recoverySupported} title={recoveryTitle} onSelect={() => onInterruptSession(session.id)}>{t("terminal.recovery.interrupt")}</ContextMenuItem>
+                        <ContextMenuItem disabled={!recoverySupported} title={recoveryTitle} onSelect={() => onOpenEmergencyTerminal(session.id)}>{t("terminal.recovery.emergency")}</ContextMenuItem>
+                        <ContextMenuItem disabled={!recoverySupported} title={recoveryTitle} onSelect={() => onRebuildSession(session.id)}>{t("terminal.recovery.rebuild")}</ContextMenuItem>
+                        <ContextMenuItem disabled={!recoverySupported} title={recoveryTitle} onSelect={() => onHardKillSession(session.id)}>{t("terminal.recovery.hardKill")}</ContextMenuItem>
+                      </>
+                    );
+                  })()}
                   {terminalBackgroundEnabled && terminalBackgroundImagePath && (
                     hiddenBackgroundSessionIds.has(session.id) ? (
                       <ContextMenuItem onSelect={() => onShowBackground(session.id)}>{t("terminal.tab.showBackground")}</ContextMenuItem>

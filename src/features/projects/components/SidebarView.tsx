@@ -101,6 +101,11 @@ export function SidebarView({
   handleRequestDeleteProject,
   handleOpenWorktree,
   handleNewWorktreeTerminal,
+  handleProbeWorktree,
+  handleInterruptWorktree,
+  handleEmergencyWorktree,
+  handleRebuildWorktree,
+  handleHardKillWorktree,
   setFinishTarget,
   handleOpenWorktreeHistory,
   handleInstallWorktreeDeps,
@@ -612,6 +617,26 @@ export function SidebarView({
                 >
                   <Plus size={14} strokeWidth={1.5} />
                   {t("worktree.menu.newTerminal")}
+                </button>
+                <button className="context-menu-item" role="menuitem" onClick={() => { handleProbeWorktree(contextMenu.worktree); setContextMenu(null); }}>
+                  <ListClockIcon size={14} />
+                  {t("terminal.recovery.status")}
+                </button>
+                <button className="context-menu-item" role="menuitem" onClick={() => { handleInterruptWorktree(contextMenu.worktree); setContextMenu(null); }}>
+                  <TerminalSquare size={14} />
+                  {t("terminal.recovery.interrupt")}
+                </button>
+                <button className="context-menu-item" role="menuitem" onClick={() => { handleEmergencyWorktree(contextMenu.worktree); setContextMenu(null); }}>
+                  <Plus size={14} />
+                  {t("terminal.recovery.emergency")}
+                </button>
+                <button className="context-menu-item" role="menuitem" onClick={() => { void handleRebuildWorktree(contextMenu.worktree); setContextMenu(null); }}>
+                  <Play size={14} />
+                  {t("terminal.recovery.rebuild")}
+                </button>
+                <button className="context-menu-item danger" role="menuitem" onClick={() => { void handleHardKillWorktree(contextMenu.worktree); setContextMenu(null); }}>
+                  <Trash2 size={14} />
+                  {t("terminal.recovery.hardKill")}
                 </button>
                 <button
                   className="context-menu-item"

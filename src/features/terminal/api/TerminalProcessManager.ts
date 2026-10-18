@@ -306,6 +306,24 @@ export class TerminalProcessManager {
     });
   }
 
+  probe(sessionId: string): Promise<TerminalAttachResult> {
+    const normalizedSessionId = sessionId.trim();
+    if (!normalizedSessionId) return Promise.reject(new Error("terminal_recovery_session_missing"));
+    return this.attach(normalizedSessionId);
+  }
+
+  interrupt(sessionId: string): Promise<void> {
+    const normalizedSessionId = sessionId.trim();
+    if (!normalizedSessionId) return Promise.reject(new Error("terminal_recovery_session_missing"));
+    return this.write(normalizedSessionId, "\u0003");
+  }
+
+  hardKill(sessionId: string): Promise<void> {
+    const normalizedSessionId = sessionId.trim();
+    if (!normalizedSessionId) return Promise.reject(new Error("terminal_recovery_session_missing"));
+    return this.close(normalizedSessionId, true);
+  }
+
   getProcessTraits(sessionId: string): TerminalProcessTraits | null {
     return this.processTraits.get(sessionId) ?? null;
   }

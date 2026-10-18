@@ -49,6 +49,11 @@ export interface PaneLeafViewProps {
   onCancelEdit: () => void;
   onNewTab: () => void;
   onDuplicateSession: (session: TerminalSession) => void;
+  onProbeSession: (sessionId: string) => void;
+  onInterruptSession: (sessionId: string) => void;
+  onOpenEmergencyTerminal: (sessionId: string) => void;
+  onRebuildSession: (sessionId: string) => void;
+  onHardKillSession: (sessionId: string) => void;
   onSaveSessionToSidebar: (session: TerminalSession) => void;
   onOpenSplitPicker: (sessionId: string, direction: TerminalPaneSplitDirection, anchor?: SplitPickerAnchor) => void;
   onUnsplit: (sessionId: string) => void;
@@ -106,6 +111,11 @@ export function PaneLeafView({
   onCancelEdit,
   onNewTab,
   onDuplicateSession,
+  onProbeSession,
+  onInterruptSession,
+  onOpenEmergencyTerminal,
+  onRebuildSession,
+  onHardKillSession,
   onSaveSessionToSidebar,
   onOpenSplitPicker,
   onUnsplit,
@@ -185,6 +195,11 @@ export function PaneLeafView({
           onCancelEdit={onCancelEdit}
           onNewTab={onNewTab}
           onDuplicateSession={onDuplicateSession}
+          onProbeSession={onProbeSession}
+          onInterruptSession={onInterruptSession}
+          onOpenEmergencyTerminal={onOpenEmergencyTerminal}
+          onRebuildSession={onRebuildSession}
+          onHardKillSession={onHardKillSession}
           onSaveSessionToSidebar={onSaveSessionToSidebar}
           onOpenSplitPicker={onOpenSplitPicker}
           onUnsplit={onUnsplit}
