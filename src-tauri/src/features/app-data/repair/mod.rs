@@ -10,6 +10,9 @@ use crate::{
     MIGRATION_ADD_WORKTREE_ISOLATION_DESCRIPTION, MIGRATION_ADD_WORKTREE_ISOLATION_SQL,
     MIGRATION_ADD_WORKTREE_ISOLATION_VERSION, MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_DESCRIPTION,
     MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_SQL, MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_VERSION,
+    MIGRATION_ADD_WORKTREE_SHORT_LABELS_DESCRIPTION, MIGRATION_ADD_WORKTREE_SHORT_LABELS_SQL,
+    MIGRATION_ADD_WORKTREE_SHORT_LABELS_VERSION, MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_DESCRIPTION,
+    MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_SQL, MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_VERSION,
     MIGRATION_BACKFILL_REQUEST_LOG_PROJECT_PATH_SQL,
     MIGRATION_BACKFILL_REQUEST_LOG_PROJECT_PATH_VERSION,
     MIGRATION_CREATE_SESSION_FAVORITE_SNAPSHOTS_DESCRIPTION,
@@ -31,6 +34,9 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
+
+mod migration_compat;
+use migration_compat::{ensure_command_template_type, reconcile_worktree_short_labels_migration};
 
 const SQLX_MIGRATIONS_TABLE: &str = "_sqlx_migrations";
 const KNOWN_DRIFT_START_VERSION: i64 = 13;
@@ -189,9 +195,17 @@ pub async fn db_repair_known_migration_drift(
 
     let mut conn = open_cli_manager_db(&db_path).await?;
     let mut result = repair_known_migration_drift(&mut conn).await?;
+    if reconcile_worktree_short_labels_migration(&mut conn).await? {
+        result.repaired = true;
+        result.status = append_repair_status(&result.status, "reconciled_worktree_short_labels_migration");
+    }
     if ensure_worktree_root_identity(&mut conn).await? {
         result.repaired = true;
         result.status = append_repair_status(&result.status, "repaired_worktree_root_identity");
+    }
+    if ensure_command_template_type(&mut conn).await? {
+        result.repaired = true;
+        result.status = append_repair_status(&result.status, "repaired_command_template_type");
     }
     if reconcile_legacy_node_appearance_v33_migration(&mut conn).await? {
         result.repaired = true;
@@ -1951,6 +1965,7 @@ async fn table_columns(
         "ssh_host_groups" => "PRAGMA table_info(ssh_host_groups)",
         "usage_records" => "PRAGMA table_info(usage_records)",
         "providers" => "PRAGMA table_info(providers)",
+        "command_templates" => "PRAGMA table_info(command_templates)",
         _ => return Err("migration_repair_unsupported_table".to_string()),
     };
     let rows = sqlx::query(query)

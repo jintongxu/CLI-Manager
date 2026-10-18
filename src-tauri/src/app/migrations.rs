@@ -955,6 +955,11 @@ pub(crate) const MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_DESCRIPTION: &str =
     "add_worktree_root_identity";
 pub(crate) const MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_SQL: &str =
     "ALTER TABLE worktrees ADD COLUMN root_identity TEXT NOT NULL DEFAULT '';";
+pub(crate) const MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_VERSION: i64 = 53;
+pub(crate) const MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_DESCRIPTION: &str =
+    "add_command_template_type";
+pub(crate) const MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_SQL: &str =
+    "ALTER TABLE command_templates ADD COLUMN template_type TEXT NOT NULL DEFAULT 'command';";
 
 // 按既定版本顺序返回向上迁移注册表，由 SQL 插件在初始化时应用；此函数本身不执行 SQL。
 pub(crate) fn migrations() -> Vec<Migration> {
@@ -1373,6 +1378,12 @@ pub(crate) fn migrations() -> Vec<Migration> {
             version: MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_VERSION,
             description: MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_DESCRIPTION,
             sql: MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_VERSION,
+            description: MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_DESCRIPTION,
+            sql: MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_SQL,
             kind: MigrationKind::Up,
         },
     ]

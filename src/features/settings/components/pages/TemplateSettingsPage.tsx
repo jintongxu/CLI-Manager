@@ -4,8 +4,10 @@ import { ChevronRight, Plus, TerminalSquare } from "../../../../shared/ui/icons"
 import { useTemplateStore } from "../../../prompts/api/templateStore";
 import { useProjectStore } from "../../../projects/api/projectStore";
 import { useTerminalStore } from "../../../terminal/state";
-import type { CommandTemplate } from "../../../../shared/types/index";
+import type { CommandTemplate, TemplateType } from "../../../../shared/types/index";
 import { useI18n, type TranslationKey } from "../../../../shared/i18n/index";
+import { toast } from "sonner";
+import { logError } from "../../../../shared/platform/logger";
 
 type Scope = "global" | "project" | "session";
 
@@ -16,6 +18,7 @@ interface TemplateSettingsPageProps {
 interface TemplateEditorForm {
   name: string;
   command: string;
+  templateType: TemplateType;
   description: string;
   scope: Scope;
   projectId: string | null;
@@ -58,6 +61,7 @@ export function TemplateSettingsPage({ searchValue }: TemplateSettingsPageProps)
   const [form, setForm] = useState<TemplateEditorForm>({
     name: "",
     command: "",
+    templateType: "command",
     description: "",
     scope: "global",
     projectId: null,
@@ -127,6 +131,7 @@ export function TemplateSettingsPage({ searchValue }: TemplateSettingsPageProps)
     setForm({
       name: "",
       command: "",
+      templateType: "command",
       description: "",
       scope: "global",
       projectId: activeSession?.projectId ?? null,
@@ -140,6 +145,7 @@ export function TemplateSettingsPage({ searchValue }: TemplateSettingsPageProps)
     setForm({
       name: template.name,
       command: template.command,
+      templateType: template.template_type ?? "command",
       description: template.description,
       scope: resolveScope(template),
       projectId: template.project_id,
@@ -150,8 +156,7 @@ export function TemplateSettingsPage({ searchValue }: TemplateSettingsPageProps)
     const name = form.name.trim();
     const command = form.command.trim();
     const description = form.description.trim();
-    const commandRequired = form.scope !== "global";
-    if (!name || (commandRequired && !command)) return;
+    if (!name || !command) return;
     if (mode === "create" && form.scope === "project" && !form.projectId) return;
     if (mode === "create" && form.scope === "session" && !activeSessionId) return;
 
@@ -164,6 +169,7 @@ export function TemplateSettingsPage({ searchValue }: TemplateSettingsPageProps)
             project_id: activeSession?.projectId ?? null,
             name,
             command,
+            template_type: form.templateType,
             description,
           });
         } else {
@@ -171,10 +177,12 @@ export function TemplateSettingsPage({ searchValue }: TemplateSettingsPageProps)
             project_id: form.scope === "project" ? form.projectId : null,
             name,
             command,
+            template_type: form.templateType,
             description,
           });
         }
         resetToCreate();
+        toast.success(t("commandTemplate.toast.saveSuccess"));
         return;
       }
 
@@ -184,16 +192,28 @@ export function TemplateSettingsPage({ searchValue }: TemplateSettingsPageProps)
         await updateSessionTemplate(editingTemplate.session_id, editingTemplate.id, {
           name,
           command,
+          template_type: form.templateType,
           description,
         });
       } else {
         await updateTemplate(editingTemplate.id, {
           name,
           command,
+          template_type: form.templateType,
           description,
         });
       }
-      openEditor({ ...editingTemplate, name, command, description });
+      openEditor({ ...editingTemplate, name, command, template_type: form.templateType, description });
+      toast.success(t("commandTemplate.toast.saveSuccess"));
+    } catch (err) {
+      toast.error(t("commandTemplate.toast.saveFailed"), { description: String(err) });
+      logError("Failed to save template from settings", {
+        mode,
+        scope: form.scope,
+        templateType: form.templateType,
+        selectedTemplateId: selectedTemplate?.id,
+        err,
+      });
     } finally {
       setSaving(false);
     }
@@ -209,10 +229,9 @@ export function TemplateSettingsPage({ searchValue }: TemplateSettingsPageProps)
     resetToCreate();
   };
 
-  const commandRequired = form.scope !== "global";
   const saveDisabled = saving
     || !form.name.trim()
-    || (commandRequired && !form.command.trim())
+    || !form.command.trim()
     || (mode === "create" && form.scope === "project" && !form.projectId)
     || (mode === "create" && form.scope === "session" && !activeSessionId);
 
@@ -381,14 +400,40 @@ export function TemplateSettingsPage({ searchValue }: TemplateSettingsPageProps)
               aria-label={t("settings.templates.name")}
           />
 
-          <TextInput
-              label={t("settings.templates.command")}
-              value={form.command}
-              onChange={(event) => setForm((prev) => ({ ...prev, command: event.currentTarget.value }))}
-              placeholder={t("settings.templates.commandPlaceholder")}
+          <Select<TemplateType>
+              label={t("commandTemplate.typeLabel")}
+              value={form.templateType}
+              onChange={(value) => setForm((prev) => ({ ...prev, templateType: (value as TemplateType) ?? "command" }))}
+              data={[
+                { value: "command", label: t("commandTemplate.type.command") },
+                { value: "pi_prompt", label: t("commandTemplate.type.piPrompt") },
+              ]}
               size="xs"
-              aria-label={t("settings.templates.command")}
+              aria-label={t("commandTemplate.typeLabel")}
           />
+
+          {form.templateType === "pi_prompt" ? (
+            <Box>
+              <Text size="xs" fw={500} mb={4}>{t("commandTemplate.promptLabel")}</Text>
+              <textarea
+                value={form.command}
+                onChange={(event) => setForm((prev) => ({ ...prev, command: event.currentTarget.value }))}
+                placeholder={t("commandTemplate.promptPlaceholder")}
+                rows={6}
+                className="ui-input ui-focus-ring w-full resize-y rounded-md px-2 py-1.5 text-xs text-on-surface outline-none"
+                aria-label={t("commandTemplate.promptLabel")}
+              />
+            </Box>
+          ) : (
+            <TextInput
+                label={t("settings.templates.command")}
+                value={form.command}
+                onChange={(event) => setForm((prev) => ({ ...prev, command: event.currentTarget.value }))}
+                placeholder={t("settings.templates.commandPlaceholder")}
+                size="xs"
+                aria-label={t("settings.templates.command")}
+            />
+          )}
 
           <TextInput
               label={t("settings.templates.description")}
