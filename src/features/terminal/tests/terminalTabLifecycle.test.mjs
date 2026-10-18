@@ -25,6 +25,7 @@ const batchClose = load("../api/terminalBatchClose.ts");
 const layout = load("../lib/terminalStoreLayout.ts", { ...visibility, ...currentWork });
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const rendererPolicy = load("../types/xTermModel.ts");
+const hiddenDisplay = load("../lib/hiddenTerminalDisplayLifecycle.ts");
 
 const naming = load("../lib/terminalSessionNaming.ts", {
   CLI_TOOL_DESCRIPTORS: [{ id: "pi", command: "pi", label: "Pi" }, { id: "claude", command: "claude", label: "Claude" }, { id: "codex", command: "codex", label: "Codex" }],
@@ -42,6 +43,58 @@ test("close-other batch never calls close for current-work protected sessions", 
     () => assert.fail("close should not fail"),
   );
   assert.deepEqual(closed, ["outside-a", "outside-b"]);
+});
+
+test("hidden terminal display disposal waits 60 seconds and restores when visible", () => {
+  let now = 0;
+  const timers = new Map();
+  let nextTimerId = 1;
+  const scheduler = {
+    setTimeout(callback, delayMs) {
+      const id = nextTimerId++;
+      timers.set(id, { callback, dueAt: now + delayMs });
+      return id;
+    },
+    clearTimeout(id) {
+      timers.delete(id);
+    },
+  };
+  const advanceTo = (target) => {
+    now = target;
+    for (const [id, timer] of [...timers]) {
+      if (timer.dueAt <= now) {
+        timers.delete(id);
+        timer.callback();
+      }
+    }
+  };
+  let disposed = 0;
+  let restored = 0;
+  const lifecycle = hiddenDisplay.createHiddenTerminalDisplayLifecycle(
+    () => { disposed += 1; },
+    () => { restored += 1; },
+    scheduler,
+  );
+  lifecycle.update({ enabled: true, visible: false });
+  assert.equal(timers.size, 1);
+  advanceTo(hiddenDisplay.HIDDEN_TERMINAL_DISPOSE_DELAY_MS - 1);
+  assert.equal(disposed, 0, "the display remains mounted before the 60-second boundary");
+  advanceTo(hiddenDisplay.HIDDEN_TERMINAL_DISPOSE_DELAY_MS);
+  assert.equal(disposed, 1, "the display disposes at the 60-second boundary");
+  assert.equal(restored, 0);
+
+  lifecycle.update({ enabled: true, visible: true });
+  assert.equal(restored, 1);
+  assert.equal(timers.size, 0);
+  lifecycle.update({ enabled: true, visible: false });
+  assert.equal(timers.size, 1);
+  lifecycle.update({ enabled: true, visible: true });
+  assert.equal(timers.size, 0, "becoming visible clears the pending disposal timer");
+  lifecycle.update({ enabled: true, visible: false });
+  assert.equal(timers.size, 1);
+  lifecycle.update({ enabled: false, visible: false });
+  assert.equal(timers.size, 0, "disabling low memory mode clears the pending disposal timer");
+  lifecycle.dispose();
 });
 
 test("terminal renderer refreshes after the idle threshold but not before it", () => {
@@ -295,6 +348,8 @@ test("render contracts keep backing trees and xterm mounted even after the last 
   const view = readFileSync(new URL("../components/TerminalTabsView.tsx", import.meta.url), "utf8");
   const leaf = readFileSync(new URL("../components/PaneLeafView.tsx", import.meta.url), "utf8");
   const controller = readFileSync(new URL("../hooks/useTerminalTabsController.tsx", import.meta.url), "utf8");
+  const terminal = readFileSync(new URL("../components/XTermTerminal.tsx", import.meta.url), "utf8");
+  const hiddenDisplaySource = readFileSync(new URL("../lib/hiddenTerminalDisplayLifecycle.ts", import.meta.url), "utf8");
   assert.match(view, /mountedWorkspanLayouts\.length > 0/);
   assert.match(view, /node=\{layout\.paneTree\}/);
   assert.match(view, /visibleNode=\{layout\.visiblePaneTree\}/);
@@ -304,6 +359,10 @@ test("render contracts keep backing trees and xterm mounted even after the last 
   assert.match(controller, /closeTerminalSessions\(sessionIds, protectedSessionIds, destroy \? destroySession : hideSession/);
   assert.match(controller, /visibleSessionIds=\{visibleSessionIds\}/);
   assert.match(controller, /!isHideableTerminalSession\(session\)/);
+  assert.match(hiddenDisplaySource, /HIDDEN_TERMINAL_DISPOSE_DELAY_MS = 60_000/);
+  assert.match(terminal, /lowMemoryMode/);
+  assert.match(terminal, /setDisplayMounted\(false\)/);
+  assert.match(terminal, /<MountedXTermTerminal/);
 });
 
 test("visible layouts intersect scope and hidden, retain backing keys, and render all-hidden as empty", () => {
