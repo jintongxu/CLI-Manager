@@ -48,6 +48,7 @@ export function XTermView({
   isActive,
   isVisible,
   suggestionGhost,
+  savedPasswordPromptHint,
   searchForeground,
   effectiveFontFamily,
   menuState,
@@ -241,6 +242,23 @@ export function XTermView({
           />
         </div>
       </div>
+      {isActive && isVisible && !searchOpen && savedPasswordPromptHint && (
+        <div
+          aria-hidden="true"
+          className="terminal-input-suggestion-ghost pointer-events-none absolute z-10 whitespace-nowrap"
+          style={{
+            left: savedPasswordPromptHint.left,
+            top: savedPasswordPromptHint.top,
+            height: savedPasswordPromptHint.height,
+            lineHeight: `${savedPasswordPromptHint.height}px`,
+            color: searchForeground,
+            fontFamily: effectiveFontFamily,
+            fontSize,
+          }}
+        >
+          {t("terminal.passwordPrompt.pasteSaved")}
+        </div>
+      )}
       {terminalInputSuggestionsEnabled && isActive && isVisible && !searchOpen && suggestionGhost && (
         <div
           aria-hidden="true"

@@ -66,8 +66,6 @@ export function SidebarView({
   loadProjects,
   expandSidebar,
   onOpenSettings,
-  onOpenStats,
-  sidebarToolbarVisibility,
   contextMenu,
   menuPos,
   contextMenuRef,
@@ -269,8 +267,6 @@ export function SidebarView({
         <SidebarFooter
           collapsed={compactMode ? false : sidebarCollapsed}
           onOpenSettings={onOpenSettings}
-          onOpenStats={onOpenStats}
-          toolbarVisibility={sidebarToolbarVisibility}
         />
       </div>
 

@@ -515,4 +515,5 @@ export interface TerminalTabsProps {
   terminalScope?: TerminalScope;
   onOpenProviderSettings?: () => void;
   onOpenHistorySettings?: () => void;
+  onOpenSshSettings?: () => void;
 }

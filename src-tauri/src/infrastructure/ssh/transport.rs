@@ -186,7 +186,11 @@ impl SshTransportSpec {
         }
         args.extend([
             "-o".to_string(),
-            if self.auth_mode == "credential_ref" {
+            if matches!(
+                self.auth_mode.as_str(),
+                "credential_ref" | "password_prompt"
+            ) && !self.credential_ref.trim().is_empty()
+            {
                 "BatchMode=no".to_string()
             } else {
                 "BatchMode=yes".to_string()
@@ -308,10 +312,19 @@ impl SshTransportSpec {
         if self.auth_mode == "credential_ref" {
             let mut env = crate::ssh_askpass::prepare(&self.credential_ref)?;
             configure_askpass_terminal_fallback(&mut env, allow_terminal_fallback);
-            Ok(env)
-        } else {
-            Ok(HashMap::new())
+            return Ok(env);
         }
+        if self.auth_mode == "password_prompt" && !self.credential_ref.trim().is_empty() {
+            match crate::ssh_askpass::prepare(&self.credential_ref) {
+                Ok(mut env) => {
+                    configure_askpass_terminal_fallback(&mut env, allow_terminal_fallback);
+                    return Ok(env);
+                }
+                Err(error) if error == "ssh_credential_missing" => return Ok(HashMap::new()),
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(HashMap::new())
     }
 }
 

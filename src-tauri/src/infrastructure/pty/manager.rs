@@ -3,7 +3,10 @@ use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
 use std::path::Path;
-use std::sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex, RwLock};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex, RwLock,
+};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -595,15 +598,34 @@ function global:prompt {
             if !command.trim().is_empty() {
                 return match shell {
                     "powershell" | "pwsh" if cfg!(target_os = "windows") => Ok((
-                        if shell == "pwsh" { "pwsh.exe".to_string() } else { "powershell.exe".to_string() },
-                        vec!["-NoLogo".to_string(), "-NoProfile".to_string(), "-NonInteractive".to_string(), "-Command".to_string(), command.clone()],
+                        if shell == "pwsh" {
+                            "pwsh.exe".to_string()
+                        } else {
+                            "powershell.exe".to_string()
+                        },
+                        vec![
+                            "-NoLogo".to_string(),
+                            "-NoProfile".to_string(),
+                            "-NonInteractive".to_string(),
+                            "-Command".to_string(),
+                            command.clone(),
+                        ],
                     )),
                     "cmd" if cfg!(target_os = "windows") => Ok((
                         "cmd.exe".to_string(),
-                        vec!["/Q".to_string(), "/D".to_string(), "/C".to_string(), command.clone()],
+                        vec![
+                            "/Q".to_string(),
+                            "/D".to_string(),
+                            "/C".to_string(),
+                            command.clone(),
+                        ],
                     )),
                     "bash" | "gitbash" | "zsh" | "fish" | "sh" => Ok((
-                        if shell == "gitbash" && cfg!(target_os = "windows") { "bash.exe".to_string() } else { shell.to_string() },
+                        if shell == "gitbash" && cfg!(target_os = "windows") {
+                            "bash.exe".to_string()
+                        } else {
+                            shell.to_string()
+                        },
                         vec!["-c".to_string(), command.clone()],
                     )),
                     _ => Self::resolve_shell(shell),
@@ -613,10 +635,7 @@ function global:prompt {
         let monitoring_enabled = Self::shell_runtime_monitoring_enabled(env_vars);
         if !monitoring_enabled {
             if shell == "pwsh" && cfg!(target_os = "windows") {
-                return Ok((
-                    "pwsh.exe".to_string(),
-                    Self::powershell_fast_prompt_args(),
-                ));
+                return Ok(("pwsh.exe".to_string(), Self::powershell_fast_prompt_args()));
             }
             return Self::resolve_shell(shell);
         }
@@ -726,7 +745,8 @@ function global:prompt {
                 e
             })?
         };
-        let host_cwd = if cfg!(target_os = "windows") && shell_key == "wsl" && ssh_launch.is_none() {
+        let host_cwd = if cfg!(target_os = "windows") && shell_key == "wsl" && ssh_launch.is_none()
+        {
             let (wsl_args, host_cwd) = super::wsl_launch::resolve_wsl_launch(cwd)?;
             super::wsl_launch::validate_wsl_directory(&wsl_args)?;
             args.extend(wsl_args);
@@ -760,11 +780,7 @@ function global:prompt {
         let spawned = platform::spawn(PtyLaunchOptions {
             exe: exe.clone(),
             args: args.clone(),
-            cwd: if ssh_launch.is_some() {
-                None
-            } else {
-                host_cwd
-            },
+            cwd: if ssh_launch.is_some() { None } else { host_cwd },
             env: launch_env,
             cols: 80,
             rows: 24,
@@ -984,21 +1000,22 @@ function global:prompt {
         let child_for_watcher = child.clone();
         let sink_for_watcher = Arc::clone(&sink);
         let session_id_for_watcher = session_id.to_string();
-        std::thread::spawn(move || {
-            loop {
-                match child_for_watcher.try_wait() {
-                    Ok(Some(exit)) => {
-                        if !exit_reported_for_watcher.swap(true, Ordering::AcqRel) {
-                            sink_for_watcher.on_status(&session_id_for_watcher, PtyProcessStatus {
+        std::thread::spawn(move || loop {
+            match child_for_watcher.try_wait() {
+                Ok(Some(exit)) => {
+                    if !exit_reported_for_watcher.swap(true, Ordering::AcqRel) {
+                        sink_for_watcher.on_status(
+                            &session_id_for_watcher,
+                            PtyProcessStatus {
                                 status: "exited".to_string(),
                                 exit_code: exit.code,
-                            });
-                        }
-                        break;
+                            },
+                        );
                     }
-                    Ok(None) => std::thread::sleep(std::time::Duration::from_millis(25)),
-                    Err(_) => break,
+                    break;
                 }
+                Ok(None) => std::thread::sleep(std::time::Duration::from_millis(25)),
+                Err(_) => break,
             }
         });
 
@@ -1429,16 +1446,35 @@ mod tests {
             let manager = PtyManager::new();
             let id = format!("oneshot-exit-{code}");
             let status = Arc::new(Mutex::new(None));
-            manager.create(&id, None, Some(HashMap::from([
-                ("CLI_MANAGER_ONE_SHOT_COMMAND".to_string(), format!("echo done & exit {code}")),
-            ])), Some("cmd"), Arc::new(ExitPtySink { status: Arc::clone(&status) })).unwrap();
+            manager
+                .create(
+                    &id,
+                    None,
+                    Some(HashMap::from([(
+                        "CLI_MANAGER_ONE_SHOT_COMMAND".to_string(),
+                        format!("echo done & exit {code}"),
+                    )])),
+                    Some("cmd"),
+                    Arc::new(ExitPtySink {
+                        status: Arc::clone(&status),
+                    }),
+                )
+                .unwrap();
             let deadline = Instant::now() + Duration::from_secs(5);
             while Instant::now() < deadline && status.lock().unwrap().is_none() {
                 std::thread::sleep(Duration::from_millis(20));
             }
-            let actual = status.lock().unwrap().clone().and_then(|status| status.exit_code);
+            let actual = status
+                .lock()
+                .unwrap()
+                .clone()
+                .and_then(|status| status.exit_code);
             manager.close(&id).unwrap();
-            assert_eq!(actual, Some(code), "one-shot status must not wait for UI close");
+            assert_eq!(
+                actual,
+                Some(code),
+                "one-shot status must not wait for UI close"
+            );
         }
     }
 

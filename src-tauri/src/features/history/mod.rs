@@ -1,8 +1,5 @@
 mod diagnostics;
-use diagnostics::{
-    log_history_detail_oom_diagnostic,
-    log_history_stats_oom_diagnostic,
-};
+use diagnostics::{log_history_detail_oom_diagnostic, log_history_stats_oom_diagnostic};
 mod scan_state;
 pub(super) use scan_state::CodexThreadNameIndex;
 use scan_state::{
@@ -10,14 +7,13 @@ use scan_state::{
     CachedSessionComputation, CachedSessionFiles, CachedSessionProjectCacheEntry,
     CachedWslSessionFingerprint, CursorSessionMetadata, HistoryIndexEntry, HistorySessionIndex,
     HistoryStatsAggregationCache, HistoryStatsDailyIndexCache, HistoryStatsSessionFact,
-    OpenCodeParsedSession, SessionDetailParts, SessionFilesCache,
-    SessionProjectCache, SessionProjectScan, SessionStatsScan, SessionSummaryScan,
-    SessionUsageEventScan, WslSessionFileHit, WslSessionFingerprintCache,
-    CODEX_THREAD_NAME_INDEX_MAX_BYTES, DAY_MS, HISTORY_SESSION_INDEX, HISTORY_SESSION_INDEX_TTL_MS,
-    HISTORY_STATS_AGGREGATION_CACHE, HISTORY_STATS_AGGREGATION_CACHE_MAX,
-    HISTORY_STATS_DAILY_INDEX_CACHE, HISTORY_STATS_DAILY_INDEX_CACHE_MAX, HOUR_MS,
-    MAX_STATS_RANGE_DAYS, SESSION_FILES_CACHE, SESSION_PROJECT_CACHE,
-    WSL_SESSION_FINGERPRINT_CACHE,
+    OpenCodeParsedSession, SessionDetailParts, SessionFilesCache, SessionProjectCache,
+    SessionProjectScan, SessionStatsScan, SessionSummaryScan, SessionUsageEventScan,
+    WslSessionFileHit, WslSessionFingerprintCache, CODEX_THREAD_NAME_INDEX_MAX_BYTES, DAY_MS,
+    HISTORY_SESSION_INDEX, HISTORY_SESSION_INDEX_TTL_MS, HISTORY_STATS_AGGREGATION_CACHE,
+    HISTORY_STATS_AGGREGATION_CACHE_MAX, HISTORY_STATS_DAILY_INDEX_CACHE,
+    HISTORY_STATS_DAILY_INDEX_CACHE_MAX, HOUR_MS, MAX_STATS_RANGE_DAYS, SESSION_FILES_CACHE,
+    SESSION_PROJECT_CACHE, WSL_SESSION_FINGERPRINT_CACHE,
 };
 pub(crate) use scan_state::{HistoryRoots, SessionFileFingerprint, SessionFileRef};
 mod types;
@@ -44,8 +40,8 @@ use opencode_detail::build_opencode_session_detail;
 mod scope;
 pub(crate) use scope::validate_session_file_ref;
 use scope::{
-    codex_runtime_path, history_source_base, path_within_history_scope, should_register_codex_state_db,
-    validate_session_file_ref_for_conversion,
+    codex_runtime_path, history_source_base, path_within_history_scope,
+    should_register_codex_state_db, validate_session_file_ref_for_conversion,
 };
 mod remote_requests;
 use remote_requests::{
@@ -69,9 +65,10 @@ use stats::{
 mod index_cache;
 pub use index_cache::set_history_index_cache_dir;
 use index_cache::{
-    can_reuse_session_scan, get_files_cache,
-    get_project_cache, get_wsl_session_fingerprint_cache, history_index_snapshot_for_stats, load_persisted_history_index, refresh_history_index, refresh_history_index_snapshot, scan_session_computation, scan_session_computation_with_messages, summary_from_computation,
-    HISTORY_INDEX_CACHE_DIR,
+    can_reuse_session_scan, get_files_cache, get_project_cache, get_wsl_session_fingerprint_cache,
+    history_index_snapshot_for_stats, load_persisted_history_index, refresh_history_index,
+    refresh_history_index_snapshot, scan_session_computation,
+    scan_session_computation_with_messages, summary_from_computation, HISTORY_INDEX_CACHE_DIR,
 };
 pub(crate) use index_cache::{
     invalidate_history_caches, invalidate_history_stats_caches, session_file_fingerprint,
@@ -81,36 +78,34 @@ mod session_query;
 pub(crate) use session_detail::build_session_detail;
 use session_detail::{
     build_session_detail_with_roots, build_v2_adapter_session, build_v2_adapter_session_from_parts,
-    collect_subtask_session_file_refs,
-    scan_session_detail_parts_with_thread_names, v2_fingerprint_value,
+    collect_subtask_session_file_refs, scan_session_detail_parts_with_thread_names,
+    v2_fingerprint_value,
 };
 mod conversion;
 pub(crate) use conversion::now_rfc3339;
 use conversion::{
-    build_codex_thread_registration, convert_history_session, delete_session_tree, register_codex_thread,
+    build_codex_thread_registration, convert_history_session, delete_session_tree,
+    register_codex_thread,
 };
 mod roots;
 use roots::{
     apply_codex_thread_name, codex_thread_name_index, list_subagent_transcript_files,
-    normalize_config_dir, resolve_antigravity_history_root,
-    resolve_claude_history_root, resolve_cline_history_roots, resolve_codex_config_root,
-    resolve_codex_history_root, resolve_codex_state_db_path, resolve_copilot_history_root,
-    resolve_cursor_global_storage_root, resolve_cursor_history_root, resolve_gemini_history_root,
-    resolve_grok_history_root, resolve_kiro_history_root, resolve_pi_history_root,
-    scan_session_detail_parts, scan_session_detail_parts_for_roots,
+    normalize_config_dir, resolve_antigravity_history_root, resolve_claude_history_root,
+    resolve_cline_history_roots, resolve_codex_config_root, resolve_codex_history_root,
+    resolve_codex_state_db_path, resolve_copilot_history_root, resolve_cursor_global_storage_root,
+    resolve_cursor_history_root, resolve_gemini_history_root, resolve_grok_history_root,
+    resolve_kiro_history_root, resolve_pi_history_root, scan_session_detail_parts,
+    scan_session_detail_parts_for_roots,
 };
 pub(crate) use roots::{history_roots, is_subagent_transcript_path};
 mod opencode;
 use opencode::{
-    delete_opencode_session_from_locator,
-    opencode_catalog_sessions, opencode_locator_in_default_scope,
-    parse_opencode_database, parse_opencode_session_locator,
+    delete_opencode_session_from_locator, opencode_catalog_sessions,
+    opencode_locator_in_default_scope, parse_opencode_database, parse_opencode_session_locator,
     path_equals_lenient, resolve_opencode_database_path, timestamp_millis_to_rfc3339,
 };
 mod codex_config;
-use codex_config::{
-    codex_config_string, expand_codex_config_path,
-};
+use codex_config::{codex_config_string, expand_codex_config_path};
 mod discovery;
 use discovery::{collect_session_files, collect_session_files_with_force};
 mod wsl_discovery;
@@ -128,17 +123,17 @@ use source_files::{
 };
 mod source_metadata;
 use source_metadata::{
-    antigravity_path_parts, antigravity_workspace_from_path, apply_cursor_metadata_to_computation, cline_api_message_values, cline_model_from_path,
-    cline_project_key_from_path, cline_session_id_from_path, cline_title_from_path,
-    cline_ui_timestamps, cline_workspace_from_path,
-    cursor_metadata_from_path,
-    cursor_project_key_from_path, cursor_project_slug_from_path, cursor_session_id_from_path, grok_project_key_from_path, grok_session_id_from_path,
-    grok_string_by_paths, grok_summary_value, grok_workspace_from_path,
+    antigravity_path_parts, antigravity_workspace_from_path, apply_cursor_metadata_to_computation,
+    cline_api_message_values, cline_model_from_path, cline_project_key_from_path,
+    cline_session_id_from_path, cline_title_from_path, cline_ui_timestamps,
+    cline_workspace_from_path, cursor_metadata_from_path, cursor_project_key_from_path,
+    cursor_project_slug_from_path, cursor_session_id_from_path, grok_project_key_from_path,
+    grok_session_id_from_path, grok_string_by_paths, grok_summary_value, grok_workspace_from_path,
     load_antigravity_workspace_map, looks_like_antigravity_transcript_file,
     looks_like_cline_session_file, looks_like_copilot_events_file,
     looks_like_cursor_agent_transcript_file, looks_like_gemini_session_file,
-    looks_like_grok_updates_file, looks_like_kiro_session_file, looks_like_pi_session_file, pi_project_key_from_path,
-    pi_session_id_from_path, pi_string_by_keys, pi_workspace_from_path,
+    looks_like_grok_updates_file, looks_like_kiro_session_file, looks_like_pi_session_file,
+    pi_project_key_from_path, pi_session_id_from_path, pi_string_by_keys, pi_workspace_from_path,
 };
 mod project_paths;
 use project_paths::{
@@ -150,52 +145,44 @@ use project_paths::{
     read_dir_entries, session_matches_project_path,
 };
 mod route_usage;
-use route_usage::{
-    load_history_stats_data_quality, merge_route_usage_into_history_stats,
-};
+use route_usage::{load_history_stats_data_quality, merge_route_usage_into_history_stats};
 mod scanner;
 use scanner::scan_session_inner;
 mod copilot_parser;
 use copilot_parser::{
-    copilot_message_from_event, copilot_tool_id, copilot_tool_name,
-    copilot_tool_result_text, scan_copilot_jsonl_session,
+    copilot_message_from_event, copilot_tool_id, copilot_tool_name, copilot_tool_result_text,
+    scan_copilot_jsonl_session,
 };
 mod grok_parser;
 use grok_parser::{
-    grok_event_timestamp, grok_tool_call_id, grok_tool_input,
-    grok_tool_name, grok_tool_output, grok_tool_status, grok_update_value, scan_grok_jsonl_session,
+    grok_event_timestamp, grok_tool_call_id, grok_tool_input, grok_tool_name, grok_tool_output,
+    grok_tool_status, grok_update_value, scan_grok_jsonl_session,
 };
 mod pi_parser;
-use pi_parser::{
-    scan_pi_jsonl_session,
-    scan_pi_tool_events,
-};
+use pi_parser::{scan_pi_jsonl_session, scan_pi_tool_events};
 mod transcript_parsers;
 use transcript_parsers::{
-    empty_session_scan, scan_antigravity_jsonl_session,
-    scan_cursor_jsonl_session,
+    empty_session_scan, scan_antigravity_jsonl_session, scan_cursor_jsonl_session,
 };
 mod json_parsers;
 use json_parsers::{
-    json_content_text, json_history_message,
-    json_session_scan_result, normalize_json_role, scan_json_session,
+    json_content_text, json_history_message, json_session_scan_result, normalize_json_role,
+    scan_json_session,
 };
 mod file_changes;
 use file_changes::{
-    scan_file_changes, scan_session_combined, scan_session_detail,
-    scan_tool_events,
+    scan_file_changes, scan_session_combined, scan_session_detail, scan_tool_events,
     summarize_file_change_operations,
 };
 mod message_stream;
 use message_stream::{
     extract_codex_context_info, extract_codex_token_count, extract_context_window,
-    extract_usage_tokens, is_codex_token_usage_record, iter_session_messages,
-    CodexCumulativeUsage,
+    extract_usage_tokens, is_codex_token_usage_record, iter_session_messages, CodexCumulativeUsage,
 };
-mod tool_observations;
 mod native_tool_records;
 mod nested_tools;
 mod tool_events;
+mod tool_observations;
 use tool_events::{
     collect_tool_calls, collect_tool_events_from_value, extract_command_name,
     extract_tool_duration_ms, make_tool_event, mark_tool_event_seen, sorted_tool_counts,
@@ -204,23 +191,23 @@ use tool_events::{
 mod usage;
 use usage::{
     backfill_latest_assistant_message_usage, build_usage_event_key, calculate_usage_cost,
-    codex_usage_delta, extract_model, extract_positive_u64, extract_reasoning_effort, extract_u64_by_keys,
-    extract_usage_dedup_key, extract_usage_tokens_from_value,
-    history_stats_total_tokens, is_synthetic_model, positive_usage_token, qualify_model_with_reasoning_effort,
-    usage_stats_total_tokens, usage_total_tokens, usage_trend_point,
+    codex_usage_delta, extract_model, extract_positive_u64, extract_reasoning_effort,
+    extract_u64_by_keys, extract_usage_dedup_key, extract_usage_tokens_from_value,
+    history_stats_total_tokens, is_synthetic_model, positive_usage_token,
+    qualify_model_with_reasoning_effort, usage_stats_total_tokens, usage_total_tokens,
+    usage_trend_point,
 };
 mod time;
 use time::{
-    calc_heat_level, day_start_utc, hour_of_day_for_stats, is_tool_result_message,
-    now_millis,
+    calc_heat_level, day_start_utc, hour_of_day_for_stats, is_tool_result_message, now_millis,
 };
 mod message_content;
 use message_content::{
-    excerpt, extract_branch, extract_content,
-    extract_simple_tag_block, extract_text_from_value, extract_timestamp_millis,
-    fallback_history_message_part, fallback_message_part_kind, is_injected_prompt_content, looks_like_patch, message_title_candidate, normalize_text,
-    normalize_unix_timestamp_millis, parse_timestamp_millis_str, parse_timestamp_millis_value, system_time_to_millis,
-    update_timestamp_bounds,
+    excerpt, extract_branch, extract_content, extract_simple_tag_block, extract_text_from_value,
+    extract_timestamp_millis, fallback_history_message_part, fallback_message_part_kind,
+    is_injected_prompt_content, looks_like_patch, message_title_candidate, normalize_text,
+    normalize_unix_timestamp_millis, parse_timestamp_millis_str, parse_timestamp_millis_value,
+    system_time_to_millis, update_timestamp_bounds,
 };
 pub(crate) use message_content::{extract_editable_text, extract_timestamp, parse_message};
 

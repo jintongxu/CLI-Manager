@@ -110,13 +110,12 @@ fn migration_checksum(sql: &str) -> Vec<u8> {
 }
 
 async fn table_exists(conn: &mut SqliteConnection, table: &str) -> Result<bool, String> {
-    let exists: Option<(i64,)> = sqlx::query_as(
-        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1 LIMIT 1",
-    )
-    .bind(table)
-    .fetch_optional(&mut *conn)
-    .await
-    .map_err(|err| format!("migration_repair_schema_query_failed: {err}"))?;
+    let exists: Option<(i64,)> =
+        sqlx::query_as("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1 LIMIT 1")
+            .bind(table)
+            .fetch_optional(&mut *conn)
+            .await
+            .map_err(|err| format!("migration_repair_schema_query_failed: {err}"))?;
     Ok(exists.is_some())
 }
 

@@ -6,8 +6,8 @@ use super::handoff::{
 use super::handoff_session::CcConnectHandoffTransport;
 use super::handoff_session::{load_handoff_record, PersistedHandoffRecord};
 use super::*;
-use crate::daemon::discovery::{daemon_info_path, is_pid_alive, read_daemon_info, DaemonInfo};
 use crate::codex_goal::{classify_codex_stop, CodexGoalHookState};
+use crate::daemon::discovery::{daemon_info_path, is_pid_alive, read_daemon_info, DaemonInfo};
 use log::{debug, warn};
 use serde_json::Value;
 use std::collections::hash_map::DefaultHasher;

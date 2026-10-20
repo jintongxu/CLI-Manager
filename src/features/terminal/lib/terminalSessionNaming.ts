@@ -2,7 +2,7 @@ import type { TerminalSession } from "../../../shared/types/index";
 import { CLI_TOOL_DESCRIPTORS } from "../../../shared/lib/cliTools";
 import { normalizeShellKey } from "../../../shared/platform/shell";
 
-export function terminalPurpose(shell?: string | null, startupCmd?: string, environmentType?: string): string {
+export function terminalPurpose(shell?: string | null, startupCmd?: string, environmentType?: string, sshHostName?: string | null): string {
   // Match executable tokens, not arbitrary substrings (e.g. echo claude).
   const tokens = (startupCmd ?? "").trim().split(/\s*(?:&&|;)\s*/);
   for (const command of tokens) {
@@ -11,7 +11,7 @@ export function terminalPurpose(shell?: string | null, startupCmd?: string, envi
     const tool = CLI_TOOL_DESCRIPTORS.find((item) => item.command === executable);
     if (tool) return tool.id === "claude" ? "Claude" : tool.id === "codex" ? "Codex" : tool.id === "pi" ? "Pi" : tool.label;
   }
-  if (environmentType === "ssh") return "SSH Shell";
+  if (environmentType === "ssh") return sshHostName?.trim() || "SSH Shell";
   if (environmentType === "wsl") return "WSL";
   const labels = { powershell: "PowerShell", pwsh: "PowerShell 7", cmd: "CMD", wsl: "WSL", gitbash: "Git Bash", bash: "Bash", zsh: "Zsh", fish: "Fish", sh: "sh" };
   const key = normalizeShellKey(shell);

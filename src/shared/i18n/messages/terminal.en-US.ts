@@ -202,6 +202,7 @@ export const en: Record<keyof typeof zh, string> = {
   "terminal.toolbar.closeSystemResourcesPanel": "Close system resources panel",
   "terminal.toolbar.openProvidersPanel": "Open providers panel",
   "terminal.toolbar.closeProvidersPanel": "Close providers panel",
+  "terminal.passwordPrompt.pasteSaved": "Press Enter to paste saved password",
   "terminal.markdownPreview.open": "Open Markdown preview",
   "terminal.markdownPreview.close": "Close Markdown preview",
   "terminal.markdownPreview.title": "Markdown Preview",

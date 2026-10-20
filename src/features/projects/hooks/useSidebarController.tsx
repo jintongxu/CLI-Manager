@@ -130,7 +130,6 @@ export function useSidebarController({
   const useExternalTerminal = useSettingsStore((s) => s.useExternalTerminal);
   const projectWorktreeConfigEnabled = useSettingsStore((s) => s.projectWorktreeConfigEnabled);
   const sidebarDensity = useSettingsStore((s) => s.sidebarDensity);
-  const sidebarToolbarVisibility = useSettingsStore((s) => s.sidebarToolbarVisibility);
   const confirmBeforeClosingTerminalTab = useSettingsStore((s) => s.confirmBeforeClosingTerminalTab);
   const updateSetting = useSettingsStore((s) => s.update);
   const openFileProject = useFileExplorerStore((s) => s.openProject);
@@ -1834,7 +1833,6 @@ export function useSidebarController({
     expandSidebar,
     onOpenSettings,
     onOpenStats,
-    sidebarToolbarVisibility,
     contextMenu,
     menuPos,
     contextMenuRef,

@@ -1,7 +1,5 @@
 #[path = "../features/agents/commands.rs"]
 pub mod agent_capabilities;
-#[path = "../features/extensions/commands.rs"]
-pub mod extensions;
 #[path = "../features/app-data/commands.rs"]
 pub mod app_data;
 #[path = "../features/terminal/background.rs"]
@@ -16,6 +14,8 @@ pub mod command_suggestion;
 pub mod db_repair;
 #[path = "../features/desktop-pet/commands.rs"]
 pub mod desktop_pet;
+#[path = "../features/extensions/commands.rs"]
+pub mod extensions;
 #[path = "../features/system/fonts.rs"]
 pub mod fonts;
 #[path = "../features/files/commands.rs"]

@@ -452,8 +452,7 @@ where
                         || is_retryable_worktree_remove_error(&err.to_string())) =>
             {
                 last_error = err.to_string();
-                let delay = WORKTREE_REMOVE_RETRY_DELAY_MS
-                    .saturating_mul(1u64 << attempt.min(5));
+                let delay = WORKTREE_REMOVE_RETRY_DELAY_MS.saturating_mul(1u64 << attempt.min(5));
                 thread::sleep(Duration::from_millis(delay.min(2_000)));
             }
             Err(err) => return Err(format!("remove_stale_worktree_dir_failed: {err}")),

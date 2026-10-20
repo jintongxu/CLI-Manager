@@ -24,6 +24,9 @@ use crate::ssh_transport::{
     SshRemoteHomePathError, SshTransportLaunch, SshTransportSpec,
 };
 
+pub mod file_ops;
+pub mod sftp;
+
 const SSH_AGENT_RESOURCE_ROOT: &str = "resources/ssh-agent";
 
 const AGENT_PROBE_MAGIC: &str = "CLI_MANAGER_SSH_AGENT_PROBE/1";
@@ -121,6 +124,15 @@ pub async fn ssh_save_password(host_id: String, password: String) -> Result<Stri
 }
 
 #[tauri::command]
+// 仅在终端密码提示快捷键触发时读取当前主机凭据，不持久化或记录明文。
+pub async fn ssh_get_password(host_id: String) -> Result<Option<String>, String> {
+    let account = ssh_password_account(&host_id)?;
+    tokio::task::spawn_blocking(move || crate::credential_store::get(&account))
+        .await
+        .map_err(|err| format!("ssh credential task failed: {err}"))?
+}
+
+#[tauri::command]
 // 查询该主机的凭据是否存在且非空。
 pub async fn ssh_password_status(host_id: String) -> Result<bool, String> {
     let account = ssh_password_account(&host_id)?;
@@ -151,6 +163,32 @@ fn validate_remote_path(path: &str) -> Result<&str, String> {
         return Err("ssh_remote_path_parent_forbidden".to_string());
     }
     Ok(path)
+}
+
+fn validate_remote_relative_file_path(path: &str) -> Result<&str, String> {
+    let path = path.trim().trim_matches('/');
+    if path.is_empty()
+        || path.contains(['\0', '\n', '\r', '\\'])
+        || path
+            .split('/')
+            .any(|part| part.is_empty() || part == "." || part == "..")
+    {
+        return Err("ssh_remote_path_invalid".to_string());
+    }
+    Ok(path)
+}
+
+fn direct_file_mime(path: &str) -> Option<&'static str> {
+    let extension = path.rsplit('.').next()?.to_ascii_lowercase();
+    match extension.as_str() {
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "png" => Some("image/png"),
+        "gif" => Some("image/gif"),
+        "webp" => Some("image/webp"),
+        "bmp" => Some("image/bmp"),
+        "svg" => Some("image/svg+xml"),
+        _ => None,
+    }
 }
 
 // 拒绝需要真实终端交互的认证方式。
@@ -1786,20 +1824,12 @@ pub async fn ssh_check_path(
 }
 
 #[tauri::command]
-// 通过 find 读取直接子目录并按名称不区分大小写排序。
-pub async fn ssh_list_directories(
-    spec: SshConnectionSpec,
-    path: String,
-) -> Result<Vec<SshDirectoryEntry>, String> {
+// 通过远端登录用户的 HOME 环境变量解析默认文件浏览根目录。
+pub async fn ssh_resolve_home(spec: SshConnectionSpec) -> Result<String, String> {
     validate_spec(&spec)?;
     ensure_non_interactive(&spec)?;
-    let path = validate_remote_path(&path)?.to_string();
-    let script = format!(
-        "find -- {} -mindepth 1 -maxdepth 1 -type d -print0",
-        posix_quote(&path)
-    );
-    let timeout = Duration::from_secs(spec.connect_timeout_sec.saturating_add(10).min(310));
-    let command = ssh_remote_command(&spec, &script)?;
+    let command = ssh_remote_command(&spec, "printf '%s' \"$HOME\"")?;
+    let timeout = Duration::from_secs(spec.connect_timeout_sec.saturating_add(5).min(305));
     let output =
         tauri::async_runtime::spawn_blocking(move || output_with_timeout(command, timeout))
             .await
@@ -1808,26 +1838,9 @@ pub async fn ssh_list_directories(
     if !output.status.success() {
         return Err(single_line(&output.stderr));
     }
-    let mut entries: Vec<SshDirectoryEntry> = output
-        .stdout
-        .split(|byte| *byte == 0)
-        .filter(|value| !value.is_empty())
-        .filter_map(|value| String::from_utf8(value.to_vec()).ok())
-        .map(|entry_path| {
-            let normalized = entry_path.trim_end_matches('/').to_string();
-            let name = normalized
-                .rsplit('/')
-                .next()
-                .unwrap_or(&normalized)
-                .to_string();
-            SshDirectoryEntry {
-                name,
-                path: normalized,
-            }
-        })
-        .collect();
-    entries.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
-    Ok(entries)
+    let home = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    validate_remote_path(&home)?;
+    Ok(home)
 }
 
 #[cfg(test)]

@@ -1,6 +1,4 @@
-use super::{
-    now_millis, DEFAULT_MAX_TURN_TIME_MINS, MAX_LOG_LINES,
-};
+use super::{now_millis, DEFAULT_MAX_TURN_TIME_MINS, MAX_LOG_LINES};
 #[cfg(target_os = "windows")]
 use crate::process_job::ChildJob;
 use serde::{Deserialize, Serialize};

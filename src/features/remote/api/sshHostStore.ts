@@ -64,7 +64,9 @@ function buildSshHost(input: CreateSshHostInput): SshHost {
     config_file: configManaged ? input.config_file?.trim() ?? "" : "",
     auth_mode: authMode,
     identity_file: authMode === "identity_file" ? input.identity_file?.trim() ?? "" : "",
-    credential_ref: authMode === "credential_ref" ? input.credential_ref?.trim() ?? "" : "",
+    credential_ref: authMode === "credential_ref" || authMode === "password_prompt"
+      ? input.credential_ref?.trim() ?? ""
+      : "",
     jump_mode: configManaged ? "none" : input.jump_mode ?? "none",
     jump_host_id: configManaged ? null : input.jump_host_id ?? null,
     proxy_type: configManaged ? "none" : input.proxy_type ?? "none",

@@ -7,6 +7,7 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
+use tauri::{AppHandle, Emitter};
 
 const LEGACY_IMAGE_ATTACHMENT_BYTES: usize = 5 * 1024 * 1024;
 const MAX_ATTACHMENT_BYTES: usize = 20 * 1024 * 1024;
@@ -400,8 +401,10 @@ fn upload_file_to_remote_directory(
     consumer_id: String,
     ssh_launch: SshLaunchPlan,
     remote_directory: String,
+    relative_path: String,
     file_name: String,
     data: Vec<u8>,
+    app: Option<&AppHandle>,
 ) -> Result<String, String> {
     validate_plan(&ssh_launch)?;
     validate_attachment_name(&file_name)?;
@@ -417,7 +420,7 @@ fn upload_file_to_remote_directory(
         "filePutBegin".to_string(),
         json!({
             "rootPath": remote_directory,
-            "relativePath": "",
+            "relativePath": relative_path,
             "fileName": file_name,
             "sizeBytes": data.len(),
             "sha256": sha256,
@@ -448,6 +451,12 @@ fn upload_file_to_remote_directory(
                 return Err("remote_file_put_chunk_response_invalid".to_string());
             }
             offset = expected;
+            if let Some(app) = app {
+                let _ = app.emit(
+                    &format!("ssh-file-upload-progress-{consumer_id}"),
+                    json!({ "progress": (offset as f64 / data.len() as f64 * 100.0).round() as u8 }),
+                );
+            }
         }
         let response = client.ssh_agent_request(
             consumer_id.clone(),
@@ -555,10 +564,12 @@ pub async fn ssh_remote_file_attach_path(
 #[tauri::command]
 // 校验非空远端目录后，在阻塞任务中读取本地文件并上传。
 pub async fn ssh_remote_file_put_path(
+    app: AppHandle,
     daemon_bridge: tauri::State<'_, DaemonBridge>,
     consumer_id: String,
     ssh_launch: SshLaunchPlan,
     root_path: String,
+    relative_path: String,
     local_path: String,
 ) -> Result<String, String> {
     let root_path = normalize_attachment_root(Some(root_path))?;
@@ -575,8 +586,10 @@ pub async fn ssh_remote_file_put_path(
             consumer_id,
             ssh_launch,
             root_path,
+            relative_path,
             file_name,
             data,
+            Some(&app),
         )
     })
     .await
