@@ -7,10 +7,12 @@ import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { useI18n } from "../../../shared/i18n/index";
 import { CommandTemplatePanel } from "../../prompts/api/CommandTemplatePanel";
 import { ProjectIdeasPanel } from "../../projects";
+import { SshSidebarPanel } from "../../remote";
+import { Portal } from "../../../shared/ui/Portal";
 import { BackgroundTasksPanel, type BackgroundTaskMeta } from "../components/BackgroundTasksPanel";
 import {
   Activity, ArrowLeftRight, Plus, ListClockIcon, Maximize2, Minimize2, BarChart3, GitBranch, Folder,
-  Cpu,
+  Cpu, Globe,
 } from "../../../shared/ui/icons";
 import type { Project } from "../../../shared/types/index";
 import { SortableToolbarButton, CpuCatIndicator } from "../components/TerminalToolbarControls";
@@ -56,6 +58,10 @@ interface TerminalToolbarContext {
   systemResourceMonitoringEnabled: boolean;
   cpuResourceCardVisible: boolean;
   sidePanelMerged: boolean;
+  sshPanelOpen: boolean;
+  onToggleSshPanel: () => void;
+  onOpenSshSettings?: () => void;
+  onOpenSshTerminal: (host: import("../../../shared/types/index").SshHost) => void;
 }
 
 export function useTerminalToolbarRenderer({
@@ -98,6 +104,10 @@ export function useTerminalToolbarRenderer({
   systemResourceMonitoringEnabled,
   cpuResourceCardVisible,
   sidePanelMerged,
+  sshPanelOpen,
+  onToggleSshPanel,
+  onOpenSshSettings,
+  onOpenSshTerminal,
 }: TerminalToolbarContext) {
   return useCallback(() => {
     const toolbarTooltips: Record<string, string> = {
@@ -121,6 +131,7 @@ export function useTerminalToolbarRenderer({
         ? t("terminal.toolbar.closeSystemResourcesPanel")
         : t("terminal.toolbar.openSystemResourcesPanel"),
       backgroundTasks: t("terminal.backgroundTasks.title"),
+      ssh: sshPanelOpen ? t("sidebar.ssh.close") : t("sidebar.ssh.title"),
     };
     const buttonMap: Record<string, ReactNode> = {
       new: (
@@ -256,6 +267,29 @@ export function useTerminalToolbarRenderer({
           <Cpu size={13} strokeWidth={1.8} />
         </button>
       ),
+      ssh: (
+        <div className="relative">
+          <button type="button" onClick={onToggleSshPanel} className="ui-focus-ring ui-icon-action" data-active={sshPanelOpen ? "true" : "false"} aria-label={toolbarTooltips.ssh} aria-pressed={sshPanelOpen}>
+            <Globe size={14} strokeWidth={1.8} />
+          </button>
+          {sshPanelOpen && (
+            <Portal>
+              <div
+                className="pointer-events-auto fixed z-40 h-[min(640px,calc(100vh-24px))] w-[300px] overflow-hidden rounded-lg border border-border shadow-xl"
+                style={terminalSidePanelSide === "right" ? { right: 46, top: 64 } : { left: 46, top: 64 }}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <SshSidebarPanel
+                  onClose={onToggleSshPanel}
+                  onOpenSettings={() => onOpenSshSettings?.()}
+                  onOpenTerminal={onOpenSshTerminal}
+                />
+              </div>
+            </Portal>
+          )}
+        </div>
+      ),
       backgroundTasks: (
         <BackgroundTasksPanel
           tasks={backgroundTasks}
@@ -268,6 +302,7 @@ export function useTerminalToolbarRenderer({
     };
 
     const visibleButtons = terminalToolbarOrder
+      .filter((key) => key !== "ssh")
       .filter((key) => {
         if (key === "new") return true;
         if (key === "fullscreen" && !onToggleFullscreen) return false;
@@ -293,6 +328,13 @@ export function useTerminalToolbarRenderer({
       <div className="ui-terminal-action-fixed-slot">
         <div className="ui-terminal-action-sort-item flex w-full justify-center" data-tooltip={t("projectIdeas.toolbar.open")}>
           {buttonMap.projectIdeas}
+        </div>
+      </div>
+    );
+    const sshButton = (
+      <div className="ui-terminal-action-fixed-slot">
+        <div className="ui-terminal-action-sort-item flex w-full justify-center" data-tooltip={toolbarTooltips.ssh}>
+          {buttonMap.ssh}
         </div>
       </div>
     );
@@ -324,6 +366,7 @@ export function useTerminalToolbarRenderer({
                 </SortableToolbarButton>
                 {btn.id === "new" && anonymousPiButton}
                 {btn.id === "new" && projectIdeasButton}
+                {btn.id === "new" && sshButton}
               </Fragment>
             ))}
           </SortableContext>

@@ -117,6 +117,8 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
   const displayNormalizeOutputRef = useRef<(text: string) => string>((text) => text);
   const displayTransformOutputRef = useRef<(text: string) => string>((text) => text);
   const displayAfterWriteRef = useRef<((terminal: Terminal) => void) | null>(null);
+  const [savedPasswordPromptHint, setSavedPasswordPromptHint] = useState<{ left: number; top: number; height: number } | null>(null);
+  const savedPasswordPasteInFlightRef = useRef(false);
   const piTerminalCompatibilityRef = useRef<PiTerminalCompatibility | null>(null);
   const terminalScrollbackCustomEnabled = useSettingsStore((s) => s.terminalScrollbackCustomEnabled);
   const terminalScrollbackRows = useSettingsStore((s) => s.terminalScrollbackRows);
@@ -578,7 +580,38 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
 
     return processed + text.slice(lastIndex);
   };
+  const refreshSavedPasswordPromptHint = useCallback((terminal: Terminal) => {
+    const session = useTerminalStore.getState().sessions.find((item) => item.id === sessionId);
+    const activeBuffer = terminal.buffer.active;
+    const promptLine = activeBuffer.getLine(activeBuffer.viewportY + activeBuffer.cursorY)
+      ?.translateToString(true).trim() ?? "";
+    if (!session?.sshHostId || session.environmentType !== "ssh"
+      || !/(?:password|passphrase|密码|口令)(?:\s+for\s+[^:：]{1,128})?\s*[:：]\s*$/i.test(promptLine)) {
+      setSavedPasswordPromptHint(null);
+      return;
+    }
+    void invoke<boolean>("ssh_password_status", { hostId: session.sshHostId }).then((hasPassword) => {
+      if (!hasPassword || !wrapperRef.current || terminalRef.current !== terminal) {
+        setSavedPasswordPromptHint(null);
+        return;
+      }
+      const screen = terminal.element?.querySelector<HTMLElement>(".xterm-screen");
+      const wrapper = wrapperRef.current;
+      if (!screen) return;
+      const screenRect = screen.getBoundingClientRect();
+      const wrapperRect = wrapper.getBoundingClientRect();
+      const cellWidth = screenRect.width / Math.max(terminal.cols, 1);
+      const cellHeight = screenRect.height / Math.max(terminal.rows, 1);
+      setSavedPasswordPromptHint({
+        left: screenRect.left - wrapperRect.left + activeBuffer.cursorX * cellWidth + 2,
+        top: screenRect.top - wrapperRect.top + activeBuffer.cursorY * cellHeight,
+        height: cellHeight,
+      });
+    }).catch(() => setSavedPasswordPromptHint(null));
+  }, [sessionId]);
+
   displayAfterWriteRef.current = (terminal) => {
+    refreshSavedPasswordPromptHint(terminal);
     if (!isVisibleRef.current) return;
     if (isCodexSession(undefined, terminal) && disposeWebglRenderer()) {
       scheduleViewportRefresh();
@@ -947,6 +980,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
       cursorBlink: false,
       cursorStyle: "bar",
       cursorWidth: 1,
+      convertEol: true,
       fontSize,
       fontFamily: effectiveFontFamily,
       fontWeight: "normal",
@@ -1366,6 +1400,24 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
         }
       }
       if (e.type === "keydown" && e.key === "Enter") {
+        const activeSession = useTerminalStore.getState().sessions.find((item) => item.id === sessionId);
+        const activeBuffer = terminal.buffer.active;
+        const promptLine = activeBuffer.getLine(activeBuffer.viewportY + activeBuffer.cursorY)
+          ?.translateToString(true).trim() ?? "";
+        if (
+          activeSession?.environmentType === "ssh"
+          && activeSession.sshHostId
+          && !savedPasswordPasteInFlightRef.current
+          && /(?:password|passphrase|密码|口令)(?:\s+for\s+[^:：]{1,128})?\s*[:：]\s*$/i.test(promptLine)
+        ) {
+          e.preventDefault();
+          savedPasswordPasteInFlightRef.current = true;
+          void invoke<string | null>("ssh_get_password", { hostId: activeSession.sshHostId })
+            .then((password) => terminalProcessManager.write(sessionId, password ? `${password}\r` : "\r"))
+            .catch(() => terminalProcessManager.write(sessionId, "\r"))
+            .finally(() => { savedPasswordPasteInFlightRef.current = false; });
+          return false;
+        }
         const sessionContext = getSessionToolContext();
         const newlineDecision = resolveTerminalNewlineKeyEvent(e, {
           shortcut: useSettingsStore.getState().terminalNewlineShortcut,
@@ -1883,6 +1935,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     isActive,
     isVisible,
     suggestionGhost,
+    savedPasswordPromptHint,
     searchForeground,
     effectiveFontFamily,
     menuState,

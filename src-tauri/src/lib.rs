@@ -3,20 +3,19 @@
 mod app;
 pub(crate) use app::migrations::{
     migrations, MIGRATION_ADD_CLI_ARGS_DESCRIPTION, MIGRATION_ADD_CLI_ARGS_SQL,
-    MIGRATION_ADD_CLI_ARGS_VERSION, MIGRATION_ADD_GROUP_BOUND_PATH_DESCRIPTION,
-    MIGRATION_ADD_GROUP_BOUND_PATH_SQL, MIGRATION_ADD_GROUP_BOUND_PATH_VERSION,
-    MIGRATION_ADD_PROJECT_PATH_MODE_DESCRIPTION, MIGRATION_ADD_PROJECT_PATH_MODE_SQL,
-    MIGRATION_ADD_PROJECT_PATH_MODE_VERSION, MIGRATION_ADD_SSH_ATTACHMENT_ROOT_DESCRIPTION,
-    MIGRATION_ADD_SSH_ATTACHMENT_ROOT_SQL, MIGRATION_ADD_SSH_ATTACHMENT_ROOT_VERSION,
-    MIGRATION_ADD_USAGE_ERROR_DETAIL_DESCRIPTION, MIGRATION_ADD_USAGE_ERROR_DETAIL_SQL,
-    MIGRATION_ADD_USAGE_ERROR_DETAIL_VERSION, MIGRATION_ADD_WORKTREE_ISOLATION_DESCRIPTION,
-    MIGRATION_ADD_WORKTREE_ISOLATION_SQL, MIGRATION_ADD_WORKTREE_ISOLATION_VERSION,
-    MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_DESCRIPTION, MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_SQL,
-    MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_VERSION,
-    MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_DESCRIPTION, MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_SQL,
-    MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_VERSION, MIGRATION_ADD_WORKTREE_SHORT_LABELS_DESCRIPTION,
-    MIGRATION_ADD_WORKTREE_SHORT_LABELS_SQL, MIGRATION_ADD_WORKTREE_SHORT_LABELS_VERSION,
-    MIGRATION_BACKFILL_REQUEST_LOG_PROJECT_PATH_SQL,
+    MIGRATION_ADD_CLI_ARGS_VERSION, MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_DESCRIPTION,
+    MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_SQL, MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_VERSION,
+    MIGRATION_ADD_GROUP_BOUND_PATH_DESCRIPTION, MIGRATION_ADD_GROUP_BOUND_PATH_SQL,
+    MIGRATION_ADD_GROUP_BOUND_PATH_VERSION, MIGRATION_ADD_PROJECT_PATH_MODE_DESCRIPTION,
+    MIGRATION_ADD_PROJECT_PATH_MODE_SQL, MIGRATION_ADD_PROJECT_PATH_MODE_VERSION,
+    MIGRATION_ADD_SSH_ATTACHMENT_ROOT_DESCRIPTION, MIGRATION_ADD_SSH_ATTACHMENT_ROOT_SQL,
+    MIGRATION_ADD_SSH_ATTACHMENT_ROOT_VERSION, MIGRATION_ADD_USAGE_ERROR_DETAIL_DESCRIPTION,
+    MIGRATION_ADD_USAGE_ERROR_DETAIL_SQL, MIGRATION_ADD_USAGE_ERROR_DETAIL_VERSION,
+    MIGRATION_ADD_WORKTREE_ISOLATION_DESCRIPTION, MIGRATION_ADD_WORKTREE_ISOLATION_SQL,
+    MIGRATION_ADD_WORKTREE_ISOLATION_VERSION, MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_DESCRIPTION,
+    MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_SQL, MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_VERSION,
+    MIGRATION_ADD_WORKTREE_SHORT_LABELS_DESCRIPTION, MIGRATION_ADD_WORKTREE_SHORT_LABELS_SQL,
+    MIGRATION_ADD_WORKTREE_SHORT_LABELS_VERSION, MIGRATION_BACKFILL_REQUEST_LOG_PROJECT_PATH_SQL,
     MIGRATION_BACKFILL_REQUEST_LOG_PROJECT_PATH_VERSION, MIGRATION_CREATE_REQUEST_LOGS_SQL,
     MIGRATION_CREATE_SESSION_FAVORITE_SNAPSHOTS_DESCRIPTION,
     MIGRATION_CREATE_SESSION_FAVORITE_SNAPSHOTS_SQL,
@@ -33,14 +32,13 @@ pub(crate) use app::migrations::{
 #[cfg(test)]
 pub(crate) use app::migrations::{
     MIGRATION_ADD_NODE_APPEARANCE_VERSION, MIGRATION_ADD_SSH_CONFIG_FILE_SQL,
-    MIGRATION_CREATE_HISTORY_GENERATED_TITLES_VERSION, MIGRATION_CREATE_SSH_AGENT_INTEGRATIONS_SQL,
-    MIGRATION_CREATE_EXTENSION_MCP_RESOURCES_VERSION,
+    MIGRATION_ADD_WORKTREE_METADATA_DESCRIPTION, MIGRATION_ADD_WORKTREE_METADATA_SQL,
+    MIGRATION_ADD_WORKTREE_METADATA_VERSION, MIGRATION_CREATE_EXTENSION_MCP_RESOURCES_VERSION,
     MIGRATION_CREATE_EXTENSION_SCOPE_POLICIES_VERSION,
     MIGRATION_CREATE_EXTENSION_SKILLS_DESCRIPTION, MIGRATION_CREATE_EXTENSION_SKILLS_SQL,
-    MIGRATION_CREATE_EXTENSION_SKILLS_VERSION, MIGRATION_CREATE_MESSAGE_STARS_DESCRIPTION,
-    MIGRATION_CREATE_MESSAGE_STARS_SQL, MIGRATION_CREATE_MESSAGE_STARS_VERSION,
-    MIGRATION_ADD_WORKTREE_METADATA_DESCRIPTION, MIGRATION_ADD_WORKTREE_METADATA_SQL,
-    MIGRATION_ADD_WORKTREE_METADATA_VERSION,
+    MIGRATION_CREATE_EXTENSION_SKILLS_VERSION, MIGRATION_CREATE_HISTORY_GENERATED_TITLES_VERSION,
+    MIGRATION_CREATE_MESSAGE_STARS_DESCRIPTION, MIGRATION_CREATE_MESSAGE_STARS_SQL,
+    MIGRATION_CREATE_MESSAGE_STARS_VERSION, MIGRATION_CREATE_SSH_AGENT_INTEGRATIONS_SQL,
     MIGRATION_MATERIALIZE_REQUEST_LOG_PROJECT_PATH_VERSION,
 };
 
@@ -48,8 +46,6 @@ pub(crate) use app::migrations::{
 pub mod app_paths;
 #[path = "features/providers/ccswitch_db.rs"]
 mod ccswitch_db;
-#[path = "features/extensions/mod.rs"]
-pub(crate) mod extensions;
 #[path = "features/hooks/claude.rs"]
 mod claude_hook;
 #[path = "features/codex-proxy/mod.rs"]
@@ -63,8 +59,12 @@ mod conpty_sideload;
 mod crash_reporter;
 #[path = "infrastructure/storage/credential_store.rs"]
 pub(crate) mod credential_store;
+#[path = "features/extensions/mod.rs"]
+pub(crate) mod extensions;
 // daemon 二进制（src/bin/cli-manager-daemon.rs）经 lib 复用以下模块，
 // 因此 app_paths 与 daemon 需 pub。
+#[path = "features/hooks/codex_goal.rs"]
+mod codex_goal;
 #[path = "infrastructure/daemon/mod.rs"]
 pub mod daemon;
 pub mod device_identity;
@@ -74,8 +74,6 @@ mod file_watcher;
 mod git_watcher;
 #[path = "features/hooks/client.rs"]
 pub mod hook_client;
-#[path = "features/hooks/codex_goal.rs"]
-mod codex_goal;
 #[path = "infrastructure/system/linux_graphics.rs"]
 mod linux_graphics;
 #[path = "features/files/live_server/mod.rs"]
@@ -120,11 +118,11 @@ pub mod web_daemon;
 mod web_device_outbox;
 #[path = "infrastructure/webdav/mod.rs"]
 mod webdav;
-#[path = "infrastructure/process/wsl.rs"]
-mod wsl;
 #[cfg(target_os = "windows")]
 #[path = "shared/windows_command_line.rs"]
 mod windows_command_line;
+#[path = "infrastructure/process/wsl.rs"]
+mod wsl;
 
 use log::LevelFilter;
 use serde_json::Value;
@@ -563,7 +561,9 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .manage(PendingBackgroundSession::default())
         .manage(daemon::client::DaemonBridge::new())
-        .manage(commands::git_worktree::jobs::WorktreeDeleteQueue::load().expect("worktree job queue"))
+        .manage(
+            commands::git_worktree::jobs::WorktreeDeleteQueue::load().expect("worktree job queue"),
+        )
         .manage(file_watcher::FileWatcherBridge::new())
         .manage(git_watcher::GitWatcherBridge::new())
         .manage(live_server::LiveServerManager::new())
@@ -672,6 +672,7 @@ pub fn run() {
             commands::ssh_integration::ssh_agent_record_hook_report,
             commands::ssh_integration::ssh_agent_save_host_preferences,
             commands::ssh::ssh_save_password,
+            commands::ssh::ssh_get_password,
             commands::ssh::ssh_password_status,
             commands::ssh::ssh_delete_password,
             commands::ssh_db::ssh_db_ensure_group_schema,
@@ -682,7 +683,26 @@ pub fn run() {
             commands::ssh_db::ssh_db_record_hook_report,
             commands::ssh_db::ssh_db_record_history_source,
             commands::ssh::ssh_check_path,
-            commands::ssh::ssh_list_directories,
+            commands::ssh::ssh_resolve_home,
+            commands::ssh::file_ops::ssh_list_directories,
+            commands::ssh::file_ops::ssh_list_file_entries,
+            commands::ssh::sftp::ssh_sftp_list,
+            commands::ssh::sftp::ssh_sftp_list_orphan_parts,
+            commands::ssh::sftp::ssh_sftp_read,
+            commands::ssh::sftp::ssh_sftp_write,
+            commands::ssh::sftp::ssh_sftp_mkdir,
+            commands::ssh::sftp::ssh_sftp_delete,
+            commands::ssh::sftp::ssh_sftp_rename,
+            commands::ssh::sftp::ssh_sftp_put,
+            commands::ssh::sftp::ssh_sftp_download,
+            commands::ssh::sftp::ssh_sftp_resume_upload,
+            commands::ssh::sftp::ssh_sftp_cancel_upload,
+            commands::ssh::sftp::ssh_sftp_cleanup_upload,
+            commands::ssh::file_ops::ssh_read_file,
+            commands::ssh::file_ops::ssh_write_file,
+            commands::ssh::file_ops::ssh_delete_file,
+            commands::ssh::file_ops::ssh_put_file,
+            commands::ssh::file_ops::ssh_create_entry,
             commands::ssh_config::ssh_config_default_directory,
             commands::ssh_config::ssh_config_import_preview,
             commands::third_party_notification::third_party_notification_test_send,
@@ -1357,18 +1377,14 @@ mod provider_migration_tests {
     use crate::{
         MIGRATION_ADD_GROUP_BOUND_PATH_VERSION, MIGRATION_ADD_NODE_APPEARANCE_VERSION,
         MIGRATION_ADD_PROJECT_PATH_MODE_VERSION, MIGRATION_ADD_SSH_ATTACHMENT_ROOT_VERSION,
-        MIGRATION_ADD_USAGE_ERROR_DETAIL_VERSION,
+        MIGRATION_ADD_USAGE_ERROR_DETAIL_VERSION, MIGRATION_ADD_WORKTREE_METADATA_DESCRIPTION,
+        MIGRATION_ADD_WORKTREE_METADATA_SQL, MIGRATION_ADD_WORKTREE_METADATA_VERSION,
         MIGRATION_BACKFILL_REQUEST_LOG_PROJECT_PATH_VERSION,
         MIGRATION_CREATE_EXTENSION_MCP_RESOURCES_VERSION,
         MIGRATION_CREATE_EXTENSION_SCOPE_POLICIES_VERSION,
-        MIGRATION_CREATE_EXTENSION_SKILLS_DESCRIPTION,
-        MIGRATION_CREATE_EXTENSION_SKILLS_SQL,
+        MIGRATION_CREATE_EXTENSION_SKILLS_DESCRIPTION, MIGRATION_CREATE_EXTENSION_SKILLS_SQL,
         MIGRATION_CREATE_EXTENSION_SKILLS_VERSION,
-        MIGRATION_CREATE_HISTORY_GENERATED_TITLES_VERSION,
-        MIGRATION_CREATE_MESSAGE_STARS_VERSION,
-        MIGRATION_ADD_WORKTREE_METADATA_DESCRIPTION,
-        MIGRATION_ADD_WORKTREE_METADATA_SQL,
-        MIGRATION_ADD_WORKTREE_METADATA_VERSION,
+        MIGRATION_CREATE_HISTORY_GENERATED_TITLES_VERSION, MIGRATION_CREATE_MESSAGE_STARS_VERSION,
         MIGRATION_MATERIALIZE_REQUEST_LOG_PROJECT_PATH_VERSION,
     };
 
@@ -1488,9 +1504,7 @@ mod provider_migration_tests {
         assert!(project_path_mode_migration.version < ssh_attachment_root_migration.version);
         let extension_mcp_migration = registry
             .iter()
-            .find(|migration| {
-                migration.version == MIGRATION_CREATE_EXTENSION_MCP_RESOURCES_VERSION
-            })
+            .find(|migration| migration.version == MIGRATION_CREATE_EXTENSION_MCP_RESOURCES_VERSION)
             .expect("extension MCP migration must be registered");
         assert_eq!(extension_mcp_migration.version, 38);
         assert!(extension_mcp_migration
@@ -1508,7 +1522,10 @@ mod provider_migration_tests {
             MIGRATION_CREATE_EXTENSION_SKILLS_DESCRIPTION
         );
         assert!(extension_mcp_migration.version < extension_skill_migration.version);
-        assert_eq!(extension_skill_migration.sql, MIGRATION_CREATE_EXTENSION_SKILLS_SQL);
+        assert_eq!(
+            extension_skill_migration.sql,
+            MIGRATION_CREATE_EXTENSION_SKILLS_SQL
+        );
         assert!(extension_skill_migration
             .sql
             .contains("CREATE TABLE IF NOT EXISTS extension_skill_packages"));
@@ -1517,7 +1534,9 @@ mod provider_migration_tests {
             .contains("CREATE TABLE IF NOT EXISTS extension_skill_installations"));
         let scope_policy_migration = registry
             .iter()
-            .find(|migration| migration.version == MIGRATION_CREATE_EXTENSION_SCOPE_POLICIES_VERSION)
+            .find(|migration| {
+                migration.version == MIGRATION_CREATE_EXTENSION_SCOPE_POLICIES_VERSION
+            })
             .expect("extension scope policy migration must be registered");
         assert_eq!(scope_policy_migration.version, 40);
         assert!(extension_skill_migration.version < scope_policy_migration.version);
@@ -1531,11 +1550,23 @@ mod provider_migration_tests {
             .find(|migration| migration.version == MIGRATION_ADD_WORKTREE_METADATA_VERSION)
             .expect("worktree metadata migration must be registered");
         assert_eq!(worktree_metadata_migration.version, 42);
-        assert_eq!(worktree_metadata_migration.description, MIGRATION_ADD_WORKTREE_METADATA_DESCRIPTION);
-        assert_eq!(worktree_metadata_migration.sql, MIGRATION_ADD_WORKTREE_METADATA_SQL);
-        assert!(worktree_metadata_migration.sql.contains("ADD COLUMN display_name"));
-        assert!(worktree_metadata_migration.sql.contains("ADD COLUMN description"));
-        assert!(worktree_metadata_migration.sql.contains("UPDATE worktrees SET display_name = name"));
+        assert_eq!(
+            worktree_metadata_migration.description,
+            MIGRATION_ADD_WORKTREE_METADATA_DESCRIPTION
+        );
+        assert_eq!(
+            worktree_metadata_migration.sql,
+            MIGRATION_ADD_WORKTREE_METADATA_SQL
+        );
+        assert!(worktree_metadata_migration
+            .sql
+            .contains("ADD COLUMN display_name"));
+        assert!(worktree_metadata_migration
+            .sql
+            .contains("ADD COLUMN description"));
+        assert!(worktree_metadata_migration
+            .sql
+            .contains("UPDATE worktrees SET display_name = name"));
         assert!(message_star_migration.version < worktree_metadata_migration.version);
         assert!(registry.iter().all(|migration| migration.version <= 53));
         assert!(registry.iter().any(|migration| migration.version == 29
@@ -1553,15 +1584,21 @@ mod extension_scope_policy_migration_tests {
         let registry = migrations();
         let migration = registry
             .iter()
-            .find(|migration| migration.version == MIGRATION_CREATE_EXTENSION_SCOPE_POLICIES_VERSION)
+            .find(|migration| {
+                migration.version == MIGRATION_CREATE_EXTENSION_SCOPE_POLICIES_VERSION
+            })
             .expect("extension scope policy migration must be registered");
         assert_eq!(migration.version, 40);
         assert_eq!(migration.description, "create_extension_scope_policies");
         assert!(migration
             .sql
             .contains("PRIMARY KEY (scope_kind, scope_id, cli, extension_kind)"));
-        assert!(migration.sql.contains("CHECK(mode IN ('inherit', 'custom'))"));
-        assert!(migration.sql.contains("REFERENCES projects(id) ON DELETE CASCADE"));
+        assert!(migration
+            .sql
+            .contains("CHECK(mode IN ('inherit', 'custom'))"));
+        assert!(migration
+            .sql
+            .contains("REFERENCES projects(id) ON DELETE CASCADE"));
     }
 }
 
@@ -1581,12 +1618,17 @@ mod message_star_migration_tests {
             .find(|migration| migration.version == MIGRATION_CREATE_MESSAGE_STARS_VERSION)
             .expect("message star migration must be registered");
         assert_eq!(migration.version, 41);
-        assert_eq!(migration.description, MIGRATION_CREATE_MESSAGE_STARS_DESCRIPTION);
+        assert_eq!(
+            migration.description,
+            MIGRATION_CREATE_MESSAGE_STARS_DESCRIPTION
+        );
         assert_eq!(migration.sql, MIGRATION_CREATE_MESSAGE_STARS_SQL);
         assert!(migration
             .sql
             .contains("CREATE TABLE IF NOT EXISTS message_stars"));
-        assert!(migration.sql.contains("PRIMARY KEY (session_key, message_index)"));
+        assert!(migration
+            .sql
+            .contains("PRIMARY KEY (session_key, message_index)"));
         assert!(migration
             .sql
             .contains("idx_message_stars_session ON message_stars(session_key)"));

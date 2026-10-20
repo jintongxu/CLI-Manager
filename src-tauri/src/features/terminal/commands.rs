@@ -359,7 +359,9 @@ fn client_frame_id(frame: &ClientFrame) -> Option<u64> {
 
 // 旧传输拒绝路由控制和鉴权帧，其余帧返回请求编号。
 fn legacy_client_frame_id(frame: &ClientFrame) -> Result<u64, &'static str> {
-    if matches!(frame, ClientFrame::WorktreeAdmission { .. }) { return Err("worktree_admission_protocol_unsupported"); }
+    if matches!(frame, ClientFrame::WorktreeAdmission { .. }) {
+        return Err("worktree_admission_protocol_unsupported");
+    }
     if routing_control_id(frame).is_some() {
         return Err(ROUTING_ERROR_PROTOCOL_UNSUPPORTED);
     }

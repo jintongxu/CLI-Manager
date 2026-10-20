@@ -274,7 +274,7 @@ export function SshHostsSettingsPage({ searchValue, onTerminalOpened }: Props) {
     setSource(configManaged ? "config" : "address");
     setPassword("");
     setCredentialStored(false);
-    if (host.auth_mode === "credential_ref") {
+    if (host.auth_mode === "credential_ref" || host.auth_mode === "password_prompt") {
       void invoke<boolean>("ssh_password_status", { hostId: host.id })
         .then(setCredentialStored)
         .catch(() => setCredentialStored(false));
@@ -341,7 +341,7 @@ export function SshHostsSettingsPage({ searchValue, onTerminalOpened }: Props) {
       if (editingId) {
         const previous = hosts.find((host) => host.id === editingId);
         let credentialRef = form.credential_ref ?? previous?.credential_ref ?? "";
-        if (form.auth_mode === "credential_ref" && password) {
+        if ((form.auth_mode === "credential_ref" || form.auth_mode === "password_prompt") && password) {
           credentialRef = await invoke<string>("ssh_save_password", {
             hostId: editingId,
             password,
@@ -349,21 +349,21 @@ export function SshHostsSettingsPage({ searchValue, onTerminalOpened }: Props) {
         }
         await updateHost(editingId, {
           ...form,
-          credential_ref: form.auth_mode === "credential_ref" ? credentialRef : "",
+          credential_ref: form.auth_mode === "credential_ref" || form.auth_mode === "password_prompt" ? credentialRef : "",
         });
-        if (previous?.credential_ref && form.auth_mode !== "credential_ref") {
+        if (previous?.credential_ref && form.auth_mode !== "credential_ref" && form.auth_mode !== "password_prompt") {
           await invoke("ssh_delete_password", { hostId: editingId });
         }
       } else {
         const created = await createHost({ ...form, credential_ref: "" });
         try {
-          if (form.auth_mode === "credential_ref") {
+          if ((form.auth_mode === "credential_ref" || form.auth_mode === "password_prompt") && password) {
             const credentialRef = await invoke<string>("ssh_save_password", {
               hostId: created.id,
               password,
             });
             await updateHost(created.id, {
-              auth_mode: "credential_ref",
+              auth_mode: form.auth_mode,
               credential_ref: credentialRef,
             });
           }
@@ -395,7 +395,7 @@ export function SshHostsSettingsPage({ searchValue, onTerminalOpened }: Props) {
     let temporaryCredentialHostId: string | null = null;
     try {
       let testForm = form;
-      if (form.auth_mode === "credential_ref" && password) {
+      if ((form.auth_mode === "credential_ref" || form.auth_mode === "password_prompt") && password) {
         temporaryCredentialHostId = crypto.randomUUID();
         const credentialRef = await invoke<string>("ssh_save_password", {
           hostId: temporaryCredentialHostId,

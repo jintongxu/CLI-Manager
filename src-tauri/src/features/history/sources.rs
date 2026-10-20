@@ -271,7 +271,10 @@ const SOURCES: &[SourceSpec] = &[
         default_label: "OpenCode",
         aliases: &[],
         location: SESSION_DB,
-        capabilities: CapabilitySpec { resume: "supported", ..NATIVE_READONLY_DB },
+        capabilities: CapabilitySpec {
+            resume: "supported",
+            ..NATIVE_READONLY_DB
+        },
         default_leaf: ".local/share/opencode/opencode.db",
     },
     SourceSpec {

@@ -46,7 +46,9 @@ export function buildSshConnectionSpec(
     configFile: host.config_file,
     authMode: host.auth_mode,
     identityFile: host.auth_mode === "identity_file" ? host.identity_file : "",
-    credentialRef: host.auth_mode === "credential_ref" ? host.credential_ref : "",
+    credentialRef: host.auth_mode === "credential_ref" || host.auth_mode === "password_prompt"
+      ? host.credential_ref
+      : "",
     jumpTarget: buildJumpTarget(jumpHost),
     proxyType: host.proxy_type,
     proxyHost: host.proxy_host,

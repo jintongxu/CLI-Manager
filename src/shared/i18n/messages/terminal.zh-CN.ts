@@ -198,6 +198,7 @@ export const zh = {
   "terminal.toolbar.closeSystemResourcesPanel": "关闭系统资源面板",
   "terminal.toolbar.openProvidersPanel": "打开供应商面板",
   "terminal.toolbar.closeProvidersPanel": "关闭供应商面板",
+  "terminal.passwordPrompt.pasteSaved": "按 Enter 粘贴已保存的密码",
   "terminal.markdownPreview.open": "打开 Markdown 预览",
   "terminal.markdownPreview.close": "关闭 Markdown 预览",
   "terminal.markdownPreview.title": "Markdown 预览",

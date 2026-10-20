@@ -188,12 +188,16 @@ impl SshLaunchPlan {
     }
 
     // 按路径切换、连接标记、排序后的环境变量构造 setup，再进入登录 shell。
-    // 有用户命令时依次按换行拼接，末尾进入非登录交互 shell；命令之间未追加失败短路。
+    // 未绑定项目的主机级 Shell 使用登录用户 HOME；有用户命令时依次按换行拼接，末尾进入非登录交互 shell。
+    // 命令之间未追加失败短路。
     fn remote_command(&self) -> String {
-        let mut setup = vec![
-            format!("cd -- {}", posix_quote(self.remote_path.trim())),
-            "printf '\\033]777;cli-manager-ssh=connected\\007'".to_string(),
-        ];
+        let change_directory =
+            if self.project_id.trim().is_empty() && self.remote_path.trim() == "/" {
+                "cd -- \"$HOME\"".to_string()
+            } else {
+                format!("cd -- {}", posix_quote(self.remote_path.trim()))
+            };
+        let mut setup = vec![change_directory];
         let mut environment: Vec<_> = self.environment_overrides.iter().collect();
         environment.sort_by(|left, right| left.0.cmp(right.0));
         setup.extend(environment.into_iter().map(|(key, value)| {
@@ -207,7 +211,11 @@ impl SshLaunchPlan {
             };
             format!("export {key}={formatted_value}")
         }));
-        let setup = setup.join(" && ");
+        let is_host_shell = self.project_id.trim().is_empty();
+        let mut setup = setup.join(" && ");
+        if !is_host_shell {
+            setup.push_str(" && printf '\\033]777;cli-manager-ssh=connected\\007'");
+        }
         let mut shell_commands = Vec::new();
         if let Some(command) = self
             .initialization_command
@@ -226,15 +234,26 @@ impl SshLaunchPlan {
             shell_commands.push(command);
         }
         if shell_commands.is_empty() {
-            format!("{setup} && exec \"${{SHELL:-/bin/sh}}\" -l")
-        } else {
-            let mut command_then_shell = shell_commands.join("\n");
-            command_then_shell.push_str("\nexec \"${SHELL:-/bin/sh}\" -i");
-            format!(
+            if !is_host_shell {
+                return format!("{setup} && exec \"${{SHELL:-/bin/sh}}\" -l");
+            }
+            let command_then_shell =
+                "printf '\\033]777;cli-manager-ssh=connected\\007'\nexec \"${SHELL:-/bin/sh}\" -i";
+            return format!(
                 "{setup} && exec \"${{SHELL:-/bin/sh}}\" -lic {}",
-                posix_quote(&command_then_shell)
-            )
+                posix_quote(command_then_shell)
+            );
         }
+
+        let mut command_then_shell = shell_commands.join("\n");
+        if is_host_shell {
+            command_then_shell.push_str("\nprintf '\\033]777;cli-manager-ssh=connected\\007'");
+        }
+        command_then_shell.push_str("\nexec \"${SHELL:-/bin/sh}\" -i");
+        format!(
+            "{setup} && exec \"${{SHELL:-/bin/sh}}\" -lic {}",
+            posix_quote(&command_then_shell)
+        )
     }
 }
 
@@ -325,16 +344,30 @@ mod tests {
         assert!(launch.args.windows(2).any(|pair| pair == ["-J", "bastion"]));
         assert!(launch.args.iter().any(|arg| arg == "IdentitiesOnly=yes"));
         assert_eq!(launch.args[launch.args.len() - 2], "dev@example.com");
-        assert_eq!(launch.args.last().unwrap(), "cd -- '/srv/project name/开发' && printf '\\033]777;cli-manager-ssh=connected\\007' && export APP_MODE='remote dev' && exec \"${SHELL:-/bin/sh}\" -lic 'printf '\\''%s\\n'\\'' \"it'\\''s ready\"\nexec \"${SHELL:-/bin/sh}\" -i'");
+        assert_eq!(launch.args.last().unwrap(), "cd -- '/srv/project name/开发' && export APP_MODE='remote dev' && exec \"${SHELL:-/bin/sh}\" -lic 'printf '\\''%s\\n'\\'' \"it'\\''s ready\"\nprintf '\\''\\033]777;cli-manager-ssh=connected\\007'\\''\nexec \"${SHELL:-/bin/sh}\" -i'");
     }
 
     #[test]
-    // 验证启动命令在登录 shell 中执行后切到非登录交互 shell，避免再次登录。
+    // 验证未绑定项目的主机级 Shell 使用当前登录用户 HOME，而不是远端根目录。
+    fn host_shell_starts_in_login_user_home() {
+        let mut value = plan();
+        value.remote_path = "/".into();
+        let command = value.remote_command();
+        assert!(command.starts_with("cd -- \"$HOME\" &&"));
+
+        value.project_id = "project-1".into();
+        let project_command = value.remote_command();
+        assert!(project_command.starts_with("cd -- '/' &&"));
+    }
+
+    #[test]
+    // 验证登录 Shell 完成初始化后才发送连接标记，再切到非登录交互 shell。
     fn startup_command_returns_to_interactive_shell_without_second_login() {
         let command = plan().remote_command();
         assert!(command.contains("exec \"${SHELL:-/bin/sh}\" -lic"));
+        assert!(command.contains("printf '\\033]777;cli-manager-ssh=connected\\007'"));
         assert!(command.contains("\nexec \"${SHELL:-/bin/sh}\" -i"));
-        assert!(!command.contains("\nexec \"${SHELL:-/bin/sh}\" -l"));
+        assert!(!command.contains(" && printf '\\033]777;cli-manager-ssh=connected\\007' && exec \"${SHELL:-/bin/sh}\" -lic"));
     }
 
     #[test]

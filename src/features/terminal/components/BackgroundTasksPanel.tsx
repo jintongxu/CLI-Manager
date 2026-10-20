@@ -277,11 +277,20 @@ export function BackgroundTasksPanel({ tasks, onRefresh, showText, popoverSide =
                 <div className="mt-1 text-[11px] text-text-muted">
                   {error ? t(error.title) : t(operation.detailKey, operation.detailParams)}
                 </div>
+                {operation.verification && <div className={operation.verification === "failed" ? "mt-1 text-[10px] text-danger" : "mt-1 text-[10px] text-text-muted"}>
+                  {t(`backgroundOperations.verification.${operation.verification}` as TranslationKey)}
+                </div>}
                 {error && <div className="mt-1 text-[10px] text-text-muted">{t(error.hint)}</div>}
                 <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-high" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={operation.progress ?? undefined}>
                   <div className={`h-full rounded-full ${operation.status === "failed" ? "bg-danger" : "bg-primary transition-[width] duration-200"} ${operation.progress === null && operation.status === "running" ? "animate-pulse" : ""}`} style={{ width: `${progress}%` }} />
                 </div>
                 <div className="mt-2 flex justify-end gap-1.5">
+                  {operation.status === "running" && operation.cancel && (
+                    <button className="background-tasks-panel__action background-tasks-panel__action--danger ui-flat-action px-2 py-1 text-[11px]" onClick={() => void operation.cancel?.()}>
+                      <X size={11} />
+                      {t("common.cancel")}
+                    </button>
+                  )}
                   {operation.status === "failed" && operation.retry && (
                     <button className="background-tasks-panel__action ui-flat-action px-2 py-1 text-[11px]" onClick={() => void operation.retry?.()}>
                       <RefreshCw size={11} />

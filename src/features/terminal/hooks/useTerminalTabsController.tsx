@@ -46,9 +46,13 @@ import type { Project, TerminalSession, WorktreeRecord } from "../../../shared/t
 import type { NativeProviderAppType } from "../../settings/api/nativeProviderTypes";
 import { getTerminalTheme, isLightTerminalTheme } from "../../../shared/lib/terminalThemes";
 import { getTerminalSidePanelSkinStyle } from "../../stats/api/termStatsUi";
-import { findWorktreeForSession, isSameProjectFileContext, projectWithWorktreeProviderOverrides, resolveProjectForSession, resolveProjectForSessionFileContext } from "../api/terminalProject";
+import { findWorktreeForSession, isSameProjectFileContext, projectWithWorktreeProviderOverrides, resolveProjectForSession } from "../api/terminalProject";
 import { ALL_TERMINALS_SCOPE, collectProjectIdsForGroup, sessionMatchesTerminalScope } from "../api/terminalScope";
-import { TERMINAL_FILE_NAVIGATION_REQUEST_EVENT, type TerminalFileNavigationRequest } from "../lib/terminalFileNavigation";
+import { useTerminalFileNavigation } from "./useTerminalFileNavigation";
+import { useTerminalSshHosts } from "./useTerminalSshHosts";
+import { useTerminalFilePanelProject } from "./useTerminalFilePanelProject";
+import { useTerminalSidePanelTabChange } from "./useTerminalSidePanelTabChange";
+import { useTerminalProjectLabels } from "./useTerminalProjectLabels";
 import { consumeTerminalFileDragPanelSyncSuppression } from "../api/terminalFileDrag";
 import { WORKSPAN_TABBAR_END_DROP_ID } from "../../workspace/api/WorkspanTabBar";
 import {
@@ -80,6 +84,7 @@ export function useTerminalTabsController({
   terminalScope = ALL_TERMINALS_SCOPE,
   onOpenProviderSettings,
   onOpenHistorySettings,
+  onOpenSshSettings,
 }: TerminalTabsProps = {}) {
   const { t } = useI18n();
   const { prompt, promptDialog } = useAppPrompt();
@@ -103,7 +108,8 @@ export function useTerminalTabsController({
   const createTerminalSession = useTerminalStore((s) => s.createSession);
   const splitTerminal = useTerminalStore((s) => s.splitTerminal);
   const sessionStoreLoaded = useSessionStore((s) => s.loaded);
-  const persistedCurrentWorkSessionIds = useSessionStore((s) => s.currentWorkSessionIds);
+  const sshHosts = useTerminalSshHosts(sessions);
+  const [sshPanelOpen, setSshPanelOpen] = useState(false); const persistedCurrentWorkSessionIds = useSessionStore((s) => s.currentWorkSessionIds);
   const persistedCurrentWorkActiveSessionId = useSessionStore((s) => s.currentWorkActiveSessionId);
   const persistedCurrentWorkPaneTree = useSessionStore((s) => s.currentWorkPaneTree);
   const {
@@ -401,25 +407,21 @@ export function useTerminalTabsController({
     () => findWorktreeForSession(activeSession, sessions, worktrees),
     [activeSession, sessions, worktrees]
   );
-  const filePanelProject = useMemo(
-    () => resolveProjectForSessionFileContext(activeSession, sessions, projects, projectById, worktrees),
-    [activeSession, projectById, projects, sessions, worktrees]
-  );
+  const filePanelProject = useTerminalFilePanelProject(activeSession, sessions, projects, projectById, worktrees, sshHosts);
   const sidePanelProjectPath = panelProject?.environment_type === "ssh"
     ? panelProject.remote_path.trim() || null
     : panelSession?.cwd?.trim() || filePanelProject?.path.trim() || null;
-  const gitWorkspaceProject = panelProject ?? scopedProject ?? filePanelProject;
+  const gitWorkspaceProject = panelProject ?? scopedProject ?? (filePanelProject?.id.startsWith("ssh-host:") ? null : filePanelProject);
   const gitWorkspaceProjectPath = sidePanelProjectPath
     ?? scopedWorktree?.path.trim()
     ?? (gitWorkspaceProject?.environment_type === "ssh"
       ? gitWorkspaceProject.remote_path.trim() || null
       : gitWorkspaceProject?.path.trim() || null);
-  const workspanContextOptions = useMemo(() => buildTerminalProjectOptions(visibleWorkspanLayouts, sessions, projectById, worktrees, {
-    unboundProject: t("terminal.context.unboundProject"), anonymousPi: t("terminal.context.anonymousPi"), missingWorktree: t("terminal.context.worktreeMissing"),
-  }, tabNotifications), [projectById, sessions, t, tabNotifications, visibleWorkspanLayouts, worktrees]);
+  const projectTabLabels = useTerminalProjectLabels(t, sshHosts);
+  const workspanContextOptions = useMemo(() => buildTerminalProjectOptions(visibleWorkspanLayouts, sessions, projectById, worktrees, projectTabLabels, tabNotifications), [projectById, projectTabLabels, sessions, tabNotifications, visibleWorkspanLayouts, worktrees]);
   const workspanTabModels = useMemo(
-    () => buildWorkspanTabModels(visibleWorkspanLayouts, sessions, projectById, tabNotifications, t, worktrees),
-    [projectById, sessions, t, tabNotifications, visibleWorkspanLayouts, worktrees]
+    () => buildWorkspanTabModels(visibleWorkspanLayouts, sessions, projectById, tabNotifications, t, worktrees, projectTabLabels),
+    [projectById, projectTabLabels, sessions, t, tabNotifications, visibleWorkspanLayouts, worktrees]
   );
   const sessionWorktreeBadges = useMemo(() => buildGlobalWorktreeBadges(
     workspanTabModels.flatMap((model) => model.members.map((member) => ({
@@ -452,7 +454,6 @@ export function useTerminalTabsController({
     }
     workspanDragHoverTargetRef.current = null;
   }, []);
-
   const scheduleWorkspanDragHoverActivation = useCallback((targetWorkspanId: string) => {
     if (workspanDragHoverTargetRef.current === targetWorkspanId) return;
     clearWorkspanDragHoverActivation();
@@ -463,15 +464,12 @@ export function useTerminalTabsController({
       activateWorkspanTab(targetWorkspanId);
     }, WORKSPAN_DRAG_AUTO_ACTIVATE_MS);
   }, [activateWorkspanTab, clearWorkspanDragHoverActivation]);
-
   useEffect(() => clearWorkspanDragHoverActivation, [clearWorkspanDragHoverActivation]);
-
   useEffect(() => () => {
     if (workspanDragOverflowFrameRef.current !== null) {
       window.cancelAnimationFrame(workspanDragOverflowFrameRef.current);
     }
   }, []);
-
   const terminalTheme = useMemo(
     () => getTerminalTheme(terminalThemeName, resolvedTheme, lightThemePalette, darkThemePalette),
     [darkThemePalette, lightThemePalette, resolvedTheme, terminalThemeName]
@@ -547,18 +545,15 @@ export function useTerminalTabsController({
   const systemResourcesPanelActive = sidePanelMerged
     ? sidePanelOpen && sidePanelTab === "systemResources"
     : systemResourcesOpen;
-
   useEffect(() => {
     if (!sidePanelMerged || !sidePanelOpen || visibleSidePanelTabs.includes(sidePanelTab)) return;
     const nextTab = visibleSidePanelTabs[0];
     if (nextTab) setSidePanelTab(nextTab);
     else setSidePanelOpen(false);
   }, [sidePanelMerged, sidePanelOpen, sidePanelTab, visibleSidePanelTabs]);
-
   useEffect(() => {
     if (!historyOpen && activeWorkspaceTab === "history") setActiveWorkspaceTab("terminal");
   }, [activeWorkspaceTab, historyOpen]);
-
   useEffect(() => {
     if (!gitWorkspaceOpen) return;
     closeHistory();
@@ -1215,7 +1210,7 @@ export function useTerminalTabsController({
 
   const handleToggleFilesPanel = useCallback(async () => {
     if (filesPanelActive) {
-      if (ensureTerminalSidePanelVisible()) return;
+      ensureTerminalSidePanelVisible();
       closeFilesPanel();
       return;
     }
@@ -1223,51 +1218,27 @@ export function useTerminalTabsController({
     void openFilesPanelForProject(filePanelProject);
   }, [closeFilesPanel, ensureTerminalSidePanelVisible, filePanelProject, filesPanelActive, openFilesPanelForProject]);
 
-  useEffect(() => {
-    const handleTerminalFileNavigation = (event: Event) => {
-      const request = (event as CustomEvent<TerminalFileNavigationRequest>).detail;
-      const sourceSession = sessions.find((session) => session.id === request.sessionId) ?? null;
-      const project = resolveProjectForSessionFileContext(sourceSession, sessions, projects, projectById, worktrees);
-      if (!project) return;
-      void openFilesPanelForProject(project).then(async (opened) => {
-        if (!opened) return;
-        try {
-          const revealed = await revealFilePath(request.path, {
-            ...(request.lineNumber ? { lineNumber: request.lineNumber } : {}),
-            ...(request.columnNumber ? { columnNumber: request.columnNumber } : {}),
-          });
-          if (revealed && request.kind === "file") openFileEditorPane(project);
-        } catch (err) {
-          logError("Failed to reveal terminal relative path", { request, err });
-          toast.error(t("files.toast.openFileFailed"), { description: String(err) });
-        }
-      });
-    };
-    window.addEventListener(TERMINAL_FILE_NAVIGATION_REQUEST_EVENT, handleTerminalFileNavigation);
-    return () => window.removeEventListener(TERMINAL_FILE_NAVIGATION_REQUEST_EVENT, handleTerminalFileNavigation);
-  }, [openFileEditorPane, openFilesPanelForProject, projectById, projects, revealFilePath, sessions, t, worktrees]);
+  useTerminalFileNavigation({
+    openFileEditorPane,
+    openFilesPanelForProject,
+    projectById,
+    projects,
+    revealFilePath,
+    sessions,
+    sshHosts,
+    t,
+    worktrees,
+  });
 
-  const handleSidePanelTabChange = useCallback((tab: TerminalSidePanelTab) => {
-    const project = panelSession?.projectId ? projectById.get(panelSession.projectId) : null;
-    if (tab === "stats") {
-      if (rejectUnsupportedCapability(project, "statistics")) return;
-      void ensureStatsPanelAllowed().then((allowed) => {
-        if (allowed) setSidePanelTab("stats");
-      });
-      return;
-    }
-    if (tab === "files") {
-      if (!filePanelProject) return;
-      if (rejectUnsupportedCapability(filePanelProject, "files")) return;
-      void syncFilePanelProject(filePanelProject).then((allowed) => {
-        if (allowed) setSidePanelTab("files");
-      });
-      return;
-    }
-    if (tab === "git" && project?.environment_type !== "ssh" && rejectUnsupportedCapability(project, "git")) return;
-    if (tab === "replay" && rejectUnsupportedCapability(project, "history")) return;
-    setSidePanelTab(tab);
-  }, [ensureStatsPanelAllowed, filePanelProject, panelSession, projectById, rejectUnsupportedCapability, syncFilePanelProject]);
+  const handleSidePanelTabChange = useTerminalSidePanelTabChange({
+    ensureStatsPanelAllowed,
+    filePanelProject,
+    panelSession,
+    projectById,
+    rejectUnsupportedCapability,
+    setSidePanelTab,
+    syncFilePanelProject,
+  });
 
   // 响应式约束：非合并模式下两个面板各占固定宽度，窗口过窄时会挤压终端。
   // 窗口 < 1100px 时退化为单面板，并随窗口缩小持续生效。
@@ -1721,6 +1692,10 @@ export function useTerminalTabsController({
     systemResourceMonitoringEnabled,
     cpuResourceCardVisible,
     sidePanelMerged,
+    sshPanelOpen,
+    onToggleSshPanel: () => setSshPanelOpen((value) => !value),
+    onOpenSshSettings,
+    onOpenSshTerminal: (host) => { void createTerminalSession(undefined, "/", host.name, "", undefined, undefined, undefined, undefined, host.id); },
   });
 
   const handleSubmitTabEdit = useCallback(

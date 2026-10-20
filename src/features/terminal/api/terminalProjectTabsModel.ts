@@ -7,6 +7,7 @@ export interface ProjectTabLabels {
   unboundProject: string;
   anonymousPi?: string;
   missingWorktree: string;
+  sshHostNames?: ReadonlyMap<string, string>;
 }
 
 export interface TerminalProjectMembership {
@@ -59,6 +60,13 @@ export function getTerminalProjectKey(projectId: string | null | undefined): str
   return projectId ? `project:${JSON.stringify(projectId)}` : "unbound";
 }
 
+function getTerminalSessionProjectKey(session: TerminalSession, projectId: string | null): string {
+  if (projectId) return getTerminalProjectKey(projectId);
+  return session.environmentType === "ssh" && session.sshHostId?.trim()
+    ? `ssh-host:${JSON.stringify(session.sshHostId.trim())}`
+    : getTerminalProjectKey(null);
+}
+
 // Identity belongs to terminalProject; presentation must not infer it from titles.
 export function resolveTerminalProjectMembership(
   session: TerminalSession,
@@ -84,9 +92,11 @@ export function resolveTerminalProjectMembership(
   return {
     sessionId: session.id,
     projectId,
-    projectKey: getTerminalProjectKey(projectId),
+    projectKey: getTerminalSessionProjectKey(session, projectId),
     project: project?.name.trim()
-      || (session.kind === "ephemeral-pi" ? labels.anonymousPi ?? labels.unboundProject : labels.unboundProject),
+      || (session.environmentType === "ssh" && session.sshHostId
+        ? labels.sshHostNames?.get(session.sshHostId.trim()) || labels.unboundProject
+        : session.kind === "ephemeral-pi" ? labels.anonymousPi ?? labels.unboundProject : labels.unboundProject),
     worktreeId,
     worktreeKind: worktreeId ? validWorktree ? "worktree" : "missing-worktree" : "root",
     worktreeLabel: worktreeId ? retainedWorktree ? getWorktreeSidebarLabel(retainedWorktree) || worktreeId : worktreeId : "",

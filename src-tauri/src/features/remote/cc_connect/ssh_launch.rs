@@ -228,7 +228,10 @@ pub(super) fn load_ssh_codex_launch(project: &RegisteredProject) -> Result<SshCo
         } else {
             String::new()
         },
-        credential_ref: if host.auth_mode == "credential_ref" {
+        credential_ref: if matches!(
+            host.auth_mode.as_str(),
+            "credential_ref" | "password_prompt"
+        ) {
             host.credential_ref
         } else {
             String::new()

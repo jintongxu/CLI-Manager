@@ -57,13 +57,12 @@ import { visibleTerminalSessionIds } from "../lib/terminalTabVisibility";
 import { filterPaneTreeBySessionIds } from "../api/terminalPaneTree";
 import { createTerminalSidebarMetadata } from "./terminalSidebarMetadata";
 import { createTerminalRuntime } from "./terminalRuntime";
-
 import { reserveWorktreeLaunch } from "../../../shared/lib/worktreeLaunchAdmission";
-
 import { assignTerminalTitle, terminalPurpose, validTitleNaming } from "../lib/terminalSessionNaming";
 import { createWorktreeSessionAdmission } from "../lib/worktreeSessionAdmission";
 import { startPtyOrphanReconcileHeartbeat } from "../lib/ptyOrphanReconcile";
 import { createTerminalRecoveryActions } from "./terminalRecoveryActions";
+import { sshHostNameForLaunch } from "../lib/terminalSshNaming";
 let restoreInProgress = false;
 let pendingNamingSessions: TerminalSession[] = [];
 const worktreeSessionAdmission = createWorktreeSessionAdmission();
@@ -596,7 +595,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         const projectName = session.projectId
           ? useProjectStore.getState().projects.find((project) => project.id === session.projectId)?.name
           : undefined;
-        assignTerminalTitle(session, title, terminalPurpose(resolvedShell, startupCmd === "" ? "" : launchStartupCmd, launch.environmentType), [...pendingNamingSessions, ...useSessionStore.getState().sessions, ...state.sessions], projectName);
+        assignTerminalTitle(session, title, terminalPurpose(resolvedShell, startupCmd === "" ? "" : launchStartupCmd, launch.environmentType, sshHostNameForLaunch(launch)), [...pendingNamingSessions, ...useSessionStore.getState().sessions, ...state.sessions], projectName);
         const newSessions = [...state.sessions, session];
         let workspans: TerminalWorkspan[];
         let activeWorkspanId: string | null;
@@ -1096,7 +1095,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       }
 
       const paneResult = splitPaneLeaf(currentOwner.paneTree, currentTargetPane.id, direction, splitSessionId, createPaneId);
-      assignTerminalTitle(splitSession, options?.title, terminalPurpose(resolvedShell, options?.startupCmd === "" ? "" : launchStartupCmd, launch.environmentType), [...pendingNamingSessions, ...useSessionStore.getState().sessions, ...currentState.sessions]);
+      assignTerminalTitle(splitSession, options?.title, terminalPurpose(resolvedShell, options?.startupCmd === "" ? "" : launchStartupCmd, launch.environmentType, sshHostNameForLaunch(launch)), [...pendingNamingSessions, ...useSessionStore.getState().sessions, ...currentState.sessions]);
       const newSessions = [...currentState.sessions, splitSession];
       const workspans = updateTerminalWorkspan(currentState.workspans, currentOwner.id, (workspan) => (
         syncTerminalWorkspanLayout(workspan, paneResult.tree, paneResult.activePaneId, splitSessionId)
@@ -1634,7 +1633,8 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
             launch = await resolvePtyLaunch({
               projectId: ps.projectId,
               worktreeId: ps.worktreeId,
-              cwd: ps.cwd,
+              sshHostId: ps.sshHostId,
+              cwd: ps.environmentType === "ssh" ? (ps.remotePath ?? ps.cwd) : ps.cwd,
               startupCmd: restoredStartupCmd,
               envVars: ps.envVars,
               shell: ps.shell,
@@ -1834,10 +1834,10 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
     attachDaemonSession: async (sessionId) => {
       const current = get();
       if (current.sessions.some((session) => session.id === sessionId)) {
+        if (current.hiddenBackgroundSessionIds.has(sessionId)) { const nextHidden = new Set(current.hiddenBackgroundSessionIds); nextHidden.delete(sessionId); set({ hiddenBackgroundSessionIds: nextHidden, daemonAttachPendingSessionIds: new Set([...current.daemonAttachPendingSessionIds, sessionId]) }); }
         current.setActive(sessionId);
         return true;
       }
-
       const persisted = useSessionStore.getState().sessions.find((session) => session.id === sessionId);
       const daemonSession = (await invoke<DaemonSessionMeta[]>("pty_daemon_sessions"))
         .find((item) => item.sessionId === sessionId);
@@ -1930,10 +1930,10 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       if (get().sessions.some((session) => session.id === sessionId)) {
         await get().closeSession(sessionId);
         return;
-      }
-      await terminalProcessManager.close(sessionId).catch((err) => {
+      } const closeRequest = terminalProcessManager.close(sessionId).catch((err) => {
         logWarn("daemon session was already unavailable while discarding", { sessionId, err });
       });
+      await Promise.race([closeRequest, new Promise<void>((resolve) => window.setTimeout(resolve, 5_000))]);
       const persisted = useSessionStore.getState();
       const discardedSession = persisted.sessions.find((session) => session.id === sessionId);
       releaseProviderSnapshot(discardedSession?.providerSnapshot);

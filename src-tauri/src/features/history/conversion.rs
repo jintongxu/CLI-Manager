@@ -1,6 +1,5 @@
 use super::super::history_backup::{
-    create_file_backup_snapshot, default_backup_root,
-    lock_source_mutations,
+    create_file_backup_snapshot, default_backup_root, lock_source_mutations,
 };
 use super::{
     build_session_detail_with_roots, claude_project_key_from_path, codex_config_string,

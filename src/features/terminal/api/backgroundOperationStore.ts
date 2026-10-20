@@ -3,6 +3,7 @@ import type { TranslationKey } from "../../../shared/i18n/index";
 
 export type BackgroundOperationStatus = "running" | "succeeded" | "failed";
 export type BackgroundOperationKind = "dataSync" | "remoteHistory" | "remoteFiles" | "remoteGit" | "sshHook" | "worktree";
+export type BackgroundVerificationStatus = "pending" | "verified" | "failed";
 
 export interface BackgroundOperation {
   id: string;
@@ -17,16 +18,21 @@ export interface BackgroundOperation {
   startedAt: number;
   updatedAt: number;
   retry?: () => void | Promise<void>;
+  cancel?: () => void | Promise<void>;
+  verification?: BackgroundVerificationStatus;
 }
 
 type StartOperation = Pick<BackgroundOperation, "id" | "kind" | "titleKey" | "detailKey">
-  & Partial<Pick<BackgroundOperation, "detailParams" | "contextLabel" | "progress" | "retry">>;
+  & Partial<Pick<BackgroundOperation, "detailParams" | "contextLabel" | "progress" | "retry" | "cancel" | "verification">>;
 
 interface BackgroundOperationStore {
   operations: Record<string, BackgroundOperation>;
   start: (operation: StartOperation) => void;
   succeed: (id: string, detailKey?: TranslationKey) => void;
   fail: (id: string, error: unknown) => void;
+  updateProgress: (id: string, progress: number) => void;
+  updateVerification: (id: string, verification: BackgroundVerificationStatus) => void;
+  clearVerification: (id: string) => void;
   dismiss: (id: string) => void;
   clearFinished: () => void;
 }
@@ -82,6 +88,23 @@ export const useBackgroundOperationStore = create<BackgroundOperationStore>((set
         [id]: { ...operation, status: "failed", error: errorText(error), updatedAt: Date.now() },
       },
     };
+  }),
+  updateProgress: (id, progress) => set((state) => {
+    const operation = state.operations[id];
+    if (!operation || operation.status !== "running") return state;
+    return { operations: { ...state.operations, [id]: { ...operation, progress: Math.max(0, Math.min(100, progress)), updatedAt: Date.now() } } };
+  }),
+  updateVerification: (id, verification) => set((state) => {
+    const operation = state.operations[id];
+    if (!operation) return state;
+    return { operations: { ...state.operations, [id]: { ...operation, verification, updatedAt: Date.now() } } };
+  }),
+  clearVerification: (id) => set((state) => {
+    const operation = state.operations[id];
+    if (!operation) return state;
+    const next = { ...operation };
+    delete next.verification;
+    return { operations: { ...state.operations, [id]: next } };
   }),
   dismiss: (id) => set((state) => {
     const operations = { ...state.operations };

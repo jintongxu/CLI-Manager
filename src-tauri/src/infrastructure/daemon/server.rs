@@ -12,9 +12,7 @@ mod pty_events;
 use pty_events::DaemonPtyEventSink;
 mod hook_status;
 #[cfg(test)]
-use hook_status::{
-    map_hook_event_to_task_status, map_hook_event_to_task_status_for_payload,
-};
+use hook_status::{map_hook_event_to_task_status, map_hook_event_to_task_status_for_payload};
 
 use super::discovery::{remove_daemon_info, write_daemon_info_exclusive, DaemonInfo};
 use super::protocol::{
@@ -1262,7 +1260,10 @@ impl DaemonServer {
                 WebSocketClientMessage::Text(line) => match decode_client_frame(&line) {
                     Ok(frame) => {
                         if let ClientFrame::WorktreeAdmission { id, .. } = &frame {
-                            let _ = writer.send_frame(&err_frame(*id, "worktree_admission_protocol_unsupported"));
+                            let _ = writer.send_frame(&err_frame(
+                                *id,
+                                "worktree_admission_protocol_unsupported",
+                            ));
                             continue;
                         }
                         if let Some(id) = routing_control_id(&frame) {
@@ -1435,12 +1436,15 @@ impl DaemonServer {
                     .collect();
                 DaemonFrame::Sessions { id, sessions }
             }
-            ClientFrame::WorktreeAdmission { id, path, token, action } => {
-                match super::worktree_admission::control(&path, &token, &action,client_id) {
-                    Ok(()) => DaemonFrame::Ok { id },
-                    Err(message) => err_frame(id, &message),
-                }
-            }
+            ClientFrame::WorktreeAdmission {
+                id,
+                path,
+                token,
+                action,
+            } => match super::worktree_admission::control(&path, &token, &action, client_id) {
+                Ok(()) => DaemonFrame::Ok { id },
+                Err(message) => err_frame(id, &message),
+            },
             ClientFrame::Create {
                 id,
                 session_id,

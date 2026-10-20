@@ -438,7 +438,7 @@ function AuthFields({
             const value = e.target.value as SshAuthMode;
             setValue("auth_mode", value);
             if (value !== "identity_file") setValue("identity_file", "");
-            if (value !== "credential_ref") onPasswordChange("");
+            if (value !== "credential_ref" && value !== "password_prompt") onPasswordChange("");
           }}
         >
           <option value="agent">{t("settings.sshHosts.auth.agent")}</option>
@@ -481,7 +481,7 @@ function AuthFields({
           </div>
         </FieldRow>
       )}
-      {authMode === "credential_ref" && (
+      {(authMode === "credential_ref" || authMode === "password_prompt") && (
         <FieldRow
           label={t("settings.sshHosts.loginPassword")}
           description={

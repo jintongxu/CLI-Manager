@@ -67,6 +67,57 @@ export async function buildSshAgentProjectLaunch(
   );
 }
 
+export async function buildSshDirectProjectLaunch(project: Project): Promise<SshAgentProjectLaunch> {
+  if (project.environment_type !== "ssh" || !project.ssh_host_id?.trim() || !project.remote_path.trim()) {
+    throw new Error("ssh_project_configuration_invalid");
+  }
+  const { host, hosts } = await resolveSshHost(project.ssh_host_id.trim());
+  return {
+    ...buildSshConnectionSpec(host, hosts),
+    hostId: host.id,
+    remotePath: project.remote_path.trim(),
+    clientInstanceId: getSshClientInstanceId(),
+    projectId: project.id,
+    projectName: project.name,
+    bridgeEpoch: crypto.randomUUID(),
+    agentPath: "",
+    agentInstallationId: "",
+    agentRemoteMachineId: "",
+    toolSource: "",
+    environmentOverrides: {},
+    initializationCommand: null,
+    startupCommand: null,
+    attachmentRoot: host.attachment_root?.trim() ?? "",
+  };
+}
+
+export async function buildSshDirectHostLaunch(
+  hostId: string,
+  remotePath: string,
+): Promise<SshAgentProjectLaunch> {
+  const normalizedHostId = hostId.trim();
+  const normalizedRemotePath = remotePath.trim();
+  if (!normalizedHostId || !normalizedRemotePath) throw new Error("ssh_terminal_context_invalid");
+  const { host, hosts } = await resolveSshHost(normalizedHostId);
+  return {
+    ...buildSshConnectionSpec(host, hosts),
+    hostId: host.id,
+    remotePath: normalizedRemotePath,
+    clientInstanceId: getSshClientInstanceId(),
+    projectId: "",
+    projectName: "",
+    bridgeEpoch: crypto.randomUUID(),
+    agentPath: "",
+    agentInstallationId: "",
+    agentRemoteMachineId: "",
+    toolSource: "",
+    environmentOverrides: {},
+    initializationCommand: null,
+    startupCommand: null,
+    attachmentRoot: host.attachment_root?.trim() ?? "",
+  };
+}
+
 export async function buildSshAgentHostLaunch(
   hostId: string,
   remotePath: string,

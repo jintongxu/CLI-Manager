@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import { toast } from "sonner";
+import { useBackgroundOperationStore } from "../../terminal/api/backgroundOperationStore";
 import type {
   GitFileChange,
   Project,
@@ -25,9 +26,13 @@ import {
   buildSshRemoteFileContext,
   releaseSshRemoteFileContext,
   remoteEntryToSearchMatch,
+  sshRemoteDeleteFile,
   sshRemoteListDir,
   sshRemoteReadFile,
   sshRemoteSearch,
+  sshRemotePutFile,
+  sshRemoteCreateEntry,
+  sshRemoteWriteFile,
   type SshRemoteFileContext,
   type SshRemoteFileOperationOptions,
 } from "../../remote/api/sshRemoteFiles";
@@ -1508,14 +1513,36 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
 
   saveFile: async (path) => {
     const project = get().project;
-    if (project?.environment_type === "ssh") throw new Error("remote_project_read_only");
     const file = get().openFiles.find((item) => item.path === path);
-    if (!project || !file || file.previewKind === "image" || !file.encoding) return;
+    if (!project || !file || file.previewKind === "image") return;
+    const content = file.content.length > 0 && !file.content.endsWith("\n")
+      ? `${file.content}\n`
+      : file.content;
+    if (project.environment_type === "ssh") {
+      const context = get().remoteFileContext;
+      if (!context || !file.encoding) return;
+      try {
+        await sshRemoteWriteFile(context, file.path, content);
+        set((state) => {
+          const openFiles = state.openFiles.map((candidate) => candidate.path === file.path
+            ? { ...candidate, content, savedContent: content, sizeBytes: new TextEncoder().encode(content).byteLength }
+            : candidate);
+          return { openFiles, activeFile: openFiles.find((candidate) => candidate.path === state.activeFilePath) ?? null };
+        });
+        toast.success(translateCurrent("files.toast.saved"));
+      } catch (err) {
+        logError("Failed to save remote file", err);
+        toast.error(translateCurrent("files.toast.saveFailed"), { description: fileSaveErrorMessage(err) });
+        throw err;
+      }
+      return;
+    }
+    if (!file.encoding) return;
     try {
       await invoke("file_write_project_text", {
         rootPath: project.path,
         relativePath: file.path,
-        content: file.content,
+        content,
         encoding: file.encoding,
         hasBom: file.hasBom,
       });
@@ -1527,7 +1554,7 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
       throw err;
     }
     const markSaved = (files: ActiveProjectFile[]) => files.map((candidate) => (
-      candidate.path === file.path ? { ...candidate, savedContent: file.content } : candidate
+      candidate.path === file.path ? { ...candidate, content, savedContent: content } : candidate
     ));
     set((state) => {
       if (isSameProjectFileLocation(state.project, project)) {
@@ -1565,8 +1592,14 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
   createEntry: async (parent, name, kind, overwrite) => {
     if (get().mutationBusy) throw new Error("file_operation_busy");
     const project = get().project;
-    if (project?.environment_type === "ssh") throw new Error("remote_project_read_only");
     if (!project) return;
+    if (project.environment_type === "ssh") {
+      const context = get().remoteFileContext;
+      if (!context) throw new Error("remote_file_context_missing");
+      await sshRemoteCreateEntry(context, parent, name, kind, overwrite);
+      await get().loadDir(parent);
+      return;
+    }
     const command = kind === "directory" ? "file_create_dir" : "file_create_file";
     await invoke(command, { rootPath: project.path, parentPath: parent, name, overwrite });
     await get().loadDir(parent);
@@ -1577,7 +1610,7 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
   renameEntry: async (path, newName, overwrite) => {
     if (get().mutationBusy) throw new Error("file_operation_busy");
     const project = get().project;
-    if (project?.environment_type === "ssh") throw new Error("remote_project_read_only");
+    if (project?.environment_type === "ssh") throw new Error("remote_project_rename_unsupported");
     if (!project) return;
     await invoke("file_rename", {
       rootPath: project.path,
@@ -1607,7 +1640,22 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
     if (result.failures.length) throw new Error(result.failures[0].error);
   },
 
-  deleteEntries: (entries, project) => performFileBatch(project, entries, "delete"),
+  deleteEntries: async (entries, project) => {
+    if (project.environment_type !== "ssh") return performFileBatch(project, entries, "delete");
+    const context = get().remoteFileContext;
+    if (!context) throw new Error("remote_file_context_missing");
+    if (get().mutationBusy) throw new Error("file_operation_busy");
+    set({ mutationBusy: true });
+    try {
+      for (const entry of entries) await sshRemoteDeleteFile(context, entry.path);
+      await get().refreshVisibleState();
+      return { succeeded: entries, skipped: [], failures: [], conflicts: [] };
+    } catch (error) {
+      return { succeeded: [], skipped: [], failures: entries.map((entry) => ({ entry, error: String(error) })), conflicts: [] };
+    } finally {
+      set({ mutationBusy: false });
+    }
+  },
 
   setClipboard: (clipboard) => {
     const id = ++fileClipboardSequence;
@@ -1661,12 +1709,41 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
   pasteInto: async (targetParentPath, overwrite, snapshot) => {
     const clipboard = snapshot ?? get().clipboard;
     if (!clipboard) return { succeeded: [], skipped: [], failures: [], conflicts: [] };
+    const project = get().project;
+    if (project?.environment_type === "ssh") {
+      const context = get().remoteFileContext;
+      if (!context || clipboard.mode !== "copy" || !clipboard.importSources) throw new Error("remote_project_paste_unsupported");
+      if (get().mutationBusy) throw new Error("file_operation_busy");
+      set({ mutationBusy: true });
+      const succeeded: FileOperationEntry[] = [];
+      const failures: FileBatchResult["failures"] = [];
+      try {
+        for (const entry of clipboard.entries) {
+          const source = clipboard.importSources[entry.path];
+          if (!source || !("sourcePath" in source)) {
+            failures.push({ entry, error: "remote_project_paste_unsupported" });
+            continue;
+          }
+          try {
+            await sshRemotePutFile(context, targetParentPath, source.sourcePath, {
+              onProgress: (progress) => useBackgroundOperationStore.getState().updateProgress(`remote-files:${context.consumerId}`, progress),
+            });
+            succeeded.push(entry);
+          } catch (error) {
+            failures.push({ entry, error: String(error) });
+          }
+        }
+        await get().refreshVisibleState();
+        return { succeeded, skipped: [], failures, conflicts: [] };
+      } finally {
+        set({ mutationBusy: false });
+      }
+    }
     return performFileBatch(clipboard.project, clipboard.entries, clipboard.mode, targetParentPath, overwrite, clipboard);
   },
   readPasteClipboard: async () => {
     const project = get().project;
     if (!project) return null;
-    if (project.environment_type === "ssh") throw new Error("remote_project_read_only");
     if (clipboardReadBusy || get().mutationBusy) throw new Error("file_operation_busy");
     const generation = openProjectRequestSeq;
     const internal = get().clipboard;
@@ -1690,6 +1767,9 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
         native.entries.map((entry) => [entry.path, entry.dataBase64 === null
           ? { sourcePath: entry.path } : { dataBase64: entry.dataBase64 }]),
       );
+      if (project.environment_type === "ssh" && native.entries.some((entry) => entry.dataBase64 !== null)) {
+        throw new Error("remote_project_paste_unsupported");
+      }
       return { id: ++fileClipboardSequence, mode: "copy", project: { ...project }, generation, entries, importSources };
     } finally {
       clipboardReadBusy = false;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { dirname as localDirname, desktopDir, join as joinLocalPath } from "@tauri-apps/api/path";
 import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
@@ -9,13 +9,18 @@ import {
   ChevronLeft,
   CircleAlert,
   Download,
+  Eye,
+  EyeOff,
   File,
   Folder,
   FolderOpen,
   Loader2,
+  Pause,
+  Play,
   RefreshCw,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
 import { isValidSshAttachmentRoot } from "../../remote/api/sshAttachment";
 import { useI18n, type TranslationKey } from "../../../shared/i18n/index";
@@ -24,9 +29,12 @@ import {
   buildSshRemoteAttachmentContext,
   releaseSshRemoteFileContext,
   resolveSshRemoteAttachmentRoot,
+  sshRemoteCancelUpload,
+  sshRemoteCleanupUpload,
   sshRemoteDeleteFile,
   sshRemoteDownloadFile,
   sshRemoteListDir,
+  sshRemoteListOrphanParts,
   sshRemotePutFilesForHost,
   type SshRemoteFileContext,
 } from "../../remote/api/sshRemoteFiles";
@@ -40,6 +48,7 @@ import {
   DialogTitle,
 } from "../../../shared/ui/dialog";
 import { useAppConfirm } from "../../../shared/ui/useAppConfirm";
+import { useBackgroundOperationStore } from "../../terminal/api/backgroundOperationStore";
 
 interface Props {
   open: boolean;
@@ -47,17 +56,26 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
-type TransferStatus = "queued" | "uploading" | "downloading" | "success" | "error";
+type TransferStatus = "queued" | "uploading" | "paused" | "downloading" | "success" | "interrupted" | "error";
 type TransferDirection = "upload" | "download";
 
 interface TransferItem {
   id: string;
+  hostId: string;
   path: string;
   name: string;
   direction: TransferDirection;
   status: TransferStatus;
   remotePath?: string;
+  targetRootPath?: string;
+  relativePath?: string;
   error?: string;
+  progress?: number;
+  bytesDone?: number;
+  bytesTotal?: number;
+  speedBytesPerSec?: number;
+  etaSec?: number;
+  updatedAt: number;
 }
 
 const ERROR_LABELS: Record<string, TranslationKey> = {
@@ -75,6 +93,7 @@ const ERROR_LABELS: Record<string, TranslationKey> = {
   ssh_agent_bridge_response_timeout: "settings.sshHosts.attachmentDialog.error.connectionFailed",
   ssh_agent_unreachable: "settings.sshHosts.attachmentDialog.error.connectionFailed",
   attachment_local_file_unavailable: "settings.sshHosts.attachmentDialog.error.localFileUnavailable",
+  ssh_local_file_unavailable: "settings.sshHosts.attachmentDialog.error.localFileUnavailable",
   attachment_local_path_invalid: "settings.sshHosts.attachmentDialog.error.localFileUnavailable",
   attachment_empty: "settings.sshHosts.attachmentDialog.error.fileInvalid",
   attachment_too_large: "settings.sshHosts.attachmentDialog.error.fileTooLarge",
@@ -94,7 +113,11 @@ const ERROR_LABELS: Record<string, TranslationKey> = {
   remote_file_delete_failed: "settings.sshHosts.attachmentDialog.error.deleteFailed",
   remote_file_delete_unsupported: "settings.sshHosts.attachmentDialog.error.deleteFailed",
   attachment_target_exists: "settings.sshHosts.attachmentDialog.error.targetExists",
+  ssh_sftp_checksum_mismatch: "settings.sshHosts.attachmentDialog.error.checksumMismatch",
+  ssh_sftp_checksum_failed: "settings.sshHosts.attachmentDialog.error.checksumFailed",
   local_directory_unavailable: "settings.sshHosts.attachmentDialog.error.localDirectoryUnavailable",
+  ssh_sftp_orphan_recovered: "settings.sshHosts.attachmentDialog.error.orphanRecovered",
+  ssh_sftp_orphan_source_missing: "settings.sshHosts.attachmentDialog.error.orphanSourceMissing",
 };
 
 function errorCode(error: unknown): string {
@@ -111,6 +134,15 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return "—";
+  const rounded = Math.ceil(seconds);
+  if (rounded < 60) return `${rounded}s`;
+  const minutes = Math.floor(rounded / 60);
+  const remainder = rounded % 60;
+  return `${minutes}m ${remainder}s`;
 }
 
 function parentRemotePath(path: string): string {
@@ -147,6 +179,24 @@ function localPathKey(path: string): string {
     : normalized;
 }
 
+function transferItemKey(item: TransferItem): string {
+  const remote = item.remotePath?.trim();
+  if (remote) return `${item.direction}:remote:${remote}`;
+  return `${item.direction}:local:${localPathKey(item.path)}:${item.targetRootPath ?? ""}:${item.name}`;
+}
+
+function dedupeTransferItems(items: TransferItem[]): TransferItem[] {
+  const byKey = new Map<string, TransferItem>();
+  for (const item of items) {
+    const key = transferItemKey(item);
+    const previous = byKey.get(key);
+    if (!previous || item.updatedAt >= previous.updatedAt || item.status === "uploading" || item.status === "downloading") {
+      byKey.set(key, item);
+    }
+  }
+  return Array.from(byKey.values()).sort((left, right) => left.updatedAt - right.updatedAt);
+}
+
 function statusIcon(status: TransferStatus) {
   if (status === "uploading" || status === "downloading") return <Loader2 className="h-4 w-4 animate-spin text-primary" />;
   if (status === "success") return <CheckCircle2 className="h-4 w-4 text-primary" />;
@@ -157,6 +207,7 @@ function statusIcon(status: TransferStatus) {
 export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
   const { t } = useI18n();
   const { confirm, confirmDialog } = useAppConfirm({ zIndex: 80 });
+  const backgroundOperations = useBackgroundOperationStore((state) => state.operations);
   const hostId = host?.id ?? "";
   const [context, setContext] = useState<SshRemoteFileContext | null>(null);
   const [rootPath, setRootPath] = useState("");
@@ -173,11 +224,13 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
   const [localPathDraft, setLocalPathDraft] = useState("");
   const [localEntries, setLocalEntries] = useState<ProjectFileEntry[]>([]);
   const [queue, setQueue] = useState<TransferItem[]>([]);
+  const [queueFilter, setQueueFilter] = useState<"all" | "active" | "queued" | "finished" | "failed">("all");
+  const [expandedTransferId, setExpandedTransferId] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(false);
   const [remoteLoading, setRemoteLoading] = useState(false);
+  const [showHiddenRemoteDirectories, setShowHiddenRemoteDirectories] = useState(false);
   const [localLoading, setLocalLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [downloading, setDownloading] = useState(false);
   const [deletingPath, setDeletingPath] = useState<string | null>(null);
   const [rootError, setRootError] = useState<string | null>(null);
   const [remoteError, setRemoteError] = useState<string | null>(null);
@@ -185,6 +238,14 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
   const [localRefreshToken, setLocalRefreshToken] = useState(0);
+  const queueHydratedRef = useRef(false);
+  const transferRunningRef = useRef(false);
+  const cancelledUploadsRef = useRef(new Set<string>());
+  const pausedUploadsRef = useRef(new Set<string>());
+  const queueRef = useRef<TransferItem[]>([]);
+  const orphanScanKeyRef = useRef("");
+  const autoResumeRequestedRef = useRef(false);
+  queueRef.current = queue;
 
   useEffect(() => {
     let cancelled = false;
@@ -206,7 +267,33 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
     setRemoteError(null);
     setLocalError(null);
     setError(null);
-    setQueue([]);
+    queueHydratedRef.current = false;
+    orphanScanKeyRef.current = "";
+    autoResumeRequestedRef.current = false;
+    if (open && hostId) {
+      try {
+        const saved = JSON.parse(localStorage.getItem("cli-manager.ssh-transfer-queue.v1") ?? "[]") as TransferItem[];
+        const hydrated = dedupeTransferItems(saved.filter((item) => item.hostId === hostId).map((item) => {
+          const activeOperation = useBackgroundOperationStore.getState().operations[`remote-files:file-put:${item.id}`];
+          const recoveredWithSource = item.direction === "upload" && item.error === "ssh_sftp_orphan_recovered" && Boolean(item.path);
+          return {
+            ...item,
+            status: activeOperation?.status === "running"
+              ? "uploading"
+              : activeOperation?.status === "succeeded"
+                ? "success"
+                : recoveredWithSource
+                  ? "queued"
+                  : item.status === "uploading" || item.status === "downloading" ? "interrupted" : item.status,
+            progress: activeOperation?.progress ?? item.progress,
+            error: activeOperation?.status === "failed" ? activeOperation.error : activeOperation?.status === "succeeded" ? undefined : item.error,
+          } as TransferItem;
+        }));
+        if (hydrated.some((item) => item.direction === "upload" && item.status === "queued" && Boolean(item.remotePath))) autoResumeRequestedRef.current = true;
+        setQueue(hydrated);
+      } catch { setQueue([]); }
+      queueHydratedRef.current = true;
+    } else setQueue([]);
 
     if (!open || !hostId) {
       setInitializing(false);
@@ -224,8 +311,7 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
         }
         setContext(nextContext);
         try {
-          const configuredRoot = host?.attachment_root?.trim() ?? "";
-          const nextRoot = configuredRoot || await resolveSshRemoteAttachmentRoot(nextContext);
+          const nextRoot = await resolveSshRemoteAttachmentRoot(nextContext);
           if (!cancelled) {
             setRootPath(nextRoot);
             setRemotePathDraft(nextRoot);
@@ -246,6 +332,77 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
       if (activeContext) void releaseSshRemoteFileContext(activeContext).catch(() => undefined);
     };
   }, [hostId, open]);
+
+  useEffect(() => {
+    if (!queueHydratedRef.current || !hostId) return;
+    try {
+      const all = JSON.parse(localStorage.getItem("cli-manager.ssh-transfer-queue.v1") ?? "[]") as TransferItem[];
+      const otherHosts = all.filter((item) => item.hostId !== hostId);
+      localStorage.setItem("cli-manager.ssh-transfer-queue.v1", JSON.stringify([...otherHosts, ...dedupeTransferItems(queue)]));
+    } catch { /* queue persistence is best effort */ }
+  }, [hostId, queue]);
+
+  useEffect(() => {
+    if (!context || !rootPath || !queueHydratedRef.current || !hostId) return undefined;
+    const scanKey = `${hostId}:${rootPath}`;
+    if (orphanScanKeyRef.current === scanKey) return undefined;
+    orphanScanKeyRef.current = scanKey;
+    let cancelled = false;
+    void sshRemoteListOrphanParts({ ...context, rootPath }, "", { silent: true }).then((parts) => {
+      if (cancelled || parts.length === 0) return;
+      setQueue((current) => {
+        const known = new Set(current.filter((item) => item.direction === "upload").map(transferItemKey));
+        const recovered = parts.map((part): TransferItem => ({
+          id: part.transferId.replace(/^file-put:/u, "") || crypto.randomUUID(),
+          hostId,
+          path: part.localPath,
+          name: part.fileName || fileNameFromPath(part.localPath),
+          direction: "upload",
+          status: part.localPath ? "queued" : "interrupted",
+          remotePath: part.remotePath,
+          targetRootPath: parentRemotePath(part.remotePath),
+          error: part.localPath ? undefined : "ssh_sftp_orphan_source_missing",
+          progress: part.sizeBytes > 0 ? Math.min(99, (part.uploadedBytes / part.sizeBytes) * 100) : undefined,
+          bytesDone: part.uploadedBytes,
+          bytesTotal: part.sizeBytes,
+          updatedAt: Date.now(),
+        }));
+        const uniqueRecovered = recovered.filter((item, index) => {
+          const key = transferItemKey(item);
+          return !known.has(key) && recovered.findIndex((candidate) => transferItemKey(candidate) === key) === index;
+        });
+        if (uniqueRecovered.some((item) => item.status === "queued")) autoResumeRequestedRef.current = true;
+        return uniqueRecovered.length > 0 ? dedupeTransferItems([...current, ...uniqueRecovered]) : current;
+      });
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [context, hostId, rootPath]);
+
+  useEffect(() => {
+    if (!hostId || !queueHydratedRef.current) return;
+    setQueue((current) => {
+      let changed = false;
+      const next = current.map((item) => {
+        if (item.direction !== "upload") return item;
+        const operation = backgroundOperations[`remote-files:file-put:${item.id}`];
+        if (!operation) return item;
+        const status: TransferStatus = operation.status === "running" ? "uploading" : operation.status === "succeeded" ? "success" : pausedUploadsRef.current.has(item.id) ? "paused" : "interrupted";
+        const error = operation.status === "failed" ? operation.error : operation.status === "succeeded" ? undefined : item.error;
+        const progress = operation.progress ?? item.progress;
+        if (item.status === status && item.error === error && item.progress === progress) return item;
+        changed = true;
+        return { ...item, status, error, progress, updatedAt: Date.now() };
+      });
+      return changed ? next : current;
+    });
+  }, [backgroundOperations, hostId]);
+
+  useEffect(() => {
+    if (!context || !rootPath || !autoResumeRequestedRef.current || !queue.some((item) => item.direction === "upload" && item.status === "queued" && Boolean(item.remotePath))) return;
+    autoResumeRequestedRef.current = false;
+    const timer = window.setTimeout(() => void uploadQueuedFiles(), 0);
+    return () => window.clearTimeout(timer);
+  }, [context, queue, rootPath]);
 
   useEffect(() => {
     let cancelled = false;
@@ -348,32 +505,44 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
   const rootLabel = rootPath || host?.attachment_root?.trim() || t("settings.sshHosts.attachmentDialog.defaultRoot");
   const displayedRemotePath = rootPath || rootLabel;
   const pendingCount = useMemo(() => queue.filter((item) => item.direction === "upload" && item.status === "queued").length, [queue]);
-  const transferring = uploading || downloading || deletingPath !== null;
-  const canUpload = Boolean(hostId && context && rootPath) && !initializing && !transferring && pendingCount > 0;
+  const canUpload = Boolean(hostId && context && rootPath) && !initializing && pendingCount > 0;
   const remoteEntries = useMemo(
-    () => [...entries].sort((left, right) => Number(right.kind === "directory") - Number(left.kind === "directory") || left.name.localeCompare(right.name, undefined, { sensitivity: "base" })),
-    [entries],
+    () => [...entries]
+      .filter((entry) => showHiddenRemoteDirectories || !entry.name.startsWith("."))
+      .sort((left, right) => Number(right.kind === "directory") - Number(left.kind === "directory") || left.name.localeCompare(right.name, undefined, { sensitivity: "base" })),
+    [entries, showHiddenRemoteDirectories],
   );
   const localEntriesSorted = useMemo(
     () => [...localEntries].sort((left, right) => Number(right.kind === "directory") - Number(left.kind === "directory") || left.name.localeCompare(right.name, undefined, { sensitivity: "base" })),
     [localEntries],
   );
+  const visibleQueue = useMemo(() => queue.filter((item) => {
+    if (queueFilter === "active") return item.status === "uploading" || item.status === "downloading";
+    if (queueFilter === "queued") return item.status === "queued" || item.status === "paused";
+    if (queueFilter === "finished") return item.status === "success";
+    if (queueFilter === "failed") return item.status === "error" || item.status === "interrupted";
+    return true;
+  }), [queue, queueFilter]);
   const queuedPathKeys = useMemo(
-    () => new Set(queue.filter((item) => item.direction === "upload").map((item) => localPathKey(item.path))),
+    () => new Set(queue.filter((item) => item.direction === "upload" && (item.status === "queued" || item.status === "uploading" || item.status === "downloading")).map((item) => localPathKey(item.path))),
     [queue],
   );
 
   const addPathsToQueue = (paths: string[]) => {
     setQueue((current) => {
-      const existing = new Set(current.map((item) => item.path));
+      const existing = new Set(current.filter((item) => item.status === "queued" || item.status === "uploading" || item.status === "downloading").map((item) => item.path));
       const additions = paths
         .filter((path) => !existing.has(path))
         .map((path) => ({
           id: crypto.randomUUID(),
+          hostId,
           path,
           name: fileNameFromPath(path),
           direction: "upload" as const,
           status: "queued" as const,
+          targetRootPath: rootPath,
+          remotePath: `${rootPath.replace(/\/$/u, "")}/${fileNameFromPath(path)}`,
+          updatedAt: Date.now(),
         }));
       return [...current, ...additions];
     });
@@ -432,7 +601,7 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
   };
 
   const addLocalFile = async (entry: ProjectFileEntry) => {
-    if (entry.kind !== "file" || !localPath || transferring) return;
+    if (entry.kind !== "file" || !localPath) return;
     try {
       const path = await joinLocalPath(localPath, entry.name);
       addPathsToQueue([path]);
@@ -455,8 +624,12 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
   };
 
   const removeQueueItem = (id: string) => {
-    if (transferring) return;
-    setQueue((current) => current.filter((item) => item.id !== id));
+    const item = queueRef.current.find((candidate) => candidate.id === id);
+    if (!item || item.status === "uploading" || item.status === "downloading") return;
+    setQueue((current) => current.filter((candidate) => candidate.id !== id));
+    if (item.direction === "upload" && context && item.remotePath) {
+      void sshRemoteCleanupUpload(hostId, item.remotePath).catch(() => undefined);
+    }
   };
 
   const refreshRemote = () => setRefreshToken((current) => current + 1);
@@ -475,7 +648,7 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
   };
 
   const openRemoteDirectoryPicker = () => {
-    if (!context || !rootPath || initializing || transferring) return;
+    if (!context || !rootPath || initializing) return;
     setRemotePickerPath(rootPath);
     setRemotePickerPathDraft(rootPath);
     setRemotePickerEntries([]);
@@ -522,31 +695,133 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
   };
 
   const uploadQueuedFiles = async () => {
-    if (!canUpload) return;
+    if (transferRunningRef.current || !hostId || !context || !rootPath || initializing) return;
+    transferRunningRef.current = true;
     setUploading(true);
     setError(null);
-    const pending = queue.filter((item) => item.direction === "upload" && item.status === "queued");
-    for (const item of pending) {
+    while (true) {
+      const item = queueRef.current.find((candidate) => candidate.direction === "upload" && candidate.status === "queued");
+      if (!item) break;
       setQueue((current) => current.map((candidate) => candidate.id === item.id
-        ? { ...candidate, status: "uploading", error: undefined }
+        ? { ...candidate, status: "uploading", progress: candidate.progress ?? 0, error: undefined, updatedAt: Date.now() }
         : candidate));
       try {
-        const [remotePath] = await sshRemotePutFilesForHost(hostId, rootPath, [{ kind: "localPath", path: item.path }]);
+        const targetRootPath = item.targetRootPath || rootPath;
+        const [remotePath] = await sshRemotePutFilesForHost(hostId, targetRootPath, [{ kind: "localPath", path: item.path }], {
+          onProgress: (progress) => setQueue((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, progress, updatedAt: Date.now() } : candidate)),
+          onProgressDetail: ({ bytesDone, bytesTotal }) => setQueue((current) => current.map((candidate) => {
+            if (candidate.id !== item.id) return candidate;
+            const previousBytes = candidate.bytesDone ?? 0;
+            const previousAt = candidate.updatedAt;
+            const elapsed = Math.max(1, Date.now() - previousAt) / 1000;
+            const speed = Math.max(0, bytesDone - previousBytes) / elapsed;
+            return { ...candidate, bytesDone, bytesTotal, speedBytesPerSec: speed, etaSec: speed > 0 ? Math.max(0, bytesTotal - bytesDone) / speed : undefined, updatedAt: Date.now() };
+          })),
+        }, item.id);
         setQueue((current) => current.map((candidate) => candidate.id === item.id
-          ? { ...candidate, status: "success", remotePath }
+          ? { ...candidate, status: "success", progress: 100, remotePath, updatedAt: Date.now() }
           : candidate));
         refreshRemote();
       } catch (nextError) {
+        const failureCode = errorCode(nextError);
+        if (item.direction === "upload" && (failureCode.includes("ssh_local_file_unavailable") || failureCode.includes("ssh_local_file_invalid"))) {
+          const selected = await openFileDialog({
+            multiple: false,
+            directory: false,
+            title: t("settings.sshHosts.attachmentDialog.chooseRecoveryFile"),
+            defaultPath: localPath ? await joinLocalPath(localPath, item.name).catch(() => localPath) : undefined,
+          });
+          const selectedPath = Array.isArray(selected) ? selected[0] : selected;
+          if (typeof selectedPath === "string" && selectedPath) {
+            setQueue((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, path: selectedPath, name: fileNameFromPath(selectedPath), status: "queued", error: undefined, updatedAt: Date.now() } : candidate));
+            continue;
+          }
+        }
+        const targetExists = failureCode.includes("attachment_target_exists");
+        if (targetExists && context) {
+          const confirmed = await confirm({
+            title: t("settings.sshHosts.attachmentDialog.overwriteTitle"),
+            message: t("settings.sshHosts.attachmentDialog.overwriteMessage", { path: item.remotePath ?? item.name }),
+            confirmText: t("settings.sshHosts.attachmentDialog.overwriteConfirm"),
+            cancelText: t("common.cancel"),
+            danger: true,
+          });
+          if (confirmed) {
+            await sshRemoteDeleteFile({ ...context, rootPath: item.targetRootPath || rootPath }, item.name).then(() => {
+              setQueue((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, status: "queued", error: undefined, updatedAt: Date.now() } : candidate));
+            });
+            continue;
+          }
+        }
         setQueue((current) => current.map((candidate) => candidate.id === item.id
-          ? { ...candidate, status: "error", error: errorCode(nextError) }
+          ? { ...candidate, status: targetExists ? "error" : pausedUploadsRef.current.has(item.id) ? "paused" : "interrupted", error: pausedUploadsRef.current.has(item.id) ? undefined : failureCode, updatedAt: Date.now() }
           : candidate));
       }
     }
+    transferRunningRef.current = false;
     setUploading(false);
   };
 
+  const pauseUpload = async (item: TransferItem) => {
+    try {
+      await sshRemoteCancelUpload(item.id);
+      pausedUploadsRef.current.add(item.id);
+      setQueue((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, status: "paused", error: undefined, updatedAt: Date.now() } : candidate));
+    } catch { /* fallback transports do not expose native cancellation */ }
+  };
+
+  const cancelUpload = async (item: TransferItem) => {
+    pausedUploadsRef.current.delete(item.id);
+    cancelledUploadsRef.current.add(item.id);
+    try { await sshRemoteCancelUpload(item.id); } catch { /* transport may already be finished */ }
+    setQueue((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, status: "interrupted", error: "ssh_sftp_upload_cancelled", updatedAt: Date.now() } : candidate));
+  };
+
+  const retryAllTransfers = () => {
+    const retryable = queueRef.current.filter((item) => item.direction === "upload" && (item.status === "paused" || item.status === "interrupted" || item.status === "error") && Boolean(item.path));
+    if (retryable.length === 0) return;
+    retryable.forEach((item) => {
+      cancelledUploadsRef.current.delete(item.id);
+      pausedUploadsRef.current.delete(item.id);
+    });
+    setQueue((current) => current.map((item) => retryable.some((candidate) => candidate.id === item.id) ? { ...item, status: "queued", error: undefined, updatedAt: Date.now() } : item));
+    window.setTimeout(() => void uploadQueuedFiles(), 0);
+  };
+
+  const pauseAllUploads = () => {
+    queueRef.current.filter((item) => item.status === "uploading").forEach((item) => { void pauseUpload(item); });
+  };
+
+  const retryTransfer = async (item: TransferItem) => {
+    cancelledUploadsRef.current.delete(item.id);
+    pausedUploadsRef.current.delete(item.id);
+    if (item.direction === "upload" && !item.path) {
+      const defaultPath = localPath ? await joinLocalPath(localPath, item.name).catch(() => localPath) : undefined;
+      const selected = await openFileDialog({
+        multiple: false,
+        directory: false,
+        title: t("settings.sshHosts.attachmentDialog.chooseRecoveryFile"),
+        defaultPath,
+      });
+      const selectedPath = Array.isArray(selected) ? selected[0] : selected;
+      if (typeof selectedPath !== "string" || !selectedPath) return;
+      setQueue((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, path: selectedPath, name: fileNameFromPath(selectedPath), status: "queued", error: undefined, updatedAt: Date.now() } : candidate));
+      window.setTimeout(() => void uploadQueuedFiles(), 0);
+      return;
+    }
+    setQueue((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, status: "queued", error: undefined, updatedAt: Date.now() } : candidate));
+    if (item.direction === "upload") window.setTimeout(() => void uploadQueuedFiles(), 0);
+    else if (context && item.remotePath) {
+      void sshRemoteDownloadFile({ ...context, rootPath: item.targetRootPath || rootPath }, item.relativePath ?? item.remotePath, item.path, {
+        onProgress: (progress) => setQueue((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, status: "downloading", progress, updatedAt: Date.now() } : candidate)),
+      }).then(() => setQueue((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, status: "success", progress: 100, updatedAt: Date.now() } : candidate)))
+        .catch((nextError) => setQueue((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, status: "interrupted", error: errorCode(nextError), updatedAt: Date.now() } : candidate)))
+        .finally(() => undefined);
+    }
+  };
+
   const downloadRemoteFile = async (entry: ProjectFileEntry) => {
-    if (entry.kind !== "file" || !context || !rootPath || transferring) return;
+    if (entry.kind !== "file" || !context || !rootPath) return;
     const selected = await saveFileDialog({
       title: t("settings.sshHosts.attachmentDialog.downloadFile"),
       defaultPath: entry.name,
@@ -555,30 +830,33 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
     const id = crypto.randomUUID();
     setQueue((current) => [...current, {
       id,
+      hostId,
       path: selected,
       name: entry.name,
       direction: "download",
       status: "downloading",
+      progress: 0,
       remotePath: joinRemotePath(rootPath, entry.path),
+      targetRootPath: rootPath,
+      relativePath: entry.path,
+      updatedAt: Date.now(),
     }]);
-    setDownloading(true);
     setRemoteError(null);
     try {
-      await sshRemoteDownloadFile({ ...context, rootPath }, entry.path, selected);
+      await sshRemoteDownloadFile({ ...context, rootPath }, entry.path, selected, { onProgress: (progress) => setQueue((current) => current.map((candidate) => candidate.id === id ? { ...candidate, progress, updatedAt: Date.now() } : candidate)) });
       setQueue((current) => current.map((candidate) => candidate.id === id
         ? { ...candidate, status: "success" }
         : candidate));
     } catch (nextError) {
       setQueue((current) => current.map((candidate) => candidate.id === id
-        ? { ...candidate, status: "error", error: errorCode(nextError) }
+        ? { ...candidate, status: "interrupted", error: errorCode(nextError), updatedAt: Date.now() }
         : candidate));
     } finally {
-      setDownloading(false);
     }
   };
 
   const deleteRemoteEntry = async (entry: ProjectFileEntry) => {
-    if (!context || !rootPath || transferring) return;
+    if (!context || !rootPath) return;
     const confirmed = await confirm({
       title: t("settings.sshHosts.attachmentDialog.confirmDeleteTitle"),
       message: t("settings.sshHosts.attachmentDialog.confirmDeleteMessage", { name: entry.name }),
@@ -662,14 +940,14 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
                           goToLocalPath();
                         }
                       }}
-                      disabled={transferring}
+                      disabled={localLoading}
                     />
                     <button
                       type="button"
                       className="ui-icon-button h-7 w-7"
                       aria-label={t("settings.sshHosts.attachmentDialog.goToLocalPath")}
                       title={t("settings.sshHosts.attachmentDialog.goToLocalPath")}
-                      disabled={!localPathDraft.trim() || transferring || localLoading}
+                      disabled={!localPathDraft.trim() || localLoading}
                       onClick={goToLocalPath}
                     >
                       <ArrowRight className="h-3.5 w-3.5" />
@@ -679,7 +957,7 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
                       className="ui-icon-button h-7 w-7"
                       aria-label={t("settings.sshHosts.attachmentDialog.parentLocalDirectory")}
                       title={t("settings.sshHosts.attachmentDialog.parentLocalDirectory")}
-                      disabled={!localPath || isFilesystemRoot(localPath) || localLoading || transferring}
+                      disabled={!localPath || isFilesystemRoot(localPath) || localLoading}
                       onClick={() => void goToLocalParent()}
                     >
                       <ChevronLeft className="h-4 w-4" />
@@ -689,7 +967,7 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
                       className="ui-icon-button h-7 w-7"
                       aria-label={t("settings.sshHosts.attachmentDialog.refreshLocal")}
                       title={t("settings.sshHosts.attachmentDialog.refreshLocal")}
-                      disabled={!localPath || localLoading || transferring}
+                      disabled={!localPath || localLoading}
                       onClick={refreshLocal}
                     >
                       <RefreshCw className={`h-4 w-4 ${localLoading ? "animate-spin" : ""}`} />
@@ -703,12 +981,12 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
                     className="ui-icon-button h-8 w-8"
                     aria-label={t("settings.sshHosts.attachmentDialog.chooseDirectory")}
                     title={t("settings.sshHosts.attachmentDialog.chooseDirectory")}
-                    disabled={transferring}
+                    disabled={localLoading}
                     onClick={() => void chooseLocalDirectory()}
                   >
                     <FolderOpen className="h-3.5 w-3.5" />
                   </button>
-                  <Button type="button" size="sm" onClick={() => void chooseFiles()} disabled={transferring}>
+                  <Button type="button" size="sm" onClick={() => void chooseFiles()}>
                     <Upload className="h-3.5 w-3.5" />
                     {t("settings.sshHosts.attachmentDialog.chooseFiles")}
                   </Button>
@@ -730,7 +1008,7 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
                           key={entry.path}
                           type="button"
                           className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-surface-high disabled:cursor-default ${selected ? "bg-primary/10" : ""}`}
-                          disabled={transferring}
+                          disabled={localLoading}
                           aria-label={entry.kind === "directory"
                             ? t("settings.sshHosts.attachmentDialog.openLocalDirectory", { name: entry.name })
                             : selected
@@ -777,14 +1055,14 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
                           goToRemotePath();
                         }
                       }}
-                      disabled={initializing || transferring}
+                      disabled={initializing}
                     />
                     <button
                       type="button"
                       className="ui-icon-button h-7 w-7"
                       aria-label={t("settings.sshHosts.attachmentDialog.goToRemotePath")}
                       title={t("settings.sshHosts.attachmentDialog.goToRemotePath")}
-                      disabled={!remotePathDraft.trim() || initializing || transferring || remoteLoading}
+                      disabled={!remotePathDraft.trim() || initializing || remoteLoading}
                       onClick={goToRemotePath}
                     >
                       <ArrowRight className="h-3.5 w-3.5" />
@@ -792,9 +1070,23 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
                   </div>
                   <div className="truncate text-[10px] text-text-muted" title={displayedRemotePath}>{displayedRemotePath}</div>
                   </div>
-                <button type="button" className="ui-icon-button h-7 w-7" aria-label={t("settings.sshHosts.attachmentDialog.chooseRemoteDirectory")} title={t("settings.sshHosts.attachmentDialog.chooseRemoteDirectory")} disabled={!rootPath || initializing || remoteLoading || transferring} onClick={openRemoteDirectoryPicker}><FolderOpen className="h-4 w-4" /></button>
-                <button type="button" className="ui-icon-button h-7 w-7" aria-label={t("settings.sshHosts.attachmentDialog.parentDirectory")} title={t("settings.sshHosts.attachmentDialog.parentDirectory")} disabled={!rootPath || rootPath === "/" || rootPath === "~" || remoteLoading || transferring} onClick={goToParent}><ChevronLeft className="h-4 w-4" /></button>
-                <button type="button" className="ui-icon-button h-7 w-7" aria-label={t("settings.sshHosts.attachmentDialog.refreshRemote")} title={t("settings.sshHosts.attachmentDialog.refreshRemote")} disabled={!rootPath || remoteLoading || transferring} onClick={refreshRemote}><RefreshCw className={`h-4 w-4 ${remoteLoading ? "animate-spin" : ""}`} /></button>
+                <button type="button" className="ui-icon-button h-7 w-7" aria-label={t("settings.sshHosts.attachmentDialog.chooseRemoteDirectory")} title={t("settings.sshHosts.attachmentDialog.chooseRemoteDirectory")} disabled={!rootPath || initializing || remoteLoading} onClick={openRemoteDirectoryPicker}><FolderOpen className="h-4 w-4" /></button>
+                <button type="button" className="ui-icon-button h-7 w-7" aria-label={t("settings.sshHosts.attachmentDialog.parentDirectory")} title={t("settings.sshHosts.attachmentDialog.parentDirectory")} disabled={!rootPath || rootPath === "/" || rootPath === "~" || remoteLoading} onClick={goToParent}><ChevronLeft className="h-4 w-4" /></button>
+                <button
+                  type="button"
+                  className="ui-icon-button h-7 w-7"
+                  aria-label={showHiddenRemoteDirectories
+                    ? t("settings.sshHosts.attachmentDialog.hideHiddenDirectories")
+                    : t("settings.sshHosts.attachmentDialog.showHiddenDirectories")}
+                  title={showHiddenRemoteDirectories
+                    ? t("settings.sshHosts.attachmentDialog.hideHiddenDirectories")
+                    : t("settings.sshHosts.attachmentDialog.showHiddenDirectories")}
+                  aria-pressed={showHiddenRemoteDirectories}
+                  onClick={() => setShowHiddenRemoteDirectories((value) => !value)}
+                >
+                  {showHiddenRemoteDirectories ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                </button>
+                <button type="button" className="ui-icon-button h-7 w-7" aria-label={t("settings.sshHosts.attachmentDialog.refreshRemote")} title={t("settings.sshHosts.attachmentDialog.refreshRemote")} disabled={!rootPath || remoteLoading} onClick={refreshRemote}><RefreshCw className={`h-4 w-4 ${remoteLoading ? "animate-spin" : ""}`} /></button>
               </div>
               <div className="h-[360px] shrink-0 overflow-y-auto p-2 ui-thin-scroll" aria-busy={initializing || remoteLoading}>
                 {initializing || remoteLoading ? (
@@ -812,7 +1104,7 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
                         <button
                           type="button"
                           className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-2 text-left disabled:cursor-default"
-                          disabled={entry.kind !== "directory" || transferring}
+                          disabled={entry.kind !== "directory"}
                           aria-label={entry.kind === "directory"
                             ? t("settings.sshHosts.attachmentDialog.openRemoteDirectory", { name: entry.name })
                             : t("settings.sshHosts.attachmentDialog.remoteFile", { name: entry.name })}
@@ -836,7 +1128,7 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
                               className="ui-icon-button h-7 w-7 text-text-muted"
                               aria-label={t("settings.sshHosts.attachmentDialog.downloadRemoteFile", { name: entry.name })}
                               title={t("settings.sshHosts.attachmentDialog.downloadRemoteFile", { name: entry.name })}
-                              disabled={transferring}
+                              disabled={localLoading}
                               onClick={() => void downloadRemoteFile(entry)}
                             >
                               <Download className="h-3.5 w-3.5" />
@@ -847,7 +1139,7 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
                             className="ui-icon-button h-7 w-7 text-text-muted hover:text-danger"
                             aria-label={t("settings.sshHosts.attachmentDialog.deleteRemoteFile", { name: entry.name })}
                             title={t("settings.sshHosts.attachmentDialog.deleteRemoteFile", { name: entry.name })}
-                            disabled={transferring}
+                            disabled={localLoading}
                             onClick={() => void deleteRemoteEntry(entry)}
                           >
                             {deletingPath === entry.path
@@ -866,21 +1158,61 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
           <section className="overflow-hidden rounded-xl border border-border bg-surface-lowest" aria-label={t("settings.sshHosts.attachmentDialog.queueTitle")}>
             <div className="flex items-center justify-between gap-3 border-b border-border bg-surface-low px-3 py-2.5">
               <div className="flex items-center gap-2"><Upload className="h-4 w-4 text-primary" /><span className="text-sm font-semibold text-text-primary">{t("settings.sshHosts.attachmentDialog.queueTitle")}</span></div>
-              <span className="text-xs text-text-muted">{t("settings.sshHosts.attachmentDialog.queueCount", { count: queue.length })}</span>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1 text-[10px] text-text-muted">
+                  <span>{t("settings.sshHosts.attachmentDialog.queueFilter")}</span>
+                  <select className="ui-select h-6 px-1 text-[10px]" value={queueFilter} onChange={(event) => setQueueFilter(event.target.value as typeof queueFilter)}>
+                    <option value="all">{t("settings.sshHosts.attachmentDialog.filterAll")}</option>
+                    <option value="active">{t("settings.sshHosts.attachmentDialog.filterActive")}</option>
+                    <option value="queued">{t("settings.sshHosts.attachmentDialog.filterQueued")}</option>
+                    <option value="finished">{t("settings.sshHosts.attachmentDialog.filterFinished")}</option>
+                    <option value="failed">{t("settings.sshHosts.attachmentDialog.filterFailed")}</option>
+                  </select>
+                </label>
+                <span className="text-xs text-text-muted">{t("settings.sshHosts.attachmentDialog.queueCount", { count: visibleQueue.length })}</span>
+                <button type="button" className="text-[10px] text-primary hover:text-text-primary disabled:opacity-40" disabled={!queue.some((item) => item.status === "paused" || item.status === "interrupted" || item.status === "error") || !queue.some((item) => item.path)} onClick={retryAllTransfers}>{t("settings.sshHosts.attachmentDialog.retryAll")}</button>
+                <button type="button" className="text-[10px] text-text-muted hover:text-text-primary disabled:opacity-40" disabled={!queue.some((item) => item.status === "uploading")} onClick={pauseAllUploads}>{t("settings.sshHosts.attachmentDialog.pauseAll")}</button>
+                <button
+                  type="button"
+                  className="text-[10px] text-text-muted hover:text-text-primary disabled:opacity-40"
+                  disabled={!queue.some((item) => item.status === "success")}
+                  onClick={() => setQueue((current) => current.filter((item) => item.status !== "success"))}
+                >
+                  {t("settings.sshHosts.attachmentDialog.clearCompleted")}
+                </button>
+              </div>
             </div>
             {queue.length === 0 ? (
               <div className="px-3 py-5 text-center text-xs text-text-muted">{t("settings.sshHosts.attachmentDialog.queueEmpty")}</div>
             ) : (
               <div className="max-h-44 overflow-y-auto p-2 ui-thin-scroll">
-                {queue.map((item) => (
-                  <div key={item.id} className="flex items-center gap-2 border-b border-border/60 px-2 py-2 last:border-b-0">
-                    {statusIcon(item.status)}
-                    <span className="min-w-0 flex-1 truncate text-xs text-text-primary">{item.name}</span>
-                    <span className={item.status === "error" ? "text-[10px] text-danger" : "text-[10px] text-text-muted"}>
-                      {item.status === "error" ? formatError(item.error ?? "") : t(`settings.sshHosts.attachmentDialog.status.${item.status}` as const)}
-                    </span>
-                    {item.remotePath && <span className="max-w-[38%] truncate text-[10px] text-text-muted" title={item.remotePath}>{item.remotePath}</span>}
-                    {item.status === "queued" && <button type="button" className="ui-icon-button h-7 w-7 text-text-muted" aria-label={t("settings.sshHosts.attachmentDialog.removeFile")} title={t("settings.sshHosts.attachmentDialog.removeFile")} onClick={() => removeQueueItem(item.id)}><Trash2 className="h-3.5 w-3.5" /></button>}
+                {visibleQueue.map((item) => (
+                  <div key={item.id} className="border-b border-border/60 px-2 py-2 last:border-b-0">
+                    <div className="flex items-center gap-2">
+                      {statusIcon(item.status)}
+                      <button type="button" className="min-w-0 flex-1 truncate text-left text-xs text-text-primary hover:text-primary" onClick={() => setExpandedTransferId((current) => current === item.id ? null : item.id)} aria-label={t("settings.sshHosts.attachmentDialog.details")}>{item.name}</button>
+                    <div className="min-w-[92px] text-right">
+                      <span className={item.status === "error" || item.status === "interrupted" ? "text-[10px] text-danger" : "text-[10px] text-text-muted"}>
+                        {(item.status === "error" || item.status === "interrupted") && item.error && item.error !== "ssh_sftp_upload_cancelled" ? formatError(item.error) : `${t(`settings.sshHosts.attachmentDialog.status.${item.status}` as const)}${item.status === "uploading" || item.status === "downloading" ? ` ${Math.round(item.progress ?? 0)}%` : ""}`}
+                      </span>
+                      {(item.status === "uploading" || item.status === "downloading") && <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-high" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(item.progress ?? 0)}><div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${item.progress === undefined ? 28 : Math.max(0, Math.min(100, item.progress))}%`, minWidth: "8px" }} /></div>}
+                    </div>
+                    {(item.remotePath || item.targetRootPath) && <span className="max-w-[38%] truncate text-[10px] text-text-muted" title={item.remotePath || item.targetRootPath}>{item.remotePath || item.targetRootPath}</span>}
+                    {item.status === "uploading" && <>
+                      <button type="button" className="ui-icon-button h-7 w-7 text-text-muted" aria-label={t("settings.sshHosts.attachmentDialog.pauseUpload")} title={t("settings.sshHosts.attachmentDialog.pauseUpload")} onClick={() => void pauseUpload(item)}><Pause className="h-3.5 w-3.5" /></button>
+                      <button type="button" className="ui-icon-button h-7 w-7 text-danger" aria-label={t("settings.sshHosts.attachmentDialog.cancelUpload")} title={t("settings.sshHosts.attachmentDialog.cancelUpload")} onClick={() => void cancelUpload(item)}><X className="h-3.5 w-3.5" /></button>
+                    </>}
+                    {item.status === "paused" && <button type="button" className="ui-icon-button h-7 w-7 text-primary" aria-label={t("settings.sshHosts.attachmentDialog.resumeUpload")} title={t("settings.sshHosts.attachmentDialog.resumeUpload")} onClick={() => void retryTransfer(item)}><Play className="h-3.5 w-3.5" /></button>}
+                    {(item.status === "interrupted" || item.status === "error") && <button type="button" className="ui-icon-button h-7 w-7 text-primary" aria-label={t("settings.sshHosts.attachmentDialog.retry")} title={t("settings.sshHosts.attachmentDialog.retry")} onClick={() => retryTransfer(item)}><RefreshCw className="h-3.5 w-3.5" /></button>}
+                      {item.status !== "uploading" && item.status !== "downloading" && <button type="button" className="ui-icon-button h-7 w-7 text-text-muted" aria-label={t("settings.sshHosts.attachmentDialog.removeFile")} title={t("settings.sshHosts.attachmentDialog.removeFile")} onClick={() => removeQueueItem(item.id)}><Trash2 className="h-3.5 w-3.5" /></button>}
+                    </div>
+                    {expandedTransferId === item.id && <div className="mt-2 grid gap-1 rounded-md bg-surface-high px-2 py-2 text-[10px] text-text-muted">
+                      <div><span className="font-semibold text-text-secondary">{t("settings.sshHosts.attachmentDialog.sourcePath")}：</span>{item.path || "—"}</div>
+                      <div><span className="font-semibold text-text-secondary">{t("settings.sshHosts.attachmentDialog.remoteTarget")}：</span>{item.remotePath || item.targetRootPath || "—"}</div>
+                      <div><span className="font-semibold text-text-secondary">{t("settings.sshHosts.attachmentDialog.transferred")}：</span>{item.bytesDone !== undefined ? `${formatBytes(item.bytesDone)} / ${item.bytesTotal ? formatBytes(item.bytesTotal) : "—"}` : "—"}</div>
+                      {item.speedBytesPerSec !== undefined && <div><span className="font-semibold text-text-secondary">{t("settings.sshHosts.attachmentDialog.speed")}：</span>{formatBytes(item.speedBytesPerSec)}/s</div>}
+                      {item.etaSec !== undefined && <div><span className="font-semibold text-text-secondary">{t("settings.sshHosts.attachmentDialog.eta")}：</span>{formatDuration(item.etaSec)}</div>}
+                    </div>}
                   </div>
                 ))}
               </div>
@@ -925,14 +1257,14 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
                     goToRemotePickerPath();
                   }
                 }}
-                disabled={remotePickerLoading || transferring}
+                disabled={remotePickerLoading}
               />
               <button
                 type="button"
                 className="ui-icon-button h-8 w-8"
                 aria-label={t("settings.sshHosts.attachmentDialog.goToRemotePath")}
                 title={t("settings.sshHosts.attachmentDialog.goToRemotePath")}
-                disabled={!remotePickerPathDraft.trim() || remotePickerLoading || transferring}
+                disabled={!remotePickerPathDraft.trim() || remotePickerLoading}
                 onClick={goToRemotePickerPath}
               >
                 <ArrowRight className="h-4 w-4" />
@@ -942,7 +1274,7 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
                 className="ui-icon-button h-8 w-8"
                 aria-label={t("settings.sshHosts.attachmentDialog.parentDirectory")}
                 title={t("settings.sshHosts.attachmentDialog.parentDirectory")}
-                disabled={!remotePickerPath || remotePickerPath === "/" || remotePickerPath === "~" || remotePickerLoading || transferring}
+                disabled={!remotePickerPath || remotePickerPath === "/" || remotePickerPath === "~" || remotePickerLoading}
                 onClick={goToRemotePickerParent}
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -952,7 +1284,7 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
                 className="ui-icon-button h-8 w-8"
                 aria-label={t("settings.sshHosts.attachmentDialog.refreshRemote")}
                 title={t("settings.sshHosts.attachmentDialog.refreshRemote")}
-                disabled={!remotePickerPath || remotePickerLoading || transferring}
+                disabled={!remotePickerPath || remotePickerLoading}
                 onClick={() => setRemotePickerRefreshToken((current) => current + 1)}
               >
                 <RefreshCw className={`h-4 w-4 ${remotePickerLoading ? "animate-spin" : ""}`} />
@@ -973,7 +1305,7 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
                       key={entry.path}
                       type="button"
                       className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-surface-high"
-                      disabled={transferring}
+                      disabled={localLoading}
                       aria-label={t("settings.sshHosts.attachmentDialog.openRemoteDirectory", { name: entry.name })}
                       onClick={() => openRemotePickerDirectory(entry)}
                     >
@@ -995,7 +1327,7 @@ export function SshHostAttachmentDialog({ open, host, onOpenChange }: Props) {
           </div>
           <DialogFooter className="shrink-0 border-t border-border px-5 py-3">
             <Button type="button" variant="outline" onClick={() => setRemoteDirectoryPickerOpen(false)}>{t("common.cancel")}</Button>
-            <Button type="button" onClick={selectRemotePickerPath} disabled={!remotePickerPath || remotePickerLoading || Boolean(remotePickerError) || transferring}>
+            <Button type="button" onClick={selectRemotePickerPath} disabled={!remotePickerPath || remotePickerLoading || Boolean(remotePickerError)}>
               <FolderOpen className="h-4 w-4" />
               {t("settings.sshHosts.attachmentDialog.selectRemoteDirectory")}
             </Button>

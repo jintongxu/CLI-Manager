@@ -1,28 +1,28 @@
 mod model;
 use model::{
-    agent_from_launcher_program, cc_connect_agent_from_cli_tool, parse_registered_command, CcConnectLogBuffer,
-    DetectedBinary, DetectionCache, ManagedProcess, ProcessState, ResolvedAgentLauncher,
-    SharedLogWriter, WeixinAuthorizationProcess, WeixinAuthorizationState, CC_CONNECT_PLATFORMS,
-    MAX_REGISTERED_LAUNCHER_ARGS,
+    agent_from_launcher_program, cc_connect_agent_from_cli_tool, parse_registered_command,
+    CcConnectLogBuffer, DetectedBinary, DetectionCache, ManagedProcess, ProcessState,
+    ResolvedAgentLauncher, SharedLogWriter, WeixinAuthorizationProcess, WeixinAuthorizationState,
+    CC_CONNECT_PLATFORMS, MAX_REGISTERED_LAUNCHER_ARGS,
 };
 pub use model::{
-    CcConnectAgent, CcConnectExecutableStatus, CcConnectLanguage,
-    CcConnectLogPage, CcConnectPlatform, CcConnectPlatformProfile, CcConnectPlatformStatus,
-    CcConnectProfile, CcConnectSaveProfileRequest, CcConnectStatus,
-    CcConnectWeixinAuthorizationPhase, CcConnectWeixinAuthorizationStatus,
-    CcConnectWeixinAuthorizeRequest,
+    CcConnectAgent, CcConnectExecutableStatus, CcConnectLanguage, CcConnectLogPage,
+    CcConnectPlatform, CcConnectPlatformProfile, CcConnectPlatformStatus, CcConnectProfile,
+    CcConnectSaveProfileRequest, CcConnectStatus, CcConnectWeixinAuthorizationPhase,
+    CcConnectWeixinAuthorizationStatus, CcConnectWeixinAuthorizeRequest,
 };
 mod paths;
 use paths::{
     cleanup_weixin_authorization_files, config_path, control_work_dir, data_dir, log_path,
-    now_millis, path_string, profile_path, remote_manager_dir, remove_file_if_exists, weixin_account_dir, weixin_account_dir_at,
-    weixin_authorization_dir, weixin_authorization_error_detail, weixin_authorization_paths,
+    now_millis, path_string, profile_path, remote_manager_dir, remove_file_if_exists,
+    weixin_account_dir, weixin_account_dir_at, weixin_authorization_dir,
+    weixin_authorization_error_detail, weixin_authorization_paths,
     weixin_authorization_qr_data_url,
 };
 mod executable;
 use executable::{
-    detect_binary_uncached, output_text, probe_codex_app_server,
-    sha256_file, trusted_binary_version,
+    detect_binary_uncached, output_text, probe_codex_app_server, sha256_file,
+    trusted_binary_version,
 };
 mod config_types;
 use config_types::{
@@ -34,13 +34,13 @@ use config_types::{
 };
 mod platform_config;
 use platform_config::{
-    build_managed_config_with_agent_launch, build_weixin_authorization_config, merge_weixin_allow_from,
-    parse_weixin_authorization_result, platform_type,
+    build_managed_config_with_agent_launch, build_weixin_authorization_config,
+    merge_weixin_allow_from, parse_weixin_authorization_result, platform_type,
 };
 mod project_commands;
 use project_commands::{
-    agent_display_name, build_remote_project_commands, is_switch_identifier, project_list_path, project_switch_script_path,
-    project_switch_token, remote_switch_request_from_args,
+    agent_display_name, build_remote_project_commands, is_switch_identifier, project_list_path,
+    project_switch_script_path, project_switch_token, remote_switch_request_from_args,
     render_project_list, render_project_switch_script, single_line, switch_result_path,
 };
 mod file_io;
@@ -56,17 +56,18 @@ use file_io::{
 use file_io::{copy_file_atomically_if_changed, replace_file};
 mod profile;
 use profile::{
-    apply_control_profile, enabled_platforms,
-    hydrate_profile_platforms, load_profile, normalize_allow_from, normalize_profile, normalize_proxy_url, persist_profile, platform_profile,
-    prepare_weixin_authorization_platforms, profile_issue_codes, profile_platforms, set_platform_allow_from,
+    apply_control_profile, enabled_platforms, hydrate_profile_platforms, load_profile,
+    normalize_allow_from, normalize_profile, normalize_proxy_url, persist_profile,
+    platform_profile, prepare_weixin_authorization_platforms, profile_issue_codes,
+    profile_platforms, set_platform_allow_from,
 };
 mod launcher;
 #[cfg(all(test, unix))]
 use launcher::resolve_codex_launcher_from_path;
+pub(crate) use launcher::resolve_local_agent_program;
 use launcher::{
     ensure_local_agent_available, managed_agent_command, managed_project_environment, user_home_dir,
 };
-pub(crate) use launcher::resolve_local_agent_program;
 mod codex_launch;
 use codex_launch::{
     apply_remote_codex_launch_environment, prepare_remote_codex_launch,
@@ -75,18 +76,13 @@ use codex_launch::{
 #[cfg(not(target_os = "windows"))]
 use codex_launch::{codex_profile_wrapper_payload, write_codex_profile_wrapper};
 mod project_catalog;
-use project_catalog::{
-    load_provider_catalog, load_registered_projects, project_provider,
-};
+use project_catalog::{load_provider_catalog, load_registered_projects, project_provider};
 mod ssh_launch;
-use ssh_launch::{
-    load_ssh_codex_launch,
-    registered_project_by_token,
-};
+use ssh_launch::{load_ssh_codex_launch, registered_project_by_token};
 mod credentials;
 use credentials::{
-    credential_environment_for_profile, credentials_ready,
-    credentials_ready_for_profile, platform_statuses, save_request_credentials,
+    credential_environment_for_profile, credentials_ready, credentials_ready_for_profile,
+    platform_statuses, save_request_credentials,
 };
 #[cfg(target_os = "windows")]
 use credentials::{delete_credential, get_credential, set_credential};
@@ -94,15 +90,15 @@ use credentials::{delete_credential, get_credential, set_credential};
 use credentials::{delete_credential, get_credential, set_credential};
 mod process_environment;
 use process_environment::{
-    apply_git_safe_directory_environment, apply_proxy_environment, git_safe_directory_environment_for_value, resolve_proxy_url_if_enabled, ProxySource, ResolvedProxy,
+    apply_git_safe_directory_environment, apply_proxy_environment,
+    git_safe_directory_environment_for_value, resolve_proxy_url_if_enabled, ProxySource,
+    ResolvedProxy,
 };
 mod rollback;
 use rollback::{CredentialSnapshot, FileSnapshot};
 mod logging;
 pub(crate) use logging::redact_log_line;
-use logging::{
-    format_and_check_config_syntax, push_log_line, spawn_log_reader,
-};
+use logging::{format_and_check_config_syntax, push_log_line, spawn_log_reader};
 
 #[cfg(not(target_os = "windows"))]
 use crate::codex_app_server_proxy::HELPER_SUBCOMMAND as CODEX_PROXY_SUBCOMMAND;

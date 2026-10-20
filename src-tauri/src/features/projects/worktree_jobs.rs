@@ -47,7 +47,9 @@ pub struct WorktreeDeleteQueue {
 
 impl WorktreeDeleteQueue {
     pub fn load() -> Result<Self, String> {
-        Self::load_from_path(crate::app_paths::cli_manager_data_dir()?.join("worktree-delete-jobs.json"))
+        Self::load_from_path(
+            crate::app_paths::cli_manager_data_dir()?.join("worktree-delete-jobs.json"),
+        )
     }
 
     fn load_from_path(path: PathBuf) -> Result<Self, String> {
@@ -183,7 +185,12 @@ impl WorktreeDeleteQueue {
         if let Some(value) = phase {
             if !matches!(
                 value.as_str(),
-                "queued" | "closingSessions" | "gitCompleted" | "retryWait" | "completed" | "needsReconfirmation"
+                "queued"
+                    | "closingSessions"
+                    | "gitCompleted"
+                    | "retryWait"
+                    | "completed"
+                    | "needsReconfirmation"
             ) {
                 return Err("worktree_job_phase_invalid".into());
             }
@@ -271,25 +278,57 @@ mod tests {
             WorktreeDeleteMode::Discard,
             WorktreeDeleteMode::Force,
         ] {
-            let path = std::env::temp_dir().join(format!(
-                "cli-manager-worktree-job-{}.json",
-                Uuid::new_v4()
-            ));
+            let path = std::env::temp_dir()
+                .join(format!("cli-manager-worktree-job-{}.json", Uuid::new_v4()));
             let queue = WorktreeDeleteQueue::load_from_path(path.clone()).expect("queue");
-            let job = queue.enqueue(request.clone(), mode.clone(), true).expect("enqueue");
-            queue.update(&job.id, Some("queued".into()), Some("running".into()), Some("closingSessions".into()), None).expect("start");
+            let job = queue
+                .enqueue(request.clone(), mode.clone(), true)
+                .expect("enqueue");
+            queue
+                .update(
+                    &job.id,
+                    Some("queued".into()),
+                    Some("running".into()),
+                    Some("closingSessions".into()),
+                    None,
+                )
+                .expect("start");
             drop(queue);
 
             let reloaded = WorktreeDeleteQueue::load_from_path(path.clone()).expect("reload");
             let persisted = reloaded.list().expect("list").pop().expect("persisted job");
-            let git_completed = reloaded.update(&job.id, Some("running".into()), Some("running".into()), Some("gitCompleted".into()), None).expect("git complete");
+            let git_completed = reloaded
+                .update(
+                    &job.id,
+                    Some("running".into()),
+                    Some("running".into()),
+                    Some("gitCompleted".into()),
+                    None,
+                )
+                .expect("git complete");
             assert_eq!(git_completed.phase, "gitCompleted");
             assert_eq!(persisted.mode, mode);
             assert_eq!(persisted.state, "running");
-            let recovered = reloaded.update(&job.id, Some("running".into()), Some("needsReconfirmation".into()), Some("needsReconfirmation".into()), Some("restart_requires_confirmation".into())).expect("recover");
+            let recovered = reloaded
+                .update(
+                    &job.id,
+                    Some("running".into()),
+                    Some("needsReconfirmation".into()),
+                    Some("needsReconfirmation".into()),
+                    Some("restart_requires_confirmation".into()),
+                )
+                .expect("recover");
             assert_eq!(recovered.state, "needsReconfirmation");
             assert_eq!(recovered.phase, "needsReconfirmation");
-            assert!(reloaded.update(&job.id, Some("needsReconfirmation".into()), Some("running".into()), Some("closingSessions".into()), None).is_err());
+            assert!(reloaded
+                .update(
+                    &job.id,
+                    Some("needsReconfirmation".into()),
+                    Some("running".into()),
+                    Some("closingSessions".into()),
+                    None
+                )
+                .is_err());
             let _ = std::fs::remove_file(path);
         }
     }

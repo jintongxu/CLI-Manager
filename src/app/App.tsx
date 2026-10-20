@@ -70,7 +70,6 @@ import {
 } from "../features/terminal/lib/terminalStatus";
 import type { TerminalScope } from "../shared/types/index";
 import "../App.css";
-
 const appStartAt =
   typeof performance !== "undefined" && typeof performance.now === "function"
     ? performance.now()
@@ -1924,6 +1923,7 @@ function App() {
                 terminalScope={terminalScope}
                 onOpenProviderSettings={() => handleOpenSettings("native-providers")}
                 onOpenHistorySettings={() => handleOpenSettings("history-sources")}
+                onOpenSshSettings={() => handleOpenSettings("ssh-hosts")}
               />
             </main>
           </div>

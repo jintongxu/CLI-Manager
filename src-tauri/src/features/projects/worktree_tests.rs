@@ -6,8 +6,8 @@ use super::{
     path_to_git_arg, remove_registered_stale_worktree_dir, remove_worktree_path_with_retry,
     resolve_worktree_target_path, seed_trellis_developer_identity, validate_plain_branch_name,
     validate_task_name, validate_worktree_branch, worktree_root_identity, WorktreeRegistration,
-    WORKTREE_REMOVE_RETRY_ATTEMPTS, WORKTREE_REMOVE_RETRY_DELAY_MS,
-    FORCE_MERGE_STASH_MESSAGE_PREFIX,
+    FORCE_MERGE_STASH_MESSAGE_PREFIX, WORKTREE_REMOVE_RETRY_ATTEMPTS,
+    WORKTREE_REMOVE_RETRY_DELAY_MS,
 };
 use std::fs;
 use std::io;

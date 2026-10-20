@@ -1,4 +1,4 @@
-import type { Project, TerminalSession, WorktreeRecord } from "../../../shared/types/index";
+import type { Project, SshHost, TerminalSession, WorktreeRecord } from "../../../shared/types/index";
 import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
 
 export function normalizeProjectPath(path: string): string {
@@ -162,15 +162,55 @@ export function resolveProjectForSession(
   return findProjectByPath(projects, session.cwd);
 }
 
+export function createSshHostFileProject(
+  session: Pick<TerminalSession, "sshHostId" | "remotePath">,
+  host: SshHost,
+): Project {
+  const remotePath = session.remotePath?.trim() || "/";
+  const hostName = host.name.trim() || host.config_alias.trim() || host.host.trim() || host.id;
+  return {
+    id: `ssh-host:${host.id}`,
+    name: hostName,
+    path: "",
+    path_mode: "custom",
+    group_name: "",
+    group_id: null,
+    sort_order: 0,
+    cli_tool: "",
+    cli_args: "",
+    startup_cmd: "",
+    env_vars: "",
+    shell: "",
+    provider_overrides: "{}",
+    worktree_strategy: "disabled",
+    worktree_root: "",
+    worktree_deps_prompt_enabled: 0,
+    worktree_label_high_water: 0,
+    environment_type: "ssh",
+    ssh_host_id: host.id,
+    remote_path: remotePath,
+    cli_config_root: "",
+    icon: "",
+    color: "",
+    created_at: "",
+    updated_at: "",
+  };
+}
+
 export function resolveProjectForSessionFileContext(
   session: TerminalSession | null,
   sessions: TerminalSession[],
   projects: Project[],
   projectById: Map<string, Project>,
-  worktrees: WorktreeRecord[]
+  worktrees: WorktreeRecord[],
+  sshHosts: SshHost[] = [],
 ): Project | null {
   const project = resolveProjectForSession(session, sessions, projects, projectById);
-  if (!project) return null;
-  const worktree = findWorktreeForSession(session, sessions, worktrees);
-  return worktree ? projectWithWorktreePath(project, worktree) : project;
+  if (project) {
+    const worktree = findWorktreeForSession(session, sessions, worktrees);
+    return worktree ? projectWithWorktreePath(project, worktree) : project;
+  }
+  if (!session?.sshHostId?.trim() || session.environmentType !== "ssh") return null;
+  const host = sshHosts.find((candidate) => candidate.id === session.sshHostId);
+  return host ? createSshHostFileProject(session, host) : null;
 }

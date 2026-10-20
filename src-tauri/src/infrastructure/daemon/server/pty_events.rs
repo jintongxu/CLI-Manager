@@ -41,8 +41,7 @@ impl DaemonPtyEventSink {
                         let mut pending = data;
                         // 小帧直通：首帧够小说明是命令回显/结果短突发，只给 1ms
                         // 粘连窗口粘住同 read 的 prompt 尾巴，不等满 5ms 合批。
-                        let deadline =
-                            Instant::now() + output_passthrough_window(pending.len());
+                        let deadline = Instant::now() + output_passthrough_window(pending.len());
                         let mut final_status = None;
                         while pending.len() < OUTPUT_BUFFERING_MAX_BYTES {
                             let now = Instant::now();

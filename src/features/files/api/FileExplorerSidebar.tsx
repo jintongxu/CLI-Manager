@@ -11,6 +11,7 @@ import {
 } from "react";
 import { getMaterialFileIcon, getMaterialFolderIcon } from "@baybreezy/file-extension-icon";
 import { invoke } from "@tauri-apps/api/core";
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
 import { copyAiText } from "./aiClipboard";
@@ -34,6 +35,7 @@ import {
 } from "../lib/fileExplorerIgnore";
 import type { GitFileChange, Project, ProjectFileContentMatch, ProjectFileEntry, ProjectFileSearchMode, SshHost } from "../../../shared/types/index";
 import { isDefaultCollapsedDirectoryName, useFileExplorerStore, type FileClipboard } from "./fileExplorerStore";
+import { sshRemotePutFile } from "../../remote/api/sshRemoteFiles";
 import { fileActionEntries, fileOperationRootKey, isFileActionInput, normalizeFileOperationEntries, type FileBatchResult, type FileOperationEntry } from "../lib/fileExplorerOperations";
 import { isSameProjectFileContext } from "../../terminal/api/terminalProject";
 import {
@@ -49,7 +51,7 @@ import { Button } from "../../../shared/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from "../../../shared/ui/dialog";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "../../../shared/ui/context-menu";
 import { Portal } from "../../../shared/ui/Portal";
-import { ChevronRight, Copy, EyeOff, File, FileCode, Folder, FolderOpen, FolderPlus, Pencil, RefreshCw, Search, Trash2, Upload, X } from "../../../shared/ui/icons";
+import { ChevronRight, Copy, Eye, EyeOff, File, FileCode, Folder, FolderOpen, FolderPlus, Pencil, RefreshCw, Search, Trash2, Upload, X } from "../../../shared/ui/icons";
 import { TERM } from "../../stats/api/termStatsUi";
 import { TerminalPanelHeader } from "../../terminal/api/TerminalPanelHeader";
 import { PathCopyMenu } from "./PathCopyMenu";
@@ -212,10 +214,10 @@ function isEntryIgnored(entry: ProjectFileEntry, state: FileIgnoreState): boolea
 }
 
 /** 过滤 VCS 元数据条目；绝大多数层级不含它们，此时返回原数组引用避免无谓的新数组。 */
-function visibleTreeEntries(entries: ProjectFileEntry[]): ProjectFileEntry[] {
-  return entries.some(isAlwaysHiddenEntry)
-    ? entries.filter((entry) => !isAlwaysHiddenEntry(entry))
-    : entries;
+function visibleTreeEntries(entries: ProjectFileEntry[], hideHiddenDirectories = false): ProjectFileEntry[] {
+  const filtered = entries.filter((entry) => !isAlwaysHiddenEntry(entry)
+    && !(hideHiddenDirectories && entry.name.startsWith(".")));
+  return filtered.length === entries.length ? entries : filtered;
 }
 
 function parentPath(path: string): string {
@@ -236,6 +238,13 @@ function fileOperationErrorMessage(error: unknown, t: Translate): string {
     ["file_operation_context_changed", "files.batch.error.context"],
     ["file_operation_busy", "files.batch.error.busy"],
     ["remote_project_read_only", "files.readOnly"],
+    ["remote_project_create_unsupported", "files.readOnly"],
+    ["remote_project_rename_unsupported", "files.readOnly"],
+    ["remote_file_context_missing", "files.readOnly"],
+    ["remote_project_paste_unsupported", "files.readOnly"],
+    ["target_exists", "files.batch.error.duplicate"],
+    ["remote_file_kind_invalid", "files.readOnly"],
+    ["ssh_remote_file_too_large", "files.error.tooLarge"],
     ["path_is_symlink", "files.batch.error.link"],
     ["batch_duplicate_target", "files.batch.error.duplicate"],
     ["target_overlaps_selection", "files.batch.error.overlap"],
@@ -350,7 +359,14 @@ function FileSelectionMenuItems({ entry, onInput, onConfirm }: {
   const selected = useFileExplorerStore((state) => state.selectedEntries);
   const busy = useFileExplorerStore((state) => state.mutationBusy);
   const entries = fileActionEntries(selected, entry);
-  if (!project || project.environment_type === "ssh") return null;
+  if (!project) return null;
+  if (project.environment_type === "ssh") {
+    return (
+      <ContextMenuItem danger disabled={busy} onSelect={() => onConfirm({ kind: "delete", entries, project })}>
+        <Trash2 size={13} /> {t("files.batch.delete", { count: entries.length })}
+      </ContextMenuItem>
+    );
+  }
   const copy = (mode: "copy" | "move") => copyFileEntries(mode, entries, t);
   return <>
     <ContextMenuItem disabled={busy || entries.length !== 1} onSelect={() => onInput({ kind: "rename", path: entry.path, currentName: entry.name })}>
@@ -610,16 +626,13 @@ function FileNode({
         </ContextMenuTrigger>
         <ContextMenuContent className="file-explorer-menu" portalContainer={menuPortalContainer}>
           <LiveServerFileMenuItem project={project} entry={displayEntry} />
-          {!readOnly && isDir && (
+          {isDir && (
             <>
               <ContextMenuItem disabled={busy} onSelect={() => onInput({ kind: "create-file", parentPath: displayEntry.path })}>
                 <File size={13} /> {t("files.menu.newFile")}
               </ContextMenuItem>
               <ContextMenuItem disabled={busy} onSelect={() => onInput({ kind: "create-dir", parentPath: displayEntry.path })}>
                 <FolderPlus size={13} /> {t("files.menu.newFolder")}
-              </ContextMenuItem>
-              <ContextMenuItem disabled={busy} onSelect={() => onPaste(displayEntry.path)}>
-                <Copy size={13} /> {t("files.menu.paste")}
               </ContextMenuItem>
               {isManuallyIgnored ? (
                 <ContextMenuItem onSelect={() => ignoreState.unignorePath(entry.path)}>
@@ -636,13 +649,16 @@ function FileNode({
               <ContextMenuSeparator />
             </>
           )}
+          {isDir && <ContextMenuItem disabled={busy} onSelect={() => onPaste(displayEntry.path)}>
+            <Copy size={13} /> {t("files.menu.paste")}
+          </ContextMenuItem>}
           {gitChange && (
             <ContextMenuItem onSelect={() => onOpenDiff(gitChange)}>
               <FileCode size={13} /> {t("files.menu.openDiff")}
             </ContextMenuItem>
           )}
           <FileSelectionMenuItems entry={displayEntry} onInput={onInput} onConfirm={onConfirm} />
-          {!readOnly && !isDir && <ContextMenuItem disabled={busy} onSelect={() => onPaste(parentPath(displayEntry.path))}>
+          {!isDir && <ContextMenuItem disabled={busy} onSelect={() => onPaste(parentPath(displayEntry.path))}>
             <Copy size={13} /> {t("files.menu.paste")}
           </ContextMenuItem>}
           {project && (
@@ -693,6 +709,7 @@ function FileTreeRows({
   menuPortalContainer,
   inheritedIgnored = false,
   readOnly = false,
+  hideHiddenDirectories = false,
 }: {
   entries: ProjectFileEntry[];
   depth: number;
@@ -721,10 +738,11 @@ function FileTreeRows({
   /** Issue #227：父级已判定为忽略时，整棵子树继承淡化。 */
   inheritedIgnored?: boolean;
   readOnly?: boolean;
+  hideHiddenDirectories?: boolean;
 }) {
   return (
     <div>
-      {visibleTreeEntries(entries).map((entry) => (
+      {visibleTreeEntries(entries, hideHiddenDirectories).map((entry) => (
         <FileNode
           key={entry.path}
           entry={entry}
@@ -768,6 +786,8 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
   const fetchSshHosts = useSshHostStore((s) => s.fetchHosts);
   const [attachmentHost, setAttachmentHost] = useState<SshHost | null>(null);
   const [openingAttachment, setOpeningAttachment] = useState(false);
+  const remoteFileContext = useFileExplorerStore((s) => s.remoteFileContext);
+  const [uploadingRemoteFile, setUploadingRemoteFile] = useState(false);
   const tree = useFileExplorerStore((s) => s.tree);
   const loading = useFileExplorerStore((s) => s.loading);
   const selectedTreePath = useFileExplorerStore((s) => s.selectedTreePath);
@@ -811,8 +831,26 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
     [project?.path]
   );
   const [searchControlsVisible, setSearchControlsVisible] = useState(false);
+  const [showHiddenDirectories, setShowHiddenDirectories] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const selectionProjectKeyRef = useRef(`${project?.id}:${project?.path}:${project?.remote_path}:${project?.ssh_host_id}`);
+
+  const uploadRemoteFile = useCallback(async () => {
+    if (!readOnly || !remoteFileContext || uploadingRemoteFile) return;
+    const selected = await openFileDialog({ multiple: false, directory: false, title: t("files.uploadRemote") });
+    const localPath = Array.isArray(selected) ? selected[0] : selected;
+    if (!localPath) return;
+    setUploadingRemoteFile(true);
+    try {
+      await sshRemotePutFile(remoteFileContext, "", localPath);
+      await refresh();
+      toast.success(t("files.uploadedRemote"));
+    } catch (error) {
+      toast.error(t("files.uploadRemoteFailed"), { description: String(error) });
+    } finally {
+      setUploadingRemoteFile(false);
+    }
+  }, [readOnly, refresh, remoteFileContext, t, uploadingRemoteFile]);
 
   const openSftp = useCallback(async () => {
     const hostId = project?.environment_type === "ssh" ? project.ssh_host_id?.trim() ?? "" : "";
@@ -835,6 +873,7 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
 
   useEffect(() => {
     setSearchControlsVisible(false);
+    setShowHiddenDirectories(false);
     setProjectGitIgnoreMatcher(null);
     setGitIgnoreLoadState("idle");
   }, [project?.id]);
@@ -1182,7 +1221,7 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
   const handleRootKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (isFileActionInput(event.target)) return;
     if (event.key === "Escape") { clearSelection(); return; }
-    if (readOnly || mutationBusy) return;
+    if (mutationBusy) return;
     if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== "v") return;
     event.preventDefault(); event.stopPropagation();
     void pasteIntoTarget("");
@@ -1540,6 +1579,7 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
         ignoreState={ignoreState}
         menuPortalContainer={menuPortalContainer}
         readOnly={readOnly}
+        hideHiddenDirectories={readOnly && !showHiddenDirectories}
       />
     ) : (
       <div className="px-3 py-8 text-center text-xs text-text-muted">{t("files.empty")}</div>
@@ -1584,6 +1624,30 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
       >
         {searchControlsVisible ? <EyeOff size={13} /> : <Search size={13} />}
       </button>
+      {readOnly && (
+        <button
+          type="button"
+          className="ui-file-tooltip ui-icon-action"
+          data-tooltip={showHiddenDirectories ? t("files.hideHiddenDirectories") : t("files.showHiddenDirectories")}
+          aria-label={showHiddenDirectories ? t("files.hideHiddenDirectories") : t("files.showHiddenDirectories")}
+          aria-pressed={showHiddenDirectories}
+          onClick={() => setShowHiddenDirectories((current) => !current)}
+        >
+          {showHiddenDirectories ? <Eye size={13} /> : <EyeOff size={13} />}
+        </button>
+      )}
+      {readOnly && (
+        <button
+          type="button"
+          className="ui-file-tooltip ui-icon-action"
+          data-tooltip={t("files.uploadRemote")}
+          aria-label={t("files.uploadRemote")}
+          disabled={!remoteFileContext || uploadingRemoteFile}
+          onClick={() => void uploadRemoteFile()}
+        >
+          <Upload size={13} />
+        </button>
+      )}
       {readOnly && (
         <button
           type="button"
@@ -1718,15 +1782,15 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent className="file-explorer-menu" portalContainer={menuPortalContainer}>
-          {!readOnly && <ContextMenuItem disabled={mutationBusy} onSelect={() => openInput({ kind: "create-file", parentPath: "" })}>
+          <ContextMenuItem disabled={mutationBusy} onSelect={() => openInput({ kind: "create-file", parentPath: "" })}>
             <File size={13} /> {t("files.menu.newFile")}
-          </ContextMenuItem>}
-          {!readOnly && <ContextMenuItem disabled={mutationBusy} onSelect={() => openInput({ kind: "create-dir", parentPath: "" })}>
+          </ContextMenuItem>
+          <ContextMenuItem disabled={mutationBusy} onSelect={() => openInput({ kind: "create-dir", parentPath: "" })}>
             <FolderPlus size={13} /> {t("files.menu.newFolder")}
-          </ContextMenuItem>}
-          {!readOnly && <ContextMenuItem disabled={mutationBusy} onSelect={() => void pasteIntoTarget("")}>
+          </ContextMenuItem>
+          <ContextMenuItem disabled={mutationBusy} onSelect={() => void pasteIntoTarget("")}>
             <Copy size={13} /> {t("files.menu.paste")}
-          </ContextMenuItem>}
+          </ContextMenuItem>
           {!readOnly && <ContextMenuSeparator />}
           {!readOnly && <ContextMenuItem onSelect={openProjectRootFolder}>
             <FolderOpen size={13} /> {t("files.menu.openContainingFolder")}
