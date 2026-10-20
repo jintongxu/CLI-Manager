@@ -49,6 +49,7 @@ import { getTerminalSidePanelSkinStyle } from "../../stats/api/termStatsUi";
 import { findWorktreeForSession, isSameProjectFileContext, projectWithWorktreeProviderOverrides, resolveProjectForSession } from "../api/terminalProject";
 import { ALL_TERMINALS_SCOPE, collectProjectIdsForGroup, sessionMatchesTerminalScope } from "../api/terminalScope";
 import { useTerminalFileNavigation } from "./useTerminalFileNavigation";
+import { useTerminalWorkspaceMode } from "./useTerminalWorkspaceMode";
 import { useTerminalSshHosts } from "./useTerminalSshHosts";
 import { useTerminalFilePanelProject } from "./useTerminalFilePanelProject";
 import { useTerminalSidePanelTabChange } from "./useTerminalSidePanelTabChange";
@@ -275,13 +276,27 @@ export function useTerminalTabsController({
   const historyOpen = useHistoryStore((s) => s.isOpen);
   const openHistory = useHistoryStore((s) => s.openHistory);
   const closeHistory = useHistoryStore((s) => s.closeHistory);
+  const {
+    activeWorkspaceTab,
+    setActiveWorkspaceTab,
+    editorActive,
+    hasEditorWorkspace,
+    switchToTerminalWorkspace,
+    switchToEditorWorkspace,
+  } = useTerminalWorkspaceMode({
+    activeSessionId,
+    sessions,
+    historyOpen,
+    closeHistory,
+    addCurrentWorkSession,
+    setActive,
+  });
   const focusGlobalSearchSeq = useHistoryStore((s) => s.focusGlobalSearchSeq);
   const gitWorkspaceOpen = useGitWorkspaceStore((s) => s.isOpen);
   const openGitWorkspace = useGitWorkspaceStore((s) => s.open);
   const closeGitWorkspace = useGitWorkspaceStore((s) => s.close);
   const [gitWorkspaceHeight, setGitWorkspaceHeight] = useState(420);
   const gitWorkspaceResizeCleanupRef = useRef<(() => void) | null>(null);
-  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<"terminal" | "history">("terminal");
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [splitPicker, setSplitPicker] = useState<SplitPickerState>(null);
   const [closeConfirm, setCloseConfirm] = useState<TerminalCloseConfirmState>(null);
@@ -551,9 +566,6 @@ export function useTerminalTabsController({
     if (nextTab) setSidePanelTab(nextTab);
     else setSidePanelOpen(false);
   }, [sidePanelMerged, sidePanelOpen, sidePanelTab, visibleSidePanelTabs]);
-  useEffect(() => {
-    if (!historyOpen && activeWorkspaceTab === "history") setActiveWorkspaceTab("terminal");
-  }, [activeWorkspaceTab, historyOpen]);
   useEffect(() => {
     if (!gitWorkspaceOpen) return;
     closeHistory();
@@ -1874,6 +1886,10 @@ export function useTerminalTabsController({
   return {
     fullscreen,
     historyActive,
+    editorActive,
+    hasEditorWorkspace,
+    switchToTerminalWorkspace,
+    switchToEditorWorkspace,
     terminalWellStyle,
     promptDialog,
     confirmDialog,

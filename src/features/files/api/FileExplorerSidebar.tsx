@@ -66,6 +66,10 @@ interface FileExplorerSidebarProps {
   mode?: "sidebar" | "panel";
   onClosePanel?: () => void;
   onBackToProjects?: () => void;
+  editorActive?: boolean;
+  hasEditorWorkspace?: boolean;
+  onSwitchToTerminalWorkspace?: () => void;
+  onSwitchToEditorWorkspace?: () => void;
 }
 
 type InputAction =
