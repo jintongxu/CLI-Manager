@@ -8,7 +8,9 @@ export function formatTerminalTabContext(
   labels: { unboundProject?: string; anonymousPi?: string } = {},
 ): string {
   const projectName = project?.name?.trim()
-    || (session.kind === "ephemeral-pi" ? labels.anonymousPi ?? labels.unboundProject ?? "Independent anonymous Pi" : labels.unboundProject ?? "Unbound project");
+    || (session.environmentType === "ssh" && session.title.trim() && session.title.trim() !== "Terminal"
+      ? session.title.trim()
+      : session.kind === "ephemeral-pi" ? labels.anonymousPi ?? labels.unboundProject ?? "Independent anonymous Pi" : labels.unboundProject ?? "Unbound project");
   const worktreeName = worktree?.status === "active"
     ? getWorktreeSidebarLabel(worktree) || "Worktree"
     : session.worktreeId ? "Worktree missing" : "Project root";

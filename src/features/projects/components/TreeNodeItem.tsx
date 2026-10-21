@@ -193,7 +193,6 @@ function TreeNodeItemImpl({
           data-invalid={worktree.status !== "active" ? "true" : "false"}
           style={{ paddingLeft, paddingRight: compact ? 8 : 10 }}
           onClick={(e) => { if (!isDragging) actions.onSelectWorktree(e, worktree); }}
-          onDoubleClick={() => { if (!isDragging) actions.onOpenWorktree(project, worktree); }}
           onContextMenu={(e) => actions.onContextMenuWorktree(e, project, worktree)}
         >
           <span className="ui-tree-leading-icon ui-worktree-tree-icon" title={worktree.branch}>
@@ -310,7 +309,7 @@ function TreeNodeItemImpl({
                 mark={appearance.emoji}
                 iconKey={appearance.iconKey}
                 cliTool={p.cli_tool}
-                fallback="terminal"
+                fallback="folder"
                 size={14}
               />
             </span>
@@ -354,30 +353,19 @@ function TreeNodeItemImpl({
           onMouseDown={(e) => {
             if (e.button === 2) e.preventDefault();
           }}
-          onClick={(e) => actions.onSelectProject(e, p)}
-          onDoubleClick={() => actions.onOpenProject(p)}
+          onClick={(e) => {
+            actions.onSelectProject(e, p);
+            if (
+              hasWorktrees &&
+              !forceExpanded &&
+              !(e.target as Element).closest("button, input, textarea, select, [contenteditable], [data-sidebar-terminals]")
+            ) {
+              actions.toggleCollapsed(worktreeCollapseKey);
+            }
+          }}
           onContextMenu={(e) => actions.onContextMenuProject(e, p)}
           {...listeners}
         >
-          {hasWorktrees && (
-            <button
-              type="button"
-              className="ui-tree-chevron inline-flex items-center justify-center"
-              aria-label={worktreesOpen ? t("sidebar.terminals.collapseChildren") : t("sidebar.terminals.expandChildren")}
-              title={worktreesOpen ? t("sidebar.terminals.collapseChildren") : t("sidebar.terminals.expandChildren")}
-              onPointerDownCapture={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!forceExpanded) actions.toggleCollapsed(worktreeCollapseKey);
-              }}
-            >
-              <ChevronRight
-                size={12}
-                strokeWidth={2}
-                style={{ transition: "transform 150ms", transform: worktreesOpen ? "rotate(90deg)" : "rotate(0)" }}
-              />
-            </button>
-          )}
           <span className={`ui-tree-leading-icon${inheritsParentPath ? " ui-tree-leading-icon-inherited" : ""}`}>
             {inheritsParentPath && (
               <span className="ui-tree-inherit-marker" role="img" aria-label={t("sidebar.tree.inheritsParent")} title={t("sidebar.tree.inheritsParent")}>
@@ -388,7 +376,7 @@ function TreeNodeItemImpl({
               mark={appearance.emoji}
               iconKey={appearance.iconKey}
               cliTool={p.cli_tool}
-              fallback="terminal"
+              fallback="folder"
               size={14}
             />
           </span>

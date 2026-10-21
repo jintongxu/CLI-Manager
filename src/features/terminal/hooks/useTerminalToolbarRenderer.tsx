@@ -8,7 +8,6 @@ import { useI18n } from "../../../shared/i18n/index";
 import { CommandTemplatePanel } from "../../prompts/api/CommandTemplatePanel";
 import { ProjectIdeasPanel } from "../../projects";
 import { SshSidebarPanel } from "../../remote";
-import { Portal } from "../../../shared/ui/Portal";
 import { BackgroundTasksPanel, type BackgroundTaskMeta } from "../components/BackgroundTasksPanel";
 import {
   Activity, ArrowLeftRight, Plus, ListClockIcon, Maximize2, Minimize2, BarChart3, GitBranch, Folder,
@@ -17,6 +16,7 @@ import {
 import type { Project } from "../../../shared/types/index";
 import { SortableToolbarButton, CpuCatIndicator } from "../components/TerminalToolbarControls";
 import { CliToolIcon } from "../../../shared/ui/CliToolIcon";
+import { Popover, PopoverContent, PopoverTrigger } from "../../../shared/ui/popover";
 
 interface TerminalToolbarContext {
   t: ReturnType<typeof useI18n>["t"];
@@ -268,27 +268,28 @@ export function useTerminalToolbarRenderer({
         </button>
       ),
       ssh: (
-        <div className="relative">
-          <button type="button" onClick={onToggleSshPanel} className="ui-focus-ring ui-icon-action" data-active={sshPanelOpen ? "true" : "false"} aria-label={toolbarTooltips.ssh} aria-pressed={sshPanelOpen}>
-            <Globe size={14} strokeWidth={1.8} />
-          </button>
-          {sshPanelOpen && (
-            <Portal>
-              <div
-                className="pointer-events-auto fixed z-40 h-[min(640px,calc(100vh-24px))] w-[300px] overflow-hidden rounded-lg border border-border shadow-xl"
-                style={terminalSidePanelSide === "right" ? { right: 46, top: 64 } : { left: 46, top: 64 }}
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={(event) => event.stopPropagation()}
-              >
-                <SshSidebarPanel
-                  onClose={onToggleSshPanel}
-                  onOpenSettings={() => onOpenSshSettings?.()}
-                  onOpenTerminal={onOpenSshTerminal}
-                />
-              </div>
-            </Portal>
-          )}
-        </div>
+        <Popover open={sshPanelOpen} onOpenChange={(open) => { if (open !== sshPanelOpen) onToggleSshPanel(); }}>
+          <PopoverTrigger asChild>
+            <button type="button" className="ui-focus-ring ui-icon-action" data-active={sshPanelOpen ? "true" : "false"} aria-label={toolbarTooltips.ssh} aria-pressed={sshPanelOpen}>
+              <Globe size={14} strokeWidth={1.8} />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            side={terminalSidePanelSide === "right" ? "left" : "right"}
+            align="start"
+            sideOffset={8}
+            collisionPadding={8}
+            className="pointer-events-auto z-50 h-[min(640px,calc(100vh-32px))] w-[300px] overflow-hidden rounded-lg border border-border p-0 shadow-xl"
+            onPointerDownOutside={(event) => event.preventDefault()}
+            onInteractOutside={(event) => event.preventDefault()}
+          >
+            <SshSidebarPanel
+              onClose={onToggleSshPanel}
+              onOpenSettings={() => onOpenSshSettings?.()}
+              onOpenTerminal={onOpenSshTerminal}
+            />
+          </PopoverContent>
+        </Popover>
       ),
       backgroundTasks: (
         <BackgroundTasksPanel

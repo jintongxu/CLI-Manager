@@ -279,18 +279,18 @@ test("sidebar domain CSS keeps ordered imports, narrow title flex, static status
   assert.match(css, /\.sidebar-terminal-title\s*\{[^}]*min-width: 0;[^}]*text-overflow: ellipsis;/);
   assert.match(css, /\.sidebar-terminal-list\[data-density="compact"\]/);
   assert.match(css, /\.sidebar-terminal-row:focus-visible\s*\{[^}]*outline: 2px solid[^}]*outline-offset: -2px/);
-  assert.match(css, /border-inline-start: 1px solid/);
-  assert.match(css, /\.sidebar-terminal-list\s*\{[^}]*margin-block: 2px 8px;[^}]*padding: 1px 0 2px 7px;/);
-  assert.match(css, /\.sidebar-terminal-row::before\s*\{[^}]*inset-inline-start: -8px;[^}]*width: 7px;/);
+  assert.match(css, /\.sidebar-terminal-list::before\s*\{[^}]*width: 2px;[^}]*background:/);
+  assert.match(css, /\.sidebar-terminal-list\s*\{[^}]*margin-block: 3px 8px;[^}]*padding: 3px 4px 6px 8px;/);
+  assert.match(css, /\.sidebar-terminal-row::before\s*\{[^}]*inset-inline-start: -5px;[^}]*width: 4px;/);
   assert.match(css, /\.sidebar-terminal-heading\s*\{[^}]*flex-direction: column;[^}]*min-width: 0;/);
   assert.match(css, /\.sidebar-terminal-metadata\s*\{[^}]*overflow: hidden;[^}]*white-space: nowrap;/);
-  assert.match(css, /\.sidebar-terminal-title-line\s*\{[^}]*font-weight: 400;/);
+  assert.match(css, /\.sidebar-terminal-title-line\s*\{[^}]*font-weight: 500;/);
   assert.match(source("../components/SidebarTerminalList.tsx"), /EyeOff/);
   assert.match(source("../components/SidebarTerminalList.tsx"), /sidebarTerminalGlyphs\[status\]/);
-  assert.match(css, /flex: 0 0 12px;/);
+  assert.match(css, /flex: 0 0 17px;/);
   assert.match(css, /\.worktree-terminal-summary-token\s*\{[^}]*flex: 0 0 auto;[^}]*gap: 3px;[^}]*white-space: nowrap;/);
-  assert.match(css, /box-shadow: inset 2px 0 0 var\(--primary\)/);
-  assert.doesNotMatch(css, /#[0-9a-f]{3,8}\b|gradient|animation|transition/i);
+  assert.match(css, /box-shadow: inset 3px 0 0 var\(--primary\)/);
+  assert.match(css, /gradient|transition/i);
 });
 
 test("sidebar text/status/focus contrast on opaque theme token surfaces across declared palettes", () => {

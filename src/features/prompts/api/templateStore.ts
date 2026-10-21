@@ -68,6 +68,7 @@ export const useTemplateStore = create<TemplateStore>((set, get) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [template.id, template.project_id, template.name, template.command, template.template_type, template.description, template.sort_order]
     );
+    set((state) => ({ templates: [...state.templates, template] }));
     await get().fetchTemplates();
     return template;
   },
@@ -113,12 +114,16 @@ export const useTemplateStore = create<TemplateStore>((set, get) => {
       `UPDATE command_templates SET ${fields.join(", ")} WHERE id = $${idx}`,
       values
     );
+    set((state) => ({
+      templates: state.templates.map((template) => template.id === id ? { ...template, ...input } : template),
+    }));
     await get().fetchTemplates();
   },
 
   deleteTemplate: async (id) => {
     const db = await getDb();
     await db.execute("DELETE FROM command_templates WHERE id = $1", [id]);
+    set((state) => ({ templates: state.templates.filter((template) => template.id !== id) }));
     await get().fetchTemplates();
   },
 

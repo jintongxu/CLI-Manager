@@ -330,7 +330,9 @@ export function buildTerminalTabContext(
   siblingWorktrees: WorktreeRecord[] = [],
 ): TerminalTabContext {
   const projectName = project?.name.trim()
-    || (session.kind === "ephemeral-pi" ? labels.anonymousPi ?? labels.unboundProject : labels.unboundProject);
+    || (session.environmentType === "ssh" && session.title.trim() && session.title.trim() !== "Terminal"
+      ? session.title.trim()
+      : session.kind === "ephemeral-pi" ? labels.anonymousPi ?? labels.unboundProject : labels.unboundProject);
   const activeWorktree = worktree?.status === "active" ? worktree : null;
   const unresolvedWorktree = Boolean(session.worktreeId && !activeWorktree);
   return {

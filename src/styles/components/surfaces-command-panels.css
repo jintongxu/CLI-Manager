@@ -424,13 +424,16 @@
 }
 
 .command-template-panel__row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: start;
+  column-gap: 10px;
   width: 100%;
-  min-height: 62px;
-  padding: 9px;
-  border-radius: 8px;
+  min-height: 76px;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
   color: var(--terminal-popover-muted);
   cursor: pointer;
   transition: background-color 0.16s ease, border-color 0.16s ease;
@@ -438,18 +441,61 @@
 
 .command-template-panel__row:hover,
 .command-template-panel__row:focus-visible {
-  background-color: var(--surface-container-highest);
+  border-color: color-mix(in srgb, var(--border) 68%, transparent);
+  background-color: color-mix(in srgb, var(--surface-container-highest) 72%, transparent);
+}
+
+.command-template-panel__row > span:nth-child(2) {
+  display: block;
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.command-template-panel__row > span:nth-child(2) > span:first-child {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+  min-height: 20px;
+}
+
+.command-template-panel__row > span:nth-child(2) > span:first-child > .truncate {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.command-template-panel__row > span:nth-child(2) > code {
+  display: block;
+  max-width: 100%;
+  margin-top: 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 15px;
+}
+
+.command-template-panel__row > span:nth-child(2) > code.whitespace-pre-wrap {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .command-template-panel__row-icon {
+  grid-column: 1;
+  grid-row: 1 / span 2;
   width: 38px;
   height: 38px;
-  border-radius: 8px;
+  margin-top: 1px;
+  border-radius: 9px;
+  color: color-mix(in srgb, var(--primary) 72%, var(--terminal-popover-muted));
+  background-color: color-mix(in srgb, var(--primary) 10%, var(--surface-container-highest));
 }
 
 .command-template-panel__scope-pill {
-  max-width: 110px;
-  height: 20px;
+  max-width: 120px;
+  height: 19px;
   padding: 0 7px;
   border-radius: 999px;
   overflow: hidden;
@@ -461,9 +507,13 @@
 
 .command-template-panel__actions {
   display: inline-flex;
+  grid-column: 2;
+  grid-row: 2;
   align-items: center;
+  justify-content: flex-end;
   gap: 4px;
-  flex: 0 0 auto;
+  min-width: 0;
+  margin-top: 7px;
 }
 
 .command-template-panel__icon-button {

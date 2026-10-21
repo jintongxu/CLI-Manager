@@ -1,53 +1,70 @@
 /* Shared by tree, pinned projects and narrow-sidebar flyouts; no global tree overrides. */
 .sidebar-terminal-list {
   min-width: 0;
-  border-inline-start: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
-  border-end-start-radius: 6px;
-  margin-block: 2px 8px;
-  padding: 1px 0 2px 7px;
+  margin-block: 3px 8px;
+  padding: 3px 4px 6px 8px;
+}
+
+.sidebar-terminal-list::before {
+  content: "";
+  display: block;
+  width: 2px;
+  height: 8px;
+  margin-inline-start: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 45%, var(--border));
+  opacity: 0.55;
 }
 
 .sidebar-terminal-row {
   position: relative;
   display: flex;
-  align-items: flex-start;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   min-width: 0;
-  min-height: 28px;
-  padding: 4px 7px;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
+  min-height: 34px;
+  margin-block: 2px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--surface-container-low) 42%, transparent);
   color: var(--on-surface-variant);
   font-size: 12px;
-  line-height: 18px;
+  line-height: 17px;
   text-align: start;
   cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
 }
 
 .sidebar-terminal-row::before {
   content: "";
   position: absolute;
-  inset-inline-start: -8px;
+  inset-inline-start: -5px;
   top: 50%;
-  width: 7px;
+  width: 4px;
   height: 1px;
-  background: color-mix(in srgb, var(--border) 55%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 65%, transparent);
   pointer-events: none;
 }
 
 .sidebar-terminal-row:hover {
-  background: color-mix(in srgb, var(--on-surface) 5%, transparent);
+  background: color-mix(in srgb, var(--on-surface) 8%, var(--surface-container-low));
+  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+  color: var(--on-surface);
+  transform: translateX(1px);
 }
 
 .sidebar-terminal-row[data-selected="true"] {
-  background: color-mix(in srgb, var(--primary) 10%, transparent);
-  box-shadow: inset 2px 0 0 var(--primary);
+  background: linear-gradient(100deg, color-mix(in srgb, var(--primary) 18%, var(--surface-container-lowest)), color-mix(in srgb, var(--primary) 7%, var(--surface-container-lowest)));
+  border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
+  box-shadow: inset 3px 0 0 var(--primary), 0 4px 12px color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--on-surface);
 }
 
 .sidebar-terminal-row[data-selected="true"]:hover {
-  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  background: linear-gradient(100deg, color-mix(in srgb, var(--primary) 22%, var(--surface-container-lowest)), color-mix(in srgb, var(--primary) 9%, var(--surface-container-lowest)));
 }
 
 /* Inset focus stays visible even when a narrow/flyout scroll container clips edges. */
@@ -75,22 +92,31 @@
 .sidebar-terminal-title-line {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   min-width: 0;
-  font-weight: 400;
+  font-weight: 500;
 }
 
 .sidebar-terminal-icon {
   flex: 0 0 auto;
-  margin-block-start: 3px;
-  color: var(--on-surface-variant);
+  width: 23px;
+  height: 23px;
+  padding: 5px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--on-surface-variant) 12%, transparent);
+  color: color-mix(in srgb, var(--on-surface) 68%, var(--primary));
+}
+
+.sidebar-terminal-row[data-selected="true"] .sidebar-terminal-icon {
+  background: color-mix(in srgb, var(--primary) 20%, transparent);
+  color: var(--primary);
 }
 
 /* Compact fixed indicators stay on the existing title-aligned second tier. */
 .sidebar-terminal-metadata {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
@@ -101,12 +127,17 @@
 .sidebar-terminal-status,
 .sidebar-terminal-hidden {
   display: inline-flex;
-  flex: 0 0 12px;
+  flex: 0 0 17px;
   align-items: center;
   justify-content: center;
-  width: 12px;
+  width: 17px;
+  min-height: 15px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--on-surface-variant) 10%, transparent);
   white-space: nowrap;
   color: var(--on-surface-variant);
+  font-size: 9px;
+  line-height: 15px;
 }
 
 .sidebar-terminal-row[data-status="running"] .sidebar-terminal-status,
@@ -127,9 +158,76 @@
 }
 
 .sidebar-terminal-list[data-density="compact"] .sidebar-terminal-row {
-  min-height: 24px;
-  padding-block: 2px;
+  min-height: 30px;
+  padding-block: 3px;
   font-size: 11px;
+}
+
+.sidebar-terminal-list[data-density="compact"] .sidebar-terminal-icon {
+  width: 21px;
+  height: 21px;
+  padding: 4px;
+}
+
+/* Worktree branches use the same visual language as terminal rows without becoming a second project card. */
+.ui-worktree-row {
+  min-height: 35px;
+  margin-block: 2px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--on-surface-variant);
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+.ui-worktree-row:hover {
+  border-color: color-mix(in srgb, var(--border) 68%, transparent);
+  background: color-mix(in srgb, var(--surface-container-high) 52%, transparent);
+  color: var(--on-surface);
+  transform: translateX(1px);
+}
+
+.ui-worktree-row[data-selected="true"] {
+  border-color: color-mix(in srgb, var(--primary) 48%, var(--border));
+  background: linear-gradient(100deg, color-mix(in srgb, var(--primary) 17%, var(--surface-container-lowest)), color-mix(in srgb, var(--primary) 6%, var(--surface-container-lowest)));
+  box-shadow: inset 3px 0 0 var(--primary), 0 4px 12px color-mix(in srgb, var(--primary) 9%, transparent);
+  color: var(--on-surface);
+}
+
+.ui-worktree-row[data-selected="true"]:hover {
+  background: linear-gradient(100deg, color-mix(in srgb, var(--primary) 22%, var(--surface-container-lowest)), color-mix(in srgb, var(--primary) 9%, var(--surface-container-lowest)));
+}
+
+.ui-worktree-row .ui-worktree-tree-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--primary) 9%, var(--surface-container-high));
+  color: color-mix(in srgb, var(--primary) 72%, var(--on-surface));
+  transition: background-color 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+.ui-worktree-row:hover .ui-worktree-tree-icon,
+.ui-worktree-row[data-selected="true"] .ui-worktree-tree-icon {
+  background: color-mix(in srgb, var(--primary) 22%, var(--surface-container-high));
+  color: var(--primary);
+  transform: scale(1.04);
+}
+
+.ui-worktree-row[data-invalid="true"] {
+  color: var(--on-surface-variant);
+}
+
+.ui-worktree-row[data-invalid="true"] .ui-worktree-tree-icon {
+  background: color-mix(in srgb, var(--danger) 9%, var(--surface-container-high));
+  color: color-mix(in srgb, var(--danger) 82%, var(--on-surface-variant));
+}
+
+.ui-worktree-row[data-invalid="true"] .ui-tree-warning-chip {
+  width: 17px;
+  height: 17px;
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, transparent);
+  background-color: color-mix(in srgb, var(--danger) 10%, transparent);
+  opacity: 0.9;
 }
 
 /* Keep the same leading column for empty, folded and expanded Worktree rows. */
@@ -145,6 +243,7 @@
 .ui-worktree-row > .ui-tree-item-actions {
   display: flex;
   flex: 0 0 22px;
+  margin-inline-end: 3px;
 }
 
 /* Title/badges own the first tier; optional summary owns the second, title-aligned tier. */
@@ -172,6 +271,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
 }
 
 .worktree-terminal-summary {
@@ -212,3 +314,11 @@
 }
 
 .sidebar-terminal-pin { flex: 0 0 auto; color: var(--primary); }
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-terminal-row,
+  .ui-worktree-row,
+  .ui-worktree-row .ui-worktree-tree-icon {
+    transition: none;
+  }
+}
