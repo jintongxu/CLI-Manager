@@ -127,7 +127,6 @@ function PinnedProjectItem({ project, density }: { project: Project; density: "c
           if (event.button === 2) event.preventDefault();
         }}
         onClick={(event) => actions.onSelectProject(event, project)}
-        onDoubleClick={() => actions.onOpenProject(project)}
         onContextMenu={(event) => actions.onContextMenuProject(event, project, true)}
       >
         <span className="ui-tree-leading-icon">
@@ -135,7 +134,7 @@ function PinnedProjectItem({ project, density }: { project: Project; density: "c
             mark={appearance.emoji}
             iconKey={appearance.iconKey}
             cliTool={project.cli_tool}
-            fallback="terminal"
+            fallback="folder"
             size={14}
           />
         </span>

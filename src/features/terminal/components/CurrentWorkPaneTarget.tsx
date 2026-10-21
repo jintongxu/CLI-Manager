@@ -1,4 +1,4 @@
-import { useCallback, type CSSProperties, type PointerEvent } from "react";
+import { memo, useCallback, type CSSProperties, type PointerEvent } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import type { Project, TerminalSession, WorktreeRecord } from "../../../shared/types/index";
@@ -70,7 +70,7 @@ function CurrentWorkPaneHeader({
   );
 }
 
-export function CurrentWorkPaneTarget({
+export const CurrentWorkPaneTarget = memo(function CurrentWorkPaneTarget({
   paneId,
   activeDropPreview,
   session,
@@ -123,4 +123,4 @@ export function CurrentWorkPaneTarget({
       </div>
     </div>
   );
-}
+});

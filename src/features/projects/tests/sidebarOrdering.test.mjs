@@ -96,10 +96,10 @@ test('actual WT row body attaches activator, primary-only listener and selects o
  let selector;
  body.props.onPointerDown({ ...pointer(), target: { closest: value => { selector=value;return {}; } } });
  for(const excluded of ['button','input','textarea','select','[contenteditable]','[data-sidebar-terminals]']) assert.ok(selector.includes(excluded));
- assert.equal(h.calls.length,1);body.props.onClick({});body.props.onDoubleClick({});body.props.onContextMenu({});
- assert.deepEqual(h.actionsCalls,[['select'],['open'],['menu']]);
+ assert.equal(h.calls.length,1);body.props.onClick({});body.props.onContextMenu({});
+ assert.deepEqual(h.actionsCalls,[['select'],['menu']]);
  const drag=worktreeHarness(true);const draggingBody=React.Children.toArray(drag.render().props.children)[0];
- draggingBody.props.onClick({});draggingBody.props.onDoubleClick({});assert.deepEqual(drag.actionsCalls,[]);
+ draggingBody.props.onClick({});assert.deepEqual(drag.actionsCalls,[]);
  const disabled=worktreeHarness(false,true);React.Children.toArray(disabled.render().props.children)[0].props.onPointerDown(pointer());
  assert.equal(disabled.calls.length,0);
 });

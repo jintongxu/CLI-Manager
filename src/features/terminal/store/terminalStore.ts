@@ -478,7 +478,6 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         },
       }));
     },
-
     createSession: async (projectId, cwd, title, startupCmd, envVars, shell, paneId, worktreeId, sshHostId, cliSessionId, remoteHistoryConsumerId, remoteHistorySourceInstanceId, options) => {
       const ordinaryWorktree = Boolean(worktreeId) && !options?.sessionKind && !options?.transientBackground && !options?.allowDuplicateWorktree;
       const admission = ordinaryWorktree ? worktreeSessionAdmission.begin(worktreeId!, get().sessions) : null;
@@ -539,6 +538,8 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         if (!launch) throw new Error("terminal_launch_missing");
         const resolvedShell = launch.shell;
         const launchStartupCmd = launch.startupCmd;
+        const startupWrittenBeforeAttach = sessionKind === "ephemeral-pi" && Boolean(launchStartupCmd) && !launch.startupHandledByLaunch && !oneShot;
+        if (startupWrittenBeforeAttach) await terminalProcessManager.write(sessionId, formatStartupInputForPty(launchStartupCmd as string, normalizeShellKey(resolvedShell) ?? null));
         const session: TerminalSession = {
           id: sessionId,
           createdAtMs,
@@ -648,7 +649,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
           toast.warning(translateCurrent("extensions.project.startupFallbackWarning"));
         }
 
-        if (launchStartupCmd && !launch.startupHandledByLaunch && !oneShot) {
+        if (launchStartupCmd && !launch.startupHandledByLaunch && !oneShot && !startupWrittenBeforeAttach) {
           try {
             await terminalProcessManager.write(
               sessionId,
@@ -1830,7 +1831,6 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         pendingNamingSessions = [];
       }
     },
-
     attachDaemonSession: async (sessionId) => {
       const current = get();
       if (current.sessions.some((session) => session.id === sessionId)) {

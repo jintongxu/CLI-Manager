@@ -888,7 +888,6 @@ function CollapsedProjectButton({ node, sizeClass, pinned = false }: { node: TNo
       aria-haspopup="dialog"
       aria-expanded={open}
       onClick={(event) => actions.onSelectProject(event, p)}
-      onDoubleClick={() => actions.onOpenProject(p)}
       onContextMenu={(e) => actions.onContextMenuProject(e, p)}
     >
       <span className="ui-tree-collapsed-icon pointer-events-none" aria-hidden="true">
@@ -896,7 +895,7 @@ function CollapsedProjectButton({ node, sizeClass, pinned = false }: { node: TNo
           mark={appearance.emoji}
           iconKey={appearance.iconKey}
           cliTool={p.cli_tool}
-          fallback="terminal"
+          fallback="folder"
           size={15}
         />
       </span>

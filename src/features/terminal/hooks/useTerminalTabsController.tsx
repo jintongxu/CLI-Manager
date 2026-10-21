@@ -133,9 +133,12 @@ export function useTerminalTabsController({
   const currentWorkReturnRef = useRef<{ workspanId: string | null; sessionId: string | null } | null>(null);
   const createSession = useCallback(async (...args: Parameters<typeof createTerminalSession>) => {
     const sessionId = await createTerminalSession(...args);
-    if (shouldAddSessionToCurrentWork(args[12], currentWorkMode)) addCurrentWorkSession(sessionId);
+    if (currentWorkMode && shouldAddSessionToCurrentWork(args[12], currentWorkMode)) {
+      addCurrentWorkSession(sessionId); activateCurrentWorkSession(sessionId); setActive(sessionId);
+      useHistoryStore.getState().closeHistory(); setActiveWorkspaceTab("terminal");
+    }
     return sessionId;
-  }, [addCurrentWorkSession, createTerminalSession, currentWorkMode]);
+  }, [activateCurrentWorkSession, addCurrentWorkSession, createTerminalSession, currentWorkMode, setActive]);
   const splitTerminalAndAdd = useCallback(async (...args: Parameters<typeof splitTerminal>) => {
     const sessionId = await splitTerminal(...args);
     if (sessionId) addCurrentWorkSession(sessionId);
@@ -615,27 +618,21 @@ export function useTerminalTabsController({
       splitPickerOpenTimerRef.current = null;
     }
   }, []);
-
   useEffect(() => clearSplitPickerOpenSchedule, [clearSplitPickerOpenSchedule]);
-
   const handleCloseSplitPicker = useCallback(() => {
     clearSplitPickerOpenSchedule();
     splitPickerOutsideGuardUntilRef.current = 0;
     setSplitPicker(null);
   }, [clearSplitPickerOpenSchedule]);
-
   const shouldIgnoreSplitPickerOutsideInteraction = useCallback(() => {
     return Date.now() < splitPickerOutsideGuardUntilRef.current;
   }, []);
-
   const armCloseConfirmOutsideGuard = useCallback(() => {
     closeConfirmOutsideGuardUntilRef.current = Date.now() + 180;
   }, []);
-
   const shouldIgnoreCloseConfirmOutsideInteraction = useCallback(() => {
     return Date.now() < closeConfirmOutsideGuardUntilRef.current;
   }, []);
-
   const handleNewTab = useCallback(async (sourceSessionId?: string) => {
     const sourceSession = resolveNewTabSource(sessions, sourceSessionId ?? activeSessionId);
     if (rejectMissingSessionWorktree(sourceSession)) return;
@@ -1695,7 +1692,10 @@ export function useTerminalTabsController({
     sshPanelOpen,
     onToggleSshPanel: () => setSshPanelOpen((value) => !value),
     onOpenSshSettings,
-    onOpenSshTerminal: (host) => { void createTerminalSession(undefined, "/", host.name, "", undefined, undefined, undefined, undefined, host.id); },
+    onOpenSshTerminal: (host) => {
+      void createSession(undefined, "/", host.name, "", undefined, undefined, undefined, undefined, host.id)
+        .then((sessionId) => { closeHistory(); setActiveWorkspaceTab("terminal"); setActive(sessionId); }).catch(() => {});
+    },
   });
 
   const handleSubmitTabEdit = useCallback(
