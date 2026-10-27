@@ -22,7 +22,7 @@ import {
 } from "../../history/index";
 import { useTerminalStore } from "../state";
 import { useWorktreeStore } from "../../projects/api/worktreeStore";
-import { ArrowDown, ArrowDownToLine } from "lucide-react";
+import { ArrowDown, ArrowDownToLine, ChevronLeft, ChevronRight } from "lucide-react";
 import { Check, Copy, FileText, RefreshCw, X } from "../../../shared/ui/icons";
 import { SessionTranscriptContent } from "../../history/api/SessionTranscriptContent";
 import { TerminalMarkdownPreviewQuestions, type MarkdownPreviewQuestion } from "./TerminalMarkdownPreviewQuestions";
@@ -354,6 +354,17 @@ export function TerminalMarkdownPreview({ sessionId, open, onClose }: TerminalMa
     previewScroll.requestScrollToBottom(latest.messageIndex);
     setSelectedMessageIndex(latest.messageIndex);
   };
+  const navigateAnswer = (direction: -1 | 1) => {
+    if (previewMessages.length === 0) return;
+    const currentPosition = previewMessages.findIndex((message) => message.messageIndex === selectedMessageIndex);
+    const nextPosition = Math.max(0, Math.min(
+      previewMessages.length - 1,
+      (currentPosition < 0 ? previewMessages.length - 1 : currentPosition) + direction,
+    ));
+    if (nextPosition === currentPosition) return;
+    previewScroll.cancelScrollIntent();
+    setSelectedMessageIndex(previewMessages[nextPosition].messageIndex);
+  };
   const copyCurrentAnswer = async () => {
     if (!content) return;
     try {
@@ -396,7 +407,28 @@ export function TerminalMarkdownPreview({ sessionId, open, onClose }: TerminalMa
         <FileText size={14} className="shrink-0 text-[var(--primary)]" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate text-xs font-semibold">{t("terminal.markdownPreview.title")}</span>
         {previewMessages.length > 0 && (
-          <MarkdownPreviewAnswerSelect
+          <>
+            <button
+              type="button"
+              onClick={() => navigateAnswer(-1)}
+              disabled={loading || previewMessages.findIndex((message) => message.messageIndex === selectedMessageIndex) <= 0}
+              className="ui-focus-ring inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[var(--text-secondary)] transition hover:bg-[var(--interactive-hover-bg)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label={t("terminal.markdownPreview.previousAnswer")}
+              title={t("terminal.markdownPreview.previousAnswer")}
+            >
+              <ChevronLeft size={13} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() => navigateAnswer(1)}
+              disabled={loading || previewMessages.findIndex((message) => message.messageIndex === selectedMessageIndex) < 0 || previewMessages.findIndex((message) => message.messageIndex === selectedMessageIndex) >= previewMessages.length - 1}
+              className="ui-focus-ring inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[var(--text-secondary)] transition hover:bg-[var(--interactive-hover-bg)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label={t("terminal.markdownPreview.nextAnswer")}
+              title={t("terminal.markdownPreview.nextAnswer")}
+            >
+              <ChevronRight size={13} aria-hidden="true" />
+            </button>
+            <MarkdownPreviewAnswerSelect
             key={previewSessionKey}
             messages={previewMessages}
             starredMessageIndexes={starredMessageIndexes}
@@ -419,7 +451,8 @@ export function TerminalMarkdownPreview({ sessionId, open, onClose }: TerminalMa
             title={t("terminal.markdownPreview.selectAnswer")}
             jumpToEndLabel={t("terminal.markdownPreview.jumpToListEnd")}
             terminalPreviewStyle={terminalPreviewStyle}
-          />
+            />
+          </>
         )}
         <button
           type="button"
@@ -451,7 +484,7 @@ export function TerminalMarkdownPreview({ sessionId, open, onClose }: TerminalMa
         </button>
         <button
           type="button"
-          onClick={() => void loadLatest(previewLoadTrigger)}
+          onClick={() => void loadLatest(previewLoadTrigger, true)}
           disabled={loading}
           className="ui-focus-ring inline-flex h-6 w-6 items-center justify-center rounded-md text-[var(--text-secondary)] transition hover:bg-[var(--interactive-hover-bg)] hover:text-[var(--text-primary)] disabled:cursor-wait disabled:opacity-50"
           aria-label={t("terminal.markdownPreview.refresh")}

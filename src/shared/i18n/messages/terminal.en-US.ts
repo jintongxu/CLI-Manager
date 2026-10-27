@@ -242,6 +242,8 @@ export const en: Record<keyof typeof zh, string> = {
   "terminal.markdownPreview.selectAnswer": "Choose a historical response to preview",
   "terminal.markdownPreview.scrollToBottom": "Scroll to the end of this answer",
   "terminal.markdownPreview.latestAnswer": "Jump to the latest answer",
+  "terminal.markdownPreview.previousAnswer": "Previous answer",
+  "terminal.markdownPreview.nextAnswer": "Next answer",
   "terminal.markdownPreview.jumpToListEnd": "Jump to the end of the list",
   "terminal.markdownPreview.answerOption": "Answer {index} · {time}",
   "terminal.markdownPreview.loading": "Loading session responses…",

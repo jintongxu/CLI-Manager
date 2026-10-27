@@ -241,6 +241,8 @@ export const zh = {
   "terminal.markdownPreview.selectAnswer": "选择要预览的历史回答",
   "terminal.markdownPreview.scrollToBottom": "回到当前回答底部",
   "terminal.markdownPreview.latestAnswer": "跳到最新回答",
+  "terminal.markdownPreview.previousAnswer": "上一条回答",
+  "terminal.markdownPreview.nextAnswer": "下一条回答",
   "terminal.markdownPreview.jumpToListEnd": "跳到列表末尾",
   "terminal.markdownPreview.answerOption": "第 {index} 条回答 · {time}",
   "terminal.markdownPreview.loading": "正在加载会话回答…",
