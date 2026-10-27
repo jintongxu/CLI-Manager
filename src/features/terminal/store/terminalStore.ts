@@ -596,7 +596,9 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         const projectName = session.projectId
           ? useProjectStore.getState().projects.find((project) => project.id === session.projectId)?.name
           : undefined;
-        assignTerminalTitle(session, title, terminalPurpose(resolvedShell, startupCmd === "" ? "" : launchStartupCmd, launch.environmentType, sshHostNameForLaunch(launch)), [...pendingNamingSessions, ...useSessionStore.getState().sessions, ...state.sessions], projectName);
+        assignTerminalTitle(session, title, sessionKind === "ephemeral-pi"
+          ? "Anonymous Pi"
+          : terminalPurpose(resolvedShell, startupCmd === "" ? "" : launchStartupCmd, launch.environmentType, sshHostNameForLaunch(launch)), [...pendingNamingSessions, ...useSessionStore.getState().sessions, ...state.sessions], projectName);
         const newSessions = [...state.sessions, session];
         let workspans: TerminalWorkspan[];
         let activeWorkspanId: string | null;
@@ -1991,10 +1993,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       set({ hiddenBackgroundSessionIds: next });
     },
 
-    openSubagentTranscript: runtimeActions.openSubagentTranscript,
-    finishSubagentTranscript: runtimeActions.finishSubagentTranscript,
-
-    appendSubagentTranscript: runtimeActions.appendSubagentTranscript,
+    openSubagentTranscript: runtimeActions.openSubagentTranscript, finishSubagentTranscript: runtimeActions.finishSubagentTranscript, appendSubagentTranscript: runtimeActions.appendSubagentTranscript,
   };
 });
 startPtyOrphanReconcileHeartbeat(() => useTerminalStore.getState().sessions.filter(hasBackendPty).map((session) => session.id));

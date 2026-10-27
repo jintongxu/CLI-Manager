@@ -11,7 +11,7 @@ import { inferVendor } from "../../../shared/ui/VendorIcon";
 import { canSaveSessionToSidebar } from "../../projects/api/saveSessionToSidebar";
 import type { Project, TerminalSession, WorktreeRecord } from "../../../shared/types/index";
 import {
-  ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubTrigger, ContextMenuSubContent,
+  ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubTrigger, ContextMenuSubContent,
 } from "../../../shared/ui/context-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../shared/ui/popover";
 import { getTerminalTheme } from "../../../shared/lib/terminalThemes";
@@ -22,6 +22,7 @@ import {
 } from "../lib/terminalTabsModel";
 import type { TerminalWorktreeBadge } from "../api/terminalWorktreeBadge";
 import { SortableTab } from "./SortableTerminalTabs";
+import { attachTerminalTabWheelScroll } from "../lib/terminalTabWheelScroll";
 
 
 export interface PaneTabBarProps {
@@ -72,6 +73,9 @@ export interface PaneTabBarProps {
   currentWorkSessionIds?: readonly string[];
   onToggleCurrentWork?: (sessionId: string) => void;
   variant?: "global" | "pane";
+  actionSessionId?: string;
+  onToggleNavigationPin?: (id: string) => void;
+  navigationPinnedIds?: readonly string[];
 }
 
 export function PaneTabBar({
@@ -117,6 +121,9 @@ export function PaneTabBar({
   currentWorkSessionIds = [],
   onToggleCurrentWork,
   variant = "pane",
+  actionSessionId,
+  onToggleNavigationPin,
+  navigationPinnedIds = [],
   resolvedTheme,
   terminalThemeName,
   lightThemePalette,
@@ -124,7 +131,7 @@ export function PaneTabBar({
 }: PaneTabBarProps) {
   const { t } = useI18n();
   const workspanEnabled = useSettingsStore((s) => s.workspanEnabled);
-  const { setNodeRef, isOver } = useDroppable({ id: `${PANE_DROP_PREFIX}${pane.id}` });
+  const { setNodeRef, isOver } = useDroppable({ id: actionSessionId ? `navigation-menu:${actionSessionId}` : `${PANE_DROP_PREFIX}${pane.id}`, disabled: Boolean(actionSessionId) });
   const tabMenuTheme = getTerminalTheme(terminalThemeName, resolvedTheme, lightThemePalette, darkThemePalette);
   const tabMenuForeground = normalizeTabMenuHex(tabMenuTheme.foreground, resolvedTheme === "dark" ? "#d8dee9" : "#1e293b");
   const tabMenuBackground = normalizeTabMenuHex(tabMenuTheme.background, resolvedTheme === "dark" ? "#0c0e10" : "#ffffff");
@@ -135,6 +142,7 @@ export function PaneTabBar({
     "--menu-hover": tabMenuHexToRgba(tabMenuForeground, 0.12, "rgba(255, 255, 255, 0.12)"),
   } as CSSProperties;
   const tabScrollRef = useRef<HTMLDivElement | null>(null);
+  const cancelWheelScrollRef = useRef<(() => void) | null>(null);
   const tabScrollUpdateTimeoutRef = useRef<number | null>(null);
   const isWorkspanSplit = workspanEnabled && variant === "pane" && allPanes.length > 1;
   const [tabListOpen, setTabListOpen] = useState(false);
@@ -162,6 +170,7 @@ export function PaneTabBar({
     .filter((session): session is TerminalSession => Boolean(session))
     .filter((session) => session.kind !== "file-editor");
   const paneSessionIds = paneSessions.map((session) => session.id);
+  const lastPaneTabId = paneSessionIds[paneSessionIds.length - 1] ?? null;
   const activePaneTabId =
     pane.activeSessionId && paneSessionIds.includes(pane.activeSessionId)
       ? pane.activeSessionId
@@ -211,6 +220,7 @@ export function PaneTabBar({
   const scrollPaneTabs = useCallback((direction: -1 | 1) => {
     const element = tabScrollRef.current;
     if (!element) return;
+    cancelWheelScrollRef.current?.();
     const distance = Math.max(Math.floor(element.clientWidth * 0.72), 160);
     element.scrollBy({ left: distance * direction, behavior: "smooth" });
     window.requestAnimationFrame(updateTabScrollState);
@@ -222,6 +232,7 @@ export function PaneTabBar({
   }, [updateTabScrollState]);
 
   const scrollActivePaneTabIntoView = useCallback(() => {
+    cancelWheelScrollRef.current?.();
     const element = tabScrollRef.current;
     if (!element || !activePaneTabId) {
       updateTabScrollState();
@@ -247,7 +258,7 @@ export function PaneTabBar({
     }
 
     const maxScrollLeft = Math.max(0, element.scrollWidth - element.clientWidth);
-    const isLastTab = paneSessionIds[paneSessionIds.length - 1] === activePaneTabId;
+    const isLastTab = lastPaneTabId === activePaneTabId;
     // 末尾标签吸附到最右，避免容器 padding / 标签 margin 残留导致右滚按钮仍可点
     const clampedScrollLeft = isLastTab && !isOversized
       ? maxScrollLeft
@@ -262,7 +273,7 @@ export function PaneTabBar({
       tabScrollUpdateTimeoutRef.current = null;
       updateTabScrollState();
     }, 220);
-  }, [activePaneTabId, pane.id, paneSessionIds, updateTabScrollState]);
+  }, [activePaneTabId, pane.id, lastPaneTabId, updateTabScrollState]);
 
   const activatePaneSessionAt = useCallback((index: number) => {
     const session = paneSessions[index];
@@ -316,27 +327,19 @@ export function PaneTabBar({
       if (frameId !== null) window.cancelAnimationFrame(frameId);
     };
 
-    const handleWheel = (wheelEvent: WheelEvent) => {
-      const maxScrollLeft = Math.max(0, element.scrollWidth - element.clientWidth);
-      if (maxScrollLeft <= 0) return;
-      // 取绝对值较大的轴：触控板横向滚动用 deltaX，鼠标滚轮用 deltaY
-      const delta = Math.abs(wheelEvent.deltaX) >= Math.abs(wheelEvent.deltaY)
-        ? wheelEvent.deltaX
-        : wheelEvent.deltaY;
-      if (delta === 0) return;
-      wheelEvent.preventDefault();
-      element.scrollLeft += delta;
-      scheduleUpdate();
-    };
-
+    const wheelScroll = attachTerminalTabWheelScroll(element, scheduleUpdate);
+    cancelWheelScrollRef.current = wheelScroll.cancel;
     element.addEventListener("scroll", scheduleUpdate, { passive: true });
-    element.addEventListener("wheel", handleWheel, { passive: false });
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleUpdate);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => {
+      wheelScroll.cancel();
+      scheduleUpdate();
+    });
     observer?.observe(element);
 
     return () => {
+      wheelScroll.dispose();
+      cancelWheelScrollRef.current = null;
       element.removeEventListener("scroll", scheduleUpdate);
-      element.removeEventListener("wheel", handleWheel);
       observer?.disconnect();
       if (frameId !== null) window.cancelAnimationFrame(frameId);
       if (tabScrollUpdateTimeoutRef.current !== null) {
@@ -350,70 +353,15 @@ export function PaneTabBar({
     scrollActivePaneTabIntoView();
   }, [activePaneTabId, paneSessionIds.length, scrollActivePaneTabIntoView]);
 
-  return (
-    <div
-      ref={setNodeRef}
-      className={`ui-terminal-chrome ${variant === "global" ? "ui-terminal-global-chrome" : "ui-terminal-pane-chrome"} relative flex h-10 shrink-0 items-center`}
-      data-drop-target={isOver ? "true" : "false"}
-      data-chrome-variant={variant}
-      data-terminal-split-pane={isWorkspanSplit ? "true" : undefined}
-    >
-      {variant === "pane" && tabScrollState.isOverflowing && (
-        <button
-          type="button"
-          className="ui-terminal-tab-scroll-button ui-terminal-tab-scroll-button-left"
-          onClick={() => scrollPaneTabs(-1)}
-          disabled={!tabScrollState.canScrollLeft}
-          aria-label={t("terminal.tab.scrollLeft")}
-          title={t("terminal.tab.scrollLeft")}
-        >
-          <ChevronRight size={14} strokeWidth={1.8} className="rotate-180" aria-hidden="true" />
-        </button>
-      )}
-      <div
-        ref={tabScrollRef}
-        className="ui-terminal-tab-scroll flex h-full min-w-0 flex-1 items-center overflow-x-auto px-1.5"
-        data-can-scroll-left={tabScrollState.canScrollLeft ? "true" : "false"}
-        data-can-scroll-right={tabScrollState.canScrollRight ? "true" : "false"}
-      >
-        <SortableContext items={paneSessionIds} strategy={horizontalListSortingStrategy}>
-          {paneSessions.map((session) => (
-            <SortableTab
-              key={session.id}
-              id={session.id}
-              paneId={pane.id}
-              title={session.title}
-              displayTitle={buildTerminalTabDisplayTitle(session)}
-              worktreeBadge={sessionWorktreeBadges?.get(session.id)}
-              sessionKind={session.kind}
-              isActive={session.id === activePaneTabId}
-              isEditing={editingSessionId === session.id}
-              notification={tabNotifications[session.id] ?? "none"}
-              vendor={inferVendor(projectById.get(session.projectId!)?.cli_tool) ?? inferSessionVendor(session)}
-              cliToolIcon={inferSessionCliToolIcon(session, projectById.get(session.projectId!))}
-              hoverInfo={buildTerminalTabHoverInfo(
-                session,
-                session.projectId ? projectById.get(session.projectId) : undefined,
-                session.worktreeId ? worktreeById.get(session.worktreeId) : null,
-                {
-                  unboundProject: t("terminal.context.unboundProject"),
-                  anonymousPi: t("terminal.context.anonymousPi"),
-                  missingWorktree: t("terminal.context.worktreeMissing"),
-                  defaultShell: t("terminal.context.defaultShell"),
-                },
-              )}
-              onActivate={() => onActivateSession(session.id)}
-              onClose={(anchor) => closePaneSessions([session.id], anchor)}
-              onSubmitEdit={(title) => onSubmitEdit(session.id, title)}
-              onCancelEdit={onCancelEdit}
-              menuClassName="terminal-skin"
-              menuStyle={tabMenuStyle}
-              menuContent={(getAnchor) => (
+  const renderMenu = (session: TerminalSession, getAnchor: () => SplitPickerAnchor | undefined) => (
                 <>
+                  {onToggleNavigationPin && <ContextMenuItem onSelect={() => onToggleNavigationPin(session.id)}>
+                    {t(navigationPinnedIds.includes(session.id) ? "terminal.navigation.unpin" : "terminal.navigation.pin")}
+                  </ContextMenuItem>}
                   {onToggleCurrentWork && (
                     <ContextMenuItem onSelect={() => onToggleCurrentWork(session.id)}>
                       {currentWorkSessionIds.includes(session.id)
-                        ? t("terminal.currentWork.remove")
+                        ? t(session.kind === "ephemeral-pi" ? "terminal.navigation.removeAndClose" : "terminal.currentWork.remove")
                         : t("terminal.currentWork.add")}
                     </ContextMenuItem>
                   )}
@@ -502,7 +450,79 @@ export function PaneTabBar({
                     </ContextMenuSub>
                   )}
                 </>
+  );
+  if (actionSessionId) {
+    const session = sessions.find((item) => item.id === actionSessionId);
+    if (!session) return null;
+    return <ContextMenu><ContextMenuTrigger asChild>
+      <button type="button" aria-label={t("terminal.navigation.manage")} onClick={(event) => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        event.currentTarget.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: rect.left, clientY: rect.bottom }));
+      }}>…</button>
+    </ContextMenuTrigger><ContextMenuContent className="terminal-skin" style={tabMenuStyle}>
+      {renderMenu(session, () => undefined)}
+    </ContextMenuContent></ContextMenu>;
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`ui-terminal-chrome ${variant === "global" ? "ui-terminal-global-chrome" : "ui-terminal-pane-chrome"} relative flex h-10 shrink-0 items-center`}
+      data-drop-target={isOver ? "true" : "false"}
+      data-chrome-variant={variant}
+      data-terminal-split-pane={isWorkspanSplit ? "true" : undefined}
+    >
+      {variant === "pane" && tabScrollState.isOverflowing && (
+        <button
+          type="button"
+          className="ui-terminal-tab-scroll-button ui-terminal-tab-scroll-button-left"
+          onClick={() => scrollPaneTabs(-1)}
+          disabled={!tabScrollState.canScrollLeft}
+          aria-label={t("terminal.tab.scrollLeft")}
+          title={t("terminal.tab.scrollLeft")}
+        >
+          <ChevronRight size={14} strokeWidth={1.8} className="rotate-180" aria-hidden="true" />
+        </button>
+      )}
+      <div
+        ref={tabScrollRef}
+        className="ui-terminal-tab-scroll flex h-full min-w-0 flex-1 items-center overflow-x-auto px-1.5"
+        data-can-scroll-left={tabScrollState.canScrollLeft ? "true" : "false"}
+        data-can-scroll-right={tabScrollState.canScrollRight ? "true" : "false"}
+      >
+        <SortableContext items={paneSessionIds} strategy={horizontalListSortingStrategy}>
+          {paneSessions.map((session) => (
+            <SortableTab
+              key={session.id}
+              id={session.id}
+              paneId={pane.id}
+              title={session.title}
+              displayTitle={buildTerminalTabDisplayTitle(session)}
+              worktreeBadge={sessionWorktreeBadges?.get(session.id)}
+              sessionKind={session.kind}
+              isActive={session.id === activePaneTabId}
+              isEditing={editingSessionId === session.id}
+              notification={tabNotifications[session.id] ?? "none"}
+              vendor={inferVendor(projectById.get(session.projectId!)?.cli_tool) ?? inferSessionVendor(session)}
+              cliToolIcon={inferSessionCliToolIcon(session, projectById.get(session.projectId!))}
+              hoverInfo={buildTerminalTabHoverInfo(
+                session,
+                session.projectId ? projectById.get(session.projectId) : undefined,
+                session.worktreeId ? worktreeById.get(session.worktreeId) : null,
+                {
+                  unboundProject: t("terminal.context.unboundProject"),
+                  anonymousPi: t("terminal.context.anonymousPi"),
+                  missingWorktree: t("terminal.context.worktreeMissing"),
+                  defaultShell: t("terminal.context.defaultShell"),
+                },
               )}
+              onActivate={() => onActivateSession(session.id)}
+              onClose={(anchor) => closePaneSessions([session.id], anchor)}
+              onSubmitEdit={(title) => onSubmitEdit(session.id, title)}
+              onCancelEdit={onCancelEdit}
+              menuClassName="terminal-skin"
+              menuStyle={tabMenuStyle}
+              menuContent={(getAnchor) => renderMenu(session, getAnchor)}
             />
           ))}
         </SortableContext>

@@ -405,7 +405,9 @@ pub fn run() {
                 .targets(targets)
                 .build()
         })
+        .manage(commands::btw_window::BtwWindowState::default())
         .setup(move |app| {
+            commands::btw_window::setup(app.handle());
             if let Err(err) = crash_reporter::start_runtime() {
                 log::warn!("failed to start CLI-Manager crash runtime marker: {err}");
             }
@@ -578,7 +580,8 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![
+        .invoke_handler({
+            let handler: Box<dyn Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync> = Box::new(tauri::generate_handler![
             commands::agent_capabilities::agent_capabilities_inspect,
             commands::agent_capabilities::agent_capabilities_probe,
             commands::extensions::extensions_mcp_capabilities,
@@ -938,6 +941,9 @@ pub fn run() {
             commands::command_suggestion::command_suggestion_generate,
             commands::command_suggestion::command_suggestion_list_path_entries,
             commands::command_suggestion::command_suggestion_resolve_directory,
+            commands::side_question::side_question_ask,
+            commands::side_question::side_question_context,
+            commands::side_question::side_question_cancel,
             commands::git::get_current_git_branch,
             commands::git::git_get_changes,
             commands::git::git_list_repositories,
@@ -1057,10 +1063,28 @@ pub fn run() {
             crash_reporter::frontend_crash_report,
             app_show_main_window,
             app_exit,
-        ])
+            commands::btw_window::btw_window_register,
+            commands::btw_window::btw_window_ready,
+            commands::btw_window::btw_window_publish,
+            commands::btw_window::btw_window_intent,
+            commands::btw_window::btw_window_release,
+            ]);
+            move |invoke: tauri::ipc::Invoke<tauri::Wry>| {
+                if !commands::btw_window::child_command_allowed(
+                    invoke.message.webview_ref().label(), invoke.message.command(),
+                ) {
+                    invoke.resolver.reject("btw_window_command_denied");
+                    return true;
+                }
+                handler(invoke)
+            }
+        })
         .build(context)
         .expect("error while building tauri application")
         .run(|app, event| {
+            if matches!(&event, tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit) {
+                commands::side_question::shutdown();
+            }
             if let tauri::RunEvent::Exit = &event {
                 app.state::<live_server::LiveServerManager>().shutdown();
                 app.state::<commands::cc_connect::CcConnectManager>()

@@ -977,8 +977,11 @@ export function useSidebarController({
     if (sessionId) {
       closeHistory();
       dispatchCurrentWorkTarget(sessionId);
+    } else {
+      const project = projectById.get(worktree.project_id);
+      if (project) void openWorktreeSession(project, worktree);
     }
-  }, [activateFirstWorktreeSession, closeHistory, onTerminalScopeChange, projectScopedTerminalViewEnabled, visibleWorktreeIds]);
+  }, [activateFirstWorktreeSession, closeHistory, onTerminalScopeChange, openWorktreeSession, projectById, projectScopedTerminalViewEnabled, visibleWorktreeIds]);
 
   const handleToggleWorktreeSelection = useCallback((worktree: WorktreeRecord) => {
     setSelectedProjectIds((prev) => (prev.size === 0 ? prev : new Set()));

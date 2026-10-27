@@ -31,8 +31,9 @@ export const jsxs = jsx;
 export const Fragment = "Fragment";
 `);
 compile("../src/features/projects/api/worktreeLabels.ts", "labels.mjs", code => code.replace(/import[^;]*;/g, ""));
+compile("../src/features/projects/api/worktreeMetadata.ts", "metadata.mjs", code => code.replace('"./worktreeLabels"', '"./labels.mjs"'));
 compile("../src/features/terminal/api/terminalProjectTabsModel.ts", "model.mjs", code =>
-  code.replace('"../../projects/api/worktreeLabels"', '"./labels.mjs"')
+  code.replace('"../../projects/api/worktreeLabels"', '"./labels.mjs"').replace('"../../projects/api/worktreeMetadata"', '"./metadata.mjs"')
     .replace(/import \{ findWorktreeForSession, resolveProjectForSession \}[^;]*;/, "const resolveProjectForSession = () => null; const findWorktreeForSession = () => null;"));
 compile("../src/features/terminal/api/terminalWorktreeBadge.ts", "badge.mjs", code => code.replace('"./terminalProjectTabsModel"', '"./model.mjs"'));
 const { buildWorktreeBadges, buildGlobalWorktreeBadges } = await import(pathToFileURL(join(temp, "badge.mjs")));
@@ -57,6 +58,7 @@ import { describeWorkspanTabGroup, formatWorkspanGroupTitle } from "./model.mjs"
 const useI18n = () => ({ t: (key, params) => params?.project ? key + ": " + params.project : key });
 const useDroppable = () => ({ setNodeRef() {} });
 const SortableContext = "SortableContext", horizontalListSortingStrategy = "horizontal";
+const PROJECT_DRAG_PREFIX = "project:", DND_SORTABLE_TRANSITION = {}, CSS = { Transform: { toString: () => undefined } }, useSortable = () => ({attributes: {}, listeners: {}, setNodeRef() {}});
 const WORKSPAN_DRAG_PREFIX = "workspan:", PULSING_TAB_STATES = new Set(), TAB_NOTIFICATION_COLORS = {};
 const ChevronDown = "ChevronDown", Plus = "Plus", Terminal = "Terminal", X = "X", VendorIcon = "VendorIcon";
 const Popover = "Popover", PopoverContent = "PopoverContent", PopoverTrigger = "PopoverTrigger";
@@ -110,6 +112,7 @@ function model(id, members, group = "root", closeIds = members.map(item => item.
 }
 function nodes(tree) {
   if (!tree || typeof tree !== "object") return [];
+  if (typeof tree.type === "function" && tree.type.name === "SortableProjectChip") return nodes(tree.type(tree.props));
   return [tree, ...[tree.props?.children].flat(Infinity).flatMap(nodes)];
 }
 const mixed = model("mixed", [member("a", "p"), member("b", "q"), member("c", "p")], "mixed-project");
@@ -157,35 +160,16 @@ test("mixed tab activation targets selected project; grouping/filter preserves c
   assert.equal(JSON.stringify(mixed), before);
 });
 
-test("bar empty status filter keeps project; explicit project click exits filter, invalidates overflow menu, and + has no visible-tab source", () => {
-  reset();
-  const rowChanges = [], projects = [], newTabs = [];
-  const p = model("p-root", [member("p1", "p")]);
-  const q = model("q-root", [member("q1", "q")]);
-  const props = { position: "top", models: [p, q, mixed], contextOptions: [
-    { key: "p", project: "Project P" }, { key: "q", project: "Project Q" }],
-    selectedProjectKey: "p", overflow: { isOverflowing: true, hiddenIds: ["q-root"] }, listOpen: false,
-    activeWorkspanId: "p-root", notifications: {}, detachPreview: {},
-    onRowChange: signature => rowChanges.push(signature), onActivateProject: key => projects.push(key),
-    onNewTab: (...args) => newTabs.push(args), renderTab: m => ({ type: "test-tab", props: { id: m.workspan.id } }),
-  };
-  const run = () => render(() => WorkspanTabBar(props));
-  let tree = run();
-  const running = nodes(tree).find(node => node.props?.["aria-label"] === "terminal.status.running");
-  running.props.onClick();
-  tree = run();
-  assert.equal(nodes(tree).filter(node => node.type === "test-tab").length, 0);
-  assert.equal(nodes(tree).find(node => node.props?.role === "tab" && node.props?.["aria-selected"]).props.title, "Project P");
-  assert.equal(nodes(tree).some(node => node.props?.["aria-label"] === "terminal.toolbar.newTerminal"), false);
-  assert.deepEqual(newTabs, []);
-  nodes(tree).find(node => node.props?.role === "tab" && node.props?.title === "Project Q").props.onClick();
+test("management project ordering has no status filter buttons or new-terminal action", () => {
+  reset(); const projects = [];
+  const tree = render(() => WorkspanTabBar({ position: "top", models: [mixed], selectedProjectKey: "p",
+    contextOptions: [{ key: "p", project: "Project P" }, { key: "q", project: "Project Q" }],
+    overflow: { hiddenIds: [] }, notifications: {}, detachPreview: {}, onRowChange() {},
+    onActivateProject: key => projects.push(key), renderTab: () => null }));
+  assert.equal(nodes(tree).some(n => n.props?.["aria-label"] === "terminal.status.running"), false);
+  nodes(tree).find(n => n.props?.role === "tab" && n.props.title === "Project Q").props.onClick();
   assert.deepEqual(projects, ["q"]);
-  props.selectedProjectKey = "q";
-  tree = run();
-  assert.deepEqual(nodes(tree).filter(node => node.type === "test-tab").map(node => node.props.id), ["q-root", "mixed"]);
-  assert.equal(nodes(tree).find(node => node.props?.["aria-label"] === "terminal.status.all").props["aria-pressed"], true);
-  assert.equal(rowChanges.length, 3);
-  assert.notEqual(rowChanges[1], rowChanges[2]);
+  assert.equal(nodes(tree).some(n => n.props?.["aria-label"] === "terminal.toolbar.newTerminal"), false);
 });
 
 test("new tab source remains actual active SSH/WSL member even when filtered or last visible tab differs", () => {
@@ -256,14 +240,14 @@ test("actual Workspan menu callbacks close only displayed grouped/project/status
   const mixedTab = model("mixed", [member("ma", "p"), member("mb", "q"), member("mc", "p")], "mixed-project");
   const calls = [], anchor = { x: 42 };
   const props = { t: key => key, mountedWorkspanLayouts: [{ workspan: { id: "A" } }],
-    workspanEnabled: true, workspanTabModels: [a, b, q, c, mixedTab], selectedProjectKey: "p",
+    selectedCurrentWorkSessionIds: new Set(), currentWorkSessionIds: [], workspanEnabled: true, workspanTabModels: [a, b, q, c, mixedTab], selectedProjectKey: "p",
     renderToolbarActions: () => null, onWorkspanRowChange: () => {},
     workspanContextOptions: [], workspanTabOverflow: { isOverflowing: false, hiddenIds: [] },
     workspanDetachPreview: {}, visibleSessions: [],
     tabNotifications: { a: "running", b: "done", c: "running", ma: "running" },
     handleCloseSessions: (...args) => calls.push(args) };
   const view = TerminalTabsView(props);
-  const bar = nodes(view).find(node => node.type === "WorkspanTerminalLayout").props.tabBar;
+  const bar = nodes(view).find(node => node.type === "WorkspanTerminalLayout").props.tabBar.props.legacyOrdering;
   assert.equal(bar.type, WorkspanTabBar);
   const run = () => render(() => WorkspanTabBar(bar.props));
   const tabs = tree => nodes(tree).filter(node => node.type === "SortableWorkspanTab");
@@ -298,29 +282,7 @@ test("actual Workspan menu callbacks close only displayed grouped/project/status
   item(row[2], "closeCurrent").props.onSelect();
   assert.deepEqual(calls.at(-1), [["b"], anchor]);
 
-  nodes(tree).find(node => node.props?.["aria-label"] === "terminal.status.running").props.onClick();
-  tree = run(); row = tabs(tree);
-  assert.deepEqual(row.map(tab => tab.props.workspan.id), ["A", "C", "mixed"]);
-  close(row[1], "closeLeft", ["a"]);
-  close(row[1], "closeRight", ["ma", "mb", "mc"]);
-  close(row[1], "closeOthers", ["a", "ma", "mb", "mc"]);
 
-  // Explicit project navigation exits global status mode.
-  nodes(tree).find(node => node.props?.["aria-label"] === "terminal.status.all").props.onClick();
-  bar.props.selectedProjectKey = "q";
-  tree = run(); row = tabs(tree);
-  assert.deepEqual(row.map(tab => tab.props.workspan.id), ["Q", "mixed"]);
-  close(row[0], "closeOthers", ["ma", "mb", "mc"]);
-  close(row[1], "closeLeft", ["q"]);
-  close(row[1], "closeRight", []);
-
-  nodes(tree).find(node => node.props?.["aria-label"] === "terminal.status.done").props.onClick();
-  bar.props.notifications = { q: "done" };
-  tree = run(); row = tabs(tree);
-  assert.deepEqual(row.map(tab => tab.props.workspan.id), ["Q"]);
-  close(row[0], "closeOthers", []);
-  close(row[0], "closeLeft", []);
-  close(row[0], "closeRight", []);
 });
 
 compile("../src/shared/i18n/messages/terminal.zh-CN.ts", "zh.mjs");
@@ -456,59 +418,6 @@ test("overflow groups show persistent badges without group headers; scoped close
 });
 
 
-test("global status first-row navigation, mixed matching callbacks/overflow, updates, dedupe and stable empty results", () => {
-  reset();
-  const a = model("A", [member("a", "p")]);
-  const b = model("B", [member("b", "q")]);
-  const mx = model("MX", [member("ma", "p"), member("mb", "q")], "mixed-project", ["ma"]);
-  mx.workspan.activeSessionId = "ma";
-  const calls = [], projects = [], rows = [];
-  const props = { position: "top", models: [a, mx, b, mx], selectedProjectKey: "p",
-    contextOptions: [{ key: "p", project: "P" }, { key: "q", project: "Q" }],
-    overflow: { isOverflowing: true, hiddenIds: ["MX", "B"] }, notifications: { mb: "running", b: "running" },
-    detachPreview: {}, onRowChange: x => rows.push(x), onActivate: (...x) => calls.push(x),
-    onActivateProject: x => projects.push(x), onToggleList() {}, onClose: m => calls.push(m.closeSessionIds),
-    renderTab: (m, targets, badge, activate) => ({ type: "test-tab", props: { id: m.workspan.id, targets, badge, activate } }) };
-  const run = () => render(() => WorkspanTabBar(props));
-  const tabs = tree => nodes(tree).filter(n => n.type === "test-tab");
-  let tree = run();
-  const firstRow = nodes(tree).find(n => n.props?.className?.includes("ui-workspan-context-row"));
-  assert.ok(nodes(firstRow).some(n => n.props?.["aria-label"] === "terminal.status.running"));
-  nodes(tree).find(n => n.props?.["aria-label"] === "terminal.status.running").props.onClick();
-  tree = run();
-  assert.deepEqual(tabs(tree).map(n => n.props.id), ["MX", "B"]);
-  assert.match(tabs(tree)[0].props.badge.label, /p[\s\S]*Main[\s\S]*q[\s\S]*Main/);
-  tabs(tree)[0].props.activate();
-  assert.deepEqual(calls.at(-1), ["MX", "mb"]);
-  assert.deepEqual(tabs(tree)[0].props.targets.rightSessionIds, ["b"]);
-  assert.deepEqual(tabs(tree)[1].props.targets.otherSessionIds, ["ma"]);
-  const overflow = nodes(tree).filter(n => n.props?.className?.includes("ui-workspan-overflow-target"));
-  overflow[0].props.onClick();
-  assert.deepEqual(calls.at(-1), ["MX", "mb"]);
-  props.selectedProjectKey = "q"; // activation/notification changes must not reset mode
-  tree = run();
-  assert.equal(nodes(tree).find(n => n.props?.["aria-label"] === "terminal.status.running").props["aria-pressed"], true);
-  const signature = rows.at(-1);
-  props.notifications = { mb: "running", b: "running", ma: "running" };
-  tree = run();
-  assert.notEqual(rows.at(-1), signature); // same result IDs, changed member state/count
-  const callsBefore = calls.length;
-  props.notifications = {};
-  tree = run();
-  assert.deepEqual(tabs(tree), []);
-  assert.equal(calls.length, callsBefore);
-  nodes(tree).find(n => n.props?.role === "tab" && n.props.title === "P").props.onClick();
-  props.selectedProjectKey = "p";
-  props.models = [a, mx, b];
-  tree = run();
-  assert.deepEqual(projects, ["p"]);
-  assert.deepEqual(tabs(tree).map(n => n.props.id), ["A", "MX"]);
-  nodes(tree).find(n => n.props?.["aria-label"] === "terminal.status.running").props.onClick();
-  tree = run();
-  nodes(tree).find(n => n.props?.["aria-label"] === "terminal.status.all").props.onClick();
-  tree = run();
-  assert.deepEqual(tabs(tree).map(n => n.props.id), ["A", "MX"]);
-});
 
 test("global target overrides remembered unrelated member; side scope and count dedupe remain upper bounds", async () => {
   const { countVisibleTabStatuses, resolveStatusWorkspanTarget } = await import(pathToFileURL(join(temp, "selection.mjs")));
@@ -592,13 +501,13 @@ test("each project chip x compiled view/bar callback targets clicked project wit
       : s.id === "temp" ? { kind: "synced-history" } : s.id === "hidden" ? { tabHidden: true } : {}) }));
   const scoped = model("scoped", [member("scoped", "p")]); // scope-excluded backing members never supplied
   const calls = [], destructive = [], projects = [], activated = [];
-  const view = TerminalTabsView({ t: key => key, mountedWorkspanLayouts: [{ workspan: { id: "MX" } }], workspanEnabled: true,
+  const view = TerminalTabsView({ t: key => key, mountedWorkspanLayouts: [{ workspan: { id: "MX" } }], selectedCurrentWorkSessionIds: new Set(), currentWorkSessionIds: [], workspanEnabled: true,
     workspanTabModels: [mx, scoped, mx], selectedProjectKey: "p", renderToolbarActions: () => null,
     workspanContextOptions: [{ key: "p", project: "P" }, { key: "q", project: "Q" }], workspanTabOverflow: { hiddenIds: [] },
     workspanDetachPreview: {}, visibleSessions: [], onWorkspanRowChange() {},
     tabNotifications: { a: "running", q: "running", editor: "running", transcript: "running", temp: "running", hidden: "running", scoped: "done" },
     handleHideProjectTerminals: ids => calls.push(ids), handleCloseSessions: ids => destructive.push(ids) });
-  const bar = nodes(view).find(n => n.type === "WorkspanTerminalLayout").props.tabBar;
+  const bar = nodes(view).find(n => n.type === "WorkspanTerminalLayout").props.tabBar.props.legacyOrdering;
   const run = () => render(() => WorkspanTabBar(bar.props));
   bar.props.onActivateProject = key => projects.push(key);
   bar.props.onActivate = (...args) => activated.push(args);
@@ -631,39 +540,8 @@ test("each project chip x compiled view/bar callback targets clicked project wit
   assert.deepEqual(calls.at(-1), ["q"]);
   tree = run();
   assert.equal(bar.props.selectedProjectKey, "p");
-  assert.equal(mode(tree, "all").props["aria-pressed"], true);
-  const firstRow = nodes(tree).find(n => n.props?.className?.includes("ui-workspan-context-row"));
-  assert.notEqual(firstRow.props.children.at(-1)?.type, "button"); // no global row-end x
-  mode(tree, "running").props.onClick();
-  tree = run(); click(button(tree));
-  assert.deepEqual(calls.at(-1), ["a"]); // exact member status, not whole matching mixed Workspan
-  click(button(tree, "Q"));
-  assert.deepEqual(calls.at(-1), ["q"]);
-  tree = run();
-  assert.equal(mode(tree, "running").props["aria-pressed"], true);
-  bar.props.selectedProjectKey = "q";
-  tree = run(); click(button(tree, "Q"));
-  assert.deepEqual(calls.at(-1), ["q"]);
-  click(button(tree));
-  assert.deepEqual(calls.at(-1), ["a"]); // nonselected P in global mode
-  mode(tree, "done").props.onClick();
-  tree = run(); click(button(tree));
-  assert.deepEqual(calls.at(-1), ["scoped"]);
-  assert.equal(button(tree, "Q").props.disabled, true);
-  mode(tree, "failed").props.onClick();
-  bar.props.notifications = { idle: "failed", q: "running", scoped: "done" };
-  tree = run(); click(button(tree));
-  assert.deepEqual(calls.at(-1), ["idle"]);
-  assert.equal(button(tree, "Q").props.disabled, true);
   assert.deepEqual(projects, []);
   assert.deepEqual(activated, []);
-  mode(tree, "all").props.onClick();
-  bar.props.selectedProjectKey = "p";
-  bar.props.models = [model("only-other", [member("other", "q")])];
-  tree = run(); assert.equal(button(tree).props.disabled, true);
-  bar.props.models = [model("pseudo", [member("editor", "p")])];
-  bar.props.models[0].memberSessions[0].kind = "file-editor";
-  tree = run(); assert.equal(button(tree).props.disabled, true);
   assert.deepEqual(destructive, []);
   for (const messages of [zh, en]) {
     const label = messages["terminal.context.hideDisplayedProjectTerminals"];
@@ -716,14 +594,12 @@ test("compiled current context renders full active metadata and deduplicated sco
   assert.equal(TerminalCurrentContext({ models: [m], workspanId: "absent", sessionId: "active" }), null);
   for (const position of ["top", "bottom"]) for (const visible of [true, false]) {
     const view = TerminalTabsView({ t: key => key, mountedWorkspanLayouts: [{ workspan: { id: "split" } }],
-      workspanEnabled: true, workspanTabModels: [m], effectiveActiveWorkspanId: "split", currentContextSessionId: "active",
+      selectedCurrentWorkSessionIds: new Set(), currentWorkSessionIds: [], workspanEnabled: true, workspanTabModels: [m], effectiveActiveWorkspanId: "split", currentContextSessionId: "active",
       workspanTabBarPosition: position, workspanTabBarVisible: visible, renderToolbarActions: () => null, visibleSessions: [] });
     const contexts = nodes(view).filter(n => n.type === TerminalCurrentContext);
-    assert.equal(contexts.length, 1);
-    assert.deepEqual(contexts[0].props, { models: [m], workspanId: "split", sessionId: "active" });
-    const parent = nodes(view).find(n => Array.isArray(n.props?.children) && n.props.children.includes(contexts[0]));
-    const layout = parent.props.children.find(n => n?.type === "WorkspanTerminalLayout");
-    assert.ok(parent.props.children.indexOf(contexts[0]) < parent.props.children.indexOf(layout));
+    assert.equal(contexts.length, 0);
+    const layout = nodes(view).find(n => n.type === "WorkspanTerminalLayout");
+    assert.equal(layout.props.tabBar.type, "TerminalNavigationAdapter");
     assert.equal(layout.props.position, position);
     assert.equal(layout.props.tabBarVisible, visible);
   }

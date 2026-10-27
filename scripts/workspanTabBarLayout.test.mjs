@@ -65,7 +65,7 @@ test("pane-level terminal tab ownership remains outside the top-level docking sl
   assert.doesNotMatch(tabBarSource, /SplitTerminalView|PaneTabBar/);
 });
 
-test("full current context wraps and scrolls above fixed badge rows without group headers", () => {
+test("current context is on demand; legacy ordering stays inside navigation management", () => {
   const css = readFileSync(new URL("../src/styles/components/focus-controls.css", import.meta.url), "utf8");
   const context = css.match(/\.ui-terminal-current-context\s*\{([^}]+)\}/)?.[1];
   assert.ok(context);
@@ -78,8 +78,9 @@ test("full current context wraps and scrolls above fixed badge rows without grou
   assert.match(css, /\.ui-workspan-overflow-control\s*\{[^}]*flex: 0 0 28px/);
   assert.match(tabBarSource, /ui-workspan-group-tabs/);
   assert.match(tabsSource, /showWorktreeBadge=\{true\}/);
-  assert.equal((tabsSource.match(/<TerminalCurrentContext/g) ?? []).length, 1);
-  assert.match(tabsSource, /<TerminalCurrentContext[^>]+\/>\s*<WorkspanTerminalLayout/);
+  assert.equal((tabsSource.match(/<TerminalCurrentContext/g) ?? []).length, 0);
+  assert.match(tabsSource, /tabBar=\{<TerminalNavigationAdapter/);
+  assert.match(tabsSource, /legacyOrdering=\{legacyOrdering\}/);
 });
 
 test("bar, document-flow slot and aurora override have natural height; insertion line anchors to purpose row", () => {

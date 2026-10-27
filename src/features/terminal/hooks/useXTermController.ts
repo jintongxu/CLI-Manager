@@ -1,3 +1,4 @@
+import { useTerminalSelectionActions } from "./useTerminalSelectionActions";
 import { beginTerminalContinuation, canAcceptTerminalInput, captureTerminalInputPermission, disposeTerminalContinuation, invalidateTerminalFit, isTerminalContinuationHydrated, markTerminalContinuation } from "../../../shared/lib/terminalContinuation";
 import { createTerminalSnapshotLifecycle } from "../lib/terminalSnapshotLifecycle";
 import { restoreTerminalSnapshotSize } from "../lib/terminalSnapshotCapture";
@@ -55,7 +56,7 @@ import { formatStartupInputForPty, useTerminalStore } from "../state";
 import { isTerminalMarkdownPreviewSupported } from "../components/TerminalMarkdownPreview";
 import {
   createTerminalCliContext, isClaudeTerminalContext, isCodexTerminalContext, isGrokLaunchCommand,
-  isGrokRuntimeContext, isGrokTerminalContext, isOpenCodeTerminalContext,
+  isGrokRuntimeContext, isGrokTerminalContext, isOpenCodeTerminalContext, isPiTerminalContext,
 } from "../browser/TerminalCliContext";
 import { createTerminalMouseInteractionOptions } from "../browser/TerminalMouseInteraction";
 import { resolveTerminalNewlineKeyEvent } from "../browser/TerminalNewlineShortcut";
@@ -72,7 +73,6 @@ import { logError, logInfo, logWarn } from "../../../shared/platform/logger";
 import {
   type TerminalSubsystemDisposable, type CodexImeDebugState, summarizeTextForDiagnostics,
   disposeTerminalSubsystem, canShowSuggestionAtCurrentInputEnd, withVisibleSelectionTheme,
-  serializeBufferPlainText,
 } from "../lib/xTermDiagnostics";
 import {
   getTerminalRenderedCellSize, type TerminalPathKind, type TerminalLinkHoverIcon,
@@ -90,7 +90,7 @@ import {
 
 let terminalImageAddonFallbackLogged = false;
 
-export function useXTermController({ sessionId, isActive = true, isVisible = true, fontSize = 16, fontFamily = "\"JetBrainsMono Nerd Font\", \"JetBrains Mono\", \"Cascadia Code\", Consolas, monospace", resolvedTheme = "dark", terminalThemeName = "midnightAuroraTerminal", lightThemePalette = "clear-focus", darkThemePalette = "midnight-aurora", onNewTab, onCloseSession, onCloseOthers, onCloseToLeft, onCloseToRight, onSplitRight, onSplitDown }: Props) {
+export function useXTermController({ sessionId, isActive = true, isVisible = true, fontSize = 16, fontFamily = "\"JetBrainsMono Nerd Font\", \"JetBrains Mono\", \"Cascadia Code\", Consolas, monospace", resolvedTheme = "dark", terminalThemeName = "midnightAuroraTerminal", lightThemePalette = "clear-focus", darkThemePalette = "midnight-aurora", onNewTab, onAskBtw, onCloseSession, onCloseOthers, onCloseToLeft, onCloseToRight, onSplitRight, onSplitDown }: Props) {
   const { t } = useI18n();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -106,6 +106,9 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
   const visibilityRestoreRevealRafRef = useRef<number | null>(null);
   const visibilityRestoreFallbackRafRef = useRef<number | null>(null);
   const visibilityRestoreFallbackTimerRef = useRef<number | null>(null);
+  // Incremented whenever a restore cycle is superseded. Delayed reveal and
+  // refresh callbacks must never unmask a newer terminal instance.
+  const visibilityRestoreGenerationRef = useRef(0);
   const codexCursorShowTimerRef = useRef<number | null>(null);
   const terminalInputActivityRef = useRef<(terminal: Terminal) => void>(() => {});
   const terminalRendererActivityAtRef = useRef(Date.now());
@@ -119,6 +122,9 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
   const displayAfterWriteRef = useRef<((terminal: Terminal) => void) | null>(null);
   const [savedPasswordPromptHint, setSavedPasswordPromptHint] = useState<{ left: number; top: number; height: number } | null>(null);
   const savedPasswordPasteInFlightRef = useRef(false);
+  const contextMenuSelectionRef = useRef<string>("");
+  const lastTerminalSelectionRef = useRef<string>("");
+  const lastNativeSelectionRef = useRef<string>("");
   const piTerminalCompatibilityRef = useRef<PiTerminalCompatibility | null>(null);
   const terminalScrollbackCustomEnabled = useSettingsStore((s) => s.terminalScrollbackCustomEnabled);
   const terminalScrollbackRows = useSettingsStore((s) => s.terminalScrollbackRows);
@@ -611,8 +617,11 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
   }, [sessionId]);
 
   displayAfterWriteRef.current = (terminal) => {
-    refreshSavedPasswordPromptHint(terminal);
+    // Hidden displays keep xterm parsing and scrollback authoritative, but do
+    // not run DOM/TUI scans that cannot produce visible pixels. Restoration
+    // will refresh the viewport and perform the scans once visible again.
     if (!isVisibleRef.current) return;
+    refreshSavedPasswordPromptHint(terminal);
     if (isCodexSession(undefined, terminal) && disposeWebglRenderer()) {
       scheduleViewportRefresh();
     }
@@ -658,6 +667,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
   }, [hideCodexRuntimeCursor, sessionId]);
 
   const clearVisibilityRestoreRevealSchedule = () => {
+    visibilityRestoreGenerationRef.current += 1;
     if (visibilityRestoreRevealTimerRef.current !== null) {
       window.clearTimeout(visibilityRestoreRevealTimerRef.current);
       visibilityRestoreRevealTimerRef.current = null;
@@ -684,6 +694,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
   };
 
   const scheduleVisibilityRestoreFallbackRefresh = () => {
+    const generation = visibilityRestoreGenerationRef.current;
     const refresh = () => {
       if (visibilityRestoreFallbackRafRef.current !== null) {
         window.cancelAnimationFrame(visibilityRestoreFallbackRafRef.current);
@@ -693,7 +704,8 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
         window.clearTimeout(visibilityRestoreFallbackTimerRef.current);
         visibilityRestoreFallbackTimerRef.current = null;
       }
-      if (!visibilityRestorePendingRef.current || !isVisibleRef.current) return;
+      if (generation !== visibilityRestoreGenerationRef.current
+        || !visibilityRestorePendingRef.current || !isVisibleRef.current) return;
       markViewportRefreshNeeded();
       scheduleFit(true, true);
     };
@@ -708,6 +720,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
 
   const beginVisibilityRestoreReveal = (deferViewportRefresh = false) => {
     clearVisibilityRestoreRevealSchedule();
+    const generation = visibilityRestoreGenerationRef.current;
     if (!visibilityRestorePendingRef.current) {
       visibilityRestorePendingRef.current = true;
       setVisibilityRestorePending(true);
@@ -717,6 +730,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     }
     visibilityRestoreRevealTimerRef.current = window.setTimeout(() => {
       visibilityRestoreRevealTimerRef.current = null;
+      if (generation !== visibilityRestoreGenerationRef.current) return;
       finishVisibilityRestoreReveal();
     }, VISIBILITY_RESTORE_REVEAL_TIMEOUT_MS);
   };
@@ -732,8 +746,10 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
       return;
     }
     clearVisibilityRestoreRevealSchedule();
+    const generation = visibilityRestoreGenerationRef.current;
     visibilityRestoreRevealRafRef.current = window.requestAnimationFrame(() => {
       visibilityRestoreRevealRafRef.current = null;
+      if (generation !== visibilityRestoreGenerationRef.current) return;
       finishVisibilityRestoreReveal();
     });
   };
@@ -1323,20 +1339,83 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
         }),
       });
     }
+    const readCurrentSelectionText = () => {
+      const selection = typeof window !== "undefined" ? window.getSelection() : null;
+      const domText = selection && !selection.isCollapsed ? selection.toString() : "";
+      if (domText.trim()) { lastNativeSelectionRef.current = domText.trim(); return domText; }
+      const termText = terminal.getSelection(), termTrimmed = termText.trim();
+      if (termTrimmed) { lastTerminalSelectionRef.current = termTrimmed; return termText; }
+      return lastNativeSelectionRef.current || lastTerminalSelectionRef.current;
+    };
+    const nativeSelectionListener = () => {
+      const selection = typeof window !== "undefined" ? window.getSelection() : null;
+      const text = selection && !selection.isCollapsed ? selection.toString().trim() : "";
+      if (text) lastNativeSelectionRef.current = text;
+    };
+    document.addEventListener("selectionchange", nativeSelectionListener);
+    inputDisposables.push({ dispose: () => document.removeEventListener("selectionchange", nativeSelectionListener) });
+    const captureTerminalSelection = () => {
+      const selection = terminal.getSelection().trim();
+      if (selection) lastTerminalSelectionRef.current = selection;
+    };
+    const selectionListener = terminal.onSelectionChange(captureTerminalSelection);
+    inputDisposables.push({ dispose: () => selectionListener.dispose() });
+    const pointerCell = (event: MouseEvent) => {
+      const screen = contextMenuTarget.querySelector(".xterm-screen") as HTMLElement | null;
+      if (!screen) return null;
+      const rect = screen.getBoundingClientRect();
+      const cell = getTerminalRenderedCellSize(terminal, contextMenuTarget, fontSize);
+      if (cell.width <= 0 || cell.height <= 0) return null;
+      const column = Math.max(0, Math.min(terminal.cols - 1, Math.floor((event.clientX - rect.left) / cell.width)));
+      const viewportRow = Math.max(0, Math.min(terminal.rows - 1, Math.floor((event.clientY - rect.top) / cell.height)));
+      return { column, row: terminal.buffer.active.viewportY + viewportRow };
+    };
+    let piDragStart: { column: number; row: number } | null = null;
+    const onSelectionMouseUp = (e: MouseEvent) => {
+      if (e.button !== 0 || !piDragStart) return;
+      const start = piDragStart;
+      piDragStart = null;
+      const end = pointerCell(e);
+      if (!end) return;
+      queueMicrotask(() => {
+        const startOffset = start.row * terminal.cols + start.column;
+        const endOffset = end.row * terminal.cols + end.column;
+        const length = Math.abs(endOffset - startOffset);
+        if (length > 0) {
+          const first = startOffset <= endOffset ? start : end;
+          terminal.select(first.column, first.row, length);
+        }
+        captureTerminalSelection();
+      });
+    };
+    document.addEventListener("mouseup", onSelectionMouseUp);
+    inputDisposables.push({ dispose: () => document.removeEventListener("mouseup", onSelectionMouseUp) });
+    const onMouseDownCapture = (e: MouseEvent) => {
+      if (e.button === 0 && isPiTerminalContext(getSessionToolContext())) {
+        piDragStart = pointerCell(e);
+        contextMenuSelectionRef.current = "";
+        lastTerminalSelectionRef.current = "";
+        lastNativeSelectionRef.current = "";
+        terminal.clearSelection();
+        return;
+      }
+      if (e.button !== 2) return;
+      e.stopPropagation();
+      const selection = readCurrentSelectionText().trim();
+      if (selection) contextMenuSelectionRef.current = selection;
+    };
+    const onMouseUpCapture = (e: MouseEvent) => { if (e.button === 2) e.stopPropagation(); };
     const onContextMenu = (e: MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if (terminal.hasSelection()) {
-        void copySelection();
-        terminal.clearSelection();
-        inputSelection.clearInputSelectionState();
-        focusTerminalWithCodexCursorPolicy(terminal);
-        closeContextMenu();
-        return;
-      }
-      openMenu(e.clientX, e.clientY, false);
+      e.stopImmediatePropagation();
+      const text = readCurrentSelectionText().trim() || contextMenuSelectionRef.current;
+      contextMenuSelectionRef.current = text;
+      openMenu(e.clientX, e.clientY, text.length > 0, text);
     };
-    contextMenuTarget.addEventListener("contextmenu", onContextMenu);
+    contextMenuTarget.addEventListener("mousedown", onMouseDownCapture, { capture: true });
+    contextMenuTarget.addEventListener("mouseup", onMouseUpCapture, { capture: true });
+    contextMenuTarget.addEventListener("contextmenu", onContextMenu, { capture: true });
 
     terminal.attachCustomKeyEventHandler((e) => {
       if (!canAcceptTerminalInput(terminal)) { e.preventDefault(); return false; }
@@ -1714,7 +1793,9 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
 
     return () => {
       detachPasteAndDrop();
-      contextMenuTarget.removeEventListener("contextmenu", onContextMenu);
+      contextMenuTarget.removeEventListener("mousedown", onMouseDownCapture, { capture: true });
+      contextMenuTarget.removeEventListener("mouseup", onMouseUpCapture, { capture: true });
+      contextMenuTarget.removeEventListener("contextmenu", onContextMenu, { capture: true });
       disposeTerminalSubsystem(inputDisposables);
       disposeTerminalSubsystem(displayDisposables);
       cancelScheduledFit();
@@ -1813,44 +1894,10 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     setIsScrolledAwayFromBottom(false);
   };
 
-  const handleMenuCopy = () => {
-    const terminal = terminalRef.current;
-    closeContextMenu();
-    if (!terminal) return;
-    void copyTextToClipboard(terminal.getSelection());
-    terminal.clearSelection();
-    focusTerminalWithCodexCursorPolicy(terminal);
-  };
-
-  const handleMenuPaste = () => {
-    const terminal = terminalRef.current;
-    closeContextMenu();
-    if (!terminal) return;
-    const permission = captureTerminalInputPermission(terminal);
-    if (!permission()) return;
-    readClipboardPasteText().then((text) => {
-      if (text && permission()) pasteText(terminal, text);
-      focusTerminalWithCodexCursorPolicy(terminal);
-    }).catch((err) => {
-      logError("Failed to read clipboard text", { sessionId, err });
-    });
-  };
-
-  const handleMenuSelectAll = () => {
-    const terminal = terminalRef.current;
-    closeContextMenu();
-    if (!terminal) return;
-    terminal.selectAll();
-    focusTerminalWithCodexCursorPolicy(terminal);
-  };
-
-  const handleMenuCopyAll = () => {
-    const terminal = terminalRef.current;
-    closeContextMenu();
-    if (!terminal) return;
-    void copyTextToClipboard(serializeBufferPlainText(terminal));
-    focusTerminalWithCodexCursorPolicy(terminal);
-  };
+  const { handleMenuCopy, handleMenuPaste, handleMenuSelectAll, handleMenuCopyAll, handleMenuAskBtw } = useTerminalSelectionActions({
+    sessionId, terminalRef, contextMenuSelectionRef, menuState, closeContextMenu,
+    focusTerminalWithCodexCursorPolicy, readClipboardPasteText, pasteText, onAskBtw,
+  });
 
   const handleMenuClear = () => {
     const terminal = terminalRef.current;
@@ -1921,41 +1968,13 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     markdownPreviewPanelPercent,
     handleTerminalFontSizeWheel,
     containerRef,
-    terminalContainerStyle,
-    isScrolledAwayFromBottom,
-    fontSizeControlVisible,
-    handleScrollToBottom,
-    terminalFontSizeControlStyle,
-    fontSize,
-    showFontSizeControl,
-    updateSettings,
-    handleMarkdownPreviewResizeStart,
-    sessionId,
-    terminalInputSuggestionsEnabled,
-    isActive,
-    isVisible,
-    suggestionGhost,
-    savedPasswordPromptHint,
-    searchForeground,
-    effectiveFontFamily,
-    menuState,
-    menuRef,
-    searchBackground,
-    fontFamily,
-    handleMenuCopy,
-    handleMenuPaste,
-    handleMenuSelectAll,
-    handleMenuCopyAll,
-    handleMenuClear,
-    hasManageActions,
-    onNewTab,
-    runMenuAction,
-    onCloseSession,
-    onCloseOthers,
-    onCloseToLeft,
-    onCloseToRight,
-    onSplitRight,
-    onSplitDown,
-    runSplitMenuAction,
+    terminalContainerStyle, isScrolledAwayFromBottom, fontSizeControlVisible, handleScrollToBottom,
+    terminalFontSizeControlStyle, fontSize, showFontSizeControl, updateSettings,
+    handleMarkdownPreviewResizeStart, sessionId, terminalInputSuggestionsEnabled,
+    isActive, isVisible, suggestionGhost, savedPasswordPromptHint, searchForeground,
+    effectiveFontFamily, menuState, menuRef, searchBackground, fontFamily,
+    handleMenuCopy, handleMenuPaste, handleMenuSelectAll, handleMenuCopyAll, handleMenuAskBtw, handleMenuClear,
+    hasManageActions, onNewTab, runMenuAction, onCloseSession, onCloseOthers,
+    onCloseToLeft, onCloseToRight, onSplitRight, onSplitDown, runSplitMenuAction,
   };
 }

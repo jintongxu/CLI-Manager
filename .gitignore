@@ -32,6 +32,10 @@ dist-ssr
 .xcodemap/
 data/
 
+# Generated side-question runtime (staged by Tauri beforeBuildCommand)
+src-tauri/resources/side-question/
+src-tauri/resources/side-question.staging/
+
 # Tauri
 src-tauri/target/
 src-tauri/ssh-agent/target/

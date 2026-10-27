@@ -156,6 +156,7 @@ function renderList(language, options = {}) {
     } }) },
     "../../../shared/ui/icons": icons,
     "../../terminal/state": { useTerminalStore: (selector) => selector({ tabNotifications: options.notifications ?? {}, tabStatuses: hookSources(options.notifications) }) },
+    "../../terminal/api/sessionStore": { useSessionStore: (selector) => selector({ currentWorkSessionIds: options.currentWorkSessionIds ?? [] }) },
     "../../../shared/ui/context-menu": {
       ContextMenu: tag("div"), ContextMenuTrigger: ({ children }) => children,
       ContextMenuContent: tag("div"), ContextMenuItem: tag("div"),
@@ -183,6 +184,23 @@ function descendants(element) {
   if (!element || typeof element !== "object") return [];
   return [element, ...React.Children.toArray(element.props?.children).flatMap(descendants)];
 }
+
+test("sidebar rows distinguish current-work, pending and hidden membership markers", () => {
+  for (const language of ["en-US", "zh-CN"]) {
+    const h = renderList(language, { items: [session("current"), session("pending"), session("hidden", { tabHidden: true })], currentWorkSessionIds: ["current"] });
+    const rows = descendants(h.tree).filter((el) => el.type === "button");
+    const markerOf = (row) => descendants(row).find((el) => el.props.className === "sidebar-terminal-membership");
+    assert.equal(markerOf(rows[0]).props.title, catalogs[language]["sidebar.terminals.currentWork"]);
+    assert.equal(markerOf(rows[0]).props["data-membership"], "current");
+    assert.equal(markerOf(rows[1]).props.title, catalogs[language]["sidebar.terminals.pendingWork"]);
+    assert.equal(markerOf(rows[1]).props["data-membership"], "pending");
+    assert.equal(markerOf(rows[2]).props.title, catalogs[language]["sidebar.terminals.hiddenWork"]);
+    assert.equal(markerOf(rows[2]).props["data-membership"], "hidden");
+    assert.ok(rows[0].props.title.includes(catalogs[language]["sidebar.terminals.currentWork"]));
+    assert.ok(rows[1].props.title.includes(catalogs[language]["sidebar.terminals.pendingWork"]));
+    assert.ok(rows[2].props.title.includes(catalogs[language]["sidebar.terminals.hiddenWork"]));
+  }
+});
 
 test("actual list component renders bilingual title/state/hidden labels and wires click/Delete/context-menu without parent selection", () => {
   for (const language of ["zh-CN", "en-US"]) {
@@ -233,8 +251,12 @@ test("actual sidebar rows use shared status glyphs, complete bilingual labels an
       assert.equal(row.props["data-status"], status);
       assert.equal(row.props["data-selected"], index === 0 ? "true" : "false");
       assert.equal(row.props["data-hidden"], index === 7 ? "true" : "false");
+      const membership = index === 7
+        ? catalogs[language]["sidebar.terminals.hiddenWork"]
+        : catalogs[language]["sidebar.terminals.pendingWork"];
+      const membershipKind = index === 7 ? "hidden" : "pending";
       const label = [items[index].title, catalogs[language][`sidebar.terminals.${status}`],
-        index === 7 ? catalogs[language]["sidebar.terminals.hidden"] : ""].filter(Boolean).join(" · ");
+        index === 7 ? catalogs[language]["sidebar.terminals.hidden"] : "", items[index].sidebarPinned ? catalogs[language]["sidebar.terminals.pinned"] : "", membership].filter(Boolean).join(" · ");
       assert.equal(row.props.title, label);
       assert.ok(row.props["aria-label"].endsWith(label));
       const children = descendants(row);
@@ -247,6 +269,9 @@ test("actual sidebar rows use shared status glyphs, complete bilingual labels an
       assert.ok(descendants(metadata).some((el) => el.props.className === "sidebar-terminal-status"));
       assert.ok(descendants(heading).some((el) => el.props.className === "sidebar-terminal-title-line"));
       assert.equal(children.find((el) => el.props.className === "sidebar-terminal-title").props.children, items[index].title);
+      const membershipMarker = children.find((el) => el.props.className === "sidebar-terminal-membership");
+      assert.equal(membershipMarker.props.title, membership);
+      assert.equal(membershipMarker.props["data-membership"], membershipKind);
       const hidden = children.find((el) => el.props.className === "sidebar-terminal-hidden");
       assert.equal(Boolean(hidden), index === 7);
       if (hidden) {
@@ -285,12 +310,18 @@ test("sidebar domain CSS keeps ordered imports, narrow title flex, static status
   assert.match(css, /\.sidebar-terminal-heading\s*\{[^}]*flex-direction: column;[^}]*min-width: 0;/);
   assert.match(css, /\.sidebar-terminal-metadata\s*\{[^}]*overflow: hidden;[^}]*white-space: nowrap;/);
   assert.match(css, /\.sidebar-terminal-title-line\s*\{[^}]*font-weight: 500;/);
-  assert.match(source("../components/SidebarTerminalList.tsx"), /EyeOff/);
+  assert.match(css, /\.sidebar-terminal-status\s*,\s*\.sidebar-terminal-hidden\s*,\s*\.sidebar-terminal-membership\s*\{[^}]*border-radius: 999px;/);
+  assert.match(css, /\.sidebar-terminal-membership\[data-membership="current"\]\s*\{[^}]*color: color-mix\(in srgb, var\(--primary\)/);
+  assert.match(css, /\.sidebar-terminal-membership\[data-membership="pending"\]\s*\{[^}]*background: color-mix\(in srgb, var\(--on-surface-variant\)/);
+  assert.match(css, /\.sidebar-terminal-membership\[data-membership="hidden"\]\s*\{[^}]*color: color-mix\(in srgb, var\(--on-surface\) 62%, var\(--warning\)/);
   assert.match(source("../components/SidebarTerminalList.tsx"), /sidebarTerminalGlyphs\[status\]/);
-  assert.match(css, /flex: 0 0 17px;/);
+  assert.match(css, /flex: 0 0 auto;/);;
   assert.match(css, /\.worktree-terminal-summary-token\s*\{[^}]*flex: 0 0 auto;[^}]*gap: 3px;[^}]*white-space: nowrap;/);
   assert.match(css, /box-shadow: inset 3px 0 0 var\(--primary\)/);
   assert.match(css, /gradient|transition/i);
+  assert.match(css, /\.sidebar-terminal-pinned-label\s*\{[^}]*border-radius: 999px;[^}]*background:/);
+  assert.match(css, /\.sidebar-terminal-rename-dialog\s*\{[^}]*overflow: hidden;[^}]*padding: 0;/);
+  assert.match(source("../components/SidebarTerminalList.tsx"), /sidebar-terminal-pinned-label/);
 });
 
 test("sidebar text/status/focus contrast on opaque theme token surfaces across declared palettes", () => {
@@ -391,6 +422,7 @@ function collapseHarness(language = "en-US") {
     "../../../shared/ui/VendorIcon": { VendorIcon: noop, inferVendor: noop },
     "../../../shared/ui/WorktreeIcon": { WorktreeIcon: noop },
     "../../workspace/api/dragInteraction": {},
+    "../../terminal/api/sessionStore": { useSessionStore: (selector) => selector({ currentWorkSessionIds: [] }) },
     "../api/NodeAppearanceIcon": {}, "./NewGroupRow": {}, "../api/nodeAppearance": {},
     "../../../shared/lib/cliTools": {},
   };
@@ -602,6 +634,15 @@ test("worktree terminal status aggregation remains available to the terminal lis
   assert.deepEqual(result.counts, { running: 1, wait: 0, completed: 0, failed: 0, remote: 0, idle: 1 });
 });
 
+test("worktree terminal membership aggregates current, pending and hidden states", () => {
+  const currentWorkSessionIds = new Set(["member"]);
+  assert.deepEqual(domain.worktreeTerminalMembership([session("member")], currentWorkSessionIds), { kind: "current" });
+  assert.deepEqual(domain.worktreeTerminalMembership([session("member"), session("pending")], currentWorkSessionIds), { kind: "current" });
+  assert.deepEqual(domain.worktreeTerminalMembership([session("pending")], currentWorkSessionIds), { kind: "pending" });
+  assert.deepEqual(domain.worktreeTerminalMembership([session("hidden", { tabHidden: true })], currentWorkSessionIds), { kind: "hidden" });
+  assert.equal(domain.worktreeTerminalMembership([], currentWorkSessionIds), null);
+});
+
 test("actual tree and shortcut rows keep terminal lists while Worktree rows omit summaries", () => {
   for (const language of ["zh-CN", "en-US"]) for (const compact of [false, true]) {
     const h = collapseHarness(language);
@@ -636,6 +677,11 @@ test("group flyout and all shortcut entrances retain Worktree lists without row 
   assert.match(rule(".worktree-terminal-title-line"), /flex-wrap: nowrap;[\s\S]*min-width: 0;[\s\S]*white-space: nowrap;/);
   assert.match(rule(".worktree-terminal-title"), /flex: 1 1 0;[\s\S]*min-width: 0;[\s\S]*text-overflow: ellipsis;[\s\S]*white-space: nowrap;/);
   assert.doesNotMatch(source("../components/TreeNodeItem.tsx"), /WorktreeTerminalSummary/);
+  assert.match(source("../components/TreeNodeItem.tsx"), /worktree-terminal-membership/);
+  assert.match(source("../components/TreeNodeItem.tsx"), /worktreeTerminalMembership\(actions\.getTerminals\(project\.id, worktree\.id\), currentWorkIds\)/);
+  assert.match(css, /\.worktree-terminal-membership\[data-membership="current"\]\s*\{[^}]*color: color-mix\(in srgb, var\(--primary\)/);
+  assert.match(css, /\.worktree-terminal-membership\[data-membership="pending"\]\s*\{[^}]*background: color-mix\(in srgb, var\(--on-surface-variant\)/);
+  assert.match(css, /\.worktree-terminal-membership\[data-membership="hidden"\]\s*\{[^}]*color: color-mix\(in srgb, var\(--on-surface\) 62%, var\(--warning\)/);
   assert.doesNotMatch(source("../components/SidebarProjectTerminals.tsx"), /SidebarWorktreeTerminals/);
   assert.doesNotMatch(source("../components/TreeNodeItem.tsx"), /WorktreeTerminalsToggle|worktreeTerminalsCollapseId/);
   assert.match(source("../components/SidebarTerminalList.tsx"), /resolveSidebarTerminalState\(session/);
@@ -689,6 +735,9 @@ test("actual bilingual pin/unpin and keyboard move menus dispatch metadata callb
     moves[0].props.onSelect();
     assert.deepEqual(h.calls, [["pin", "a", !pinned], ["move", "a", 1]]);
     assert.equal(elements.filter((el) => el.props.className === "sidebar-terminal-pin").length, pinned ? 2 : 0);
+    const pinnedLabels = elements.filter((el) => el.props.className === "sidebar-terminal-pinned-label");
+    assert.equal(pinnedLabels.length, pinned ? 2 : 0);
+    if (pinned) assert.ok(pinnedLabels.every((el) => el.props.children === catalogs[language]["sidebar.terminals.pinned"]));
   }
 });
 
@@ -746,7 +795,7 @@ test("ordinary shell row and no-Agent summary hide all task state while retainin
     const row = renderList(language, { items: [session("plain", { isAgentSession: false, tabHidden: true })], notifications: { plain: "running" } });
     assert.equal(descendants(row.tree).filter(el => el.props.className === "sidebar-terminal-status").length, 0);
     const button = descendants(row.tree).find((el) => el.type === "button");
-    assert.equal(button.props.title, `Terminal plain · ${catalogs[language]["sidebar.terminals.hidden"]}`);
+    assert.equal(button.props.title, `Terminal plain · ${catalogs[language]["sidebar.terminals.hidden"]} · ${catalogs[language]["sidebar.terminals.hiddenWork"]}`);
     assert.ok(button.props["aria-label"].endsWith(button.props.title));
     assert.equal((renderToStaticMarkup(row.tree).match(/data-icon="EyeOff"/g) ?? []).length, 1);
   }

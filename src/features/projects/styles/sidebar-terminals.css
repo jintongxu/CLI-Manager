@@ -125,9 +125,10 @@
 }
 
 .sidebar-terminal-status,
-.sidebar-terminal-hidden {
+.sidebar-terminal-hidden,
+.sidebar-terminal-membership {
   display: inline-flex;
-  flex: 0 0 17px;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   width: 17px;
@@ -137,7 +138,24 @@
   white-space: nowrap;
   color: var(--on-surface-variant);
   font-size: 9px;
+  font-weight: 600;
   line-height: 15px;
+}
+
+/* Membership is a distinct semantic marker from lifecycle status and hidden state. */
+.sidebar-terminal-membership[data-membership="current"] {
+  color: color-mix(in srgb, var(--primary) 88%, var(--on-surface));
+  background: color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+.sidebar-terminal-membership[data-membership="pending"] {
+  color: color-mix(in srgb, var(--on-surface) 80%, var(--primary));
+  background: color-mix(in srgb, var(--on-surface-variant) 16%, transparent);
+}
+
+.sidebar-terminal-membership[data-membership="hidden"] {
+  color: color-mix(in srgb, var(--on-surface) 62%, var(--warning));
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
 }
 
 .sidebar-terminal-row[data-status="running"] .sidebar-terminal-status,
@@ -313,7 +331,90 @@
   text-align: center;
 }
 
-.sidebar-terminal-pin { flex: 0 0 auto; color: var(--primary); }
+/* Worktree rows reuse the same membership semantics as terminal rows. */
+.worktree-terminal-membership {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  min-height: 15px;
+  margin-left: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--on-surface-variant) 10%, transparent);
+  color: var(--on-surface-variant);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 15px;
+}
+
+.worktree-terminal-membership[data-membership="current"] {
+  color: color-mix(in srgb, var(--primary) 88%, var(--on-surface));
+  background: color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+.worktree-terminal-membership[data-membership="pending"] {
+  color: color-mix(in srgb, var(--on-surface) 80%, var(--primary));
+  background: color-mix(in srgb, var(--on-surface-variant) 16%, transparent);
+}
+
+.worktree-terminal-membership[data-membership="hidden"] {
+  color: color-mix(in srgb, var(--on-surface) 62%, var(--warning));
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+}
+
+.sidebar-terminal-pin {
+  flex: 0 0 auto;
+  color: var(--primary);
+}
+
+.sidebar-terminal-pinned-label {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: 15px;
+  max-width: 72px;
+  padding-inline: 5px;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: color-mix(in srgb, var(--primary) 82%, var(--on-surface));
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 13px;
+  white-space: nowrap;
+}
+
+.sidebar-terminal-rename-dialog {
+  width: min(100% - 2rem, 440px);
+  overflow: hidden;
+  padding: 0;
+}
+
+.sidebar-terminal-rename-header {
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 10%, transparent), transparent 70%);
+}
+
+.sidebar-terminal-rename-header [data-slot="dialog-description"] {
+  margin-top: 6px;
+}
+
+.sidebar-terminal-rename-body {
+  padding: 20px 22px 4px;
+}
+
+.sidebar-terminal-rename-body input {
+  min-height: 42px;
+  border-radius: 10px;
+}
+
+.sidebar-terminal-rename-footer {
+  margin-top: 0;
+  padding: 16px 22px 20px;
+  border-top: 0;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .sidebar-terminal-row,

@@ -10,7 +10,7 @@ const HORIZONTAL_RESIZE_INTERVAL_MS = 34;
 const HIDDEN_RESIZE_IDLE_TIMEOUT_MS = 100;
 
 type ResizeCallback = (value: number) => void;
-type TimerHandle = ReturnType<typeof setTimeout>;
+type TimerHandle = number | ReturnType<typeof setTimeout>;
 
 export interface TerminalResizeDebouncerOptions {
   now?: () => number;

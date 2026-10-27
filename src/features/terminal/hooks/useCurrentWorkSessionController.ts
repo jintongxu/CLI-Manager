@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSessionStore } from "../api/sessionStore";
 import { CURRENT_WORK_SESSION_CREATED_EVENT, type CurrentWorkTarget } from "../api/currentWorkEvents";
 import { useTerminalStore } from "../state";
+import { logError } from "../../../shared/platform/logger";
 import { activateCurrentWorkSession, appendCurrentWorkSession, createCurrentWorkLayoutIdFactory } from "../lib/currentWorkModel";
 import {
   addSessionToPaneTree,
@@ -83,6 +84,7 @@ export function useCurrentWorkSessionController({
   const activeSessionIdRef = useRef(activeSessionId);
   const paneTreeRef = useRef(paneTree);
   const activePaneIdRef = useRef(activePaneId);
+  const anonymousCloseGenerationRef = useRef(new Map<string, number>());
 
   const persist = useCallback((nextIds: string[], nextActiveId: string | null) => {
     if (!sessionStoreLoaded) return;
@@ -123,12 +125,16 @@ export function useCurrentWorkSessionController({
     commitLayout(reconciled.tree, reconciled.activePaneId);
     persist(nextIds, nextActiveId);
   }, [commitLayout, persist]);
+  const cancelAnonymousClose = useCallback((sessionId: string) => {
+    anonymousCloseGenerationRef.current.set(sessionId, (anonymousCloseGenerationRef.current.get(sessionId) ?? 0) + 1);
+  }, []);
   const addSession = useCallback((sessionId: string) => {
     const currentIds = sessionIdsRef.current;
     if (!currentWorkMode || currentIds.includes(sessionId)) return;
+    cancelAnonymousClose(sessionId);
     const next = appendCurrentWorkSession(currentIds, activeSessionIdRef.current, sessionId);
     updateMembership(next.sessionIds, next.activeSessionId);
-  }, [currentWorkMode, updateMembership]);
+  }, [cancelAnonymousClose, currentWorkMode, updateMembership]);
   const activateSession = useCallback((sessionId: string) => {
     const next = activateCurrentWorkSession(sessionIdsRef.current, sessionId);
     updateMembership(next.sessionIds, next.activeSessionId);
@@ -136,19 +142,36 @@ export function useCurrentWorkSessionController({
   }, [updateMembership]);
   const removeSessions = useCallback((ids: readonly string[]) => {
     const remove = new Set(ids);
+    const store = useTerminalStore.getState();
+    const members = new Set(sessionIdsRef.current);
+    const anonymousSessions = store.sessions.filter((session) =>
+      members.has(session.id) && remove.has(session.id) && session.kind === "ephemeral-pi");
     const nextIds = sessionIdsRef.current.filter((id) => !remove.has(id));
     const nextActiveId = nextIds.includes(activeSessionIdRef.current ?? "") ? activeSessionIdRef.current : nextIds[0] ?? null;
     setSelectedSessionIds(new Set());
     updateMembership(nextIds, nextActiveId);
+    for (const session of anonymousSessions) {
+      const generation = (anonymousCloseGenerationRef.current.get(session.id) ?? 0) + 1;
+      anonymousCloseGenerationRef.current.set(session.id, generation);
+      // Defer the destructive close one microtask so a remove→re-add action can cancel it.
+      void Promise.resolve().then(() => {
+        if (anonymousCloseGenerationRef.current.get(session.id) !== generation
+          || sessionIdsRef.current.includes(session.id)) return;
+        return store.closeSession(session.id).catch((err) => {
+          logError("Failed to close anonymous Pi removed from current work", { sessionId: session.id, err });
+        });
+      });
+    }
   }, [updateMembership]);
   const toggleSession = useCallback((sessionId: string) => {
     if (sessionIdsRef.current.includes(sessionId)) {
       removeSessions([sessionId]);
       return;
     }
+    cancelAnonymousClose(sessionId);
     const next = appendCurrentWorkSession(sessionIdsRef.current, activeSessionIdRef.current, sessionId);
     updateMembership(next.sessionIds, next.activeSessionId);
-  }, [removeSessions, updateMembership]);
+  }, [cancelAnonymousClose, removeSessions, updateMembership]);
   useEffect(() => {
     const handleSessionCreated = (event: Event) => {
       addSession((event as CustomEvent<CurrentWorkTarget>).detail.sessionId);

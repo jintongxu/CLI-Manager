@@ -6,8 +6,8 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "npm run build && npm run web:build",
-    "beforeBundleCommand": "node ./scripts/prepare-bundle-binaries.mjs",
+    "beforeBuildCommand": "node ./scripts/stage-side-question-runtime.mjs && npm run build && npm run web:build",
+    "beforeBundleCommand": "node ./scripts/stage-side-question-runtime.mjs && node ./scripts/prepare-bundle-binaries.mjs",
     "frontendDist": "../dist"
   },
   "app": {
@@ -43,6 +43,22 @@
         "shadow": false,
         "visible": false,
         "dragDropEnabled": false
+      },
+      {
+        "label": "btw-thread",
+        "title": "BTW — CLI-Manager",
+        "url": "index.html",
+        "width": 1180,
+        "height": 850,
+        "minWidth": 480,
+        "minHeight": 400,
+        "decorations": true,
+        "resizable": true,
+        "minimizable": true,
+        "maximizable": true,
+        "visible": false,
+        "focus": false,
+        "dragDropEnabled": false
       }
     ],
     "security": {
@@ -69,6 +85,7 @@
     "targets": "all",
     "createUpdaterArtifacts": true,
     "resources": {
+      "resources/side-question/": "resources/side-question/",
       "resources/conpty/README.md": "resources/conpty/README.md",
       "resources/conpty/x64/*": "resources/conpty/x64",
       "resources/conpty/x86/*": "resources/conpty/x86",

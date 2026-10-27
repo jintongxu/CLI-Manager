@@ -1,0 +1,12 @@
+{
+  "id": "btw-reading-workspace",
+  "name": "btw-reading-workspace",
+  "title": "BTW Markdown reading workspace and question outline",
+  "status": "completed",
+  "dev_type": "feature",
+  "priority": "P1",
+  "createdAt": "2026-10-27",
+  "completedAt": "2026-10-27",
+  "description": "User-approved frontend redesign: bounded two-column reading workspace, shared Markdown answers and a right-hand outline of user questions with container-local navigation.",
+  "notes": "Knowledge search and coding specs loaded first. GitNexus unavailable (.gitnexus/run.cjs absent); inspected exact dialog consumer, shared Dialog/global surface CSS, MarkdownContent link/raw-HTML contracts and BtwThreadModel. Focused tests: 31 passed; npx tsc --noEmit passed. No visual/desktop acceptance claimed. Root owns final docs and end validation. No backend changes or commits."
+}

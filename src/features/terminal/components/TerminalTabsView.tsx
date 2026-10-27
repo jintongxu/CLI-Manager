@@ -22,9 +22,10 @@ import {
   HistoryWorkspace, GitChangesPanel, GitWorkspace, TerminalStatsPanel, SessionReplayPanel,
 } from "./lazyTerminalPanels";
 import { buildTerminalTabHoverInfo, terminalTabCollisionDetection } from "../lib/terminalTabsModel";
-import { TerminalCurrentContext } from "./TerminalCurrentContext";
+import { TerminalNavigationAdapter } from "./TerminalNavigationAdapter";
 import { SortableWorkspanTab } from "./SortableTerminalTabs";
 import { TerminalTabDragOverlay } from "./TerminalTabDragOverlay";
+import { BtwSideQuestionPanel } from "./BtwSideQuestionPanel";
 import { CurrentWorkPaneTarget } from "./CurrentWorkPaneTarget";
 import { SplitProjectPicker, TerminalCloseConfirmBubble } from "./TerminalTabDialogs";
 import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
@@ -91,6 +92,8 @@ export function TerminalTabsView({
   filesOpen,
   systemResourcesOpen,
   providersOpen,
+  btwPanelOpen,
+  btwSideQuestion,
   renderToolbarActions,
   sensors,
   handleDragStart,
@@ -126,7 +129,7 @@ export function TerminalTabsView({
   handleRestoreWorkspanToSinglePane,
   handleSaveSessionToSidebar,
   mountedWorkspanLayouts,
-  currentContextSessionId,
+  groups, terminalScopeValue, handleActivateSession, paneNavigationProps,
   effectiveActiveSessionId,
   renderWorkspanLeaf,
   activeFullscreenPaneId,
@@ -157,223 +160,8 @@ export function TerminalTabsView({
   toggleCurrentWork,
 }: ReturnType<typeof useTerminalTabsController>) {
   const currentWorkHasSplit = currentWorkPaneTree?.type === "split";
-  return (
-    <div
-      className="ui-terminal-tabs-shell flex h-full min-h-0 flex-col"
-      data-fullscreen={fullscreen ? "true" : "false"}
-      data-workspace-view={historyActive ? "history" : "terminal"}
-      style={terminalWellStyle}
-    >
-      {promptDialog}
-      {confirmDialog}
-      {saveSessionDialog}
-      <SplitProjectPicker
-        picker={splitPicker}
-        tree={projectTree}
-        menuStyle={splitPickerMenuStyle}
-        onSelectEmpty={handleSplitEmpty}
-        onSelectProject={handleSplitProject}
-        onClose={handleCloseSplitPicker}
-        shouldIgnoreOutsideInteraction={shouldIgnoreSplitPickerOutsideInteraction}
-      />
-      <TerminalCloseConfirmBubble
-        confirm={closeConfirm}
-        menuStyle={splitPickerMenuStyle}
-        onConfirm={confirmCloseSessions}
-        onClose={cancelCloseSessions}
-        shouldIgnoreOutsideInteraction={shouldIgnoreCloseConfirmOutsideInteraction}
-      />
-      <WorktreeFinishDialog
-        open={!!finishTarget}
-        project={finishTarget?.project ?? null}
-        worktree={finishTarget?.worktree ?? null}
-        onClose={() => setFinishTarget(null)}
-      />
-      <ConfirmDialog
-        open={!!discardTarget}
-        title={t("worktree.discard.title", { name: discardTarget ? getWorktreeDisplayName(discardTarget.worktree) : "" })}
-        message={t("worktree.discard.message", { branch: discardTarget?.worktree.branch ?? "" })}
-        confirmText={t("worktree.discard.confirm")}
-        cancelText={t("common.cancel")}
-        danger
-        onConfirm={() => {
-          if (discardTarget) {
-            void removeWorktree(discardTarget.worktree, true).catch((err) => {
-              toast.error(t("worktree.toast.discardFailed"), { description: String(err) });
-            });
-          }
-          setDiscardTarget(null);
-        }}
-        onClose={() => setDiscardTarget(null)}
-      />
-
-      <div className="relative flex-1 min-h-0 overflow-hidden">
-        {historyOpen && (
-          <div
-            className="absolute inset-0 min-h-0 overflow-hidden"
-            style={{ display: historyActive ? "block" : "none" }}
-          >
-            <Suspense fallback={null}>
-              <HistoryWorkspace active={historyActive} onOpenSettings={onOpenHistorySettings} />
-            </Suspense>
-          </div>
-        )}
-        {gitWorkspaceOpen && (
-          <div
-            className="absolute inset-x-0 bottom-0 z-[2] min-h-0 overflow-hidden border-t shadow-2xl"
-            style={{ height: gitWorkspaceHeight, borderColor: "var(--border-subtle, rgba(255,255,255,0.12))" }}
-          >
-            <div
-              className="group absolute inset-x-0 -top-1 z-10 h-2 cursor-row-resize touch-none select-none"
-              onPointerDown={beginGitWorkspaceResize}
-              role="separator"
-              aria-orientation="horizontal"
-              aria-label={t("git.workspace.resizeHeight")}
-            >
-              <span
-                className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 transition-[height] group-hover:h-0.5 group-active:h-0.5"
-                style={{ backgroundColor: "var(--border-subtle, rgba(255,255,255,0.12))" }}
-              />
-            </div>
-            <Suspense fallback={null}>
-              <GitWorkspace
-                active={gitWorkspaceOpen}
-                project={gitWorkspaceProject}
-                projectPath={gitWorkspaceProjectPath}
-                onClose={closeGitWorkspace}
-                onOpenChanges={handleOpenGitChangesPanel}
-                onOpenWorktreeSession={handleOpenGitWorkspaceWorktree}
-              />
-            </Suspense>
-          </div>
-        )}
-        <div
-          className="ui-terminal-well absolute inset-0 min-h-0 flex"
-          data-terminal-mode="independent"
-          data-terminal-theme-tone={terminalThemeTone}
-          data-terminal-side-panel-visible={terminalSidePanelVisible ? "true" : "false"}
-          style={{ display: historyActive ? "none" : "flex" }}
-        >
-          <TerminalWorkspaceFrame
-            dockSide={terminalSidePanelSide}
-            panels={[
-              sidePanelMerged ? (
-                <TerminalSidePanel
-                  key="merged"
-                  open={sidePanelOpen}
-                  dockSide={terminalSidePanelSide}
-                  activeTab={sidePanelTab}
-                  visibleTabs={visibleSidePanelTabs}
-                  activeSessionId={panelSessionId}
-                  projectPath={sidePanelProjectPath}
-                  projectId={panelSession?.projectId}
-                  filesTabDisabled={!filePanelProject}
-                  systemResourcesEnabled
-                  providerDefaultAppType={panelProviderAppType}
-                  filesPanelContent={<FileExplorerSidebar mode="panel" onClosePanel={closeFilesPanel} editorActive={editorActive} hasEditorWorkspace={hasEditorWorkspace} onSwitchToTerminalWorkspace={switchToTerminalWorkspace} onSwitchToEditorWorkspace={switchToEditorWorkspace} />}
-                  onTabChange={handleSidePanelTabChange}
-                  onOpenProviderSettings={onOpenProviderSettings}
-                />
-              ) : null,
-              !sidePanelMerged && gitOpen && panelGitSupported ? (
-                <ResizableTerminalPanelFrame
-                  key="git"
-                  widthKey="git"
-                  defaultWidth={TERMINAL_PANEL_WIDTH_DEFAULTS.git}
-                  dockSide={terminalSidePanelSide}
-                  resizeLabel={t("terminal.panel.resizeGitLabel")}
-                  resizeTitle={t("terminal.panel.resizeGitTitle")}
-                >
-                  <Suspense fallback={null}>
-                    <GitChangesPanel open={gitOpen} projectPath={sidePanelProjectPath} projectId={panelSession?.projectId} embedded />
-                  </Suspense>
-                </ResizableTerminalPanelFrame>
-              ) : null,
-              !sidePanelMerged && statsOpen && panelCapabilities.statistics ? (
-                <ResizableTerminalPanelFrame
-                  key="stats"
-                  widthKey="stats"
-                  defaultWidth={TERMINAL_PANEL_WIDTH_DEFAULTS.stats}
-                  dockSide={terminalSidePanelSide}
-                  resizeLabel={t("terminal.panel.resizeStatsLabel")}
-                  resizeTitle={t("terminal.panel.resizeStatsTitle")}
-                >
-                  <Suspense fallback={null}>
-                    <TerminalStatsPanel activeSessionId={panelSessionId} open={statsOpen} embedded />
-                  </Suspense>
-                </ResizableTerminalPanelFrame>
-              ) : null,
-              !sidePanelMerged && replayOpen && panelCapabilities.history ? (
-                <ResizableTerminalPanelFrame
-                  key="replay"
-                  widthKey="replay"
-                  defaultWidth={TERMINAL_PANEL_WIDTH_DEFAULTS.replay}
-                  dockSide={terminalSidePanelSide}
-                  resizeLabel={t("terminal.panel.resizeReplayLabel")}
-                  resizeTitle={t("terminal.panel.resizeReplayTitle")}
-                >
-                  <Suspense fallback={null}>
-                    <SessionReplayPanel activeSessionId={panelSessionId} open={replayOpen} />
-                  </Suspense>
-                </ResizableTerminalPanelFrame>
-              ) : null,
-              !sidePanelMerged && filesOpen && panelCapabilities.files ? (
-                <ResizableTerminalPanelFrame
-                  key="files"
-                  widthKey="files"
-                  defaultWidth={TERMINAL_PANEL_WIDTH_DEFAULTS.files}
-                  dockSide={terminalSidePanelSide}
-                  resizeLabel={t("terminal.panel.resizeFilesLabel")}
-                  resizeTitle={t("terminal.panel.resizeFilesTitle")}
-                >
-                  <FileExplorerSidebar mode="panel" onClosePanel={closeFilesPanel} editorActive={editorActive} hasEditorWorkspace={hasEditorWorkspace} onSwitchToTerminalWorkspace={switchToTerminalWorkspace} onSwitchToEditorWorkspace={switchToEditorWorkspace} />
-                </ResizableTerminalPanelFrame>
-              ) : null,
-              !sidePanelMerged && systemResourcesOpen ? (
-                <ResizableTerminalPanelFrame
-                  key="systemResources"
-                  widthKey="systemResources"
-                  defaultWidth={TERMINAL_PANEL_WIDTH_DEFAULTS.systemResources}
-                  dockSide={terminalSidePanelSide}
-                  resizeLabel={t("terminal.panel.resizeSystemResourcesLabel")}
-                  resizeTitle={t("terminal.panel.resizeSystemResourcesTitle")}
-                >
-                  <SystemResourcesPanel open={systemResourcesOpen} embedded />
-                </ResizableTerminalPanelFrame>
-              ) : null,
-              !sidePanelMerged && providersOpen ? (
-                <ResizableTerminalPanelFrame
-                  key="providers"
-                  widthKey="providers"
-                  defaultWidth={TERMINAL_PANEL_WIDTH_DEFAULTS.providers}
-                  dockSide={terminalSidePanelSide}
-                  resizeLabel={t("terminal.panel.resizeProvidersLabel")}
-                  resizeTitle={t("terminal.panel.resizeProvidersTitle")}
-                >
-                  <ProviderQuickSwitchPanel open={providersOpen} defaultAppType={panelProviderAppType} onOpenSettings={onOpenProviderSettings} />
-                </ResizableTerminalPanelFrame>
-              ) : null,
-            ]}
-            actions={renderToolbarActions()}
-          >
-          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-            {mountedWorkspanLayouts.length > 0 ? (
-              <DndContext
-                sensors={sensors}
-                collisionDetection={terminalTabCollisionDetection}
-                onDragStart={handleDragStart}
-                onDragOver={handleDragOver}
-                onDragCancel={clearDragState}
-                onDragEnd={handleDragEnd}
-              >
-                {!currentWorkMode && (
-                  <TerminalCurrentContext models={workspanTabModels} workspanId={effectiveActiveWorkspanId} sessionId={currentContextSessionId} />
-                )}
-                <WorkspanTerminalLayout
-                  position={workspanTabBarPosition}
-                  tabBarVisible={workspanTabBarVisible}
-                  tabBar={currentWorkMode ? (
-                    <CurrentWorkTabBar
+  const legacyOrdering = currentWorkMode ? (
+                    <CurrentWorkTabBar orderingOnly
                       sessions={currentWorkSessionIds.map((id) => sessions.find((session) => session.id === id)).filter((session): session is typeof sessions[number] => Boolean(session))}
                       activeSessionId={currentWorkActiveSessionId}
                       notifications={tabNotifications}
@@ -401,7 +189,7 @@ export function TerminalTabsView({
                       contextLabels={{ unboundProject: t("terminal.context.unboundProject"), anonymousPi: t("terminal.context.anonymousPi"), missingWorktree: t("terminal.context.worktreeMissing"), defaultShell: t("terminal.context.defaultShell") }}
                       removeLabel={(title) => t("terminal.currentWork.removeNamed", { title })}
                       renameLabel={t("terminal.tab.rename")}
-                      compact={Boolean(currentWorkHasSplit)}
+                      compact={false}
                     />
                   ) : workspanEnabled ? (
                     <WorkspanTabBar
@@ -584,7 +372,250 @@ export function TerminalTabsView({
                       renameLabel={t("terminal.tab.rename")}
                       compact
                     />
-                  )}
+                  );
+  return (
+    <div
+      className="ui-terminal-tabs-shell flex h-full min-h-0 flex-col"
+      data-fullscreen={fullscreen ? "true" : "false"}
+      data-workspace-view={historyActive ? "history" : "terminal"}
+      style={terminalWellStyle}
+    >
+      {promptDialog}
+      {confirmDialog}
+      {saveSessionDialog}
+      <SplitProjectPicker
+        picker={splitPicker}
+        tree={projectTree}
+        menuStyle={splitPickerMenuStyle}
+        onSelectEmpty={handleSplitEmpty}
+        onSelectProject={handleSplitProject}
+        onClose={handleCloseSplitPicker}
+        shouldIgnoreOutsideInteraction={shouldIgnoreSplitPickerOutsideInteraction}
+      />
+      <TerminalCloseConfirmBubble
+        confirm={closeConfirm}
+        menuStyle={splitPickerMenuStyle}
+        onConfirm={confirmCloseSessions}
+        onClose={cancelCloseSessions}
+        shouldIgnoreOutsideInteraction={shouldIgnoreCloseConfirmOutsideInteraction}
+      />
+      <WorktreeFinishDialog
+        open={!!finishTarget}
+        project={finishTarget?.project ?? null}
+        worktree={finishTarget?.worktree ?? null}
+        onClose={() => setFinishTarget(null)}
+      />
+      <ConfirmDialog
+        open={!!discardTarget}
+        title={t("worktree.discard.title", { name: discardTarget ? getWorktreeDisplayName(discardTarget.worktree) : "" })}
+        message={t("worktree.discard.message", { branch: discardTarget?.worktree.branch ?? "" })}
+        confirmText={t("worktree.discard.confirm")}
+        cancelText={t("common.cancel")}
+        danger
+        onConfirm={() => {
+          if (discardTarget) {
+            void removeWorktree(discardTarget.worktree, true).catch((err) => {
+              toast.error(t("worktree.toast.discardFailed"), { description: String(err) });
+            });
+          }
+          setDiscardTarget(null);
+        }}
+        onClose={() => setDiscardTarget(null)}
+      />
+
+      <div className="relative flex-1 min-h-0 overflow-hidden">
+        {historyOpen && (
+          <div
+            className="absolute inset-0 min-h-0 overflow-hidden"
+            style={{ display: historyActive ? "block" : "none" }}
+          >
+            <Suspense fallback={null}>
+              <HistoryWorkspace active={historyActive} onOpenSettings={onOpenHistorySettings} />
+            </Suspense>
+          </div>
+        )}
+        {gitWorkspaceOpen && (
+          <div
+            className="absolute inset-x-0 bottom-0 z-[2] min-h-0 overflow-hidden border-t shadow-2xl"
+            style={{ height: gitWorkspaceHeight, borderColor: "var(--border-subtle, rgba(255,255,255,0.12))" }}
+          >
+            <div
+              className="group absolute inset-x-0 -top-1 z-10 h-2 cursor-row-resize touch-none select-none"
+              onPointerDown={beginGitWorkspaceResize}
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label={t("git.workspace.resizeHeight")}
+            >
+              <span
+                className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 transition-[height] group-hover:h-0.5 group-active:h-0.5"
+                style={{ backgroundColor: "var(--border-subtle, rgba(255,255,255,0.12))" }}
+              />
+            </div>
+            <Suspense fallback={null}>
+              <GitWorkspace
+                active={gitWorkspaceOpen}
+                project={gitWorkspaceProject}
+                projectPath={gitWorkspaceProjectPath}
+                onClose={closeGitWorkspace}
+                onOpenChanges={handleOpenGitChangesPanel}
+                onOpenWorktreeSession={handleOpenGitWorkspaceWorktree}
+              />
+            </Suspense>
+          </div>
+        )}
+        <div
+          className="ui-terminal-well absolute inset-0 min-h-0 flex"
+          data-terminal-mode="independent"
+          data-terminal-theme-tone={terminalThemeTone}
+          data-terminal-side-panel-visible={terminalSidePanelVisible ? "true" : "false"}
+          style={{ display: historyActive ? "none" : "flex" }}
+        >
+          <TerminalWorkspaceFrame
+            dockSide={terminalSidePanelSide}
+            panels={[
+              sidePanelMerged ? (
+                <TerminalSidePanel
+                  key="merged"
+                  open={sidePanelOpen}
+                  dockSide={terminalSidePanelSide}
+                  activeTab={sidePanelTab}
+                  visibleTabs={visibleSidePanelTabs}
+                  activeSessionId={panelSessionId}
+                  projectPath={sidePanelProjectPath}
+                  projectId={panelSession?.projectId}
+                  filesTabDisabled={!filePanelProject}
+                  systemResourcesEnabled
+                  providerDefaultAppType={panelProviderAppType}
+                  filesPanelContent={<FileExplorerSidebar mode="panel" onClosePanel={closeFilesPanel} editorActive={editorActive} hasEditorWorkspace={hasEditorWorkspace} onSwitchToTerminalWorkspace={switchToTerminalWorkspace} onSwitchToEditorWorkspace={switchToEditorWorkspace} />}
+                  btwPanelContent={
+                    <BtwSideQuestionPanel controller={btwSideQuestion} />
+                  }
+                  onTabChange={handleSidePanelTabChange}
+                  onOpenProviderSettings={onOpenProviderSettings}
+                />
+              ) : null,
+              !sidePanelMerged && gitOpen && panelGitSupported ? (
+                <ResizableTerminalPanelFrame
+                  key="git"
+                  widthKey="git"
+                  defaultWidth={TERMINAL_PANEL_WIDTH_DEFAULTS.git}
+                  dockSide={terminalSidePanelSide}
+                  resizeLabel={t("terminal.panel.resizeGitLabel")}
+                  resizeTitle={t("terminal.panel.resizeGitTitle")}
+                >
+                  <Suspense fallback={null}>
+                    <GitChangesPanel open={gitOpen} projectPath={sidePanelProjectPath} projectId={panelSession?.projectId} embedded />
+                  </Suspense>
+                </ResizableTerminalPanelFrame>
+              ) : null,
+              !sidePanelMerged && statsOpen && panelCapabilities.statistics ? (
+                <ResizableTerminalPanelFrame
+                  key="stats"
+                  widthKey="stats"
+                  defaultWidth={TERMINAL_PANEL_WIDTH_DEFAULTS.stats}
+                  dockSide={terminalSidePanelSide}
+                  resizeLabel={t("terminal.panel.resizeStatsLabel")}
+                  resizeTitle={t("terminal.panel.resizeStatsTitle")}
+                >
+                  <Suspense fallback={null}>
+                    <TerminalStatsPanel activeSessionId={panelSessionId} open={statsOpen} embedded />
+                  </Suspense>
+                </ResizableTerminalPanelFrame>
+              ) : null,
+              !sidePanelMerged && replayOpen && panelCapabilities.history ? (
+                <ResizableTerminalPanelFrame
+                  key="replay"
+                  widthKey="replay"
+                  defaultWidth={TERMINAL_PANEL_WIDTH_DEFAULTS.replay}
+                  dockSide={terminalSidePanelSide}
+                  resizeLabel={t("terminal.panel.resizeReplayLabel")}
+                  resizeTitle={t("terminal.panel.resizeReplayTitle")}
+                >
+                  <Suspense fallback={null}>
+                    <SessionReplayPanel activeSessionId={panelSessionId} open={replayOpen} />
+                  </Suspense>
+                </ResizableTerminalPanelFrame>
+              ) : null,
+              !sidePanelMerged && filesOpen && panelCapabilities.files ? (
+                <ResizableTerminalPanelFrame
+                  key="files"
+                  widthKey="files"
+                  defaultWidth={TERMINAL_PANEL_WIDTH_DEFAULTS.files}
+                  dockSide={terminalSidePanelSide}
+                  resizeLabel={t("terminal.panel.resizeFilesLabel")}
+                  resizeTitle={t("terminal.panel.resizeFilesTitle")}
+                >
+                  <FileExplorerSidebar mode="panel" onClosePanel={closeFilesPanel} editorActive={editorActive} hasEditorWorkspace={hasEditorWorkspace} onSwitchToTerminalWorkspace={switchToTerminalWorkspace} onSwitchToEditorWorkspace={switchToEditorWorkspace} />
+                </ResizableTerminalPanelFrame>
+              ) : null,
+              !sidePanelMerged && systemResourcesOpen ? (
+                <ResizableTerminalPanelFrame
+                  key="systemResources"
+                  widthKey="systemResources"
+                  defaultWidth={TERMINAL_PANEL_WIDTH_DEFAULTS.systemResources}
+                  dockSide={terminalSidePanelSide}
+                  resizeLabel={t("terminal.panel.resizeSystemResourcesLabel")}
+                  resizeTitle={t("terminal.panel.resizeSystemResourcesTitle")}
+                >
+                  <SystemResourcesPanel open={systemResourcesOpen} embedded />
+                </ResizableTerminalPanelFrame>
+              ) : null,
+              !sidePanelMerged && providersOpen ? (
+                <ResizableTerminalPanelFrame
+                  key="providers"
+                  widthKey="providers"
+                  defaultWidth={TERMINAL_PANEL_WIDTH_DEFAULTS.providers}
+                  dockSide={terminalSidePanelSide}
+                  resizeLabel={t("terminal.panel.resizeProvidersLabel")}
+                  resizeTitle={t("terminal.panel.resizeProvidersTitle")}
+                >
+                  <ProviderQuickSwitchPanel open={providersOpen} defaultAppType={panelProviderAppType} onOpenSettings={onOpenProviderSettings} />
+                </ResizableTerminalPanelFrame>
+              ) : null,
+              !sidePanelMerged && btwPanelOpen ? (
+                <ResizableTerminalPanelFrame
+                  key="btw"
+                  widthKey="btw"
+                  defaultWidth={TERMINAL_PANEL_WIDTH_DEFAULTS.btw}
+                  dockSide={terminalSidePanelSide}
+                  resizeLabel={t("terminal.panel.resizeProvidersLabel")}
+                  resizeTitle={t("terminal.panel.resizeProvidersTitle")}
+                >
+                  <BtwSideQuestionPanel controller={btwSideQuestion} />
+                </ResizableTerminalPanelFrame>
+              ) : null,
+            ]}
+            actions={renderToolbarActions()}
+          >
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+            {(
+              <DndContext
+                sensors={sensors}
+                collisionDetection={terminalTabCollisionDetection}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDragCancel={clearDragState}
+                onDragEnd={handleDragEnd}
+              >
+                <WorkspanTerminalLayout
+                  position={workspanTabBarPosition}
+                  tabBarVisible={workspanTabBarVisible}
+                  tabBar={<TerminalNavigationAdapter
+                    sessions={sessions} projects={projects} worktrees={worktrees} groups={groups}
+                    scope={terminalScopeValue} currentSessionId={currentWorkMode ? currentWorkActiveSessionId : effectiveActiveSessionId}
+                    currentWorkMode={currentWorkMode} currentWorkSessionIds={currentWorkSessionIds}
+                    position={workspanTabBarPosition} tabBarVisible={workspanTabBarVisible} activateCurrentWork={activateCurrentWork} leaveCurrentWork={leaveCurrentWork}
+                    onActivate={handleActivateSession} onAdd={(id) => { if (!currentWorkSessionIds.includes(id)) toggleCurrentWork(id); }} onNewTab={() => { void handleNewTab(); }} onRemove={(id) => removeCurrentWorkSessions([id])}
+                    onCloseSession={(id) => {
+                      const session = sessions.find((item) => item.id === id);
+                      handleCloseSessions([id], undefined, [], !session?.projectId);
+                    }}
+                    selectedIds={[...selectedCurrentWorkSessionIds]} onToggleSelection={toggleCurrentWorkSelection}
+                    onRemoveSelected={removeCurrentWorkSessions} onCloseOthers={closeOtherTerminals} legacyOrdering={legacyOrdering}
+                    onRename={(session) => { void prompt({ title: t("terminal.tab.rename"), initialValue: session.title }).then((title) => {
+                      if (title !== null) void handleSubmitTabEdit(session.id, title);
+                    }); }} paneProps={paneNavigationProps} layouts={mountedWorkspanLayouts} onToggleCurrentWork={toggleCurrentWork}
+                  />}
                 >
                 <div className="relative min-h-0 flex-1 overflow-hidden">
                   {mountedWorkspanLayouts.map((layout) => {
@@ -657,7 +688,7 @@ export function TerminalTabsView({
                 </WorkspanTerminalLayout>
                 <TerminalTabDragOverlay style={terminalWellStyle} themeTone={terminalThemeTone} />
               </DndContext>
-            ) : null}
+            )}
             {hasScopedTerminalFilter && visibleSessions.length === 0 && !useExternalTerminal && scopedEmptyState && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <EmptyState

@@ -39,6 +39,23 @@ test("scope, pending metadata, custom reservation, malformed/legacy exclusion an
   assign(other, undefined, "Pi", [old]);
   assert.equal(other.title, "Pi · 1");
 });
+test("anonymous Pi sessions receive distinct labels and preserve custom renames", () => {
+  const first = { id: "first", kind: "ephemeral-pi", title: "", titleNaming: undefined };
+  assign(first, undefined, "Anonymous Pi", []);
+  assert.equal(first.title, "Anonymous Pi · 1");
+  assert.deepEqual(plain(first.titleNaming), { source: "auto", base: "Anonymous Pi", ordinal: 1 });
+
+  const second = { id: "second", kind: "ephemeral-pi", title: "", titleNaming: undefined };
+  assign(second, undefined, "Anonymous Pi", [first]);
+  assert.equal(second.title, "Anonymous Pi · 2");
+
+  const renamed = { ...second, title: "My Pi", titleNaming: { source: "custom" } };
+  const third = { id: "third", kind: "ephemeral-pi", title: "", titleNaming: undefined };
+  assign(third, undefined, "Anonymous Pi", [first, renamed]);
+  assert.equal(third.title, "Anonymous Pi · 2");
+  assert.equal(renamed.title, "My Pi");
+});
+
 test("root project terminals use project name while worktrees keep purpose", () => {
   const root = { id: "root", projectId: "p", title: "", titleNaming: undefined };
   assign(root, undefined, "PowerShell", [], "Demo");
