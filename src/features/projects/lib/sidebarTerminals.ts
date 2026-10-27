@@ -9,6 +9,23 @@ export function isSidebarTerminalLocked(session: TerminalSession): boolean {
   return Boolean(session.remoteHandoff && session.remoteHandoff.phase !== "recovery_failed");
 }
 
+export type WorktreeMembershipKind = "current" | "pending" | "hidden";
+
+/**
+ * Aggregate terminal membership for a Worktree row. Priority mirrors the terminal-row
+ * marker: explicit Current Work membership wins over pending, and hidden is reported
+ * only when the Worktree has no visible pending/member terminal left.
+ */
+export function worktreeTerminalMembership(
+  sessions: readonly TerminalSession[], currentWorkSessionIds: ReadonlySet<string>,
+): { kind: WorktreeMembershipKind } | null {
+  if (sessions.length === 0) return null;
+  if (sessions.some((session) => currentWorkSessionIds.has(session.id))) return { kind: "current" };
+  const hasVisiblePending = sessions.some((session) => !session.tabHidden);
+  if (hasVisiblePending) return { kind: "pending" };
+  return { kind: "hidden" };
+}
+
 export function openSidebarTerminal(session: TerminalSession, actions: {
   selectScope: (scope: TerminalScope) => void;
   closeHistory: () => void;

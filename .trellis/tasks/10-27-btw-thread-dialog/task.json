@@ -1,0 +1,11 @@
+{
+  "id": "btw-thread-dialog",
+  "name": "btw-thread-dialog",
+  "title": "BTW independent thread cards and conversation dialog",
+  "status": "completed",
+  "description": "Approved plan eef2dc8fce038fae488e6faffcf9e93485231ac5aea64caa63fa45590ab09f1b: independent cards, reopenable in-app multi-turn dialog, optional exact Pi conversation snapshot, cancellable tool-free side inference.",
+  "createdAt": "2026-10-27",
+  "completedAt": "2026-10-27",
+  "priority": "P1",
+  "notes": "Implemented approved thread cards/dialog and optional immutable context snapshots, structured isolated inference, streaming/cancel/retry/reset, precise identity and deployable resources. TEMP docs updated. Automated validation passed: 41 focused Node, 81 terminal smoke, 13 Rust, tsc, strict architecture zero violations. Physical UI acceptance incomplete due STALE_CONTROL_REF; see verification.md. Dev started separately; production untouched. No commits/Git sync; zero new knowledge candidates."
+}

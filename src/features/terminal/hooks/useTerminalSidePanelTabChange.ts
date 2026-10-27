@@ -3,6 +3,7 @@ import type { Project, TerminalSession } from "../../../shared/types/index";
 import type { TerminalSidePanelTab } from "../components/TerminalSidePanel";
 
 interface Options {
+  onBtwOpen?: () => void;
   ensureStatsPanelAllowed: () => Promise<boolean>;
   filePanelProject: Project | null;
   panelSession: TerminalSession | null;
@@ -13,6 +14,7 @@ interface Options {
 }
 
 export function useTerminalSidePanelTabChange({
+  onBtwOpen,
   ensureStatsPanelAllowed,
   filePanelProject,
   panelSession,
@@ -40,6 +42,7 @@ export function useTerminalSidePanelTabChange({
     }
     if (tab === "git" && project?.environment_type !== "ssh" && rejectUnsupportedCapability(project, "git")) return;
     if (tab === "replay" && rejectUnsupportedCapability(project, "history")) return;
+    if (tab === "btw") onBtwOpen?.();
     setSidePanelTab(tab);
-  }, [ensureStatsPanelAllowed, filePanelProject, panelSession, projectById, rejectUnsupportedCapability, setSidePanelTab, syncFilePanelProject]);
+  }, [onBtwOpen, ensureStatsPanelAllowed, filePanelProject, panelSession, projectById, rejectUnsupportedCapability, setSidePanelTab, syncFilePanelProject]);
 }

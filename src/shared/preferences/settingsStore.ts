@@ -144,7 +144,7 @@ export type SystemResourceCardKey =
   | "disk"
   | "gpu"
   | "processes";
-export type TerminalPanelWidthKey = "merged" | "stats" | "git" | "replay" | "files" | "systemResources" | "providers";
+export type TerminalPanelWidthKey = "merged" | "stats" | "git" | "replay" | "files" | "systemResources" | "providers" | "btw";
 export type TerminalPanelWidthSettings = Record<TerminalPanelWidthKey, number>;
 export type TerminalSettingsSectionKey = "behavior" | "paneMarker" | "shells" | "themes" | "previewTheme" | "background";
 export type TerminalSettingsSectionsExpanded = Record<TerminalSettingsSectionKey, boolean>;
@@ -168,6 +168,7 @@ export const TERMINAL_PANEL_WIDTH_DEFAULTS: TerminalPanelWidthSettings = {
   files: 220,
   systemResources: 300,
   providers: 320,
+  btw: 320,
 };
 export const TERMINAL_SETTINGS_SECTION_KEYS: readonly TerminalSettingsSectionKey[] = [
   "behavior",
@@ -288,6 +289,7 @@ export interface TerminalToolbarVisibilitySettings {
   gitChanges: boolean;
   systemResources: boolean;
   providers: boolean;
+  btw: boolean;
   backgroundTasks: boolean;
   showText: boolean;
 }
@@ -610,6 +612,7 @@ const DEFAULTS: Settings = {
     gitChanges: true,
     systemResources: false,
     providers: true,
+    btw: true,
     backgroundTasks: true,
     showText: false,
   },
@@ -617,7 +620,7 @@ const DEFAULTS: Settings = {
     stats: true,
     gitChanges: true,
   },
-  terminalToolbarOrder: ["new", "templates", "fullscreen", "sessionHistory", "replay", "files", "gitChanges", "stats", "providers", "systemResources", "backgroundTasks"],
+  terminalToolbarOrder: ["new", "templates", "fullscreen", "sessionHistory", "replay", "files", "gitChanges", "stats", "providers", "btw", "systemResources", "backgroundTasks"],
   terminalSidePanelMerged: true,
   terminalSidePanelSingleOpen: true,
   terminalSidePanelSkin: "terminal",
@@ -968,6 +971,7 @@ export function migrateTerminalToolbarVisibility(value: unknown): TerminalToolba
     gitChanges: typeof raw.gitChanges === "boolean" ? raw.gitChanges : defaults.gitChanges,
     systemResources: typeof raw.systemResources === "boolean" ? raw.systemResources : defaults.systemResources,
     providers: typeof raw.providers === "boolean" ? raw.providers : defaults.providers,
+    btw: typeof raw.btw === "boolean" ? raw.btw : defaults.btw,
     backgroundTasks: typeof raw.backgroundTasks === "boolean" ? raw.backgroundTasks : defaults.backgroundTasks,
     showText: typeof raw.showText === "boolean" ? raw.showText : defaults.showText,
   };
@@ -1017,6 +1021,7 @@ export function migrateTerminalPanelWidths(value: unknown): TerminalPanelWidthSe
     files: clampNumber(raw.files, TERMINAL_PANEL_WIDTH_DEFAULTS.files, TERMINAL_PANEL_WIDTH_MAX, TERMINAL_PANEL_WIDTH_DEFAULTS.files),
     systemResources: clampNumber(raw.systemResources, TERMINAL_PANEL_WIDTH_DEFAULTS.systemResources, TERMINAL_PANEL_WIDTH_MAX, TERMINAL_PANEL_WIDTH_DEFAULTS.systemResources),
     providers: clampNumber(raw.providers, TERMINAL_PANEL_WIDTH_DEFAULTS.providers, TERMINAL_PANEL_WIDTH_MAX, TERMINAL_PANEL_WIDTH_DEFAULTS.providers),
+    btw: clampNumber(raw.btw, TERMINAL_PANEL_WIDTH_DEFAULTS.btw, TERMINAL_PANEL_WIDTH_MAX, TERMINAL_PANEL_WIDTH_DEFAULTS.btw),
   };
 }
 

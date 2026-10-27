@@ -1,5 +1,5 @@
-import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from "react";
-import { Activity, ArrowLeftRight, BarChart3, Cpu, Folder, GitBranch } from "../../../shared/ui/icons";
+import { Suspense, lazy, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Activity, ArrowLeftRight, BarChart3, Cpu, Folder, GitBranch, MessageSquare } from "../../../shared/ui/icons";
 import { TERM_PANEL, panelColorTint } from "../../stats/api/termStatsUi";
 import { ResizableTerminalPanelFrame } from "./ResizableTerminalPanelFrame";
 import { SystemResourcesPanel } from "./SystemResourcesPanel";
@@ -21,7 +21,7 @@ const SessionReplayPanel = lazy(() =>
   import("./SessionReplayPanel").then((module) => ({ default: module.SessionReplayPanel }))
 );
 
-export type TerminalSidePanelTab = "stats" | "replay" | "git" | "files" | "providers" | "systemResources";
+export type TerminalSidePanelTab = "stats" | "replay" | "git" | "files" | "providers" | "systemResources" | "btw";
 
 export const TERMINAL_SIDE_PANEL_TAB_ORDER: readonly TerminalSidePanelTab[] = [
   "stats",
@@ -30,6 +30,7 @@ export const TERMINAL_SIDE_PANEL_TAB_ORDER: readonly TerminalSidePanelTab[] = [
   "git",
   "files",
   "providers",
+  "btw",
 ];
 
 interface TerminalSidePanelProps {
@@ -44,6 +45,7 @@ interface TerminalSidePanelProps {
   systemResourcesEnabled?: boolean;
   providerDefaultAppType?: NativeProviderAppType;
   filesPanelContent?: ReactNode;
+  btwPanelContent?: ReactNode;
   onTabChange: (tab: TerminalSidePanelTab) => void;
   onOpenProviderSettings?: () => void;
 }
@@ -60,6 +62,7 @@ export function TerminalSidePanel({
   systemResourcesEnabled = false,
   providerDefaultAppType = "claude",
   filesPanelContent = null,
+  btwPanelContent = null,
   onTabChange,
   onOpenProviderSettings,
 }: TerminalSidePanelProps) {
@@ -72,6 +75,7 @@ export function TerminalSidePanel({
   const gitEnabled = visibleTabs.includes("git");
   const filesEnabled = visibleTabs.includes("files");
   const providersEnabled = visibleTabs.includes("providers");
+  const btwEnabled = visibleTabs.includes("btw");
   const allTabs = [
     { key: "stats" as const, label: t("terminal.panel.sideStats"), color: TERM_PANEL.cyan, icon: <BarChart3 size={12} strokeWidth={1.8} /> },
     ...(systemResourcesEnabled
@@ -81,16 +85,17 @@ export function TerminalSidePanel({
     { key: "git" as const, label: t("terminal.panel.gitChanges"), color: TERM_PANEL.yellow, icon: <GitBranch size={12} strokeWidth={1.8} /> },
     { key: "files" as const, label: t("terminal.panel.files"), color: TERM_PANEL.blue, icon: <Folder size={12} strokeWidth={1.8} />, disabled: filesTabDisabled },
     { key: "providers" as const, label: t("terminal.panel.providers"), color: TERM_PANEL.green, icon: <ArrowLeftRight size={12} strokeWidth={1.8} /> },
+    { key: "btw" as const, label: t("terminal.panel.btw"), color: TERM_PANEL.magenta, icon: <MessageSquare size={12} strokeWidth={1.8} /> },
   ];
   const tabs = allTabs.filter((tab) => visibleTabs.includes(tab.key));
   const tabLayoutKey = tabs.map((tab) => `${tab.key}:${tab.label}`).join("|");
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     expandedTabsWidthRef.current = null;
     setCompactTabs(false);
   }, [tabLayoutKey]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return;
     const tabList = tabListRef.current;
     if (!tabList || tabs.length === 0) return;
@@ -200,6 +205,7 @@ export function TerminalSidePanel({
         {providersEnabled && activeTab === "providers" && (
           <ProviderQuickSwitchPanel open={open} defaultAppType={providerDefaultAppType} onOpenSettings={onOpenProviderSettings} />
         )}
+        {btwEnabled && activeTab === "btw" ? btwPanelContent : null}
       </div>
     </ResizableTerminalPanelFrame>
   );

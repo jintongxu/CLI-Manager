@@ -1,12 +1,14 @@
 import type { CSSProperties } from "react";
 import type { Project, TerminalSession, WorktreeRecord } from "../../../shared/types/index";
 import type { TabNotificationState } from "../state";
-import { X, Trash2 } from "../../../shared/ui/icons";
+import { useI18n } from "../../../shared/i18n";
+import { useCurrentWorkTabScroll } from "../hooks/useCurrentWorkTabScroll";
+import { ChevronRight, X, Trash2 } from "../../../shared/ui/icons";
 import { buildTerminalTabHoverInfo, type TerminalTabContextLabels } from "../lib/terminalTabsModel";
 import { formatTerminalTabContext } from "../lib/currentWorkPresentation";
 import { useSortable, SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CURRENT_WORK_DRAG_PREFIX, DND_SORTABLE_TRANSITION } from "../../workspace/api/dragInteraction";
+import { CURRENT_WORK_DRAG_PREFIX, CURRENT_WORK_ORDER_DRAG_PREFIX, DND_SORTABLE_TRANSITION } from "../../workspace/api/dragInteraction";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "../../../shared/ui/context-menu";
 
 interface CurrentWorkTabBarProps {
@@ -35,12 +37,14 @@ interface CurrentWorkTabBarProps {
   statusLabels: { hidden: string; sshDisconnected: string; worktreeMissing: string };
   contextLabels: TerminalTabContextLabels;
   compact?: boolean;
+  orderingOnly?: boolean;
 }
 
 interface SortableCurrentWorkItemProps {
   session: TerminalSession;
   active: boolean;
   selected: boolean;
+  orderingOnly?: boolean;
   notification: TabNotificationState;
   project?: Project;
   worktree: WorktreeRecord | null;
@@ -57,10 +61,10 @@ interface SortableCurrentWorkItemProps {
 
 function SortableCurrentWorkItem({
   session, active, selected, notification, project, worktree, selectedLabel, removeLabel, renameLabel,
-  statusLabels, contextLabels, onActivate, onToggleSelected, onRemove, onRename,
+  statusLabels, contextLabels, onActivate, onToggleSelected, onRemove, onRename, orderingOnly,
 }: SortableCurrentWorkItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: `${CURRENT_WORK_DRAG_PREFIX}${session.id}`,
+    id: `${orderingOnly ? CURRENT_WORK_ORDER_DRAG_PREFIX : CURRENT_WORK_DRAG_PREFIX}${session.id}`,
     data: {
       type: "current-work",
       sessionId: session.id,
@@ -91,12 +95,14 @@ function SortableCurrentWorkItem({
       ref={setNodeRef}
       style={style}
       className="ui-current-work-item ui-interactive inline-flex h-10 max-w-72 shrink-0 cursor-grab items-center rounded-lg active:cursor-grabbing"
+      data-current-work-session-id={session.id}
+      data-terminal-tab-id={session.id}
       data-dragging={isDragging ? "true" : "false"}
       data-selected={active ? "true" : "false"}
       {...attributes}
       {...listeners}
     >
-      <input
+      {!orderingOnly && <input
         type="checkbox"
         className="ui-current-work-select mx-1 h-3.5 w-3.5 shrink-0 accent-[var(--accent)]"
         aria-label={selectedLabel(1)}
@@ -104,7 +110,7 @@ function SortableCurrentWorkItem({
         onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
         onChange={() => onToggleSelected(session.id)}
-      />
+      />}
       <button
         type="button"
         role="tab"
@@ -120,7 +126,7 @@ function SortableCurrentWorkItem({
         </span>
         <span className="ui-current-work-tab-context max-w-56 truncate text-[10px] opacity-65">{context}</span>
       </button>
-      <button
+      {!orderingOnly && <button
         type="button"
         className="ui-current-work-remove ui-focus-ring inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md opacity-70 hover:opacity-100"
         aria-label={removeLabel(session.title)}
@@ -129,7 +135,7 @@ function SortableCurrentWorkItem({
         onClick={(event) => { event.stopPropagation(); onRemove(session.id); }}
       >
         <X size={12} strokeWidth={2} aria-hidden="true" />
-      </button>
+      </button>}
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent>
@@ -142,8 +148,12 @@ function SortableCurrentWorkItem({
 export function CurrentWorkTabBar({
   sessions, activeSessionId, notifications, projects, worktrees, selectedSessionIds, tabStyle,
   onActivate, onToggleSelected, onRemove, onRename, onClear, onCloseOtherTerminals, canCloseOtherTerminals, onExit, label, exitLabel,
-  clearLabel, closeOtherLabel, selectedLabel, removeLabel, renameLabel, statusLabels, contextLabels, compact = false,
+  clearLabel, closeOtherLabel, selectedLabel, removeLabel, renameLabel, statusLabels, contextLabels, compact = false, orderingOnly = false,
 }: CurrentWorkTabBarProps) {
+  const { t } = useI18n();
+  const signature = JSON.stringify(sessions.map((session) => [session.id, session.title]));
+  const { scrollRef, scrollState, scrollTabs } = useCurrentWorkTabScroll(!compact, activeSessionId, signature);
+  const isOverflowing = scrollState.canScrollLeft || scrollState.canScrollRight;
   const projectById = new Map(projects.map((project) => [project.id, project]));
   const worktreeById = new Map(worktrees.map((worktree) => [worktree.id, worktree]));
   return (
@@ -158,11 +168,19 @@ export function CurrentWorkTabBar({
         <span>{label}</span>
         {!compact && <span className="ui-current-work-count">{sessions.length}</span>}
       </div>
+      {!compact && isOverflowing && (
+        <button type="button" className="ui-focus-ring inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md disabled:opacity-40"
+          disabled={!scrollState.canScrollLeft} onClick={() => scrollTabs(-1)}
+          aria-label={t("terminal.tab.scrollLeft")} title={t("terminal.tab.scrollLeft")}>
+          <ChevronRight size={14} className="rotate-180" aria-hidden="true" />
+        </button>
+      )}
       {!compact && (
-        <div className="ui-current-work-list flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
-          <SortableContext items={sessions.map((session) => `${CURRENT_WORK_DRAG_PREFIX}${session.id}`)} strategy={horizontalListSortingStrategy}>
+        <div ref={scrollRef} className="ui-current-work-list flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
+          <SortableContext items={sessions.map((session) => `${orderingOnly ? CURRENT_WORK_ORDER_DRAG_PREFIX : CURRENT_WORK_DRAG_PREFIX}${session.id}`)} strategy={horizontalListSortingStrategy}>
             {sessions.map((session) => (
               <SortableCurrentWorkItem
+                orderingOnly={orderingOnly}
                 key={session.id}
                 session={session}
                 active={session.id === activeSessionId}
@@ -184,16 +202,23 @@ export function CurrentWorkTabBar({
           </SortableContext>
         </div>
       )}
-      {!compact && selectedSessionIds.size > 0 && (
+      {!compact && isOverflowing && (
+        <button type="button" className="ui-focus-ring inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md disabled:opacity-40"
+          disabled={!scrollState.canScrollRight} onClick={() => scrollTabs(1)}
+          aria-label={t("terminal.tab.scrollRight")} title={t("terminal.tab.scrollRight")}>
+          <ChevronRight size={14} aria-hidden="true" />
+        </button>
+      )}
+      {!orderingOnly && !compact && selectedSessionIds.size > 0 && (
         <button type="button" className="ui-current-work-clear ui-focus-ring shrink-0 rounded-md px-2 py-1 text-xs opacity-80 hover:opacity-100" onClick={onClear} title={clearLabel}>
           <Trash2 size={13} aria-hidden="true" />
           <span className="sr-only">{clearLabel}</span>
         </button>
       )}
-      <button type="button" className="ui-current-work-close-others ui-focus-ring shrink-0 rounded-md px-2 py-1 text-xs opacity-80 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40" onClick={onCloseOtherTerminals} title={closeOtherLabel} aria-label={closeOtherLabel} disabled={!canCloseOtherTerminals}>
+      {!orderingOnly && <button type="button" className="ui-current-work-close-others ui-focus-ring shrink-0 rounded-md px-2 py-1 text-xs opacity-80 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40" onClick={onCloseOtherTerminals} title={closeOtherLabel} aria-label={closeOtherLabel} disabled={!canCloseOtherTerminals}>
         <X size={13} aria-hidden="true" />
         <span className="sr-only">{closeOtherLabel}</span>
-      </button>
+      </button>}
       <button
         type="button"
         className="ui-current-work-exit ui-focus-ring shrink-0 rounded-md px-2 py-1 text-xs opacity-80 hover:opacity-100"

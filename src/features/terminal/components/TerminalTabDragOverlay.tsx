@@ -16,13 +16,16 @@ export function DragOverlayTab({
   vendor,
   cliToolIcon,
   worktreeBadge,
+  compact = false,
 }: {
   worktreeBadge?: TerminalWorktreeBadge;
   title: string;
   notification: TabNotificationState;
   vendor?: VendorKey | null;
   cliToolIcon?: CliToolIconKey | null;
+  compact?: boolean;
 }) {
+  if (compact) return <div className="ui-terminal-simple-drag-overlay" data-selected="true">{title}</div>;
   const tabMinWidthClass = "min-w-[92px]";
 
   return (
@@ -60,7 +63,7 @@ export function DragOverlayTab({
 }
 
 export interface TerminalDragOverlayData {
-  type: "session" | "workspan" | "project" | "current-work";
+  type: "session" | "workspan" | "project" | "current-work" | "terminal-tab";
   overlay: {
     worktreeBadge?: TerminalWorktreeBadge;
     title: string;
@@ -80,27 +83,28 @@ export function TerminalTabDragOverlay({
   const { active } = useDndContext();
   const dragData = active?.data.current as TerminalDragOverlayData | undefined;
   const overlay = dragData?.overlay;
+  const compact = dragData?.type === "terminal-tab";
+
+  const preview = overlay && compact ? (
+    <DragOverlayTab title={overlay.title} notification={overlay.notification} compact />
+  ) : overlay ? (
+    <div className="ui-terminal-well ui-terminal-drag-overlay-theme" data-terminal-theme-tone={themeTone}>
+      <div className="ui-terminal-pane-chrome ui-terminal-drag-overlay-chrome">
+        <DragOverlayTab
+          title={overlay.title}
+          worktreeBadge={overlay.worktreeBadge}
+          notification={overlay.notification}
+          vendor={overlay.vendor}
+          cliToolIcon={overlay.cliToolIcon}
+        />
+      </div>
+    </div>
+  ) : null;
 
   return (
     <Portal>
-      <DragOverlay
-        className="ui-terminal-drag-overlay"
-        dropAnimation={null}
-        style={style}
-      >
-        {overlay ? (
-          <div className="ui-terminal-well ui-terminal-drag-overlay-theme" data-terminal-theme-tone={themeTone}>
-            <div className="ui-terminal-pane-chrome ui-terminal-drag-overlay-chrome">
-              <DragOverlayTab
-                title={overlay.title}
-                worktreeBadge={overlay.worktreeBadge}
-                notification={overlay.notification}
-                vendor={overlay.vendor}
-                cliToolIcon={overlay.cliToolIcon}
-              />
-            </div>
-          </div>
-        ) : null}
+      <DragOverlay className="ui-terminal-drag-overlay" dropAnimation={null} style={compact ? undefined : style}>
+        {preview}
       </DragOverlay>
     </Portal>
   );

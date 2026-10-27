@@ -11,7 +11,7 @@ import { SshSidebarPanel } from "../../remote";
 import { BackgroundTasksPanel, type BackgroundTaskMeta } from "../components/BackgroundTasksPanel";
 import {
   Activity, ArrowLeftRight, Plus, ListClockIcon, Maximize2, Minimize2, BarChart3, GitBranch, Folder,
-  Cpu, Globe,
+  Cpu, Globe, MessageSquare,
 } from "../../../shared/ui/icons";
 import type { Project } from "../../../shared/types/index";
 import { SortableToolbarButton, CpuCatIndicator } from "../components/TerminalToolbarControls";
@@ -29,6 +29,8 @@ interface TerminalToolbarContext {
   statsPanelActive: boolean;
   providersPanelActive: boolean;
   systemResourcesPanelActive: boolean;
+  btwPanelActive: boolean;
+  handleToggleBtwPanel: () => void;
   handleNewTab: () => void;
   handleNewAnonymousPi: () => void;
   projects: Project[];
@@ -75,6 +77,8 @@ export function useTerminalToolbarRenderer({
   statsPanelActive,
   providersPanelActive,
   systemResourcesPanelActive,
+  btwPanelActive,
+  handleToggleBtwPanel,
   handleNewTab,
   handleNewAnonymousPi,
   projects,
@@ -256,6 +260,17 @@ export function useTerminalToolbarRenderer({
           <ArrowLeftRight size={13} strokeWidth={1.8} />
         </button>
       ),
+      btw: (
+        <button
+          onClick={handleToggleBtwPanel}
+          className="ui-focus-ring ui-icon-action ui-action-btw"
+          data-active={btwPanelActive ? "true" : "false"}
+          aria-label={btwPanelActive ? t("terminal.toolbar.closeBtwPanel") : t("terminal.toolbar.openBtwPanel")}
+          aria-pressed={btwPanelActive}
+        >
+          <MessageSquare size={13} strokeWidth={1.8} />
+        </button>
+      ),
       systemResources: (
         <button
           onClick={handleToggleSystemResourcesPanel}
@@ -313,6 +328,7 @@ export function useTerminalToolbarRenderer({
         if (key === "backgroundTasks") {
           return terminalToolbarVisibility.backgroundTasks === true;
         }
+        if (key === "btw") return terminalToolbarVisibility.btw === true;
         return terminalToolbarVisibility[key as keyof typeof terminalToolbarVisibility] === true;
       })
       .map((key) => ({ id: key, element: buttonMap[key] }))

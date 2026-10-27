@@ -33,7 +33,14 @@ $executableNames = @(
 )
 $resourcesDir = Join-Path $resolvedSourceDir "resources"
 $webDistDir = Join-Path $resolvedSourceDir "apps/web/dist"
-foreach ($relativePath in ($executableNames + @("apps/web/dist/index.html"))) {
+foreach ($relativePath in ($executableNames + @(
+    "apps/web/dist/index.html",
+    "resources/side-question/launch.mjs",
+    "resources/side-question/piSideQuestionAgent.mjs",
+    "resources/side-question/piSideQuestionAgentCore.mjs",
+    "resources/side-question/runtime-manifest.json",
+    "resources/side-question/node_modules/@earendil-works/pi-coding-agent/package.json"
+))) {
     $requiredPath = Join-Path $resolvedSourceDir $relativePath
     if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
         throw "Missing portable package input: $requiredPath"

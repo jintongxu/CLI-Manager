@@ -16,7 +16,7 @@ export function createAnonymousPiSessionHandler(
   setActiveWorkspaceTab: (tab: "terminal" | "history") => void,
 ) {
   return async () => {
-    await createSession(undefined, undefined, "Anonymous Pi", "pi --no-session", undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, { sessionKind: "ephemeral-pi" });
+    await createSession(undefined, undefined, undefined, "pi --no-session", undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, { sessionKind: "ephemeral-pi" });
     closeHistory();
     setActiveWorkspaceTab("terminal");
   };

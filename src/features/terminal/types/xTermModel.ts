@@ -38,6 +38,7 @@ export interface TerminalContextMenuPoint {
 
 export interface TerminalContextMenuActions {
   onNewTab?: () => void;
+  onAskBtw?: (question: string, sourceTerminalId: string) => void;
   onCloseSession?: () => void;
   onCloseOthers?: () => void;
   onCloseToLeft?: () => void;

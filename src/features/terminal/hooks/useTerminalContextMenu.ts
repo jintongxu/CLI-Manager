@@ -4,12 +4,13 @@ export interface TerminalContextMenuState {
   x: number;
   y: number;
   hasSelection: boolean;
+  selection: string;
 }
 
 export interface UseTerminalContextMenuResult {
   menuState: TerminalContextMenuState | null;
   menuRef: RefObject<HTMLDivElement | null>;
-  openMenu: (x: number, y: number, hasSelection: boolean) => void;
+  openMenu: (x: number, y: number, hasSelection: boolean, selection?: string) => void;
   closeContextMenu: () => void;
 }
 
@@ -22,8 +23,8 @@ export function useTerminalContextMenu(): UseTerminalContextMenuResult {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [menuState, setMenuState] = useState<TerminalContextMenuState | null>(null);
 
-  const openMenu = (x: number, y: number, hasSelection: boolean) => {
-    setMenuState({ x, y, hasSelection });
+  const openMenu = (x: number, y: number, hasSelection: boolean, selection = "") => {
+    setMenuState({ x, y, hasSelection, selection });
   };
 
   const closeContextMenu = () => setMenuState(null);

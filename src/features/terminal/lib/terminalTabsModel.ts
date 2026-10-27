@@ -5,7 +5,7 @@ import {
 import { type SplitTerminalOptions, type TabNotificationState } from "../state";
 import { useSshHostStore } from "../../remote/api/sshHostStore";
 import { type TranslationKey } from "../../../shared/i18n/index";
-import { CURRENT_WORK_DRAG_PREFIX, PROJECT_DRAG_PREFIX, WORKSPAN_DRAG_PREFIX } from "../../workspace/api/dragInteraction";
+import { CURRENT_WORK_DRAG_PREFIX, CURRENT_WORK_DROP_TARGET_ID, CURRENT_WORK_TAB_DRAG_PREFIX, PROJECT_DRAG_PREFIX, TERMINAL_TAB_DRAG_PREFIX, WORKSPAN_DRAG_PREFIX } from "../../workspace/api/dragInteraction";
 import type { TerminalPaneDropEdge, TerminalPaneSplitDirection } from "../api/terminalPaneTree";
 import { resolvePaneDropEdgeFromPoint } from "../api/terminalPaneTree";
 import { resolveProjectPath } from "../../projects/api/groupPath";
@@ -445,7 +445,15 @@ export const terminalTabCollisionDetection: CollisionDetection = (args) => {
   const closestCollisions = closestCenter(args);
   const tabCollision = closestCollisions.find((collision) => {
     const id = String(collision.id);
-    return !isPaneDropCollisionId(id)
+    const sameTerminalTabCollection = activeId.startsWith(TERMINAL_TAB_DRAG_PREFIX)
+      ? id.startsWith(TERMINAL_TAB_DRAG_PREFIX)
+      : activeId.startsWith(CURRENT_WORK_TAB_DRAG_PREFIX)
+        ? id.startsWith(CURRENT_WORK_TAB_DRAG_PREFIX) || id.startsWith(CURRENT_WORK_DRAG_PREFIX)
+        : true;
+    return id !== activeId
+      && sameTerminalTabCollection
+      && id !== CURRENT_WORK_DROP_TARGET_ID
+      && !isPaneDropCollisionId(id)
       && !id.startsWith(WORKSPAN_DRAG_PREFIX)
       && id !== WORKSPAN_TABBAR_END_DROP_ID;
   });

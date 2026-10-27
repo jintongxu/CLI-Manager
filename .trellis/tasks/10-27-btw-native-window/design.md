@@ -1,0 +1,11 @@
+# Ownership and lifecycle
+
+`useBtwSideQuestion` creates one main BtwThreadModel. `useBtwNativeWindow` registers a native-generated epoch and a private Tauri Channel for validated intentions. Only Tauri's injected native webview label can call main register/publish/release or child ready/intent respectively. Main frontend intent handling does not subscribe to a spoofable event. The application invoke router rejects every unrelated custom application command from `btw-thread`, in addition to its limited plugin capability.
+
+Backend caches only the latest selected-thread snapshot. Main publishes revisions in order, coalescing stream updates while preserving an explicit card-open reveal bit. A separate openVersion permits closing the OS window and reopening the same card. Native close only hides; explicit reader Close sends an intention to unselect. Model deletion/clear publishes an empty snapshot; owner cleanup releases its exact epoch. Old release cannot clear a replacement owner. StrictMode registration probes are deferred and owner registrations serialized.
+
+Child listens before ready; ready is the native epoch authority. Buffered and late snapshots obey epoch/revision fences; a new event epoch triggers a fresh native ready handshake. Child has no inference controller or side-question invoke transport. Draft intents and atomic draft+send are serialized; generation fences reject delayed double-click sends after a prior request completes. Selection revision rejects ABA thread switches; command IDs are never evicted within a live owner (bounded admission).
+
+Reader is an embeddable main element, not a portal/Dialog. Existing Markdown and outline/composer are retained. Reset/mode confirmation is an inline alert section. Language/theme come from snapshots; the child does not load persisted settings.
+
+Native ExitRequested/Exit enters process shutdown: fence new registrations, set cancellation flags, wait until owners have dropped (run_command kills and waits for subprocesses before Registration drops). No shutdown on window hide/minimize. The isolated exit test is ignored by default because the global registry cannot restart; it is explicitly run in its own test process.

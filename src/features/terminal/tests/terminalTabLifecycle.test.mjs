@@ -350,6 +350,7 @@ test("render contracts keep backing trees and xterm mounted even after the last 
   const controller = readFileSync(new URL("../hooks/useTerminalTabsController.tsx", import.meta.url), "utf8");
   const terminal = readFileSync(new URL("../components/XTermTerminal.tsx", import.meta.url), "utf8");
   const hiddenDisplaySource = readFileSync(new URL("../lib/hiddenTerminalDisplayLifecycle.ts", import.meta.url), "utf8");
+  const display = readFileSync(new URL("../hooks/useTerminalDisplay.ts", import.meta.url), "utf8");
   assert.match(view, /mountedWorkspanLayouts\.length > 0/);
   assert.match(view, /node=\{layout\.paneTree\}/);
   assert.match(view, /visibleNode=\{layout\.visiblePaneTree\}/);
@@ -360,9 +361,10 @@ test("render contracts keep backing trees and xterm mounted even after the last 
   assert.match(controller, /visibleSessionIds=\{visibleSessionIds\}/);
   assert.match(controller, /!isHideableTerminalSession\(session\)/);
   assert.match(hiddenDisplaySource, /HIDDEN_TERMINAL_DISPOSE_DELAY_MS = 60_000/);
-  assert.match(terminal, /lowMemoryMode/);
-  assert.match(terminal, /setDisplayMounted\(false\)/);
+  assert.match(terminal, /Keep the xterm\/parser and PTY output consumer mounted/);
   assert.match(terminal, /<MountedXTermTerminal/);
+  assert.doesNotMatch(terminal, /setDisplayMounted\(false\)/);
+  assert.match(display, /if \(!isVisibleRef\.current\) \{[\s\S]*queueMicrotask\(flushPendingWrites\)/);
 });
 
 test("visible layouts intersect scope and hidden, retain backing keys, and render all-hidden as empty", () => {

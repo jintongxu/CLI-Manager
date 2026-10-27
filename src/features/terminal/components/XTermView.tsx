@@ -59,6 +59,7 @@ export function XTermView({
   handleMenuPaste,
   handleMenuSelectAll,
   handleMenuCopyAll,
+  handleMenuAskBtw,
   handleMenuClear,
   hasManageActions,
   onNewTab,
@@ -293,7 +294,12 @@ export function XTermView({
               fontFamily,
             } as CSSProperties}
             onMouseDown={(e) => {
-              e.preventDefault();
+              // Keep the menu's selection snapshot, but do not cancel the
+              // browser default here: cancelling mousedown can suppress the
+              // following click event on menu buttons.
+              e.stopPropagation();
+            }}
+            onMouseUp={(e) => {
               e.stopPropagation();
             }}
             onContextMenu={(e) => {
@@ -305,11 +311,22 @@ export function XTermView({
               type="button"
               role="menuitem"
               className="terminal-context-menu-item"
-              disabled={!menuState.hasSelection}
+              aria-disabled="false"
+              style={{ opacity: 1 }}
               onClick={handleMenuCopy}
             >
               <span>{t("terminal.contextMenu.copy")}</span>
               <span className="terminal-context-menu-hint">Ctrl+C</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="terminal-context-menu-item"
+              aria-disabled="false"
+              style={{ opacity: 1 }}
+              onClick={() => handleMenuAskBtw(menuState?.selection)}
+            >
+              <span>{t("terminal.contextMenu.askBtw")}</span>
             </button>
             <button
               type="button"

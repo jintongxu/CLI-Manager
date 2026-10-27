@@ -265,10 +265,14 @@ export function useTerminalDisplay({
   const webglDisposeTimerRef = useRef<number | null>(null);
   const webglContextLostRef = useRef(false);
   const fitRafRef = useRef<number | null>(null);
+  // Invalidate delayed viewport work when a terminal is hidden, replaced, or
+  // restored again. This prevents an old pane's RAF from fitting a new one.
+  const displayGenerationRef = useRef(0);
   const needsViewportRefreshRef = useRef(false);
   const ptyPendingChunksRef = useRef<PendingTerminalWrite[]>([]);
   const ptyWriteScheduleTokenRef = useRef(Symbol(sessionId));
   const ptyWriteInProgressRef = useRef(false);
+  const ptyHiddenWriteScheduledRef = useRef(false);
   // 拥塞计数：连续多少个 flush 周期结束时队列仍非空。达阈值则单次写上限
   // 临时放宽到 RELIEF，队列排空即回落 64KB。
   const ptyWriteCongestedCyclesRef = useRef(0);
@@ -340,7 +344,7 @@ export function useTerminalDisplay({
     && !isLightTerminalTheme(theme)
   );
 
-  const createWebglAddon = () => {
+  const createWebglAddon = (terminal: Terminal) => {
     // The live-resize barrier copies the last committed renderer frame before
     // xterm reallocates its canvas. WebKit clears non-preserved WebGL drawing
     // buffers after compositing, which otherwise produces an empty snapshot.
@@ -351,6 +355,13 @@ export function useTerminalDisplay({
       if (webglAddonRef.current === addon) {
         webglAddonRef.current = null;
       }
+      const generation = displayGenerationRef.current;
+      window.requestAnimationFrame(() => {
+        if (generation !== displayGenerationRef.current || terminalRef.current !== terminal) return;
+        terminal.refresh(0, Math.max(0, terminal.rows - 1));
+        onViewportRefreshNeeded?.();
+        scheduleFit(true, true);
+      });
       logWarn("Terminal WebGL context lost; keeping the default renderer for this session", { sessionId });
     });
     return addon;
@@ -363,7 +374,7 @@ export function useTerminalDisplay({
     if (lowMemoryMode && !isVisibleRef.current) return false;
     if (webglAddonRef.current) return false;
     try {
-      const addon = createWebglAddon();
+      const addon = createWebglAddon(terminal);
       terminal.loadAddon(addon);
       webglAddonRef.current = addon;
       return true;
@@ -441,6 +452,21 @@ export function useTerminalDisplay({
     };
     const schedulePendingWrite = () => {
       if (!ownsOutput() || ptyWriteInProgressRef.current || finishReplayFitRef.current) return;
+      // Hidden terminals still parse output, but must not wait behind the
+      // visible-tab fairness watchdog. That 250ms cadence is useful for
+      // visible rendering, yet allows a detached display to accumulate an
+      // unbounded browser-side queue during sustained output. Keep hidden
+      // parsing moving one bounded xterm write at a time; frame commits and
+      // ACKs retain the exact ordering/replay contract.
+      if (!isVisibleRef.current) {
+        if (ptyHiddenWriteScheduledRef.current) return;
+        ptyHiddenWriteScheduledRef.current = true;
+        queueMicrotask(() => {
+          ptyHiddenWriteScheduledRef.current = false;
+          flushPendingWrites();
+        });
+        return;
+      }
       // 拥塞记账：每个 flush 周期结束恰更新一次。队列排空则清零回落 64KB；
       // 仍有积压则计数加一，达阈值后下轮单次写上限放宽到 256KB。
       if (ptyPendingChunksRef.current.length === 0) {
@@ -762,6 +788,7 @@ export function useTerminalDisplay({
     cancelGlobalTerminalWrite(ptyWriteScheduleTokenRef.current);
     ptyPendingChunksRef.current = [];
     ptyWriteInProgressRef.current = false;
+    ptyHiddenWriteScheduledRef.current = false;
     ptyWriteCongestedCyclesRef.current = 0;
     clearTerminalLatency(sessionId);
     forwardPtyResizeRef.current = true;
@@ -888,6 +915,7 @@ export function useTerminalDisplay({
   };
 
   const cancelScheduledFit = () => {
+    displayGenerationRef.current += 1;
     requestedFitRef.current = null;
     cancelFitRequest();
     cancelPendingViewportRestore();
@@ -895,6 +923,7 @@ export function useTerminalDisplay({
   };
 
   const scheduleFit = (immediateResize = false, forceViewportRefresh = immediateResize) => {
+    const generation = displayGenerationRef.current;
     // Keep the debouncer's leading/trailing horizontal cadence alive across
     // consecutive ResizeObserver frames; only replace the pending fit frame.
     cancelFitFrame();
@@ -903,13 +932,17 @@ export function useTerminalDisplay({
     requestedFitRef.current = null;
     fitRafRef.current = requestAnimationFrame(() => {
       fitRafRef.current = null;
+      if (generation !== displayGenerationRef.current) return;
       fitWhenStable(immediateResize, forceViewportRefresh);
     });
   };
 
   const scheduleViewportRefresh = () => {
+    const generation = displayGenerationRef.current;
     requestAnimationFrame(() => {
+      if (generation !== displayGenerationRef.current) return;
       requestAnimationFrame(() => {
+        if (generation !== displayGenerationRef.current) return;
         const terminal = terminalRef.current;
         if (!terminal) return;
         refreshTerminalViewport(terminal);

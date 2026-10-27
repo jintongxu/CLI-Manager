@@ -10,6 +10,8 @@ pub mod cc_connect;
 pub mod ccusage;
 #[path = "../features/terminal/suggestions.rs"]
 pub mod command_suggestion;
+#[path = "../features/terminal/side_question.rs"]
+pub mod side_question;
 #[path = "../features/app-data/repair/mod.rs"]
 pub mod db_repair;
 #[path = "../features/desktop-pet/commands.rs"]
@@ -91,3 +93,6 @@ pub mod version;
 pub mod web_conversation;
 pub mod web_device;
 pub mod web_server;
+
+#[path = "../features/terminal/btw_window.rs"]
+pub mod btw_window;

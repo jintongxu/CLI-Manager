@@ -12,6 +12,11 @@ window.addEventListener("contextmenu", (e) => {
 
 async function bootstrap() {
   const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
+  if (getCurrentWindow().label === "btw-thread") {
+    const { default: BtwWindowApp } = await import("./features/terminal/api/BtwWindowApp");
+    root.render(<React.StrictMode><BtwWindowApp /></React.StrictMode>);
+    return;
+  }
   const isDesktopPetWindow = getCurrentWindow().label === "desktop-pet";
   if (isDesktopPetWindow) {
     const { default: DesktopPetApp } = await import("./features/desktop-pet/api/DesktopPetApp");

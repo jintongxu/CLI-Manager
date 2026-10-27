@@ -1,0 +1,32 @@
+{
+  "id": "btw-follow-up-context",
+  "name": "btw-follow-up-context",
+  "title": "Support multi-turn BTW follow-up questions",
+  "description": "Keep the selected quote after submitting a BTW question and include prior question/answer turns in subsequent prompts. A newly selected quote begins a fresh context; Clear resets the conversation. Answers remain isolated from the active terminal.",
+  "status": "completed",
+  "dev_type": "feature",
+  "scope": "terminal BTW side-question frontend state and prompt construction",
+  "package": null,
+  "priority": "P1",
+  "creator": "Pi",
+  "assignee": "Pi",
+  "createdAt": "2026-10-27",
+  "completedAt": "2026-10-27",
+  "branch": "wt/task-1022-2147-9319cbf51fe9",
+  "base_branch": "master",
+  "worktree_path": "D:/ai/cli-manager-worktrees/task-1022-2147-9319cbf51fe9",
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "src/features/terminal/hooks/useBtwSideQuestion.ts",
+    "src/features/terminal/lib/terminalBtwSideQuestion.ts",
+    "src/features/terminal/components/BtwSideQuestionPanel.tsx",
+    "scripts/terminalBtwCommand.test.mjs",
+    "scripts/terminalBtwPanel.test.mjs"
+  ],
+  "notes": "Implemented lightweight multi-turn context without changing the single-request Pi sidecar lifecycle: successful prior turns are serialized into subsequent prompts; current quote remains after submit; choosing a new quote resets the context; Clear resets it. Added bounded history text and follow-up prompt coverage. Verification: node --test scripts/terminalBtwCommand.test.mjs scripts/terminalBtwPanel.test.mjs (9 passed), npx tsc --noEmit passed, git diff --check passed.",
+  "meta": {}
+}

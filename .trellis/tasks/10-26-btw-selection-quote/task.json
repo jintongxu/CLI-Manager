@@ -1,0 +1,32 @@
+{
+  "id": "btw-selection-quote",
+  "name": "btw-selection-quote",
+  "title": "Fix BTW side-question quote capture",
+  "description": "Fix right-click selection capture so selected Pi terminal text is passed as the quote into the BTW side-question panel. Preserve the manual question flow: do not auto-submit; the user enters a question and explicitly clicks Ask.",
+  "status": "completed",
+  "dev_type": "bugfix",
+  "scope": "terminal selection/context-menu/side-question handoff",
+  "package": null,
+  "priority": "P1",
+  "creator": "Pi",
+  "assignee": "Pi",
+  "createdAt": "2026-10-26",
+  "completedAt": "2026-10-26",
+  "branch": "wt/task-1022-2147-9319cbf51fe9",
+  "base_branch": "master",
+  "worktree_path": "D:/ai/cli-manager-worktrees/task-1022-2147-9319cbf51fe9",
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "src/features/terminal/hooks/useXTermController.ts",
+    "src/features/terminal/hooks/useTerminalTabsController.tsx",
+    "src/features/terminal/components/BtwSideQuestionPanel.tsx",
+    "scripts/terminalTabRow.test.mjs"
+  ],
+  "notes": "Root-cause statement: Pi TUI enables terminal mouse reporting, so ordinary drag events are consumed by Pi and its visible highlight is application-rendered rather than an xterm/DOM selection; runtime length-only diagnostics confirmed terminal.getSelection(), the menu snapshot, and caches all remained zero. Fix lands at the terminal mouse boundary: for Pi sessions, mirror drag start/end cells without blocking Pi, clear the previous mirrored selection and caches at each new drag, and always replace the host xterm selection with the latest non-empty drag range on mouseup. The existing right-click handoff and manual question submission remain unchanged. Temporary diagnostics were removed. Tests: node --test scripts/terminalTabRow.test.mjs scripts/terminalBtwPanel.test.mjs scripts/terminalBtwCommand.test.mjs (15 passed); npx tsc --noEmit passed; git diff --check passed. GitNexus CLI unavailable; targeted symbol search confirmed the context-menu to panel handoff.",
+
+  "meta": {}
+}

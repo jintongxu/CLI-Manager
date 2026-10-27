@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "btw-thread",
+  "description": "Read-only BTW display; application IPC is additionally fenced by native sender identity.",
+  "windows": ["btw-thread"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "clipboard-manager:allow-write-text",
+    "opener:allow-open-url",
+    "opener:allow-default-urls"
+  ]
+}

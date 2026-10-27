@@ -961,6 +961,10 @@ pub(crate) const MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_DESCRIPTION: &str =
 pub(crate) const MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_SQL: &str =
     "ALTER TABLE command_templates ADD COLUMN template_type TEXT NOT NULL DEFAULT 'command';";
 
+pub(crate) const MIGRATION_CREATE_BTW_THREADS_VERSION: i64 = 54;
+pub(crate) const MIGRATION_CREATE_BTW_THREADS_DESCRIPTION: &str = "create_btw_threads_and_messages";
+pub(crate) const MIGRATION_CREATE_BTW_THREADS_SQL: &str = include_str!("migrations/btw_threads.sql");
+
 // 按既定版本顺序返回向上迁移注册表，由 SQL 插件在初始化时应用；此函数本身不执行 SQL。
 pub(crate) fn migrations() -> Vec<Migration> {
     vec![
@@ -1384,6 +1388,12 @@ pub(crate) fn migrations() -> Vec<Migration> {
             version: MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_VERSION,
             description: MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_DESCRIPTION,
             sql: MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: MIGRATION_CREATE_BTW_THREADS_VERSION,
+            description: MIGRATION_CREATE_BTW_THREADS_DESCRIPTION,
+            sql: MIGRATION_CREATE_BTW_THREADS_SQL,
             kind: MigrationKind::Up,
         },
     ]

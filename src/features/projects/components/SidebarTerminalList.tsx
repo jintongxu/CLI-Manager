@@ -9,6 +9,7 @@ import { useTreeActions } from "./TreeContext";
 import { useI18n } from "../../../shared/i18n/index";
 import { EyeOff, Pin, Terminal } from "../../../shared/ui/icons";
 import { useTerminalStore } from "../../terminal/state";
+import { useSessionStore } from "../../terminal/api/sessionStore";
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem } from "../../../shared/ui/context-menu";
 import { isSidebarTerminalLocked, resolveSidebarTerminalState, sidebarTerminalGlyphs } from "../lib/sidebarTerminals";
 
@@ -20,6 +21,7 @@ export function SidebarTerminalList({ projectId, worktreeId, depth = 0, compact 
   const { t } = useI18n();
   const notifications = useTerminalStore((store) => store.tabNotifications);
   const taskSources = useTerminalStore((store) => store.tabStatuses);
+  const currentWorkSessionIds = useSessionStore((store) => store.currentWorkSessionIds);
   const [renameTarget, setRenameTarget] = useState<{ id: string; title: string } | null>(null);
   const sessions = actions.getTerminals(projectId, worktreeId);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: DND_ACTIVATION_CONSTRAINT }));
@@ -56,8 +58,15 @@ export function SidebarTerminalList({ projectId, worktreeId, depth = 0, compact 
         const locked = isSidebarTerminalLocked(session);
         const status = resolveSidebarTerminalState(session, actions.terminalStatuses[session.id], notifications[session.id], taskSources[session.id]);
         const state = status ? t(`sidebar.terminals.${status}`) : "";
+        const membership = currentWorkSessionIds.includes(session.id)
+          ? t("sidebar.terminals.currentWork")
+          : session.tabHidden ? t("sidebar.terminals.hiddenWork") : t("sidebar.terminals.pendingWork");
+        const membershipKind = currentWorkSessionIds.includes(session.id)
+          ? "current"
+          : session.tabHidden ? "hidden" : "pending";
         const hidden = session.tabHidden ? t("sidebar.terminals.hidden") : "";
-        const label = [session.title, state, hidden].filter(Boolean).join(" · ");
+        const pinned = session.sidebarPinned ? t("sidebar.terminals.pinned") : "";
+        const label = [session.title, state, hidden, pinned].filter(Boolean).join(" · ");
         return (
           <SidebarTerminalSortable key={session.id} session={session}>
           {(drag) => (
@@ -67,7 +76,7 @@ export function SidebarTerminalList({ projectId, worktreeId, depth = 0, compact 
                 onPointerDown={drag.onPointerDown} className="sidebar-terminal-row" data-status={status ?? undefined}
                 data-hidden={session.tabHidden ? "true" : "false"}
                 data-selected={actions.activeTerminalId === session.id && !session.tabHidden ? "true" : "false"}
-                aria-label={t("sidebar.terminals.open", { title: label })} title={label}
+                aria-label={t("sidebar.terminals.open", { title: [label, membership].filter(Boolean).join(" · ") })} title={[label, membership].filter(Boolean).join(" · ")}
                 onClick={(event) => { event.stopPropagation(); if (!drag.isDragging) actions.onOpenTerminal(session.id); }}
                 onKeyDown={(event) => {
                   if (event.altKey && ["ArrowUp", "ArrowDown"].includes(event.key)) {
@@ -89,9 +98,13 @@ export function SidebarTerminalList({ projectId, worktreeId, depth = 0, compact 
                 <span className="sidebar-terminal-heading">
                   <span className="sidebar-terminal-title-line">
                     <span className="sidebar-terminal-title">{session.title}</span>
-                    {session.sidebarPinned && <Pin size={11} className="sidebar-terminal-pin" aria-label={t("sidebar.terminals.pinned")} />}
+                    {session.sidebarPinned && <>
+                      <Pin size={11} className="sidebar-terminal-pin" aria-hidden="true" />
+                      <span className="sidebar-terminal-pinned-label">{t("sidebar.terminals.pinned")}</span>
+                    </>}
                   </span>
                   <span className="sidebar-terminal-metadata" aria-hidden="true">
+                    {membership && <span className="sidebar-terminal-membership" data-membership={membershipKind} title={membership} aria-hidden="true">{membershipKind === "current" ? "C" : membershipKind === "pending" ? "P" : "H"}</span>}
                     {status && <span className="sidebar-terminal-status" title={state}>{sidebarTerminalGlyphs[status]}</span>}
                     {session.tabHidden && <span className="sidebar-terminal-hidden" title={hidden}><EyeOff size={12} aria-hidden="true" /></span>}
                   </span>

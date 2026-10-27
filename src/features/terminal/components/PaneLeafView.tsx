@@ -48,6 +48,7 @@ export interface PaneLeafViewProps {
   onSubmitEdit: (sessionId: string, title: string) => void;
   onCancelEdit: () => void;
   onNewTab: () => void;
+  onAskBtw?: (question: string, sourceTerminalId: string) => void;
   onDuplicateSession: (session: TerminalSession) => void;
   onProbeSession: (sessionId: string) => void;
   onInterruptSession: (sessionId: string) => void;
@@ -110,6 +111,7 @@ export function PaneLeafView({
   onSubmitEdit,
   onCancelEdit,
   onNewTab,
+  onAskBtw,
   onDuplicateSession,
   onProbeSession,
   onInterruptSession,
@@ -286,6 +288,7 @@ export function PaneLeafView({
                 lightThemePalette={lightThemePalette}
                 darkThemePalette={darkThemePalette}
                 onNewTab={onNewTab}
+                onAskBtw={onAskBtw}
                 onCloseSession={() => onCloseSessions([session.id])}
                 onCloseOthers={
                   visiblePaneSessionIds.length > 1
@@ -471,6 +474,7 @@ export function arePaneLeafViewPropsEqual(prevProps: PaneLeafViewProps, nextProp
     prevProps.onSubmitEdit === nextProps.onSubmitEdit &&
     prevProps.onCancelEdit === nextProps.onCancelEdit &&
     prevProps.onNewTab === nextProps.onNewTab &&
+    prevProps.onAskBtw === nextProps.onAskBtw &&
     prevProps.onDuplicateSession === nextProps.onDuplicateSession &&
     prevProps.onSaveSessionToSidebar === nextProps.onSaveSessionToSidebar &&
     prevProps.onOpenSplitPicker === nextProps.onOpenSplitPicker &&
