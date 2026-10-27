@@ -195,6 +195,7 @@ export function useSidebarController({
     displayName: string;
     shortLabel?: string;
     description: string;
+    createOnly?: boolean;
   } | null>(null);
 
   const stoppingGroupIdsRef = useRef(new Set<string>());
@@ -721,14 +722,16 @@ export function useSidebarController({
   const worktreeCreationAttempts = useRef(new WorktreeCreationAttempts());
   const worktreePromptActionsRef = useRef(new Set<string>());
 
-  const createAndOpenWorktree = (project: Project, targetPaneId?: string, displayName?: string, description = "", taskName?: string, shortLabel = "") => {
+  const createAndOpenWorktree = (project: Project, targetPaneId?: string, displayName?: string, description = "", taskName?: string, shortLabel = "", openTerminal = true) => {
     const input = { taskName, displayName, description, shortLabel: normalizeWorktreeShortLabel(shortLabel) };
     const placeholder = createPendingWorktreeRecord(project.id, input);
     useProjectStore.getState().addWorktreeLocal(placeholder);
     setWorktreePrompt(null);
     void worktreeCreationAttempts.current.run(`${project.id}:${taskName}`,
       () => createWorktreeForProject(project, { ...input, placeholderId: placeholder.id }),
-      worktree => openWorktreeSession(project, worktree, targetPaneId, undefined, getWorktreeSidebarLabel(worktree)))
+      async worktree => openTerminal
+        ? openWorktreeSession(project, worktree, targetPaneId, undefined, getWorktreeSidebarLabel(worktree))
+        : worktree)
       .then((worktree) => {
         toast.success(t("worktree.toast.created"), { description: worktree.path });
         void maybeInstallWorktreeDeps(project, worktree);
@@ -822,6 +825,17 @@ export function useSidebarController({
   const handleOpen = useCallback(async (project: Project) => {
     await openProjects([project]);
   }, [openProjects]);
+  const handleNewWorktree = useCallback((project: Project) => {
+    if (rejectUnsupportedCapability(project, "worktree")) return;
+    const taskName = createDefaultWorktreeTaskName(project.id);
+    setWorktreePrompt({
+      taskName,
+      project,
+      displayName: taskName,
+      description: "",
+      createOnly: true,
+    });
+  }, [rejectUnsupportedCapability]);
   const handleNewProjectTerminal = useCallback(async (project: Project) => {
       if (compactMode || useExternalTerminal) {
         if (rejectUnsupportedCapability(project, "externalTerminal")) return;
@@ -1841,6 +1855,7 @@ export function useSidebarController({
     contextMenuRef,
     showProjectBatchContextMenu,
     handleOpen,
+    handleNewWorktree,
     setContextMenu,
     t,
     useExternalTerminal,

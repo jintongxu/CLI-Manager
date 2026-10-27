@@ -26,7 +26,7 @@ import { GroupEditDialog } from "./GroupEditDialog";
 import { NodeAppearancePanel } from "./NodeAppearancePanel";
 import { SidebarFooter } from "./SidebarFooter";
 import { FileExplorerSidebar } from "../../files/api/FileExplorerSidebar";
-import { ArrowLeftRight, Check, CircleStop, Copy, Crosshair, FileCode, FolderOpen, FolderPlus, ListClockIcon, Palette, Pencil, Pin, Play, Plus, Settings, SquareSplitHorizontal, SquareSplitVertical, Terminal, TerminalSquare, Trash2, X } from "../../../shared/ui/icons";
+import { ArrowLeftRight, Check, CircleStop, Copy, Crosshair, FileCode, FolderOpen, FolderPlus, GitBranch, ListClockIcon, Palette, Pencil, Pin, Play, Plus, Settings, SquareSplitHorizontal, SquareSplitVertical, Terminal, TerminalSquare, Trash2, X } from "../../../shared/ui/icons";
 import { buildProjectSplitOptions } from "../lib/sidebarModel";
 import { getWorktreeDisplayName } from "../api/worktreeMetadata";
 import { useProjectIdeaStore } from "../api/projectIdeaStore";
@@ -71,6 +71,7 @@ export function SidebarView({
   contextMenuRef,
   showProjectBatchContextMenu,
   handleOpen,
+  handleNewWorktree,
   setContextMenu,
   t,
   useExternalTerminal,
@@ -354,6 +355,18 @@ export function SidebarView({
                 >
                   <Plus size={14} strokeWidth={1.5} />
                   {t("sidebar.menu.newProjectTerminal")}
+                </button>
+                <button
+                  className="context-menu-item"
+                  hidden={showProjectBatchContextMenu}
+                  role="menuitem"
+                  onClick={() => {
+                    void handleNewWorktree(contextMenu.project);
+                    setContextMenu(null);
+                  }}
+                >
+                  <GitBranch size={14} strokeWidth={1.5} />
+                  {t("sidebar.menu.newWorktree")}
                 </button>
                 <button
                   className="context-menu-item"
@@ -957,9 +970,9 @@ export function SidebarView({
             <X size={15} strokeWidth={2} />
           </button>
           <div className="pr-10">
-            <DialogTitle>{t("worktree.prompt.title")}</DialogTitle>
+            <DialogTitle>{worktreePrompt?.createOnly ? t("worktree.create.title") : t("worktree.prompt.title")}</DialogTitle>
             <DialogDescription className="mt-2">
-              {worktreePrompt ? t("worktree.prompt.description", { name: worktreePrompt.project.name }) : ""}
+              {worktreePrompt ? t(worktreePrompt.createOnly ? "worktree.create.description" : "worktree.prompt.description", { name: worktreePrompt.project.name }) : ""}
             </DialogDescription>
           </div>
           <div className="mt-4">
@@ -994,7 +1007,7 @@ export function SidebarView({
             )}
           </div>
           <DialogFooter className="ui-worktree-prompt-footer">
-            <Button
+            {!worktreePrompt?.createOnly && <Button
               variant="outline"
               className="ui-worktree-prompt-action ui-worktree-prompt-action-neutral"
               onClick={() => {
@@ -1008,8 +1021,8 @@ export function SidebarView({
               }}
             >
               {t("worktree.prompt.direct")}
-            </Button>
-            <Button
+            </Button>}
+            {!worktreePrompt?.createOnly && <Button
               variant="outline"
               className="ui-worktree-prompt-action ui-worktree-prompt-action-accent"
               onClick={() => {
@@ -1031,19 +1044,19 @@ export function SidebarView({
               disabled={!worktreePrompt || !worktreePrompt.displayName.trim() || Array.from(worktreePrompt.displayName.trim()).length > 64 || Array.from(worktreePrompt.description).length > 2000}
             >
               {t("worktree.prompt.autoParallel")}
-            </Button>
+            </Button>}
             <Button
               className="ui-worktree-prompt-action ui-worktree-prompt-action-primary"
               onClick={() => {
                 if (worktreePrompt?.direction) {
                   void createAndSplitWorktree(worktreePrompt.project, worktreePrompt.direction, worktreePrompt.displayName, worktreePrompt.description, worktreePrompt.taskName, worktreePrompt.shortLabel);
                 } else if (worktreePrompt) {
-                  void createAndOpenWorktree(worktreePrompt.project, worktreePrompt.targetPaneId, worktreePrompt.displayName, worktreePrompt.description, worktreePrompt.taskName, worktreePrompt.shortLabel);
+                  void createAndOpenWorktree(worktreePrompt.project, worktreePrompt.targetPaneId, worktreePrompt.displayName, worktreePrompt.description, worktreePrompt.taskName, worktreePrompt.shortLabel, !worktreePrompt.createOnly);
                 }
               }}
               disabled={!worktreePrompt || !worktreePrompt.displayName.trim() || Array.from(worktreePrompt.displayName.trim()).length > 64 || Array.from(worktreePrompt.description).length > 2000}
             >
-              {t("worktree.prompt.isolate")}
+              {worktreePrompt?.createOnly ? t("worktree.create.confirm") : t("worktree.prompt.isolate")}
             </Button>
           </DialogFooter>
         </DialogContent>
