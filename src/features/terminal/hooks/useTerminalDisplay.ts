@@ -5,6 +5,7 @@ import { writeTerminalOutput, resetTerminalOutputOrigin } from "../../../shared/
 import type { IMarker, ITheme, Terminal } from "@xterm/xterm";
 import type { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { watchTerminalWebglLoss } from "../browser/terminalWebglLoss";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { refreshTerminalViewport } from "../lib/terminalVisibility";
 import {
@@ -262,6 +263,7 @@ export function useTerminalDisplay({
   onViewportRefreshNeeded,
 }: UseTerminalDisplayOptions): UseTerminalDisplayResult {
   const webglAddonRef = useRef<WebglAddon | null>(null);
+  const stopWebglLossWatchRef = useRef<(() => void) | null>(null);
   const webglDisposeTimerRef = useRef<number | null>(null);
   const webglContextLostRef = useRef(false);
   const fitRafRef = useRef<number | null>(null);
@@ -329,9 +331,12 @@ export function useTerminalDisplay({
   };
 
   const disposeWebglRenderer = () => {
-    if (!webglAddonRef.current) return false;
-    webglAddonRef.current.dispose();
+    stopWebglLossWatchRef.current?.();
+    stopWebglLossWatchRef.current = null;
+    const addon = webglAddonRef.current;
+    if (!addon) return false;
     webglAddonRef.current = null;
+    addon.dispose();
     return true;
   };
 
@@ -349,12 +354,10 @@ export function useTerminalDisplay({
     // xterm reallocates its canvas. WebKit clears non-preserved WebGL drawing
     // buffers after compositing, which otherwise produces an empty snapshot.
     const addon = new WebglAddon({ preserveDrawingBuffer: true });
-    addon.onContextLoss(() => {
+    const recover = () => {
+      if (webglAddonRef.current !== addon) return;
       webglContextLostRef.current = true;
-      addon.dispose();
-      if (webglAddonRef.current === addon) {
-        webglAddonRef.current = null;
-      }
+      disposeWebglRenderer();
       const generation = displayGenerationRef.current;
       window.requestAnimationFrame(() => {
         if (generation !== displayGenerationRef.current || terminalRef.current !== terminal) return;
@@ -363,7 +366,11 @@ export function useTerminalDisplay({
         scheduleFit(true, true);
       });
       logWarn("Terminal WebGL context lost; keeping the default renderer for this session", { sessionId });
-    });
+    };
+    addon.onContextLoss(recover);
+    if (terminal.element) {
+      stopWebglLossWatchRef.current = watchTerminalWebglLoss(terminal.element, recover);
+    }
     return addon;
   };
 
@@ -379,6 +386,8 @@ export function useTerminalDisplay({
       webglAddonRef.current = addon;
       return true;
     } catch {
+      stopWebglLossWatchRef.current?.();
+      stopWebglLossWatchRef.current = null;
       return false;
     }
   };

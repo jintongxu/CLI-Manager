@@ -143,7 +143,6 @@ export const useSessionStore = create<SessionStore>(() => ({
     const s = await getStore();
     const liveSessionIds = new Set(sessions
       .filter((session) => session.kind !== "subagent-transcript"
-        && session.kind !== "file-editor"
         && session.kind !== "synced-history"
         && session.transientBackground !== true)
       .map((session) => session.id));

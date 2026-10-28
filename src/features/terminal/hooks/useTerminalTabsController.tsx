@@ -68,7 +68,6 @@ import { useTerminalPaneAdapter } from "./useTerminalPaneAdapter";
 import { useTerminalToolbarRenderer } from "./useTerminalToolbarRenderer";
 import { useScopedTerminalEmptyState } from "./useScopedTerminalEmptyState";
 import { useTerminalVisibleLayouts } from "./useTerminalVisibleLayouts";
-import { isHideableTerminalSession } from "../lib/terminalTabVisibility";
 import { buildWorkspanTabModels } from "../lib/workspanTabModel";
 import { buildGlobalWorktreeBadges } from "../api/terminalWorktreeBadge";
 import { hideProjectTerminalSessions } from "../api/terminalProjectHide";
@@ -77,6 +76,7 @@ import { buildTerminalProjectOptions, resolveWorkspanIdOrderByProjectMove } from
 import { useTerminalProjectSelection } from "./useTerminalProjectSelection";
 import { useWorkspanTabOverflow } from "./useWorkspanTabOverflow";
 import { useCurrentWorkSessionController } from "./useCurrentWorkSessionController"; import { collectOtherSessionIds } from "../lib/currentWorkModel";
+import { useSshFileEditorCurrentWork } from "./useSshFileEditorCurrentWork";
 import { useCurrentWorkPortalTargets } from "./useCurrentWorkPortalTargets";
 import { createTerminalRecoveryHandlers } from "./terminalRecoveryController";
 export function useTerminalTabsController({
@@ -131,7 +131,7 @@ export function useTerminalTabsController({
     registerPaneTarget: registerCurrentWorkPaneTarget,
     sessionPortalTargets: currentWorkSessionPortalTargets,
     visibleSessionIds: currentWorkVisibleSessionIds,
-  } = useCurrentWorkPortalTargets(currentWorkPaneTree);
+  } = useCurrentWorkPortalTargets(currentWorkSessionIds.length > 0 ? currentWorkPaneTree : null);
   const currentWorkReturnRef = useRef<{ workspanId: string | null; sessionId: string | null } | null>(null);
   const createSession = useCallback(async (...args: Parameters<typeof createTerminalSession>) => {
     const sessionId = await createTerminalSession(...args);
@@ -168,6 +168,7 @@ export function useTerminalTabsController({
     if (previous.workspanId) useTerminalStore.getState().setActiveWorkspan(previous.workspanId);
     if (previous.sessionId) setActive(previous.sessionId);
   }, [setActive]);
+  useSshFileEditorCurrentWork({ activeSessionId, addCurrentWorkSession, currentWorkMode, currentWorkSessionIds, sessions });
   useEffect(() => {
     const handleCurrentWorkTarget = (event: Event) => {
       const { sessionId } = (event as CustomEvent<CurrentWorkTarget>).detail;
@@ -919,13 +920,13 @@ export function useTerminalTabsController({
 
     closeSessionIds(closeableSessionIds, protectedSessionIds, destroy);
   }, [closeSessionIds, confirm, t]);
-  const handleCloseSessions = useCallback((sessionIds: string[], anchor?: SplitPickerAnchor, protectedSessionIds: readonly string[] = [], destroy = false) => {
+  const handleCloseSessions = useCallback((sessionIds: string[], anchor?: SplitPickerAnchor, protectedSessionIds: readonly string[] = [], destroy = true) => {
     const uniqueSessionIds = Array.from(new Set(sessionIds)).filter((sessionId) => sessions.some((session) => session.id === sessionId));
     if (uniqueSessionIds.length === 0) return;
 
     const terminalSessionCount = uniqueSessionIds.filter((sessionId) => {
       const session = sessions.find((item) => item.id === sessionId);
-      return session && !isHideableTerminalSession(session) && session.kind !== "file-editor";
+      return session && (session.kind ?? "pty") === "pty";
     }).length;
 
     if (!shouldConfirmTerminalTabClose(terminalSessionCount)) {
@@ -1176,10 +1177,12 @@ export function useTerminalTabsController({
       setReplayOpen(true);
     }
   }, [closeHistory, ensureTerminalSidePanelVisible, panelSession, projectById, rejectUnsupportedCapability, replayPanelActive, sidePanelMerged, terminalSidePanelSingleOpen]);
-
   const syncFilePanelProject = useCallback(async (project: Project) => {
     const preserveCurrentFilePanel = consumeTerminalFileDragPanelSyncSuppression();
     if (rejectUnsupportedCapability(project, "files")) return false;
+    if (currentWorkMode && panelSession?.environmentType === "ssh" && !currentWorkSessionIds.includes(panelSession.id)) {
+      addCurrentWorkSession(panelSession.id);
+    }
     if (preserveCurrentFilePanel) return true;
     try {
       const sameFileContext = isSameProjectFileContext(
@@ -1194,8 +1197,7 @@ export function useTerminalTabsController({
       toast.error(t("sidebar.toast.openProjectFilesFailed"), { description: String(err) });
       return false;
     }
-  }, [openFileProject, rejectUnsupportedCapability, t]);
-
+  }, [addCurrentWorkSession, currentWorkMode, currentWorkSessionIds, openFileProject, panelSession, rejectUnsupportedCapability, t]);
   const closeFilesPanel = useCallback(() => {
     if (sidePanelMerged) {
       if (sidePanelTab === "files") setSidePanelOpen(false);
@@ -1203,7 +1205,6 @@ export function useTerminalTabsController({
     }
     setFilesOpen(false);
   }, [sidePanelMerged, sidePanelTab]);
-
   const openFilesPanelForProject = useCallback(async (project: Project): Promise<boolean> => {
     const allowed = await syncFilePanelProject(project);
     if (!allowed) return false;
@@ -1227,7 +1228,6 @@ export function useTerminalTabsController({
     setFilesOpen(true);
     return true;
   }, [closeHistory, ensureTerminalSidePanelVisible, sidePanelMerged, syncFilePanelProject, terminalSidePanelSingleOpen]);
-
   const handleToggleFilesPanel = useCallback(async () => {
     if (filesPanelActive) {
       ensureTerminalSidePanelVisible();

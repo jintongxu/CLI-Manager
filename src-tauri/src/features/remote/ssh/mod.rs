@@ -193,8 +193,11 @@ fn direct_file_mime(path: &str) -> Option<&'static str> {
 
 // 拒绝需要真实终端交互的认证方式。
 fn ensure_non_interactive(spec: &SshConnectionSpec) -> Result<(), String> {
-    if matches!(spec.auth_mode.as_str(), "password_prompt" | "interactive") {
+    if spec.auth_mode == "interactive" {
         return Err("ssh_interactive_auth_required".to_string());
+    }
+    if spec.auth_mode == "password_prompt" && spec.credential_ref.trim().is_empty() {
+        return Err("ssh_credential_missing".to_string());
     }
     Ok(())
 }
@@ -1836,7 +1839,19 @@ pub async fn ssh_resolve_home(spec: SshConnectionSpec) -> Result<String, String>
             .map_err(|error| error.to_string())?
             .map_err(|error| error.to_string())?;
     if !output.status.success() {
-        return Err(single_line(&output.stderr));
+        let detail = single_line(&output.stderr);
+        let normalized = detail.to_ascii_lowercase();
+        if normalized.contains("permission denied")
+            || normalized.contains("authentication failed")
+            || normalized.contains("authentication refused")
+        {
+            return Err("ssh_authentication_failed".to_string());
+        }
+        return Err(if detail.is_empty() {
+            "ssh_remote_home_failed".to_string()
+        } else {
+            format!("ssh_remote_home_failed:{detail}")
+        });
     }
     let home = String::from_utf8_lossy(&output.stdout).trim().to_string();
     validate_remote_path(&home)?;

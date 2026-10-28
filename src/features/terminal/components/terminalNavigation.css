@@ -65,6 +65,9 @@
 .ui-terminal-tab-row-item[data-dragging="true"] .ui-terminal-tab-row-drag-handle { cursor: grabbing; opacity: 1; }
 .ui-terminal-tab-row-main { display: inline-flex; flex: 1 1 auto; min-width: 0; min-height: 32px; align-items: center; padding: 0; color: inherit; background: transparent; border: 0; cursor: inherit; font: inherit; }
 .ui-terminal-tab-row-title { display: block; flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
+.ui-terminal-tab-row-close { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 20px; height: 20px; border: 0; border-radius: 5px; color: inherit; background: transparent; cursor: pointer; font-size: 16px; line-height: 1; opacity: .6; }
+.ui-terminal-tab-row-close:hover { background: color-mix(in srgb, var(--terminal-theme-foreground, #f8fafc) 12%, transparent); opacity: 1; }
+.ui-terminal-navigation-empty { display: flex; min-width: 0; flex: 1; align-items: center; padding: 0 12px; color: var(--terminal-theme-foreground, #f8fafc); font-size: 12px; opacity: .62; }
 
 .ui-terminal-tab-row-scroll { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 24px; border-radius: 6px; color: inherit; background: transparent; border: 1px solid transparent; cursor: pointer; }
 .ui-terminal-tab-row-scroll:disabled { opacity: .35; cursor: not-allowed; }

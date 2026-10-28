@@ -44,6 +44,7 @@ import {
 } from "../../git/api/gitDiffWorkspaceStore";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { useTerminalStore } from "../../terminal/state";
+import { dispatchCurrentWorkSessionCreated, dispatchCurrentWorkTarget } from "../../terminal/api/currentWorkEvents";
 import { useSshHostStore } from "../../remote/api/sshHostStore";
 import { STATUS_CONFIG } from "../../git/api/GitStatusIcon";
 import { ConfirmDialog } from "../../../shared/ui/ConfirmDialog";
@@ -1307,9 +1308,17 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
     void moveDraggedEntry(source.entries, "", project);
   }, [moveDraggedEntry, project, readOnly]);
 
+  const activateFileEditor = useCallback((targetProject: Project) => {
+    const editorSessionId = openFileEditorPane(targetProject);
+    if (targetProject.environment_type === "ssh") {
+      dispatchCurrentWorkSessionCreated(editorSessionId);
+      dispatchCurrentWorkTarget(editorSessionId);
+    }
+  }, [openFileEditorPane]);
+
   const requestOpenFile = (entry: ProjectFileEntry) => {
     void openFile(entry);
-    if (project) openFileEditorPane(project);
+    if (project) activateFileEditor(project);
   };
 
   const requestOpenDiff = useCallback((change: GitFileChange) => {
@@ -1324,8 +1333,8 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
       additions: change.added,
       deletions: change.deleted,
     });
-    openFileEditorPane(project);
-  }, [openDiff, openFileEditorPane, project]);
+    activateFileEditor(project);
+  }, [activateFileEditor, openDiff, project]);
 
   const renderContentSearchRow = useCallback((match: ProjectFileContentMatch) => {
     if (!project) return null;
@@ -1371,7 +1380,7 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
               if (event.ctrlKey || event.metaKey) { event.preventDefault(); selectEntry(entry, true); return; }
               selectEntry(entry);
               void openFileAtSearchMatch(match);
-              openFileEditorPane(project);
+              activateFileEditor(project);
             }}
           >
             <FileCode size={15} className="mt-0.5 shrink-0 text-text-muted" />
@@ -1415,7 +1424,7 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
       </ContextMenu>
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedEntries, selectEntry, readOnly, mutationBusy, pasteIntoTarget, renamingAction?.path, cancelRename, submitRename, handleFileKeyDown, handleFilePointerDown, handleFilePointerMove, handleFilePointerUp, handleFilePointerCancel, handleFileDragStart, handleFileDrag, handleFileDragEnd, handleFileDragOver, handleFileDrop, ignoreState, getGitChange, menuPortalContainer, openFileAtSearchMatch, openFileEditorPane, project, requestOpenDiff, t]);
+  }, [selectedEntries, selectEntry, readOnly, mutationBusy, pasteIntoTarget, renamingAction?.path, cancelRename, submitRename, handleFileKeyDown, handleFilePointerDown, handleFilePointerMove, handleFilePointerUp, handleFilePointerCancel, handleFileDragStart, handleFileDrag, handleFileDragEnd, handleFileDragOver, handleFileDrop, ignoreState, getGitChange, menuPortalContainer, openFileAtSearchMatch, activateFileEditor, project, requestOpenDiff, t]);
 
   const renderSearchRow = useCallback((entry: ProjectFileEntry) => {
     if (!project) return null;

@@ -63,7 +63,7 @@ export function TerminalNavigationBar({
       <Button ref={setCurrentWorkDropRef} size="sm" variant="ghost" className={`ui-terminal-navigation-work-toggle${isCurrentWorkDropOver ? " is-drop-target" : ""}`} onClick={onToggleCurrentWork}>
         {currentWorkMode ? `${t("terminal.currentWork.title")} · ${navigation.totalCount}` : `${t("terminal.navigation.available")} · ${navigation.totalCount}`}
       </Button>
-      <TerminalTabRow
+      {navigation.entries.length > 0 ? <TerminalTabRow
         entries={navigation.entries}
         activeId={activeId}
         contextLabels={contextLabels}
@@ -71,7 +71,11 @@ export function TerminalNavigationBar({
         sortable
         onReorder={onReorder}
         onActivate={actions.onActivate}
-      />
+        onClose={onClose}
+        closeLabel={(title) => t("terminal.tab.close", { title })}
+      /> : <div className="ui-terminal-navigation-empty" role="status">
+        {currentWorkMode ? t("terminal.currentWork.emptyTabs") : t("terminal.navigation.availableEmpty")}
+      </div>}
       <TerminalNavigationDrawer
         open={drawer.open}
         pinned={drawer.pinned}

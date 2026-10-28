@@ -45,6 +45,15 @@ export interface SshRemoteFileOperationOptions {
   cancel?: () => void | Promise<void>;
 }
 
+function isSshAuthenticationError(error: unknown): boolean {
+  const message = String(error);
+  return [
+    "ssh_credential_missing",
+    "ssh_authentication_failed",
+    "ssh_interactive_auth_required",
+  ].some((code) => message.includes(code));
+}
+
 function buildSshConnectionSpecFromLaunch(launch: SshAgentProjectLaunch) {
   return {
     host: launch.host,
@@ -315,7 +324,8 @@ export async function sshRemoteListDir(
       sizeBytes: entry.sizeBytes,
       modifiedMs: entry.modifiedMs ?? null,
     }));
-  } catch {
+  } catch (error) {
+    if (isSshAuthenticationError(error)) throw error;
     // Preserve Agent/OpenSSH fallback for unsupported routes and older servers.
   }
   let agentEntries: RemoteFileEntry[] | null = null;

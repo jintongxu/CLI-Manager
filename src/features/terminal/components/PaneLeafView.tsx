@@ -230,7 +230,7 @@ export function PaneLeafView({
           const focusSessionId = currentWorkPortalTargets?.size && currentWorkActiveSessionId
             ? currentWorkActiveSessionId
             : effectivePaneActiveSessionId;
-          if (focusSessionId && focusSessionId !== useTerminalStore.getState().activeSessionId) {
+          if (focusSessionId && useTerminalStore.getState().sessions.some((session) => session.id === focusSessionId && !session.tabHidden) && focusSessionId !== useTerminalStore.getState().activeSessionId) {
             onActivateSession(focusSessionId);
           }
         }}
@@ -238,7 +238,7 @@ export function PaneLeafView({
           const focusSessionId = currentWorkPortalTargets?.size && currentWorkActiveSessionId
             ? currentWorkActiveSessionId
             : effectivePaneActiveSessionId;
-          if (focusSessionId && focusSessionId !== activeSessionId) {
+          if (focusSessionId && useTerminalStore.getState().sessions.some((session) => session.id === focusSessionId && !session.tabHidden) && focusSessionId !== activeSessionId) {
             onActivateSession(focusSessionId);
           }
         }}
@@ -246,15 +246,15 @@ export function PaneLeafView({
         {paneSessions.map((session) => {
           const currentWorkPortalTarget = currentWorkPortalTargets?.get(session.id) ?? null;
           const shouldPortalCurrentWork = Boolean(currentWorkPortalTarget && currentWorkSessionIds?.includes(session.id));
-          const isCurrentWorkVisible = Boolean(shouldPortalCurrentWork && currentWorkVisibleSessionIds?.has(session.id));
-          const isCurrentWorkActive = Boolean(shouldPortalCurrentWork && currentWorkActiveSessionId === session.id);
+          const isCurrentWorkVisible = Boolean(!session.tabHidden && shouldPortalCurrentWork && currentWorkVisibleSessionIds?.has(session.id));
+          const isCurrentWorkActive = Boolean(isCurrentWorkVisible && currentWorkActiveSessionId === session.id);
           const sessionElement = (
           <div
             key={session.id}
             className={`absolute inset-0${isPiPane ? " ui-terminal-session--pi" : ""}`}
-            style={{ display: (shouldPortalCurrentWork ? isCurrentWorkVisible : session.id === effectivePaneActiveSessionId) ? "block" : "none" }}
+            style={{ display: (!session.tabHidden && (shouldPortalCurrentWork ? isCurrentWorkVisible : isLayoutVisible && session.id === effectivePaneActiveSessionId)) ? "block" : "none" }}
             onPointerDownCapture={() => {
-              if (shouldPortalCurrentWork && session.id !== currentWorkActiveSessionId) onActivateSession(session.id);
+              if (isCurrentWorkVisible && session.id !== currentWorkActiveSessionId && useTerminalStore.getState().sessions.some((live) => live.id === session.id && !live.tabHidden)) onActivateSession(session.id);
             }}
           >
             {session.kind === "file-editor" ? (

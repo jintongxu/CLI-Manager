@@ -20,6 +20,8 @@ export interface TerminalTabRowProps {
   /** Membership add is only offered while NOT in current-work mode; removal only while in it. */
   mode: "ordinary" | "current-work";
   onActivate: (sessionId: string) => void;
+  onClose?: (sessionId: string) => void;
+  closeLabel?: (title: string) => string;
   /** Extra trailing element, typically the drawer trigger button. */
   trailing?: ReactNode;
   ariaLabel?: string;
@@ -31,11 +33,13 @@ function projectColorOf(entry: TerminalNavigationEntry, contextLabels: TerminalT
 }
 
 function TabItem({
-  entry, active, sortable, mode, contextLabels, onActivate, onReorder,
+  entry, active, sortable, mode, contextLabels, onActivate, onReorder, onClose, closeLabel,
 }: {
   entry: TerminalNavigationEntry; active: boolean; sortable: boolean; mode: TerminalTabRowProps["mode"];
   contextLabels: TerminalTabRowProps["contextLabels"]; onActivate: (id: string) => void;
   onReorder?: (fromId: string, toId: string) => void;
+  onClose?: (id: string) => void;
+  closeLabel?: (title: string) => string;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: sortable ? `${mode === "current-work" ? CURRENT_WORK_TAB_DRAG_PREFIX : TERMINAL_TAB_DRAG_PREFIX}${entry.id}` : entry.id,
@@ -72,7 +76,13 @@ function TabItem({
       >
         <span className="ui-terminal-tab-row-title">{entry.session.title}</span>
       </button>
-
+      {onClose && <button
+        type="button"
+        className="ui-terminal-tab-row-close ui-focus-ring"
+        aria-label={closeLabel?.(entry.session.title) ?? entry.session.title}
+        title={closeLabel?.(entry.session.title)}
+        onClick={(event) => { event.stopPropagation(); onClose(entry.id); }}
+      >×</button>}
     </div>
   );
 }
@@ -83,7 +93,7 @@ function TabItem({
  * wheel + reveal-active. No secondary filter and no "N more" affordance.
  */
 export function TerminalTabRow({
-  entries, activeId, contextLabels, sortable = false, mode, onActivate, trailing, ariaLabel, onReorder,
+  entries, activeId, contextLabels, sortable = false, mode, onActivate, onClose, closeLabel, trailing, ariaLabel, onReorder,
 }: TerminalTabRowProps) {
   const { t } = useI18n();
   const { scrollRef, scrollState, scrollTabs } = useCurrentWorkTabScroll(true, activeId, JSON.stringify(entries.map((entry) => [entry.id, entry.session.title])));
@@ -103,6 +113,8 @@ export function TerminalTabRow({
               mode={mode}
               contextLabels={contextLabels}
               onActivate={onActivate}
+              onClose={onClose}
+              closeLabel={closeLabel}
               onReorder={onReorder}
             />
           ))}

@@ -1,11 +1,12 @@
 use super::{
     available_release_preview, build_agent_install_script, build_agent_management_script,
-    build_agent_probe_script, effective_ssh_user_command, hook_request, host_key_fingerprint,
-    install_action, is_authenticated_log, parse_agent_environment, parse_agent_operation,
-    parse_agent_probe_stdout, parse_effective_ssh_user, posix_quote, read_bounded,
-    result_from_agent_report, ssh_password_account, ssh_probe_command, validate_agent_hook_report,
-    validate_remote_path, validate_spec, AgentDoctorProbe, AgentVersionProbe, ParsedAgentProbe,
-    RemoteAgentEnvironment, SshConnectionSpec, MAX_AGENT_HOOK_ENTRIES,
+    build_agent_probe_script, effective_ssh_user_command, ensure_non_interactive, hook_request,
+    host_key_fingerprint, install_action, is_authenticated_log, parse_agent_environment,
+    parse_agent_operation, parse_agent_probe_stdout, parse_effective_ssh_user, posix_quote,
+    read_bounded, result_from_agent_report, ssh_password_account, ssh_probe_command,
+    validate_agent_hook_report, validate_remote_path, validate_spec, AgentDoctorProbe,
+    AgentVersionProbe, ParsedAgentProbe, RemoteAgentEnvironment, SshConnectionSpec,
+    MAX_AGENT_HOOK_ENTRIES,
 };
 use cli_manager_hook_schema::{
     HookConfigChange, HookConfigFile, HookConfigReport, HookHistorySourceCandidate,
@@ -32,6 +33,23 @@ fn spec() -> SshConnectionSpec {
         server_alive_interval_sec: 30,
         server_alive_count_max: 3,
     }
+}
+
+#[test]
+fn noninteractive_auth_requires_saved_password_or_noninteractive_mode() {
+    let mut value = spec();
+    value.auth_mode = "password_prompt".to_string();
+    assert_eq!(
+        ensure_non_interactive(&value).unwrap_err(),
+        "ssh_credential_missing"
+    );
+    value.credential_ref = "ssh:host:password".to_string();
+    assert!(ensure_non_interactive(&value).is_ok());
+    value.auth_mode = "interactive".to_string();
+    assert_eq!(
+        ensure_non_interactive(&value).unwrap_err(),
+        "ssh_interactive_auth_required"
+    );
 }
 
 #[test]

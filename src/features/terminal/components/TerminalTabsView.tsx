@@ -160,6 +160,10 @@ export function TerminalTabsView({
   toggleCurrentWork,
 }: ReturnType<typeof useTerminalTabsController>) {
   const currentWorkHasSplit = currentWorkPaneTree?.type === "split";
+  const currentWorkIdSet = new Set(currentWorkSessionIds);
+  const availableSessionCount = visibleSessions.filter((session) => !session.tabHidden && !currentWorkIdSet.has(session.id)).length;
+  const currentWorkSessionCount = visibleSessions.filter((session) => !session.tabHidden && currentWorkIdSet.has(session.id)).length;
+  const activeModeHasSessions = currentWorkMode ? currentWorkSessionCount > 0 : availableSessionCount > 0;
   const legacyOrdering = currentWorkMode ? (
                     <CurrentWorkTabBar orderingOnly
                       sessions={currentWorkSessionIds.map((id) => sessions.find((session) => session.id === id)).filter((session): session is typeof sessions[number] => Boolean(session))}
@@ -607,8 +611,7 @@ export function TerminalTabsView({
                     position={workspanTabBarPosition} tabBarVisible={workspanTabBarVisible} activateCurrentWork={activateCurrentWork} leaveCurrentWork={leaveCurrentWork}
                     onActivate={handleActivateSession} onAdd={(id) => { if (!currentWorkSessionIds.includes(id)) toggleCurrentWork(id); }} onNewTab={() => { void handleNewTab(); }} onRemove={(id) => removeCurrentWorkSessions([id])}
                     onCloseSession={(id) => {
-                      const session = sessions.find((item) => item.id === id);
-                      handleCloseSessions([id], undefined, [], !session?.projectId);
+                      handleCloseSessions([id], undefined, [], true);
                     }}
                     selectedIds={[...selectedCurrentWorkSessionIds]} onToggleSelection={toggleCurrentWorkSelection}
                     onRemoveSelected={removeCurrentWorkSessions} onCloseOthers={closeOtherTerminals} legacyOrdering={legacyOrdering}
@@ -617,7 +620,11 @@ export function TerminalTabsView({
                     }); }} paneProps={paneNavigationProps} layouts={mountedWorkspanLayouts} onToggleCurrentWork={toggleCurrentWork}
                   />}
                 >
-                <div className="relative min-h-0 flex-1 overflow-hidden">
+                <div
+                  className="relative min-h-0 flex-1 overflow-hidden"
+                  style={{ visibility: activeModeHasSessions ? "visible" : "hidden" }}
+                  aria-hidden={activeModeHasSessions ? undefined : "true"}
+                >
                   {mountedWorkspanLayouts.map((layout) => {
                     const layoutVisible = Boolean(layout.visiblePaneTree)
                       && layout.workspan.id === effectiveActiveWorkspanId;
@@ -640,15 +647,15 @@ export function TerminalTabsView({
                             pane,
                             layout.visiblePanes,
                             layoutActiveSessionId,
-                            layoutVisible && layout.visiblePaneIds.has(pane.id),
-                            { currentWorkSessionIds, onToggleCurrentWork: toggleCurrentWork, onActivate: currentWorkMode ? activateCurrentWork : undefined, activeSessionId: currentWorkMode ? currentWorkActiveSessionId : undefined, currentWorkPortalTargets: currentWorkMode ? currentWorkSessionPortalTargets : undefined, currentWorkVisibleSessionIds: currentWorkMode ? currentWorkVisibleSessionIds : undefined },
+                            !currentWorkMode && activeModeHasSessions && layoutVisible && layout.visiblePaneIds.has(pane.id),
+                            { currentWorkSessionIds, onToggleCurrentWork: toggleCurrentWork, onActivate: currentWorkMode ? activateCurrentWork : undefined, activeSessionId: currentWorkMode ? currentWorkActiveSessionId : undefined, currentWorkPortalTargets: currentWorkMode && currentWorkSessionIds.length > 0 ? currentWorkSessionPortalTargets : undefined, currentWorkVisibleSessionIds: currentWorkMode && currentWorkSessionIds.length > 0 ? currentWorkVisibleSessionIds : undefined },
                           )}
                           fullscreenLeafId={layoutVisible ? activeFullscreenPaneId : null}
                         />
                       </div>
                     );
                   })}
-                  {currentWorkMode && currentWorkPaneTree && (
+                  {currentWorkMode && activeModeHasSessions && currentWorkPaneTree && (
                     <SplitTerminalView
                       node={currentWorkPaneTree}
                       visibleNode={currentWorkPaneTree}
@@ -658,7 +665,7 @@ export function TerminalTabsView({
                         const paneSession = pane.activeSessionId
                           ? sessions.find((session) => session.id === pane.activeSessionId)
                           : undefined;
-                        if (!paneSession) return null;
+                        if (!paneSession || paneSession.tabHidden) return null;
                         return (
                           <CurrentWorkPaneTarget
                             paneId={pane.id}
@@ -679,17 +686,25 @@ export function TerminalTabsView({
                       }}
                     />
                   )}
-                  {currentWorkMode && !currentWorkPaneTree && (
-                    <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm opacity-70">
-                      {t("terminal.currentWork.empty")}
-                    </div>
-                  )}
                 </div>
                 </WorkspanTerminalLayout>
+                {!activeModeHasSessions && (
+                  <div
+                    className="absolute inset-x-0 z-40 flex items-center justify-center bg-[var(--terminal-theme-background,#111827)] px-6 text-center"
+                    style={workspanTabBarVisible
+                      ? workspanTabBarPosition === "top" ? { top: 42, bottom: 0 } : { top: 0, bottom: 42 }
+                      : { insetBlock: 0 }}
+                  >
+                    <div className="max-w-md rounded-xl border border-white/10 bg-white/[0.03] px-8 py-7 shadow-sm">
+                      <div className="text-sm font-medium">{currentWorkMode ? t("terminal.currentWork.emptyTitle") : t("terminal.navigation.availableEmptyTitle")}</div>
+                      <div className="mt-2 text-xs opacity-60">{currentWorkMode ? t("terminal.currentWork.empty") : t("terminal.navigation.availableEmptyDescription")}</div>
+                    </div>
+                  </div>
+                )}
                 <TerminalTabDragOverlay style={terminalWellStyle} themeTone={terminalThemeTone} />
               </DndContext>
             )}
-            {hasScopedTerminalFilter && visibleSessions.length === 0 && !useExternalTerminal && scopedEmptyState && (
+            {activeModeHasSessions && hasScopedTerminalFilter && visibleSessions.length === 0 && !useExternalTerminal && scopedEmptyState && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <EmptyState
                   icon={<Terminal size={40} strokeWidth={1} />}
@@ -700,7 +715,7 @@ export function TerminalTabsView({
                 />
               </div>
             )}
-            {visibleSessions.length === 0 && !useExternalTerminal && !hasScopedTerminalFilter && (
+            {activeModeHasSessions && visibleSessions.length === 0 && !useExternalTerminal && !hasScopedTerminalFilter && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <EmptyState
                   icon={<Terminal size={40} strokeWidth={1} />}

@@ -176,7 +176,7 @@ fn authenticate(
         "agent" | "ssh_config" => session
             .userauth_agent(username)
             .map_err(|_| "ssh_authentication_failed".to_string())?,
-        "credential_ref" | "password_prompt" | "interactive" => {
+        "credential_ref" | "password_prompt" => {
             let reference = spec.credential_ref.trim();
             let password = crate::credential_store::get(reference)
                 .map_err(|_| "ssh_credential_missing".to_string())?
@@ -186,6 +186,7 @@ fn authenticate(
                 .userauth_password(username, &password)
                 .map_err(|_| "ssh_authentication_failed".to_string())?;
         }
+        "interactive" => return Err("ssh_interactive_auth_required".to_string()),
         _ => return Err("ssh_auth_mode_invalid".into()),
     }
     session

@@ -78,6 +78,14 @@ function errorHasCode(error: unknown, code: string): boolean {
   return String(error).includes(code);
 }
 
+function remoteFileOpenErrorMessage(error: unknown): string {
+  const message = String(error);
+  if (message.includes("ssh_credential_missing")) return translateCurrent("files.error.sshCredentialMissing");
+  if (message.includes("ssh_authentication_failed")) return translateCurrent("files.error.sshAuthenticationFailed");
+  if (message.includes("ssh_interactive_auth_required")) return translateCurrent("files.error.sshInteractiveAuthRequired");
+  return message;
+}
+
 function fileReadErrorMessage(error: unknown): string {
   if (errorHasCode(error, "binary_file")) return translateCurrent("files.error.binaryFile");
   if (errorHasCode(error, "video_preview_unsupported")) return translateCurrent("files.error.videoUnsupported");
@@ -688,6 +696,32 @@ function collectRefreshPaths(
   return Array.from(paths).sort((a, b) => pathDepth(a) - pathDepth(b));
 }
 
+function collectRemoteRefreshPaths(
+  expandedPaths: Set<string>,
+  openFiles: ActiveProjectFile[],
+  changedPaths?: string[],
+): string[] {
+  const paths = new Set<string>();
+  if (!changedPaths?.length) {
+    paths.add("");
+    for (const path of expandedPaths) paths.add(path);
+    for (const file of openFiles) paths.add(parentPath(file.path));
+    return Array.from(paths).sort((a, b) => pathDepth(a) - pathDepth(b));
+  }
+
+  for (const path of changedPaths) {
+    if (path === "") paths.add("");
+    else if (path !== ".git" && !path.startsWith(".git/")) paths.add(parentPath(path));
+  }
+  for (const path of expandedPaths) {
+    if (shouldRefreshOpenFile(path, changedPaths)) paths.add(path);
+  }
+  for (const file of openFiles) {
+    if (shouldRefreshOpenFile(file.path, changedPaths)) paths.add(parentPath(file.path));
+  }
+  return Array.from(paths).sort((a, b) => pathDepth(a) - pathDepth(b));
+}
+
 function mergePendingRefreshPaths(changedPaths?: string[]): void {
   if (!changedPaths?.length) {
     pendingRefreshChangedPaths = null;
@@ -952,7 +986,7 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
         void releaseRemoteFileContext(remoteContext);
       }
       logError("Failed to open project files", err);
-      toast.error("文件列表加载失败", { description: String(err) });
+      toast.error(translateCurrent("files.error.remoteListFailed"), { description: remoteFileOpenErrorMessage(err) });
       set({ tree: [], gitChanges: [], loading: false });
     }
   },
@@ -1073,7 +1107,9 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
 
     const expandedPaths = state.expandedPaths;
     const openFiles = state.openFiles;
-    const refreshPaths = collectRefreshPaths(expandedPaths, openFiles, changedPaths);
+    const refreshPaths = remoteFileContext
+      ? collectRemoteRefreshPaths(expandedPaths, openFiles, changedPaths)
+      : collectRefreshPaths(expandedPaths, openFiles, changedPaths);
 
     try {
       const refreshedDirs = (await Promise.all(refreshPaths.map(async (path) => {

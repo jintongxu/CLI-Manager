@@ -357,9 +357,10 @@ test("render contracts keep backing trees and xterm mounted even after the last 
   assert.match(view, /visibleSessions\.length === 0/);
   assert.match(leaf, /paneSessions\.map\(\(session\)/);
   assert.match(leaf, /<XTermTerminal/);
+  assert.match(controller, /destroy = true/);
   assert.match(controller, /closeTerminalSessions\(sessionIds, protectedSessionIds, destroy \? destroySession : hideSession/);
   assert.match(controller, /visibleSessionIds=\{visibleSessionIds\}/);
-  assert.match(controller, /!isHideableTerminalSession\(session\)/);
+  assert.match(controller, /\(session\.kind \?\? "pty"\) === "pty"/);
   assert.match(hiddenDisplaySource, /HIDDEN_TERMINAL_DISPOSE_DELAY_MS = 60_000/);
   assert.match(terminal, /Keep the xterm\/parser and PTY output consumer mounted/);
   assert.match(terminal, /<MountedXTermTerminal/);
