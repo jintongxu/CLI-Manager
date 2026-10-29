@@ -20,6 +20,45 @@ pub const BINARY_KIND_CHECKPOINT: u8 = 4;
 pub const BINARY_KIND_REPLAY_RESET: u8 = 5;
 const BINARY_HEADER_BYTES: usize = 20;
 
+/// Session isolation only; does not promise OwnerExit or verified process death.
+pub const FEATURE_RUNTIME_OWNER_EXIT: &str = "runtime_owner_exit_v1";
+pub const FEATURE_PTY_OWNER_EXIT: &str = "pty_owner_exit_v1";
+pub const FEATURE_SESSION_OWNER: &str = "session_owner_v1";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(transparent)]
+pub struct InstanceId(pub String);
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(transparent)]
+pub struct DaemonEpoch(pub String);
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(transparent)]
+pub struct OwnerToken(pub String);
+impl std::fmt::Debug for OwnerToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("OwnerToken([redacted])")
+    }
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct OwnerBinding {
+    pub instance_id: InstanceId,
+    pub owner_token: OwnerToken,
+    pub daemon_epoch: DaemonEpoch,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionScope { Owned, Foreign, Legacy }
+
+/// PTY-only receipt. Never an application exit permit or a daemon death proof.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OwnerExitReceipt {
+    pub transaction_id: String,
+    pub sessions: HashMap<String, String>,
+    pub owner_released: bool,
+    pub daemon_status: String,
+    pub limitation: String,
+}
+
 pub const FEATURE_WS_BINARY_OUTPUT: &str = "ws_binary_output_v1";
 pub const FEATURE_WS_BINARY_INPUT: &str = "ws_binary_input_v1";
 pub const FEATURE_CHECKPOINT_REPLAY: &str = "checkpoint_replay_v1";
@@ -36,6 +75,10 @@ pub const ROUTING_ERROR_SERVICE_UNAVAILABLE: &str = "routing_service_unavailable
 // 返回本版本声明支持的能力列表；具体连接是否可用仍由握手和调用方判断。
 pub fn supported_features() -> Vec<String> {
     [
+        super::terminal_resources::FEATURE,
+        FEATURE_SESSION_OWNER,
+        FEATURE_PTY_OWNER_EXIT,
+        FEATURE_RUNTIME_OWNER_EXIT,
         FEATURE_WS_BINARY_OUTPUT,
         FEATURE_WS_BINARY_INPUT,
         FEATURE_CHECKPOINT_REPLAY,
@@ -60,6 +103,13 @@ pub enum ClientFrame {
         token: String,
         client_version: String,
     },
+    RegisterOwner { id: u64, instance_id: InstanceId },
+    BindOwner { id: u64, binding: OwnerBinding },
+    TerminalResources { id: u64, session_ids: Vec<String> },
+    SessionScopes { id: u64 },
+    PrepareOwnerExit { id: u64, transaction_id: String, binding: OwnerBinding },
+    ResumeOwnerExit { id: u64, transaction_id: String, binding: OwnerBinding },
+    OwnerExit { id: u64, transaction_id: String, binding: OwnerBinding },
     Ping {
         id: u64,
     },
@@ -448,9 +498,15 @@ pub struct ReplayEntry {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DaemonFrame {
+    TerminalResources { id: u64, snapshot: super::terminal_resources::Snapshot },
+    OwnerExitResult { id: u64, receipt: OwnerExitReceipt },
+    OwnerRegistered { id: u64, binding: OwnerBinding },
+    SessionScopes { id: u64, scopes: HashMap<String, SessionScope> },
     AuthOk {
         daemon_version: String,
         pid: u32,
+        #[serde(default)]
+        process_start_time: Option<u64>,
         #[serde(default)]
         protocol_version: u16,
         #[serde(default)]
@@ -682,6 +738,7 @@ fn decode_with_known_types<T: for<'de> Deserialize<'de>>(
 }
 
 const CLIENT_FRAME_TYPES: &[&str] = &[
+    "terminal_resources", "register_owner", "bind_owner", "session_scopes", "owner_exit", "prepare_owner_exit", "resume_owner_exit",
     "auth",
     "ping",
     "list",
@@ -707,6 +764,7 @@ const CLIENT_FRAME_TYPES: &[&str] = &[
 ];
 
 const DAEMON_FRAME_TYPES: &[&str] = &[
+    "terminal_resources", "owner_registered", "session_scopes", "owner_exit_result",
     "auth_ok",
     "auth_err",
     "pong",

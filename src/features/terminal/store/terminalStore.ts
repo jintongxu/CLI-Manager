@@ -7,6 +7,7 @@ import { logError, logInfo, logWarn, recordCrashActivity } from "../../../shared
 import { normalizeDirectCodexStartupCommand } from "../../projects/api/projectStartupCommand";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { useSessionStore } from "../api/sessionStore";
+import { listOwnedDaemonSessions } from "../api/ownedDaemonSessions";
 import { getOsPlatform, normalizeShellKey } from "../../../shared/platform/shell";
 import { parseProjectEnvVars } from "../../providers/api/providerSwitching";
 import { useProjectStore } from "../../projects/api/projectStore";
@@ -1495,9 +1496,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         // 不重建 PTY、不 resume。daemon 不可用/查询失败 → 空集合，全部走重建兜底。
         let daemonSessionsById = new Map<string, DaemonSessionMeta>();
         try {
-          const daemonSessions = await invoke<DaemonSessionMeta[]>(
-            "pty_daemon_sessions"
-          );
+          const daemonSessions = await listOwnedDaemonSessions();
           daemonSessionsById = new Map(
             daemonSessions.map((session) => [session.sessionId, session])
           );
@@ -1834,6 +1833,8 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       }
     },
     attachDaemonSession: async (sessionId) => {
+      const daemonSession = (await listOwnedDaemonSessions()).find((item) => item.sessionId === sessionId);
+      if (!daemonSession) return false;
       const current = get();
       if (current.sessions.some((session) => session.id === sessionId)) {
         if (current.hiddenBackgroundSessionIds.has(sessionId)) { const nextHidden = new Set(current.hiddenBackgroundSessionIds); nextHidden.delete(sessionId); set({ hiddenBackgroundSessionIds: nextHidden, daemonAttachPendingSessionIds: new Set([...current.daemonAttachPendingSessionIds, sessionId]) }); }
@@ -1841,10 +1842,6 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         return true;
       }
       const persisted = useSessionStore.getState().sessions.find((session) => session.id === sessionId);
-      const daemonSession = (await invoke<DaemonSessionMeta[]>("pty_daemon_sessions"))
-        .find((item) => item.sessionId === sessionId);
-      if (!daemonSession) return false;
-
       const taskStatus = resolveDaemonAttachTaskStatus(daemonSession);
       const taskUpdatedAt = resolveDaemonAttachUpdatedAt(daemonSession);
       const attachedMeta = resolveAttachedDaemonSession(persisted, daemonSession);

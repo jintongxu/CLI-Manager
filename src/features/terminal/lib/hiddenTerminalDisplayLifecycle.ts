@@ -20,8 +20,10 @@ export function createHiddenTerminalDisplayLifecycle(
   let timer: ReturnType<typeof setTimeout> | null = null;
   let displayDisposed = false;
   let disposed = false;
+  let generation = 0;
 
   const clear = () => {
+    generation++;
     if (timer === null) return;
     scheduler.clearTimeout(timer);
     timer = null;
@@ -30,16 +32,18 @@ export function createHiddenTerminalDisplayLifecycle(
   return {
     update({ enabled, visible }) {
       if (disposed) return;
-      clear();
-      if (visible) {
-        if (displayDisposed) onRestore();
+      if (visible || !enabled) {
+        clear();
+        const restore = displayDisposed;
         displayDisposed = false;
+        if (restore) onRestore();
         return;
       }
-      if (!enabled || displayDisposed) return;
+      if (displayDisposed || timer !== null) return;
+      const scheduledGeneration = generation;
       timer = scheduler.setTimeout(() => {
+        if (disposed || displayDisposed || generation !== scheduledGeneration) return;
         timer = null;
-        if (disposed || displayDisposed) return;
         displayDisposed = true;
         onDispose();
       }, delayMs);

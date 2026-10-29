@@ -154,3 +154,54 @@ test("the preview theme setting is persisted, defaulted, and synced like the ter
   assert.match(settingsSource, /isKnownTerminalThemePreset\(storedTerminalPreviewThemeName\)/u);
   assert.match(syncSource, /terminalPreviewThemeName: "preferences"/u);
 });
+
+test("Graphite auto reuses codexDark and leaves explicit presets and independent previews unchanged", () => {
+  assert.equal(resolveTerminalThemeId("auto", "dark", "clear-focus", "graphite"), "codexDark");
+  assert.deepEqual(getTerminalTheme("auto", "dark", "clear-focus", "graphite"),
+    getTerminalTheme("codexDark", "dark", "clear-focus", "night-indigo"));
+  for (const preset of [DARK_TERMINAL_THEME, LIGHT_PREVIEW_THEME, "graphiteRedDark", "codexDark"]) {
+    assert.equal(resolveTerminalThemeId(preset, "dark", "clear-focus", "graphite"), preset);
+    assert.deepEqual(getTerminalTheme(preset, "dark", "clear-focus", "graphite"),
+      getTerminalTheme(preset, "dark", "clear-focus", "midnight-aurora"));
+  }
+  assert.equal(resolveTerminalThemeId("auto", "light", "clear-focus", "graphite"), "windowsTerminalOneHalfLightClear");
+  const preview = resolveTerminalPreviewTheme(baseInput({ darkThemePalette: "graphite", previewThemeName: LIGHT_PREVIEW_THEME }));
+  assert.equal(preview.isIndependent, true);
+  assert.deepEqual(preview.theme, getTerminalTheme(LIGHT_PREVIEW_THEME, "dark", "warm-paper", "night-indigo"));
+});
+
+test("Cream Forest auto explicitly reuses Warm Paper while explicit terminal and preview presets stay isolated", () => {
+  const source = readFileSync(new URL("../src/shared/lib/terminalThemes.ts", import.meta.url), "utf8");
+  assert.match(source, /if \(lightPalette === "cream-forest"\) return "warmPaperLight";/u);
+  assert.equal(resolveTerminalThemeId("auto", "light", "cream-forest", "graphite"), "warmPaperLight");
+  assert.deepEqual(getTerminalTheme("auto", "light", "cream-forest", "graphite"),
+    getTerminalTheme("auto", "light", "warm-paper", "graphite"));
+  assert.equal(resolveTerminalThemeId("auto", "light", "cream-green", "graphite"), "creamGreenLight");
+  assert.equal(resolveTerminalThemeId("auto", "dark", "cream-forest", "graphite"), "codexDark");
+  for (const preset of [DARK_TERMINAL_THEME, LIGHT_PREVIEW_THEME, "creamGreenLight", "codexDark"]) {
+    assert.equal(resolveTerminalThemeId(preset, "light", "cream-forest", "graphite"), preset);
+    assert.deepEqual(getTerminalTheme(preset, "light", "cream-forest", "graphite"),
+      getTerminalTheme(preset, "dark", "clear-focus", "night-indigo"));
+  }
+  const preview = resolveTerminalPreviewTheme(baseInput({ resolvedTheme: "light", lightThemePalette: "cream-forest",
+    previewThemeName: LIGHT_PREVIEW_THEME }));
+  assert.equal(preview.isIndependent, true);
+  assert.deepEqual(preview.theme, getTerminalTheme(LIGHT_PREVIEW_THEME, "dark", "warm-paper", "night-indigo"));
+});
+
+test("Storm auto uses only official Storm while explicit terminals and independent previews stay isolated", () => {
+  assert.equal(resolveTerminalThemeId("auto", "dark", "sea-salt", "tokyo-night-storm"), "tokyoNightStormOfficial");
+  assert.deepEqual(getTerminalTheme("auto", "dark", "sea-salt", "tokyo-night-storm"),
+    getTerminalTheme("tokyoNightStormOfficial", "light", "warm-paper", "night-indigo"));
+  for (const preset of ["tokyoNightStorm", "tokyoNightStormOfficial", "codexDark", LIGHT_PREVIEW_THEME]) {
+    assert.equal(resolveTerminalThemeId(preset, "dark", "sea-salt", "tokyo-night-storm"), preset);
+    assert.deepEqual(getTerminalTheme(preset, "dark", "sea-salt", "tokyo-night-storm"),
+      getTerminalTheme(preset, "light", "clear-focus", "graphite"));
+  }
+  assert.equal(resolveTerminalThemeId("auto", "light", "sea-salt", "tokyo-night-storm"), "seaSaltLight");
+  for (const previewThemeName of [LIGHT_PREVIEW_THEME, "tokyoNightStorm"]) {
+    const preview = resolveTerminalPreviewTheme(baseInput({ darkThemePalette: "tokyo-night-storm", previewThemeName }));
+    assert.equal(preview.isIndependent, true);
+    assert.deepEqual(preview.theme, getTerminalTheme(previewThemeName, "dark", "warm-paper", "night-indigo"));
+  }
+});

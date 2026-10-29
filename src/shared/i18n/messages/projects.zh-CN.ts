@@ -1,4 +1,8 @@
 export const zh = {
+  "sidebar.tools.locateCurrent": "定位当前会话所在项",
+  "sidebar.tools.locateUnavailable": "当前会话未绑定项目，或其项目/Worktree 已不在树中",
+  "sidebar.tools.collapseAll": "折叠全部",
+  "sidebar.tools.collapseSearchDisabled": "请先清除项目搜索，再折叠全部",
   "worktree.recovery.save": "Git 工作树已创建，但记录保存失败（持久化结果未确认）。本次创建已停止，请勿重新创建。保留下方身份和路径，通过 git worktree list 检查，可将该路径作为项目打开；先刷新检查记录是否存在，再人工恢复。未删除任何对象。",
   "worktree.recovery.saved": "Git 工作树及记录已创建。本次创建已停止，请勿重新创建。刷新或重新打开工作区后，从项目侧栏现有工作树入口打开（可在那里重试启动终端）。下方保留身份、失败阶段和原因。未删除任何对象。",
   "worktree.shortLabel.label": "短标识（可选）",
@@ -396,6 +400,9 @@ export const zh = {
   "projectIdeas.workspace.unlinkedWorktree": "未关联的 Worktree（已缺失）",
   "sidebar.tree.startDirectory": "启动本目录",
   "sidebar.tree.allTerminals": "全部终端",
+  "sidebar.display.worktreeActive": "可用",
+  "sidebar.display.terminalType": "终端",
+  "sidebar.display.sessionCount": "{count} 个保留的 PTY 会话（含隐藏会话，非运行中数量）",
   "sidebar.tree.terminalCount": "已打开 {count} 个终端",
   "sidebar.tree.searchPlaceholder": "搜索项目",
   "sidebar.tree.searchAria": "搜索项目列表",

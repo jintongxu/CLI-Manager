@@ -42,6 +42,8 @@ import {
 import { resolveCcusageWslTarget, useCcusageStore } from "../../../stats/api/ccusageStore";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../../../shared/ui/dialog";
 import { FontFamilySelect } from "../FontFamilySelect";
+import { applySeaSaltScheme, applyStormScheme } from "../../lib/appearanceSchemes";
+import { AppearancePreview, useAppearancePreview } from "../AppearancePreview";
 import { DataStorageSection } from "./DataStorageSection";
 
 const WSL_BUN_INSTALL_COMMAND = "curl -fsSL https://bun.net.cn/install | bash";
@@ -55,6 +57,12 @@ const LIGHT_PALETTE_OPTIONS: {
   swatches: [string, string, string];
 }[] = [
   {
+    value: "sea-salt",
+    labelKey: "settings.palette.light.seaSalt.label",
+    descriptionKey: "settings.palette.light.seaSalt.description",
+    swatches: ["#DFEDFF", "#183656", "#2359C4"],
+  },
+  {
     value: "clear-focus",
     labelKey: "settings.palette.light.clearFocus.label",
     descriptionKey: "settings.palette.light.clearFocus.description",
@@ -65,6 +73,12 @@ const LIGHT_PALETTE_OPTIONS: {
     labelKey: "settings.palette.light.warmPaper.label",
     descriptionKey: "settings.palette.light.warmPaper.description",
     swatches: ["#f8f4ec", "#2d261d", "#c46a2d"],
+  },
+  {
+    value: "cream-forest",
+    labelKey: "settings.palette.light.creamForest.label",
+    descriptionKey: "settings.palette.light.creamForest.description",
+    swatches: ["#FFF9EE", "#263D30", "#286044"],
   },
   {
     value: "cream-green",
@@ -122,6 +136,18 @@ const DARK_PALETTE_OPTIONS: {
   descriptionKey: TranslationKey;
   swatches: [string, string, string];
 }[] = [
+  {
+    value: "tokyo-night-storm",
+    labelKey: "settings.palette.dark.tokyoNightStorm.label",
+    descriptionKey: "settings.palette.dark.tokyoNightStorm.description",
+    swatches: ["#24283b", "#c0caf5", "#7aa2f7"],
+  },
+  {
+    value: "graphite",
+    labelKey: "settings.palette.dark.graphite.label",
+    descriptionKey: "settings.palette.dark.graphite.description",
+    swatches: ["#292c33", "#eef0f6", "#aec8ff"],
+  },
   {
     value: "midnight-aurora",
     labelKey: "settings.palette.dark.midnightAurora.label",
@@ -198,8 +224,10 @@ function clampUiFontSize(value: number) {
 }
 
 const LIGHT_TEXT_COLORS: Record<LightThemePalette, string> = {
+  "sea-salt": "#183656",
   "clear-focus": "#172A36",
   "warm-paper": "#2e3336",
+  "cream-forest": "#263D30",
   "cream-green": "#25302a",
   "ink-red": "#1f1f1c",
   "emerald-mist": "#18211d",
@@ -211,6 +239,8 @@ const LIGHT_TEXT_COLORS: Record<LightThemePalette, string> = {
 };
 
 const DARK_TEXT_COLORS: Record<DarkThemePalette, string> = {
+  "tokyo-night-storm": "#c0caf5",
+  graphite: "#eef0f6",
   "midnight-aurora": "#E7F0FF",
   "terminal-acrylic": "#DCDFE4",
   "night-indigo": "#c0caf5",
@@ -236,8 +266,10 @@ function getDefaultUiTextColor(
 // 用纯映射而非 getComputedStyle：data-theme/data-*-palette 由 App.tsx 的 effect 在
 // render 之后才更新，render 期间读 computed style 会在切换主题/配色时拿到旧背景色。
 const LIGHT_BG_COLORS: Record<LightThemePalette, string> = {
+  "sea-salt": "#DFEDFF",
   "clear-focus": "#D8E3E9",
   "warm-paper": "#f9f9fb",
+  "cream-forest": "#FFF9EE",
   "cream-green": "#f7faf7",
   "ink-red": "#f7f6f4",
   "emerald-mist": "#fbfdfc",
@@ -249,6 +281,8 @@ const LIGHT_BG_COLORS: Record<LightThemePalette, string> = {
 };
 
 const DARK_BG_COLORS: Record<DarkThemePalette, string> = {
+  "tokyo-night-storm": "#24283b",
+  graphite: "#292c33",
   "midnight-aurora": "#0B1220",
   "terminal-acrylic": "#2A373F",
   "night-indigo": "#1a1b26",
@@ -331,6 +365,7 @@ const UI_FONT_FAMILY_OPTIONS: { value: string; label: string; labelKey?: Transla
 
 function PaletteCard({
   active,
+  disabled,
   label,
   description,
   activeLabel,
@@ -338,6 +373,7 @@ function PaletteCard({
   onClick,
 }: {
   active: boolean;
+  disabled: boolean;
   label: string;
   description: string;
   activeLabel: string;
@@ -347,6 +383,7 @@ function PaletteCard({
   return (
     <UnstyledButton
       type="button"
+      disabled={disabled}
       onClick={onClick}
       className="ui-interactive ui-focus-ring ui-selection-card relative rounded-xl border p-4 text-left transition-[transform,box-shadow,border-color,background-color]"
       data-selected={active ? "true" : "false"}
@@ -424,7 +461,8 @@ function PaletteCard({
   );
 }
 
-export function GeneralSettingsPage() {
+export function GeneralSettingsPage({ appearancePreviewActive = true }: { appearancePreviewActive?: boolean }) {
+  const preview = useAppearancePreview(appearancePreviewActive);
   const { t } = useI18n();
   const language = useSettingsStore((s) => s.language);
   const theme = useSettingsStore((s) => s.theme);
@@ -446,6 +484,33 @@ export function GeneralSettingsPage() {
   const ccusageError = useCcusageStore((s) => s.error);
   const checkCcusageStatus = useCcusageStore((s) => s.checkStatus);
   const normalizedUiFontFamily = normalizeFontFamilyStack(uiFontFamily, UI_FONT_FALLBACK);
+  const [applyingScheme, setApplyingScheme] = useState(false);
+  const applyWholeSeaSaltScheme = async () => {
+    if (preview.locked || !appearancePreviewActive) return;
+    setApplyingScheme(true);
+    try {
+      await applySeaSaltScheme(useSettingsStore.getState());
+      toast.success(t("settings.general.seaSaltApplied"));
+    } catch (error) {
+      debugConsoleWarn("Failed to apply Sea Salt Blue scheme", error);
+      toast.error(t("settings.general.seaSaltApplyFailed"));
+    } finally {
+      setApplyingScheme(false);
+    }
+  };
+  const applyWholeStormScheme = async () => {
+    if (preview.locked || !appearancePreviewActive) return;
+    setApplyingScheme(true);
+    try {
+      await applyStormScheme(useSettingsStore.getState());
+      toast.success(t("settings.general.stormApplied"));
+    } catch (error) {
+      debugConsoleWarn("Failed to apply Tokyo Night Storm scheme", error);
+      toast.error(t("settings.general.stormApplyFailed"));
+    } finally {
+      setApplyingScheme(false);
+    }
+  };
   const [uiFontSizeDraft, setUiFontSizeDraft] = useState(uiFontSize);
   const [uiTextColorDraft, setUiTextColorDraft] = useState(uiTextColor);
   const [systemFonts, setSystemFonts] = useState<SystemFontFamily[]>([]);
@@ -627,6 +692,7 @@ export function GeneralSettingsPage() {
                 {t("settings.general.theme")}
               </Text>
               <SegmentedControl<ThemeMode>
+                disabled={preview.locked || applyingScheme || !appearancePreviewActive}
                 value={theme}
                 onChange={(value) => void setTheme(value)}
                 data={themeOptions}
@@ -634,6 +700,26 @@ export function GeneralSettingsPage() {
                 fullWidth
                 aria-label={t("settings.general.theme")}
               />
+            </Stack>
+
+            <AppearancePreview preview={preview} disabled={applyingScheme || !appearancePreviewActive} />
+
+            <Stack gap={6}>
+              <Button size="xs" disabled={preview.locked || !appearancePreviewActive} loading={applyingScheme} onClick={() => void applyWholeStormScheme()}>
+                {t("settings.general.applyStormScheme")}
+              </Button>
+              <Text size="xs" c="var(--on-surface-variant)">
+                {t("settings.general.stormSchemeDescription")}
+              </Text>
+            </Stack>
+
+            <Stack gap={6}>
+              <Button size="xs" disabled={preview.locked || !appearancePreviewActive} loading={applyingScheme} onClick={() => void applyWholeSeaSaltScheme()}>
+                {t("settings.general.applySeaSaltScheme")}
+              </Button>
+              <Text size="xs" c="var(--on-surface-variant)">
+                {t("settings.general.seaSaltSchemeDescription")}
+              </Text>
             </Stack>
 
             {showLightPalettes && (
@@ -645,6 +731,7 @@ export function GeneralSettingsPage() {
                   {LIGHT_PALETTE_OPTIONS.map((option) => (
                     <PaletteCard
                       key={option.value}
+                      disabled={preview.locked || applyingScheme || !appearancePreviewActive}
                       active={lightThemePalette === option.value}
                       label={t(option.labelKey)}
                       description={t(option.descriptionKey)}
@@ -666,6 +753,7 @@ export function GeneralSettingsPage() {
                   {DARK_PALETTE_OPTIONS.map((option) => (
                     <PaletteCard
                       key={option.value}
+                      disabled={preview.locked || applyingScheme || !appearancePreviewActive}
                       active={darkThemePalette === option.value}
                       label={t(option.labelKey)}
                       description={t(option.descriptionKey)}

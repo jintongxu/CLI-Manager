@@ -33,6 +33,7 @@ import {
   panelColorTint,
 } from "../../stats/api/termStatsUi";
 import { TerminalPanelHeader } from "../api/TerminalPanelHeader";
+import { TerminalResourcesPanel } from "./TerminalResourcesPanel";
 
 interface SystemResourcesPanelProps {
   open: boolean;
@@ -850,6 +851,8 @@ function ProcessCard({ snapshot }: { snapshot: SystemResourceSnapshot }) {
 export function SystemResourcesPanel({ open, visible = true, embedded = false }: SystemResourcesPanelProps) {
   const { t } = useI18n();
   const panelActive = open && visible;
+  const resourceId = useId();
+  const [resourceTab, setResourceTab] = useState<"system" | "terminals">("system");
   const cardVisibility = useSettingsStore((s) => s.systemResourceCardVisibility);
   const cardOrder = useSettingsStore((s) => s.systemResourceCardOrder);
 
@@ -871,7 +874,7 @@ export function SystemResourcesPanel({ open, visible = true, embedded = false }:
   }), [cardVisibility]);
 
   const { snapshot, history, loading, error, refresh } = useSystemResources(
-    panelActive && orderedCards.length > 0,
+    panelActive && resourceTab === "system" && orderedCards.length > 0,
     samplingOptions,
     2500,
     SYSTEM_RESOURCES_RUNTIME_CACHE_KEY
@@ -886,8 +889,6 @@ export function SystemResourcesPanel({ open, visible = true, embedded = false }:
       hour12: false,
     });
   }, [snapshot?.sampledAt]);
-
-  if (!panelActive) return null;
 
   const containerClassName = embedded
     ? "flex h-full min-h-0 flex-col overflow-hidden font-mono"
@@ -919,7 +920,8 @@ export function SystemResourcesPanel({ open, visible = true, embedded = false }:
 
   return (
     <Container
-      className={containerClassName}
+      hidden={!panelActive}
+      className={panelActive ? containerClassName : "hidden"}
       style={{
         backgroundColor: TERM_PANEL.bg,
         ...PANEL_SCROLLBAR_STYLE,
@@ -939,8 +941,8 @@ export function SystemResourcesPanel({ open, visible = true, embedded = false }:
         )}
         actions={(
           <>
-          {sampleTime && <span className="text-[10px] tabular-nums" style={{ color: TERM_PANEL.dim }}>{sampleTime}</span>}
-          <button
+          {resourceTab === "system" && sampleTime && <span className="text-[10px] tabular-nums" style={{ color: TERM_PANEL.dim }}>{sampleTime}</span>}
+          {resourceTab === "system" && <button
             type="button"
             onClick={() => void refresh(true)}
             className={`ui-focus-ring rounded-md border p-1 ${loading ? "animate-spin" : ""}`}
@@ -949,13 +951,24 @@ export function SystemResourcesPanel({ open, visible = true, embedded = false }:
             aria-label={t("systemResources.refresh")}
           >
             <RefreshCw size={12} />
-          </button>
+          </button>}
           </>
         )}
       />
 
-      <div
-        className="ui-thin-scroll flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-2"
+      <div role="tablist" aria-label={t("terminal.resources.tabs")} className="flex gap-2 border-b p-2" style={{ borderColor: TERM_PANEL.border }}>
+        {(["system", "terminals"] as const).map((tab) => <button key={tab} type="button" role="tab"
+          id={`${resourceId}-tab-${tab}`} aria-controls={`${resourceId}-panel-${tab}`} aria-selected={resourceTab === tab}
+          className="ui-focus-ring flex-1 rounded border px-2 py-1 text-[11px]"
+          style={{ color: resourceTab === tab ? TERM_PANEL.fg : TERM_PANEL.dim, borderColor: TERM_PANEL.border }}
+          onClick={() => setResourceTab(tab)}>{t(tab === "system" ? "terminal.resources.systemTab" : "terminal.resources.terminalsTab")}</button>)}
+      </div>
+      <div id={`${resourceId}-panel-terminals`} role="tabpanel" aria-labelledby={`${resourceId}-tab-terminals`}
+        hidden={resourceTab !== "terminals"} className={resourceTab === "terminals" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
+        <TerminalResourcesPanel active={panelActive && resourceTab === "terminals"} />
+      </div>
+      <div id={`${resourceId}-panel-system`} role="tabpanel" aria-labelledby={`${resourceId}-tab-system`} hidden={resourceTab !== "system"}
+        className={resourceTab === "system" ? "ui-thin-scroll flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-2" : "hidden"}
         style={{
           backgroundImage: `linear-gradient(90deg, ${panelColorTint(TERM_PANEL.fg, 3)} 1px, transparent 1px), linear-gradient(${panelColorTint(TERM_PANEL.fg, 3)} 1px, transparent 1px)`,
           backgroundSize: "22px 22px, 22px 22px",

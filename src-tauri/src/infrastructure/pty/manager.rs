@@ -110,10 +110,13 @@ fn scan_vt_scroll_sequences(data: &[u8], diag: &mut VtScrollDiag, session_id: &s
 pub struct PtySession {
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     terminal_colors: Arc<std::sync::RwLock<Option<TerminalColors>>>,
-    controller: Box<dyn PlatformPtyController>,
+    controller: Option<Box<dyn PlatformPtyController>>,
     child: Arc<dyn PlatformPtyChild>,
     diagnostics: Arc<Mutex<PtySessionDiagnostics>>,
     reader_handle: Option<JoinHandle<()>>,
+    watcher_handle: Option<JoinHandle<()>>,
+    release_handle: Option<JoinHandle<()>>,
+    close_error: Option<String>,
     created_at: Instant,
     missing_since: Option<Instant>,
 }
@@ -147,6 +150,7 @@ pub struct PtyOrphanCleanupSummary {
 pub struct PtyManager {
     sessions: RwLock<HashMap<String, Arc<Mutex<PtySession>>>>,
     statuses: Arc<Mutex<HashMap<String, PtyProcessStatus>>>,
+    closing: Mutex<HashMap<String, Arc<Mutex<PtySession>>>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -164,11 +168,15 @@ struct ShellLaunchLogContext {
     cwd: Option<String>,
 }
 
+#[path = "owner_close.rs"]
+mod owner_close;
+
 impl PtyManager {
     // 创建空会话表与共享进程状态表。
     pub fn new() -> Self {
         Self {
             sessions: RwLock::new(HashMap::new()),
+            closing: Mutex::new(HashMap::new()),
             statuses: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -1000,7 +1008,7 @@ function global:prompt {
         let child_for_watcher = child.clone();
         let sink_for_watcher = Arc::clone(&sink);
         let session_id_for_watcher = session_id.to_string();
-        std::thread::spawn(move || loop {
+        let watcher_handle = std::thread::spawn(move || loop {
             match child_for_watcher.try_wait() {
                 Ok(Some(exit)) => {
                     if !exit_reported_for_watcher.swap(true, Ordering::AcqRel) {
@@ -1022,10 +1030,13 @@ function global:prompt {
         let session = Arc::new(Mutex::new(PtySession {
             writer,
             terminal_colors,
-            controller,
+            controller: Some(controller),
             child,
             diagnostics,
             reader_handle: Some(reader_handle),
+            watcher_handle: Some(watcher_handle),
+            release_handle: None,
+            close_error: None,
             created_at: Instant::now(),
             missing_since: None,
         }));
@@ -1126,7 +1137,7 @@ function global:prompt {
             diagnostics.last_resize_rows = Some(rows);
         }
         session
-            .controller
+            .controller.as_ref().ok_or("pty_closing")?
             .resize(cols, rows, pixel_width, pixel_height)
             .map_err(|e| {
                 error!("pty resize failed: session_id={}, error={}", session_id, e);
@@ -1790,5 +1801,16 @@ mod tests {
 
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Shell executable not found"));
+    }
+}
+
+impl PtyManager {
+    pub(crate) fn resource_child(&self, id: &str) -> Option<Arc<dyn PlatformPtyChild>> {
+        let sessions = self.sessions.read().ok()?;
+        let session = sessions.get(id)?.lock().ok()?;
+        Some(session.child.clone())
+    }
+    pub(crate) fn resource_child_current(&self, id: &str, child: &Arc<dyn PlatformPtyChild>) -> bool {
+        self.resource_child(id).is_some_and(|current| Arc::ptr_eq(&current, child))
     }
 }

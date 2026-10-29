@@ -489,6 +489,7 @@ export function TerminalTabsView({
                   projectId={panelSession?.projectId}
                   filesTabDisabled={!filePanelProject}
                   systemResourcesEnabled
+                  resourcesVisible={terminalSidePanelVisible && !historyActive}
                   providerDefaultAppType={panelProviderAppType}
                   filesPanelContent={<FileExplorerSidebar mode="panel" onClosePanel={closeFilesPanel} editorActive={editorActive} hasEditorWorkspace={hasEditorWorkspace} onSwitchToTerminalWorkspace={switchToTerminalWorkspace} onSwitchToEditorWorkspace={switchToEditorWorkspace} />}
                   btwPanelContent={
@@ -561,7 +562,7 @@ export function TerminalTabsView({
                   resizeLabel={t("terminal.panel.resizeSystemResourcesLabel")}
                   resizeTitle={t("terminal.panel.resizeSystemResourcesTitle")}
                 >
-                  <SystemResourcesPanel open={systemResourcesOpen} embedded />
+                  <SystemResourcesPanel open={systemResourcesOpen} visible={terminalSidePanelVisible && !historyActive} embedded />
                 </ResizableTerminalPanelFrame>
               ) : null,
               !sidePanelMerged && providersOpen ? (
@@ -611,7 +612,7 @@ export function TerminalTabsView({
                     position={workspanTabBarPosition} tabBarVisible={workspanTabBarVisible} activateCurrentWork={activateCurrentWork} leaveCurrentWork={leaveCurrentWork}
                     onActivate={handleActivateSession} onAdd={(id) => { if (!currentWorkSessionIds.includes(id)) toggleCurrentWork(id); }} onNewTab={() => { void handleNewTab(); }} onRemove={(id) => removeCurrentWorkSessions([id])}
                     onCloseSession={(id) => {
-                      handleCloseSessions([id], undefined, [], true);
+                      handleCloseSessions([id]);
                     }}
                     selectedIds={[...selectedCurrentWorkSessionIds]} onToggleSelection={toggleCurrentWorkSelection}
                     onRemoveSelected={removeCurrentWorkSessions} onCloseOthers={closeOtherTerminals} legacyOrdering={legacyOrdering}

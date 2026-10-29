@@ -4,6 +4,7 @@
 //! 线程已按 ANSI/UTF-8 安全边界切好，本层只整帧存储/透传（契约禁止再分片）。
 //! 增量 3 待办：Windows Job Object 兜底、hook 上报转发、exited 会话宽限自灭。
 
+mod ownership;
 mod replay;
 use replay::{ReplayFrame, SessionBuffer};
 mod client_transport;
@@ -24,7 +25,7 @@ use super::protocol::{
 use super::routing::{PortAllocator, RoutingRuntime, FALLBACK_PORT_START};
 use super::ssh_agent_bridge::SshAgentBridgeManager;
 use crate::claude_hook::{
-    approval_aware_hook_sink, remote_hook_payload_from_spool, spawn_hook_listener, HookPayloadSink,
+    approval_aware_hook_sink, remote_hook_payload_from_spool, spawn_stoppable_hook_listener, HookPayloadSink,
 };
 use crate::commands::cc_connect::handoff_notification::RemoteHandoffNotifier;
 use crate::pty::manager::PtyManager;
@@ -117,6 +118,7 @@ type SharedSession = Arc<Mutex<SessionEntry>>;
 
 /// daemon 共享宿主：PTY 管理器 + 会话表 + 客户端注册表。
 pub struct DaemonHost {
+    ownership: Mutex<ownership::Ownership>,
     pty: PtyManager,
     sessions: Mutex<HashMap<String, SharedSession>>,
     clients: Mutex<HashMap<u64, ClientHandle>>,
@@ -143,6 +145,7 @@ impl DaemonHost {
     // 用指定 spool 目录初始化 PTY、会话、客户端、Hook 和路由状态。
     fn with_spool_dir(spool_dir: PathBuf) -> Self {
         Self {
+            ownership: Mutex::new(ownership::Ownership::default()),
             pty: PtyManager::new(),
             sessions: Mutex::new(HashMap::new()),
             clients: Mutex::new(HashMap::new()),
@@ -835,19 +838,6 @@ impl DaemonHost {
         }
     }
 
-    // 清空所有客户端的会话订阅、ACK、流控和 attach 缓冲。
-    fn detach_all_sessions_from_clients(&self) {
-        if let Ok(mut clients) = self.clients.lock() {
-            for client in clients.values_mut() {
-                client.attached.clear();
-                client.unacknowledged_chars.clear();
-                client.flow_control_paused.clear();
-                client.last_sent_sequence.clear();
-                client.last_acknowledged_sequence.clear();
-                client.attaching.clear();
-            }
-        }
-    }
 }
 
 pub struct DaemonServer {
@@ -1043,32 +1033,41 @@ impl DaemonServer {
         });
         let hook_sink = approval_aware_hook_sink(delivery_sink);
         server.host.set_hook_sink(Arc::clone(&hook_sink));
-        spawn_hook_listener(hook_listener, token, hook_sink);
+        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let mut hook_worker = spawn_stoppable_hook_listener(hook_listener, token, hook_sink, stop.clone())
+            .map_err(|e| e.to_string())?;
 
         server.spawn_idle_watchdog();
 
-        let websocket_server = Arc::clone(&server);
-        std::thread::spawn(move || {
-            for stream in ws_listener.incoming() {
-                match stream {
-                    Ok(stream) => {
-                        let server = Arc::clone(&websocket_server);
-                        std::thread::spawn(move || server.handle_websocket_connection(stream));
-                    }
-                    Err(err) => log::warn!("daemon websocket accept failed: {err}"),
+        listener.set_nonblocking(true).map_err(|e| e.to_string())?;
+        ws_listener.set_nonblocking(true).map_err(|e| e.to_string())?;
+        while !server.host.ownership.lock().map(|s| s.draining).unwrap_or(false) {
+            for (listener, websocket) in [(&listener, false), (&ws_listener, true)] {
+                if let Ok((stream, _)) = listener.accept() {
+                    let _ = stream.set_nonblocking(false);
+                    let server = Arc::clone(&server);
+                    std::thread::spawn(move || if websocket { server.handle_websocket_connection(stream) }
+                        else { server.handle_connection(stream) });
                 }
             }
-        });
-
-        for stream in listener.incoming() {
-            match stream {
-                Ok(stream) => {
-                    let server = Arc::clone(&server);
-                    std::thread::spawn(move || server.handle_connection(stream));
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        drop(listener); drop(ws_listener);
+        stop.store(true, Ordering::Release);
+        // Resource drain finished before this latch was set. Give the response writer
+        // time to flush; native completion is still exclusively OS-handle evidence.
+        std::thread::sleep(Duration::from_millis(200));
+        loop {
+            match hook_worker.join_until(Instant::now() + Duration::from_secs(2)) {
+                Ok(()) => break,
+                Err(error) => {
+                    // Retain the task and keep OS completion unsignaled on timeout/failure.
+                    log::warn!("daemon hook drain pending: {error}");
+                    std::thread::sleep(Duration::from_millis(100));
                 }
-                Err(err) => log::warn!("daemon accept failed: {err}"),
             }
         }
+        remove_daemon_info(&server.info_path);
         Ok(())
     }
 
@@ -1077,7 +1076,8 @@ impl DaemonServer {
         let server = Arc::clone(self);
         std::thread::spawn(move || loop {
             std::thread::sleep(IDLE_CHECK_INTERVAL);
-            let busy = server.host.client_count() > 0
+            let busy = server.host.ownership.lock().map(|s| s.has_registered_owners()).unwrap_or(true)
+                || server.host.client_count() > 0
                 || server.host.alive_session_count() > 0
                 || server.host.routing_is_running();
             let Ok(mut idle_since) = server.host.last_idle_since.lock() else {
@@ -1117,6 +1117,7 @@ impl DaemonServer {
                     let _ = writer.send_frame(&DaemonFrame::AuthOk {
                         daemon_version: self.version.clone(),
                         pid: std::process::id(),
+                        process_start_time: super::process_identity::current_start_time(),
                         protocol_version: CONTROL_PROTOCOL_VERSION,
                         binary_protocol_version: BINARY_PROTOCOL_VERSION,
                         features: supported_features(),
@@ -1210,6 +1211,7 @@ impl DaemonServer {
                     let _ = writer.send_frame(&DaemonFrame::AuthOk {
                         daemon_version: self.version.clone(),
                         pid: std::process::id(),
+                        process_start_time: super::process_identity::current_start_time(),
                         protocol_version: CONTROL_PROTOCOL_VERSION,
                         binary_protocol_version: BINARY_PROTOCOL_VERSION,
                         features: supported_features(),
@@ -1259,6 +1261,14 @@ impl DaemonServer {
             match message {
                 WebSocketClientMessage::Text(line) => match decode_client_frame(&line) {
                     Ok(frame) => {
+                        if let ClientFrame::TerminalResources { id, .. } = &frame {
+                            let _ = writer.send_frame(&err_frame(*id, super::terminal_resources::NATIVE_ONLY));
+                            continue;
+                        }
+                        if let ClientFrame::RegisterOwner { id, .. } = &frame {
+                            let _ = writer.send_frame(&err_frame(*id, "native_owner_registration_required"));
+                            continue;
+                        }
                         if let ClientFrame::WorktreeAdmission { id, .. } = &frame {
                             let _ = writer.send_frame(&err_frame(
                                 *id,
@@ -1332,6 +1342,14 @@ impl DaemonServer {
                 message: "binary frame session is not attached".to_string(),
             });
             return false;
+        }
+        let ownership = match self.host.ownership.lock() {
+            Ok(state) => state,
+            Err(_) => return false,
+        };
+        if !ownership.permits(client_id, &frame.session_id) {
+            let _ = writer.send_frame(&err_frame(0, "session_owner_mismatch"));
+            return true;
         }
         match frame.kind {
             BINARY_KIND_INPUT => self
@@ -1416,8 +1434,10 @@ impl DaemonServer {
     }
 
     // 处理已鉴权的控制帧并构造应答；会话协调只报告诊断，不按 UI 列表回收 daemon 会话。
-    fn handle_frame(&self, client_id: u64, frame: ClientFrame) -> DaemonFrame {
+    fn handle_frame_inner(&self, client_id: u64, frame: ClientFrame) -> DaemonFrame {
         match frame {
+            ClientFrame::TerminalResources { id, .. } | ClientFrame::RegisterOwner { id, .. } | ClientFrame::BindOwner { id, .. }
+            | ClientFrame::PrepareOwnerExit { id, .. } | ClientFrame::ResumeOwnerExit { id, .. } | ClientFrame::OwnerExit { id, .. } | ClientFrame::SessionScopes { id } | ClientFrame::CloseAll { id } => err_frame(id, "owner_dispatch_required"),
             ClientFrame::Auth { .. } => DaemonFrame::Err {
                 id: 0,
                 message: "already authenticated".to_string(),
@@ -1546,17 +1566,6 @@ impl DaemonServer {
                     sessions.remove(&session_id);
                 }
                 self.host.detach_session_from_clients(&session_id);
-                match result {
-                    Ok(()) => DaemonFrame::Ok { id },
-                    Err(message) => DaemonFrame::Err { id, message },
-                }
-            }
-            ClientFrame::CloseAll { id } => {
-                let result = self.host.pty.close_all();
-                if let Ok(mut sessions) = self.host.sessions.lock() {
-                    sessions.clear();
-                }
-                self.host.detach_all_sessions_from_clients();
                 match result {
                     Ok(()) => DaemonFrame::Ok { id },
                     Err(message) => DaemonFrame::Err { id, message },
@@ -1825,10 +1834,6 @@ impl DaemonServer {
         if !is_valid_session_id(&session_id) {
             return err_frame(id, "invalid session id");
         }
-        let _admission = match super::worktree_admission::enter(cwd.as_deref()) {
-            Ok(reservation) => reservation,
-            Err(message) => return err_frame(id, &message),
-        };
         let sink = Arc::new(DaemonPtyEventSink::new(
             Arc::clone(&self.host),
             session_id.clone(),
@@ -1986,3 +1991,8 @@ fn maybe_activate_app_for_hook(payload: &crate::claude_hook::ClaudeHookPayload) 
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod ownership_tests;
+
+#[cfg(test)]
+pub(crate) use ownership_tests::controlled_exit_receipt;

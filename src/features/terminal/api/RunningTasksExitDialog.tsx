@@ -9,35 +9,32 @@ import {
 import { Button } from "../../../shared/ui/button";
 import { useI18n } from "../../../shared/i18n/index";
 
-type RunningTasksExitAction = "background" | "minimize" | "discard";
+type RunningTasksExitAction = "minimize" | "discard";
 
 interface Props {
   open: boolean;
   runningCount: number;
-  onBackground: (remember: boolean) => void;
+  /** @deprecated Unused compatibility prop until App coordinator integration. */
+  onBackground?: (remember: boolean) => void;
   onMinimize: (remember: boolean) => void;
   onDiscard: (remember: boolean) => void;
   onClose: () => void;
 }
 
 /** 退出时存在运行中任务的询问弹窗（Issue #123 Phase 1/2）。 */
-export function RunningTasksExitDialog({ open, runningCount, onBackground, onMinimize, onDiscard, onClose }: Props) {
+export function RunningTasksExitDialog({ open, runningCount, onMinimize, onDiscard, onClose }: Props) {
   const { t } = useI18n();
-  const [action, setAction] = useState<RunningTasksExitAction>("background");
+  const [action, setAction] = useState<RunningTasksExitAction>("minimize");
   const [remember, setRemember] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setAction("background");
+      setAction("minimize");
       setRemember(false);
     }
   }, [open]);
 
   const handleConfirm = () => {
-    if (action === "background") {
-      onBackground(remember);
-      return;
-    }
     if (action === "minimize") {
       onMinimize(remember);
       return;
@@ -73,17 +70,6 @@ export function RunningTasksExitDialog({ open, runningCount, onBackground, onMin
             <input
               type="radio"
               name="running-tasks-exit-action"
-              value="background"
-              checked={action === "background"}
-              onChange={() => setAction("background")}
-              className="h-3.5 w-3.5 accent-accent"
-            />
-            {t("dialogs.runningTasksExit.background")}
-          </label>
-          <label className="flex cursor-pointer items-center gap-2 text-[13px] text-text-primary">
-            <input
-              type="radio"
-              name="running-tasks-exit-action"
               value="discard"
               checked={action === "discard"}
               onChange={() => setAction("discard")}
@@ -103,6 +89,10 @@ export function RunningTasksExitDialog({ open, runningCount, onBackground, onMin
             {t("dialogs.runningTasksExit.minimize")}
           </label>
         </div>
+
+        <p className="mt-3 ml-6 text-xs text-text-secondary">
+          {t("dialogs.runningTasksExit.discardDescription")}
+        </p>
 
         <DialogFooter className="mt-4 flex !justify-between gap-2">
           <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-text-secondary">

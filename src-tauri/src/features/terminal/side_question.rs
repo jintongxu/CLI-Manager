@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager};
 
 #[path = "side_question_process.rs"]
-mod process;
+pub(crate) mod process;
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]

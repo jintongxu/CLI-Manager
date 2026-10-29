@@ -71,6 +71,7 @@ struct Runtime {
 
 pub struct WebServerManager {
     lifecycle: Mutex<()>,
+    exit_fenced: AtomicBool,
     runtime: Mutex<Option<Runtime>>,
     last_error: Arc<Mutex<Option<String>>>,
 }
@@ -79,6 +80,7 @@ impl Default for WebServerManager {
     fn default() -> Self {
         Self {
             lifecycle: Mutex::new(()),
+            exit_fenced: AtomicBool::new(false),
             runtime: Mutex::new(None),
             last_error: Arc::new(Mutex::new(None)),
         }
@@ -344,6 +346,7 @@ pub fn start(app: &AppHandle, manager: &WebServerManager) -> Result<WebServerSta
 }
 
 fn start_locked(app: &AppHandle, manager: &WebServerManager) -> Result<WebServerStatus, String> {
+    if manager.exit_fenced.load(Ordering::SeqCst) { return Err("helper_exit_fenced".into()); }
     let config = load_config()?;
     let server_config = server_config(app, &config)?;
     let mut runtime_slot = manager
@@ -471,7 +474,7 @@ fn stop_runtime(runtime_slot: &mut Option<Runtime>, timeout: Duration) -> Result
             if Instant::now() >= deadline {
                 return Err("web_server_still_stopping".into());
             }
-            thread::sleep(Duration::from_millis(10));
+            thread::sleep(deadline.saturating_duration_since(Instant::now()).min(Duration::from_millis(10)));
         }
         if let Some(thread) = runtime.thread.take() {
             thread
@@ -598,8 +601,23 @@ pub fn auto_start(app: &AppHandle, manager: &WebServerManager) -> Result<(), Str
     Ok(())
 }
 
+pub(crate) fn prepare_exit(manager: &WebServerManager, deadline: Instant) -> Result<(), String> {
+    manager.exit_fenced.store(true, Ordering::SeqCst);
+    drop(crate::commands::cc_connect::exit_process::lock_until(&manager.lifecycle, deadline)?);
+    Ok(())
+}
+pub(crate) fn resume_after_exit(manager: &WebServerManager) { manager.exit_fenced.store(false, Ordering::SeqCst); }
+pub(crate) fn stop_for_exit(manager: &WebServerManager, deadline: Instant) -> Result<&'static str, String> {
+    manager.exit_fenced.store(true, Ordering::SeqCst);
+    let _lifecycle = crate::commands::cc_connect::exit_process::lock_until(&manager.lifecycle, deadline)?;
+    let mut slot = crate::commands::cc_connect::exit_process::lock_until(&manager.runtime, deadline)?;
+    stop_runtime(&mut slot, deadline.saturating_duration_since(Instant::now()))?;
+    Ok("worker_joined")
+}
 pub fn shutdown(manager: &WebServerManager) {
-    let _ = stop(manager);
+    if let Err(error) = stop_for_exit(manager, Instant::now() + Duration::from_secs(5)) {
+        log::error!("web server exit cleanup: {error}");
+    }
 }
 
 #[cfg(test)]

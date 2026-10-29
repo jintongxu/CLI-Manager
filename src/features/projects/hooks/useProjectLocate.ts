@@ -2,10 +2,11 @@ import { useCallback, useRef, useState, type Dispatch, type SetStateAction } fro
 import { toast } from "sonner";
 import type { Project, TreeNode } from "../../../shared/types/index";
 import { useI18n } from "../../../shared/i18n/index";
-import { collectProjectAncestorGroupIds } from "../lib/sidebarModel";
+import { resolveSidebarLocateTarget, type SidebarLocateTarget } from "../lib/sidebarTools";
 import type { ProjectListFilter } from "../components/SidebarHeader";
 
 export interface ProjectLocateRequest {
+  worktreeId?: string;
   projectId: string;
   /** 随请求带上名称：滚动阶段可能才发现目标行不可达，此时已取不到 Project 对象。 */
   projectName: string;
@@ -24,12 +25,12 @@ interface UseProjectLocateParams {
 }
 
 /**
- * 「定位位置」：把已置顶项目的副本定位回主列表中它的真实位置。
+ * Reveal an existing project or active session owner in the normal tree.
  *
  * 置顶项是主列表节点的副本（data-tree-key 为 `pin:p:<id>`，主列表为 `p:<id>`），
  * 置顶区有独立滚动区，因此副本滚走后无从知道原项目在哪。定位分三步：
  * ① 筛选切回「全部」，否则项目可能不在树里；② 展开折叠的祖先分组，否则子节点不渲染；
- * ③ 选中该项目并递增 nonce，由 ProjectTree 的副作用滚动到位。
+ * ③ 选中目标并递增 nonce，ProjectTree 清除 local search 后滚动，不聚焦终端。
  */
 export function useProjectLocate({
   tree,
@@ -43,40 +44,31 @@ export function useProjectLocate({
   const [locateRequest, setLocateRequest] = useState<ProjectLocateRequest | null>(null);
   const nonceRef = useRef(0);
 
-  const locateProject = useCallback(
-    (project: Project) => {
-      onBeforeLocate?.();
+  const locateTarget = useCallback((target: SidebarLocateTarget | null) => {
+    if (!target) return;
+    onBeforeLocate?.();
+    if (projectFilter !== "all") setProjectFilter("all");
+    setCollapsedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of target.ancestorIds) next.delete(id);
+      return next.size === prev.size ? prev : next;
+    });
+    setSelectedId(target.worktreeId ?? target.projectId);
+    nonceRef.current += 1;
+    setLocateRequest({ projectId: target.projectId, projectName: target.projectName,
+      worktreeId: target.worktreeId, nonce: nonceRef.current });
+  }, [onBeforeLocate, projectFilter, setCollapsedIds, setProjectFilter, setSelectedId]);
 
-      if (projectFilter !== "all") {
-        setProjectFilter("all");
-      }
+  const locateProject = useCallback((project: Project) => {
+    const target = resolveSidebarLocateTarget(tree, project.id);
+    if (!target) {
+      toast.info(t("sidebar.locate.notFound"), {
+        description: t("sidebar.locate.notFoundDescription", { name: project.name }),
+      });
+      return;
+    }
+    locateTarget(target);
+  }, [locateTarget, t, tree]);
 
-      const ancestors = collectProjectAncestorGroupIds(tree, project.id);
-      if (ancestors === null) {
-        toast.info(t("sidebar.locate.notFound"), {
-          description: t("sidebar.locate.notFoundDescription", { name: project.name }),
-        });
-        return;
-      }
-
-      // 折叠的分组不会渲染子节点，先展开祖先。与手动展开同语义，因此会被持久化。
-      if (ancestors.length > 0) {
-        setCollapsedIds((prev) => {
-          const next = new Set(prev);
-          let changed = false;
-          for (const groupId of ancestors) {
-            if (next.delete(groupId)) changed = true;
-          }
-          return changed ? next : prev;
-        });
-      }
-
-      setSelectedId(project.id);
-      nonceRef.current += 1;
-      setLocateRequest({ projectId: project.id, projectName: project.name, nonce: nonceRef.current });
-    },
-    [onBeforeLocate, projectFilter, setCollapsedIds, setProjectFilter, setSelectedId, t, tree]
-  );
-
-  return { locateRequest, locateProject };
+  return { locateRequest, locateProject, locateTarget };
 }

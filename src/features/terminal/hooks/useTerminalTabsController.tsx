@@ -10,7 +10,7 @@ import {
 import { arrayMove } from "@dnd-kit/sortable";
 import { useTerminalStore } from "../state";
 import { useSessionStore } from "../api/sessionStore";
-import { CURRENT_WORK_ACTION_EVENT, CURRENT_WORK_TARGET_EVENT, type CurrentWorkAction, type CurrentWorkTarget } from "../api/currentWorkEvents";
+import { useTerminalNavigationListeners } from "./useTerminalNavigationListeners";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { updateWorkspaceLayout } from "../../../shared/lib/workspaceLayout";
 import { useWorktreeStore } from "../../projects/api/worktreeStore";
@@ -169,44 +169,6 @@ export function useTerminalTabsController({
     if (previous.sessionId) setActive(previous.sessionId);
   }, [setActive]);
   useSshFileEditorCurrentWork({ activeSessionId, addCurrentWorkSession, currentWorkMode, currentWorkSessionIds, sessions });
-  useEffect(() => {
-    const handleCurrentWorkTarget = (event: Event) => {
-      const { sessionId } = (event as CustomEvent<CurrentWorkTarget>).detail;
-      if (currentWorkMode) {
-        if (!activateCurrentWorkSession(sessionId)) return;
-        useHistoryStore.getState().closeHistory();
-        setActiveWorkspaceTab("terminal");
-        setActive(sessionId);
-        return;
-      }
-      if (currentWorkSessionIds.includes(sessionId)) {
-        activateCurrentWork(sessionId);
-        return;
-      }
-      useHistoryStore.getState().closeHistory();
-      setActiveWorkspaceTab("terminal");
-      setActive(sessionId);
-    };
-    window.addEventListener(CURRENT_WORK_TARGET_EVENT, handleCurrentWorkTarget);
-    return () => window.removeEventListener(CURRENT_WORK_TARGET_EVENT, handleCurrentWorkTarget);
-  }, [activateCurrentWork, activateCurrentWorkSession, currentWorkMode, currentWorkSessionIds, setActive]);
-  useEffect(() => {
-    const handleCurrentWorkAction = (event: Event) => {
-      const action = (event as CustomEvent<CurrentWorkAction>).detail;
-      if (action === "toggle-view") {
-        if (currentWorkMode) leaveCurrentWork(); else activateCurrentWork();
-      } else if (action === "next" || action === "previous") {
-        if (!currentWorkSessionIds.length) return;
-        const index = currentWorkSessionIds.indexOf(currentWorkActiveSessionId ?? "");
-        const delta = action === "next" ? 1 : -1;
-        activateCurrentWork(currentWorkSessionIds[(index + delta + currentWorkSessionIds.length) % currentWorkSessionIds.length]);
-      } else if (action === "clear") clearCurrentWork();
-      else if (action === "add-active" && activeSessionId) toggleCurrentWork(activeSessionId);
-      else if (action === "remove-active" && currentWorkActiveSessionId) removeCurrentWorkSessions([currentWorkActiveSessionId]);
-    };
-    window.addEventListener(CURRENT_WORK_ACTION_EVENT, handleCurrentWorkAction);
-    return () => window.removeEventListener(CURRENT_WORK_ACTION_EVENT, handleCurrentWorkAction);
-  }, [activateCurrentWork, activeSessionId, clearCurrentWork, currentWorkActiveSessionId, currentWorkMode, currentWorkSessionIds, leaveCurrentWork, removeCurrentWorkSessions, toggleCurrentWork]);
   const setActiveWorkspan = useTerminalStore((s) => s.setActiveWorkspan);
   const reorderWorkspans = useTerminalStore((s) => s.reorderWorkspans);
   const orderWorkspans = useTerminalStore((s) => s.orderWorkspans);
@@ -304,6 +266,12 @@ export function useTerminalTabsController({
     closeHistory,
     addCurrentWorkSession,
     setActive,
+  });
+  useTerminalNavigationListeners({
+    currentWorkPaneTree, currentWorkFullscreenPaneId, toggleCurrentWorkPaneFullscreen,
+    currentWorkMode, currentWorkSessionIds, currentWorkActiveSessionId, activeSessionId,
+    activateCurrentWork, activateCurrentWorkSession, leaveCurrentWork, clearCurrentWork,
+    toggleCurrentWork, removeCurrentWorkSessions, setActive, setActiveWorkspaceTab,
   });
   const focusGlobalSearchSeq = useHistoryStore((s) => s.focusGlobalSearchSeq);
   const gitWorkspaceOpen = useGitWorkspaceStore((s) => s.isOpen);
@@ -920,13 +888,13 @@ export function useTerminalTabsController({
 
     closeSessionIds(closeableSessionIds, protectedSessionIds, destroy);
   }, [closeSessionIds, confirm, t]);
-  const handleCloseSessions = useCallback((sessionIds: string[], anchor?: SplitPickerAnchor, protectedSessionIds: readonly string[] = [], destroy = true) => {
+  const handleCloseSessions = useCallback((sessionIds: string[], anchor?: SplitPickerAnchor, protectedSessionIds: readonly string[] = [], destroy = false) => {
     const uniqueSessionIds = Array.from(new Set(sessionIds)).filter((sessionId) => sessions.some((session) => session.id === sessionId));
     if (uniqueSessionIds.length === 0) return;
 
     const terminalSessionCount = uniqueSessionIds.filter((sessionId) => {
       const session = sessions.find((item) => item.id === sessionId);
-      return session && (session.kind ?? "pty") === "pty";
+      return session && (destroy || (session.kind ?? "pty") !== "pty") && session.kind !== "file-editor";
     }).length;
 
     if (!shouldConfirmTerminalTabClose(terminalSessionCount)) {

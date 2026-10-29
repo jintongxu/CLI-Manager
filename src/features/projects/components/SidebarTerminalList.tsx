@@ -1,3 +1,4 @@
+import { sessionDisplayLabels, sessionDisplayTooltip } from "../lib/sidebarDisplay";
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { SidebarTerminalSortable } from "./SidebarTerminalSortable";
@@ -24,6 +25,7 @@ export function SidebarTerminalList({ projectId, worktreeId, depth = 0, compact 
   const currentWorkSessionIds = useSessionStore((store) => store.currentWorkSessionIds);
   const [renameTarget, setRenameTarget] = useState<{ id: string; title: string } | null>(null);
   const sessions = actions.getTerminals(projectId, worktreeId);
+  const displayLabels = sessionDisplayLabels(sessions, t("sidebar.display.terminalType"));
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: DND_ACTIVATION_CONSTRAINT }));
   if (!sessions.length && !renameTarget) return null;
   return (
@@ -66,7 +68,8 @@ export function SidebarTerminalList({ projectId, worktreeId, depth = 0, compact 
           : session.tabHidden ? "hidden" : "pending";
         const hidden = session.tabHidden ? t("sidebar.terminals.hidden") : "";
         const pinned = session.sidebarPinned ? t("sidebar.terminals.pinned") : "";
-        const label = [session.title, state, hidden, pinned].filter(Boolean).join(" · ");
+        const displayLabel = displayLabels.get(session.id) ?? session.title;
+        const label = [displayLabel, state, hidden, pinned].filter(Boolean).join(" · ");
         return (
           <SidebarTerminalSortable key={session.id} session={session}>
           {(drag) => (
@@ -76,7 +79,7 @@ export function SidebarTerminalList({ projectId, worktreeId, depth = 0, compact 
                 onPointerDown={drag.onPointerDown} className="sidebar-terminal-row" data-status={status ?? undefined}
                 data-hidden={session.tabHidden ? "true" : "false"}
                 data-selected={actions.activeTerminalId === session.id && !session.tabHidden ? "true" : "false"}
-                aria-label={t("sidebar.terminals.open", { title: [label, membership].filter(Boolean).join(" · ") })} title={[label, membership].filter(Boolean).join(" · ")}
+                aria-label={t("sidebar.terminals.open", { title: [label, membership].filter(Boolean).join(" · ") })} title={sessionDisplayTooltip(session, displayLabel, [state, hidden, pinned, membership].filter(Boolean).join(" · "))}
                 onClick={(event) => { event.stopPropagation(); if (!drag.isDragging) actions.onOpenTerminal(session.id); }}
                 onKeyDown={(event) => {
                   if (event.altKey && ["ArrowUp", "ArrowDown"].includes(event.key)) {
@@ -97,7 +100,7 @@ export function SidebarTerminalList({ projectId, worktreeId, depth = 0, compact 
                 <Terminal size={13} className="sidebar-terminal-icon" aria-hidden="true" />
                 <span className="sidebar-terminal-heading">
                   <span className="sidebar-terminal-title-line">
-                    <span className="sidebar-terminal-title">{session.title}</span>
+                    <span className="sidebar-terminal-title">{displayLabel}</span>
                     {session.sidebarPinned && <>
                       <Pin size={11} className="sidebar-terminal-pin" aria-hidden="true" />
                       <span className="sidebar-terminal-pinned-label">{t("sidebar.terminals.pinned")}</span>

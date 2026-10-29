@@ -43,6 +43,11 @@ export function SidebarView({
   appConfirmDialog,
   sidebarCollapsed,
   projectFilter,
+  locateCurrent,
+  canLocateCurrent,
+  collapseAll,
+  treeSearchActive,
+  setTreeSearchActive,
   projects,
   toggleSidebarCollapsed,
   setProjectFilter,
@@ -217,6 +222,10 @@ export function SidebarView({
           density={sidebarDensity}
           onToggleCollapse={toggleSidebarCollapsed}
           dockSide={dockSide}
+          onLocateCurrent={locateCurrent}
+          canLocateCurrent={canLocateCurrent}
+          onCollapseAll={collapseAll}
+          treeSearchActive={treeSearchActive}
           onCreateGroup={() => {
             ensureSidebarExpanded();
             setNewGroupParentId("__root__");
@@ -237,6 +246,7 @@ export function SidebarView({
             <div className="ui-sidebar-combined-list h-full min-h-0 overflow-y-auto overflow-x-hidden">
               <ProjectTree
                 tree={displayedTree}
+                onSearchActiveChange={setTreeSearchActive}
                 initialLoading={initialLoading}
                 loadError={loadError}
                 collapsed={compactMode ? false : sidebarCollapsed}

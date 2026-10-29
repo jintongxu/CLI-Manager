@@ -602,20 +602,54 @@ pub fn approval_aware_hook_sink(delivery: HookPayloadSink) -> HookPayloadSink {
 /// daemon 与主进程共用（Issue #123 Phase 2）。
 // 启动 HTTP 接收线程并为每个连接派生处理线程，共享近期事件去重状态。
 pub fn spawn_hook_listener(listener: TcpListener, token: String, sink: HookPayloadSink) {
-    let recent_events = Arc::new(Mutex::new(RecentHookEvents::default()));
-    thread::spawn(move || {
-        for stream in listener.incoming() {
-            match stream {
-                Ok(stream) => {
-                    let token = token.clone();
-                    let sink = Arc::clone(&sink);
+    let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let _ = spawn_stoppable_hook_listener(listener, token, sink, stop);
+}
+
+pub struct HookListenerTask {
+    listener: Option<thread::JoinHandle<()>>,
+    failed: bool,
+}
+impl HookListenerTask {
+    /// Timeout keeps the listener and its owned worker handles for retry.
+    pub fn join_until(&mut self, deadline: Instant) -> Result<(), String> {
+        while self.listener.as_ref().is_some_and(|worker| !worker.is_finished()) {
+            if Instant::now() >= deadline { return Err("hook_worker_timeout".into()); }
+            thread::sleep(Duration::from_millis(10));
+        }
+        if let Some(worker) = self.listener.take() { self.failed |= worker.join().is_err(); }
+        if self.failed { Err("hook_worker_panicked".into()) } else { Ok(()) }
+    }
+}
+
+pub fn spawn_stoppable_hook_listener(listener: TcpListener, token: String, sink: HookPayloadSink,
+    stop: Arc<std::sync::atomic::AtomicBool>) -> std::io::Result<HookListenerTask> {
+    listener.set_nonblocking(true)?;
+    let listener = thread::Builder::new().name("hook-listener".into()).spawn(move || {
+        let recent_events = Arc::new(Mutex::new(RecentHookEvents::default()));
+        let mut workers = Vec::new();
+        let mut failed = false;
+        while !stop.load(std::sync::atomic::Ordering::Acquire) {
+            match listener.accept() {
+                Ok((stream, _)) => {
+                    let _ = stream.set_nonblocking(false);
+                    let token = token.clone(); let sink = Arc::clone(&sink);
                     let recent_events = Arc::clone(&recent_events);
-                    thread::spawn(move || handle_stream(stream, sink, &token, recent_events));
+                    workers.push(thread::spawn(move || handle_stream(stream, sink, &token, recent_events)));
                 }
-                Err(err) => warn!("cli hook bridge accept failed: {}", err),
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => thread::sleep(Duration::from_millis(20)),
+                Err(err) => { warn!("cli hook bridge accept failed: {}", err); break; }
+            }
+            let mut index = 0;
+            while index < workers.len() {
+                if workers[index].is_finished() { failed |= workers.remove(index).join().is_err(); } else { index += 1; }
             }
         }
-    });
+        // The outer task owns these handles throughout bounded caller retries.
+        for worker in workers { failed |= worker.join().is_err(); }
+        assert!(!failed, "hook connection worker panicked");
+    })?;
+    Ok(HookListenerTask { listener: Some(listener), failed: false })
 }
 
 #[path = "legacy_goal.rs"]
@@ -1833,5 +1867,27 @@ mod approval_tests {
             1
         );
         assert!(state.pending.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod listener_deadline_tests {
+    use super::*;
+    #[test]
+    fn hook_join_timeout_retains_handle_for_retry() {
+        let (send, recv) = std::sync::mpsc::channel();
+        let mut task = HookListenerTask { listener: Some(thread::spawn(move || { recv.recv().unwrap(); })), failed: false };
+        assert_eq!(task.join_until(Instant::now()).unwrap_err(), "hook_worker_timeout");
+        assert!(task.listener.is_some());
+        send.send(()).unwrap();
+        task.join_until(Instant::now() + Duration::from_secs(2)).unwrap();
+        assert!(task.listener.is_none());
+        task.join_until(Instant::now()).unwrap();
+    }
+    #[test]
+    fn hook_join_panic_remains_failure_on_retry() {
+        let mut task = HookListenerTask { listener: Some(thread::spawn(|| panic!("test-owned failure"))), failed: false };
+        assert_eq!(task.join_until(Instant::now() + Duration::from_secs(2)).unwrap_err(), "hook_worker_panicked");
+        assert_eq!(task.join_until(Instant::now()).unwrap_err(), "hook_worker_panicked");
     }
 }

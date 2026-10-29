@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use windows_sys::Win32::Foundation::{
     CloseHandle, FreeLibrary, GetLastError, SetHandleInformation, HANDLE, HANDLE_FLAG_INHERIT,
-    HMODULE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0,
+    HMODULE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0, WAIT_FAILED,
 };
 use windows_sys::Win32::Security::{SECURITY_ATTRIBUTES, TOKEN_DUPLICATE, TOKEN_QUERY};
 use windows_sys::Win32::System::Console::{
@@ -23,7 +23,7 @@ use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 use windows_sys::Win32::System::Pipes::CreatePipe;
 use windows_sys::Win32::System::Threading::{
     CreateProcessW, DeleteProcThreadAttributeList, GetCurrentProcess, GetExitCodeProcess,
-    InitializeProcThreadAttributeList, OpenProcessToken, TerminateProcess,
+    InitializeProcThreadAttributeList, OpenProcessToken, ResumeThread, TerminateProcess, CREATE_SUSPENDED,
     UpdateProcThreadAttribute, WaitForSingleObject, CREATE_UNICODE_ENVIRONMENT,
     EXTENDED_STARTUPINFO_PRESENT, PROCESS_INFORMATION, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
     STARTF_USESTDHANDLES, STARTUPINFOEXW,
@@ -178,6 +178,7 @@ struct WindowsPtyChild {
     process: HANDLE,
     pid: u32,
     uses_conpty_dll: bool,
+    job: crate::process_job::ChildJob,
 }
 
 unsafe impl Send for WindowsPtyChild {}
@@ -195,14 +196,20 @@ impl Drop for WindowsPtyChild {
 }
 
 impl PlatformPtyChild for WindowsPtyChild {
+    fn sample_resources(&self, id: &str, budget: &mut crate::daemon::terminal_resources::Budget) -> crate::daemon::terminal_resources::Row {
+        self.job.sample_resources(self.process, self.pid, id, budget)
+    }
     // 返回创建时记录的 PID，不探测进程存活状态。
     fn process_id(&self) -> u32 {
         self.pid
     }
 
-    // 零超时检查进程句柄，只有已触发才读取退出码；其余等待结果（包括失败）当前均返回 None。
+    // 零超时检查持有的进程句柄；等待失败传播错误，只有已触发才读取退出码。
     fn try_wait(&self) -> Result<Option<PlatformExitStatus>, String> {
         let wait = unsafe { WaitForSingleObject(self.process, 0) };
+        if wait == WAIT_FAILED {
+            return Err(last_error("WaitForSingleObject"));
+        }
         if wait != WAIT_OBJECT_0 {
             return Ok(None);
         }
@@ -216,13 +223,14 @@ impl PlatformPtyChild for WindowsPtyChild {
         }))
     }
 
-    // 对原生 ConPTY 先节流，再以退出码 1 终止直接进程；不在此遍历进程树或等待退出。
+    // 对原生 ConPTY 先节流，然后终止创建前已封闭登记的 Job 树；调用方仍须等待证明。
     fn kill(&self) -> Result<(), String> {
         throttle_native_conpty(self.uses_conpty_dll);
-        if unsafe { TerminateProcess(self.process, 1) } == 0 {
-            return Err(last_error("TerminateProcess"));
-        }
-        Ok(())
+        self.job.terminate_checked()
+    }
+
+    fn tree_stopped(&self) -> Result<bool, String> {
+        Ok(self.try_wait()?.is_some() && self.job.is_empty()?)
     }
 }
 
@@ -338,6 +346,33 @@ pub fn spawn(options: PtyLaunchOptions) -> Result<SpawnedPty, String> {
         unsafe { (api.close)(pseudo_console) };
         return Err(last_error("CreateProcessW"));
     }
+    // The primary thread cannot run user code or spawn descendants before Job admission.
+    let job = match unsafe {
+        crate::process_job::ChildJob::assign_handle(process_info.hProcess, "PTY")
+    } {
+        Ok(job) => job,
+        Err(error) => {
+            unsafe {
+                TerminateProcess(process_info.hProcess, 1);
+                WaitForSingleObject(process_info.hProcess, 5000);
+                CloseHandle(process_info.hThread);
+                CloseHandle(process_info.hProcess);
+                (api.close)(pseudo_console);
+            }
+            return Err(error);
+        }
+    };
+    if unsafe { ResumeThread(process_info.hThread) } == u32::MAX {
+        let error = last_error("ResumeThread");
+        let _ = job.terminate_checked();
+        let _ = job.wait_empty(Instant::now() + Duration::from_secs(5));
+        unsafe {
+            CloseHandle(process_info.hThread);
+            CloseHandle(process_info.hProcess);
+            (api.close)(pseudo_console);
+        }
+        return Err(error);
+    }
     unsafe { CloseHandle(process_info.hThread) };
 
     Ok(SpawnedPty {
@@ -351,6 +386,7 @@ pub fn spawn(options: PtyLaunchOptions) -> Result<SpawnedPty, String> {
             process: process_info.hProcess,
             pid: process_info.dwProcessId,
             uses_conpty_dll,
+            job,
         }),
         traits: PlatformPtyTraits { uses_conpty_dll },
     })
@@ -380,9 +416,9 @@ fn conpty_creation_flags() -> u32 {
     PSEUDOCONSOLE_RESIZE_QUIRK | PSEUDOCONSOLE_WIN32_INPUT_MODE
 }
 
-// 使用扩展启动属性与 Unicode 环境，刻意不设新进程组以保持 Ctrl+C 控制事件兼容。
+// 挂起主线程直到 Job 登记完成；不设新进程组，保持 Ctrl+C 控制事件兼容。
 fn conpty_process_creation_flags() -> u32 {
-    EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT
+    EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED
 }
 
 // 立即读取当前线程 Win32 错误码并附操作名，调用方需避免中间 API 覆盖错误状态。
@@ -533,6 +569,73 @@ mod tests {
     use super::*;
 
     #[test]
+    fn owned_process_suspended_admission_preserves_ctrl_c() {
+        assert_ne!(conpty_process_creation_flags() & CREATE_SUSPENDED, 0);
+        assert_eq!(conpty_process_creation_flags() & 0x200, 0);
+    }
+
+    #[test]
+    fn owned_process_tree_reaped_without_touching_control() {
+        fn fixture(script: &str) -> SpawnedPty {
+            spawn(PtyLaunchOptions {
+                exe: "powershell.exe".into(),
+                args: vec!["-NoProfile".into(), "-NonInteractive".into(), "-Command".into(), script.into()],
+                cwd: None,
+                env: Default::default(),
+                cols: 80,
+                rows: 24,
+            }).expect("spawn test-owned PTY")
+        }
+        // Both trees are test owned. No discovery, enumeration or external PID kill.
+        let mut control = fixture("Start-Sleep -Seconds 60");
+        let mut tree = fixture(
+            "$p = Start-Process powershell.exe -ArgumentList '-NoProfile -NonInteractive -Command Start-Sleep -Seconds 60' -PassThru; Write-Output 'OWNED_CHILD_READY'; Start-Sleep -Seconds 60"
+        );
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let mut reader = std::mem::replace(&mut tree.reader, Box::new(std::io::empty()));
+        let drain = std::thread::spawn(move || {
+            let mut buffer = [0u8; 4096];
+            let mut output = String::new();
+            while let Ok(count) = reader.read(&mut buffer) {
+                if count == 0 { break; }
+                output.push_str(&String::from_utf8_lossy(&buffer[..count]));
+                if output.contains("OWNED_CHILD_READY") {
+                    let _ = ready_tx.send(());
+                    output.clear();
+                }
+            }
+        });
+        let mut reader = std::mem::replace(&mut control.reader, Box::new(std::io::empty()));
+        let control_drain = std::thread::spawn(move || {
+            let _ = std::io::copy(&mut reader, &mut std::io::sink());
+        });
+        let ready = ready_rx.recv_timeout(Duration::from_secs(15)).is_ok();
+        let kill = tree.child.kill();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !tree.child.tree_stopped().unwrap_or(false) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let stopped = tree.child.tree_stopped();
+        let control_alive = control.child.try_wait().map(|status| status.is_none());
+        // Always reclaim the unrelated fixture, including assertion-failure paths.
+        let control_kill = control.child.kill();
+        drop(tree);
+        drop(control);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while (!drain.is_finished() || !control_drain.is_finished()) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(ready, "test child did not report readiness");
+        assert!(kill.is_ok());
+        assert_eq!(stopped, Ok(true));
+        assert_eq!(control_alive, Ok(true));
+        assert!(control_kill.is_ok());
+        assert!(drain.is_finished() && control_drain.is_finished(), "reader completion timeout");
+        drain.join().unwrap();
+        control_drain.join().unwrap();
+    }
+
+    #[test]
     // 验证普通参数、含空格参数以及反斜杠加引号参数的 Windows 命令行编码。
     fn quotes_windows_command_line_arguments() {
         assert_eq!(quote_windows_arg("plain"), "plain");
@@ -638,3 +741,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "resources_tests.rs"]
+mod resources_tests;

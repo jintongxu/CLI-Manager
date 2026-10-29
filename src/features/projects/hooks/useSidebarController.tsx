@@ -8,6 +8,7 @@ import { useSidebarTreeDrag } from "./useSidebarTreeDrag";
 import { invoke } from "@tauri-apps/api/core";
 import { useProjectStore } from "../api/projectStore";
 import { useProjectIdeaStore } from "../api/projectIdeaStore";
+import { collectSidebarCollapseIds, resolveSidebarLocateTarget } from "../lib/sidebarTools";
 import { useProjectLocate } from "./useProjectLocate";
 import { useTerminalStore } from "../../terminal/state";
 import { summarizeProjectTerminalStates, type SidebarTerminalState } from "../lib/sidebarTerminals";
@@ -364,18 +365,6 @@ export function useSidebarController({
     return ids;
   }, [displayedTree, collapsedIds]);
   const projectById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects]);
-
-  const activateFirstProjectSession = useCallback(
-    (projectId: string): boolean => {
-      const session = sessions.find((item) => item.projectId === projectId);
-      if (!session) return false;
-      if (session.id !== activeSessionId) {
-        setActiveSession(session.id);
-      }
-      return true;
-    },
-    [activeSessionId, sessions, setActiveSession]
-  );
 
   const activateFirstWorktreeSession = useCallback(
     (worktreeId: string): string | null => {
@@ -1125,9 +1114,6 @@ export function useSidebarController({
 
     const markActive = () => {
       setSelectedId(project.id);
-      if (projectScopedTerminalViewEnabled) {
-        onTerminalScopeChange?.({ kind: "project", projectId: project.id });
-      }
     };
 
     // Shift 范围选择：从锚点到当前项，按可见顺序取区间
@@ -1171,22 +1157,13 @@ export function useSidebarController({
     setSelectedProjectIds(new Set([project.id]));
     setSelectedGroupIds((prev) => (prev.size === 0 ? prev : new Set()));
     selectionAnchorRef.current = project.id;
-    if (activateFirstProjectSession(project.id)) {
-      closeHistory();
-    }
-  }, [activateFirstProjectSession, closeHistory, onTerminalScopeChange, projectScopedTerminalViewEnabled, selectedProjectIds, visibleProjectIds]);
+  }, [selectedProjectIds, visibleProjectIds]);
 
   const handleSelectProjectByKeyboard = useCallback((project: Project) => {
     setSelectedId(project.id);
     setSelectedProjectIds(new Set([project.id]));
     selectionAnchorRef.current = project.id;
-    if (projectScopedTerminalViewEnabled) {
-      onTerminalScopeChange?.({ kind: "project", projectId: project.id });
-    }
-    if (activateFirstProjectSession(project.id)) {
-      closeHistory();
-    }
-  }, [activateFirstProjectSession, closeHistory, onTerminalScopeChange, projectScopedTerminalViewEnabled]);
+  }, []);
 
   const handleSelectGroupScope = useCallback((groupId: string) => {
     if (!projectScopedTerminalViewEnabled) return;
@@ -1679,14 +1656,26 @@ export function useSidebarController({
     [contextMenuGroupProjectIds, sessions]
   );
 
-  const { locateRequest, locateProject } = useProjectLocate({
+  const [treeSearchActive, setTreeSearchActive] = useState(false);
+  const currentLocateTarget = resolveSidebarLocateTarget(tree, activeSessionProjectId, activeSessionWorktreeId);
+  const { locateRequest, locateProject, locateTarget } = useProjectLocate({
     tree,
     projectFilter,
     setProjectFilter,
     setCollapsedIds,
     setSelectedId,
-    onBeforeLocate: () => setContextMenu(null),
+    onBeforeLocate: () => {
+      setContextMenu(null);
+      setShowFileExplorer(false);
+      ensureSidebarExpanded();
+    },
   });
+
+  const locateCurrent = () => locateTarget(currentLocateTarget);
+  const collapseAll = () => {
+    if (treeSearchActive) return;
+    setCollapsedIds(collectSidebarCollapseIds(tree));
+  };
 
   const selectTerminalScope = useCallback((scope: TerminalScope) => {
     setShowFileExplorer(false);
@@ -1822,6 +1811,11 @@ export function useSidebarController({
     appConfirmDialog,
     sidebarCollapsed,
     projectFilter,
+    locateCurrent,
+    canLocateCurrent: currentLocateTarget !== null,
+    collapseAll,
+    treeSearchActive,
+    setTreeSearchActive,
     projects,
     pinnedProjects,
     openProjectIds,

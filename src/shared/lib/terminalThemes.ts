@@ -79,8 +79,10 @@ function applyBackgroundImageForegroundContrast(theme: ITheme, isLight: boolean)
 }
 
 export type LightTerminalPalette =
+  | "sea-salt"
   | "clear-focus"
   | "warm-paper"
+  | "cream-forest"
   | "cream-green"
   | "emerald-mist"
   | "ink-red"
@@ -90,6 +92,8 @@ export type LightTerminalPalette =
   | "apple-warm"
   | "apple-mono";
 export type DarkTerminalPalette =
+  | "tokyo-night-storm"
+  | "graphite"
   | "midnight-aurora"
   | "terminal-acrylic"
   | "night-indigo"
@@ -1017,6 +1021,33 @@ const tokyoNightStorm: ITheme = {
   brightWhite: "#acb0d0",
 };
 
+// folke/tokyonight.nvim extras/windows_terminal/tokyonight_storm.json.
+// Separate identity preserves the original Storm preset for existing users.
+const tokyoNightStormOfficial: ITheme = {
+  background: "#24283b",
+  foreground: "#c0caf5",
+  cursor: "#c0caf5",
+  selectionBackground: "#2e3c64",
+  selectionForeground: "#c0caf5",
+  selectionInactiveBackground: "#2e3c64",
+  black: "#1d202f",
+  red: "#f7768e",
+  green: "#9ece6a",
+  yellow: "#e0af68",
+  blue: "#7aa2f7",
+  magenta: "#bb9af7",
+  cyan: "#7dcfff",
+  white: "#a9b1d6",
+  brightBlack: "#414868",
+  brightRed: "#f7768e",
+  brightGreen: "#9ece6a",
+  brightYellow: "#e0af68",
+  brightBlue: "#7aa2f7",
+  brightMagenta: "#9d7cd8",
+  brightCyan: "#7dcfff",
+  brightWhite: "#c0caf5",
+};
+
 const dawnfox: ITheme = {
   background: "#faf4ed",
   foreground: "#575279",
@@ -1441,7 +1472,34 @@ const windowsTerminalVintage: ITheme = {
   brightWhite: "#FFFFFF",
 };
 
+// Sea/light direction with the approved softer blue background.
+const seaSaltLight: ITheme = {
+  background: "#E3EDFA",
+  foreground: "#203A59",
+  cursor: "#2359C4",
+  cursorAccent: "#E3EDFA",
+  selectionBackground: "#CCDEFC",
+  selectionInactiveBackground: "#CCDEFC",
+  black: "#183656",
+  red: "#A33242",
+  green: "#236745",
+  yellow: "#8B472B",
+  blue: "#2054AE",
+  magenta: "#82408C",
+  cyan: "#21657A",
+  white: "#486382",
+  brightBlack: "#486382",
+  brightRed: "#A33242",
+  brightGreen: "#236745",
+  brightYellow: "#8B472B",
+  brightBlue: "#2359C4",
+  brightMagenta: "#82408C",
+  brightCyan: "#21657A",
+  brightWhite: "#203A59",
+};
+
 export const TERMINAL_THEME_PRESETS: TerminalThemePreset[] = [
+  { id: "seaSaltLight", name: "Sea Salt Blue Light", theme: seaSaltLight, group: "light-office", family: "sea-salt", tone: "light" },
   { id: "windowsTerminalCampbell", name: "Windows Terminal Campbell", theme: windowsTerminalCampbell, group: "high-contrast", family: "windows-terminal", tone: "dark" },
   { id: "windowsTerminalCampbellPowershell", name: "Windows Terminal Campbell PowerShell", theme: windowsTerminalCampbellPowershell, group: "cool", family: "windows-terminal", tone: "dark" },
   { id: "windowsTerminalVintage", name: "Windows Terminal Vintage", theme: windowsTerminalVintage, group: "high-contrast", family: "windows-terminal", tone: "dark" },
@@ -1453,6 +1511,7 @@ export const TERMINAL_THEME_PRESETS: TerminalThemePreset[] = [
   { id: "windowsTerminalTangoDark", name: "Windows Terminal Tango Dark", theme: windowsTerminalTangoDark, group: "high-contrast", family: "windows-terminal", tone: "dark" },
   { id: "windowsTerminalTangoLight", name: "Windows Terminal Tango Light", theme: windowsTerminalTangoLight, group: "light-office", family: "windows-terminal", tone: "light" },
   { id: "tokyoNightDark", name: "Tokyo Night Dark", theme: tokyoNightDark, group: "cool", family: "tokyo-night", tone: "dark" },
+  { id: "tokyoNightStormOfficial", name: "Tokyo Night Storm (Official)", theme: tokyoNightStormOfficial, group: "cool", family: "tokyo-night", tone: "dark" },
   { id: "tokyoNightStorm", name: "Tokyo Night Storm", theme: tokyoNightStorm, group: "cool", family: "tokyo-night", tone: "dark" },
   { id: "tokyoNightLight", name: "Tokyo Night Light", theme: tokyoNightLight, group: "light-office", family: "tokyo-night", tone: "light" },
   { id: "forestNightDark", name: "Forest Night Dark", theme: forestNightDark, group: "nature", family: "atelier", tone: "dark" },
@@ -1508,7 +1567,10 @@ const themeMap = new Map(TERMINAL_THEME_PRESETS.map((p) => [p.id, p.theme]));
 const themePresetMap = new Map(TERMINAL_THEME_PRESETS.map((p) => [p.id, p]));
 
 function resolveAutoLightThemeId(lightPalette: LightTerminalPalette = "warm-paper"): string {
+  if (lightPalette === "sea-salt") return "seaSaltLight";
   if (lightPalette === "clear-focus") return "windowsTerminalOneHalfLightClear";
+  // App-only palette: reuse Warm Paper without redefining terminal or ANSI colors.
+  if (lightPalette === "cream-forest") return "warmPaperLight";
   if (lightPalette === "cream-green") return "creamGreenLight";
   if (lightPalette === "emerald-mist") return "creamGreenLight";
   if (lightPalette === "ink-red") return "inkRedLight";
@@ -1521,6 +1583,9 @@ function resolveAutoLightThemeId(lightPalette: LightTerminalPalette = "warm-pape
 }
 
 function resolveAutoDarkThemeId(darkPalette: DarkTerminalPalette = "night-indigo"): string {
+  // Graphite reuses the existing fallback preset; application tokens never redefine ANSI colors.
+  if (darkPalette === "tokyo-night-storm") return "tokyoNightStormOfficial";
+  if (darkPalette === "graphite") return "codexDark";
   if (darkPalette === "midnight-aurora") return "midnightAuroraTerminal";
   if (darkPalette === "terminal-acrylic") return "windowsTerminalOneHalfDarkAcrylic";
   if (darkPalette === "night-indigo") return "codexDark";

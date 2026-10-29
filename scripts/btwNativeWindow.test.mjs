@@ -149,3 +149,28 @@ test("snapshot palette schema rejects missing, unknown or wrong typed palettes",
     assert.equal(newerBtwSnapshot(null, { ...base, ...invalid }, "e"), null);
   }
 });
+
+test("Graphite snapshots round trip to detached windows without weakening revision fences", () => {
+  const h = harness();
+  const first = h.owner.snapshot("zh-CN", true, "clear-focus", "graphite");
+  assert.equal(newerBtwSnapshot(null, first, "epoch-one"), first);
+  assert.equal(first.darkThemePalette, "graphite");
+  const next = h.owner.snapshot("en-US", true, "clear-focus", "graphite");
+  assert.equal(newerBtwSnapshot(first, next, "epoch-one"), next);
+  assert.equal(newerBtwSnapshot(next, first, "epoch-one"), next);
+  assert.equal(newerBtwSnapshot(next, { ...next, revision: next.revision + 1, darkThemePalette: "unknown" }, "epoch-one"), next);
+  h.owner.dispose(); h.model.dispose();
+});
+
+test("Cream Forest snapshots reach detached windows while preserving older palette support and fences", () => {
+  const h = harness();
+  for (const light of ["cream-forest", "cream-green", "warm-paper", "clear-focus"]) {
+    const snapshot = h.owner.snapshot("en-US", false, light, "graphite");
+    assert.equal(snapshot.lightThemePalette, light);
+    assert.equal(newerBtwSnapshot(null, snapshot, "epoch-one"), snapshot);
+    assert.equal(newerBtwSnapshot(snapshot, snapshot, "epoch-one"), snapshot);
+    assert.equal(newerBtwSnapshot(snapshot, { ...snapshot, revision: snapshot.revision + 1,
+      lightThemePalette: "unknown" }, "epoch-one"), snapshot);
+  }
+  h.owner.dispose(); h.model.dispose();
+});

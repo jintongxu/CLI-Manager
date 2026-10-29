@@ -402,6 +402,18 @@ pub(crate) struct RouteHttpServer {
 }
 
 impl RouteHttpServer {
+    pub(crate) fn stop_until(&mut self, deadline: Instant) -> Result<(), String> {
+        self.stop.store(true, Ordering::Release);
+        while self.workers.iter().any(|w| !w.is_finished()) {
+            if Instant::now() >= deadline { return Err("routing_stop_timeout".into()); }
+            thread::sleep(Duration::from_millis(10));
+        }
+        for worker in self.workers.drain(..) {
+            worker.join().map_err(|_| "routing_worker_panicked")?;
+        }
+        Ok(())
+    }
+
     // 以新的共享路由状态启动监听工作线程。
     pub(crate) fn start(listeners: &[TcpListener]) -> Result<Self, String> {
         Self::start_with_state(listeners, None)

@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CLI-Manager · Color directions · Static preview</title>
+  <link rel="stylesheet" href="color-directions.css">
+  <script src="color-directions.js" defer>
+</script>
+</head>
+<body data-theme="sea" data-terminal="light">
+  <header class="preview-strip" aria-label="Static preview controls">
+    <div class="preview-heading">
+<span class="preview-dot">
+</span>
+<strong data-i18n="preview">配色试验台</strong>
+<span data-i18n="static">静态模拟 · 不修改配置</span>
+</div>
+    <div class="theme-switch" role="group" aria-label="Color direction">
+      <button data-theme-choice="sea" aria-pressed="true">
+<i class="swatch sea">
+</i>
+<span data-i18n="sea">海盐蓝</span>
+</button>
+      <button data-theme-choice="iris" aria-pressed="false">
+<i class="swatch iris">
+</i>
+<span data-i18n="iris">鸢尾紫</span>
+</button>
+      <button data-theme-choice="peach" aria-pressed="false">
+<i class="swatch peach">
+</i>
+<span data-i18n="peach">桃杏珊瑚</span>
+</button>
+    </div>
+    <div class="preview-options">
+      <label>
+<span data-i18n="terminal">终端</span>
+<select id="terminal-mode">
+<option value="light" data-i18n="light">协调浅色</option>
+<option value="dark" data-i18n="dark">独立深色</option>
+</select>
+</label>
+      <label>
+<span class="sr-only" data-i18n="language">语言</span>
+<select id="language">
+<option value="zh-CN">中文</option>
+<option value="en">English</option>
+</select>
+</label>
+    </div>
+  </header>
+  <div class="direction-caption">
+<span id="direction-name">01 / SEA SALT BLUE</span>
+<span id="direction-description">冰透蓝底，钴蓝点睛。清爽，但不寡淡。</span>
+</div>
+  <section class="app-window" aria-label="CLI-Manager static mock">
+    <header class="titlebar">
+<span class="app-mark">›_</span>
+<strong>CLI-Manager</strong>
+<span class="title-divider">
+</span>
+<span id="title-project">cli-manager</span>
+<span class="window-controls" aria-hidden="true">− &nbsp; □ &nbsp; ×</span>
+</header>
+    <div class="app-layout">
+      <aside class="sidebar" aria-label="Projects">
+        <header class="sidebar-header">
+<strong data-i18n="projects">项目</strong>
+<button id="collapse-sidebar" class="icon-button" aria-expanded="true" aria-label="Collapse projects">◧</button>
+</header>
+        <div class="sidebar-content">
+          <div class="tree-label">
+<span data-i18n="workspace">工作空间</span>
+<span>03</span>
+</div>
+          <button class="project selected" data-project="cli-manager" aria-pressed="true">
+<span class="folder-icon">⌄ ▱</span>
+<strong>cli-manager</strong>
+<span class="project-count">2</span>
+</button>
+          <div class="tree-children">
+<div class="branch">⑂ main <span class="branch-pill">worktree</span>
+</div>
+<button class="tree-session selected" data-session="dev" aria-pressed="true">
+<span class="running-dot">
+</span> dev <span>PowerShell</span>
+</button>
+<button class="tree-session" data-session="checks" aria-pressed="false">
+<span class="idle-dot">
+</span> checks <span>PowerShell</span>
+</button>
+</div>
+          <button class="project" data-project="design-system" aria-pressed="false">
+<span class="folder-icon">› ▱</span>
+<strong>design-system</strong>
+<span class="project-count">1</span>
+</button>
+          <button class="project" data-project="website" aria-pressed="false">
+<span class="folder-icon">› ▱</span>
+<strong>website</strong>
+<span class="project-count">1</span>
+</button>
+        </div>
+        <footer class="sidebar-footer">
+<span class="running-dot">
+</span>
+<span data-i18n="local">本地工作空间</span>
+<span class="key-hint">⌘ K</span>
+</footer>
+      </aside>
+      <main class="workspace">
+        <header class="tabbar">
+<button id="restore-sidebar" class="icon-button" aria-label="Expand projects" hidden>◨</button>
+<div role="tablist" aria-label="Mock terminals">
+<button class="terminal-tab" role="tab" aria-selected="true" data-tab="dev">
+<span class="running-dot">
+</span> dev <span class="tab-shell">pwsh</span>
+</button>
+<button class="terminal-tab" role="tab" aria-selected="false" data-tab="checks">✓ checks</button>
+</div>
+<span class="terminal-list" data-i18n="sessions">2 个终端</span>
+</header>
+        <div class="terminal-toolbar">
+<span>
+<span class="running-dot">
+</span> PowerShell <span class="toolbar-path">/ <span id="toolbar-project">cli-manager</span>
+</span>
+</span>
+<span class="mock-terminal-label" data-i18n="mockTerminal">模拟输出 · 无 PTY</span>
+</div>
+        <section class="terminal" tabindex="0" aria-label="Mock terminal output">
+          <div class="terminal-output" id="terminal-output">
+</div>
+        </section>
+        <footer class="statusbar">
+<span>⑂ main</span>
+<span id="status-session">dev</span>
+<span class="status-right">UTF-8 <span>PowerShell 7.5</span>
+<span data-i18n="previewOnly">仅预览</span>
+</span>
+</footer>
+      </main>
+      <aside class="icon-rail" aria-label="Mock tools">
+<button class="rail-button active" data-tool="terminal" aria-label="Terminal">›_</button>
+<button class="rail-button" data-tool="files" aria-label="Files">▱</button>
+<button class="rail-button" data-tool="branches" aria-label="Branches">⑂</button>
+<div class="rail-spacer">
+</div>
+<button id="open-settings" class="rail-button" aria-label="Settings" aria-expanded="false" aria-controls="settings-popover">⚙</button>
+</aside>
+    </div>
+    <section id="settings-popover" class="settings-popover" role="dialog" aria-labelledby="settings-title" hidden>
+      <header>
+<div>
+<span class="eyebrow" data-i18n="mockSettings">模拟设置</span>
+<h2 id="settings-title" data-i18n="appearance">外观与终端</h2>
+</div>
+<button id="close-settings" class="icon-button" aria-label="Close settings">×</button>
+</header>
+      <form id="settings-form">
+        <label class="field">
+<span data-i18n="sessionName">终端名称</span>
+<input id="session-name" maxlength="32" value="dev" autocomplete="off">
+</label>
+        <label class="field">
+<span data-i18n="fontSize">字体大小</span>
+<select id="font-size">
+<option value="13">13 px</option>
+<option value="14" selected>14 px</option>
+<option value="15">15 px</option>
+</select>
+</label>
+        <label class="checkbox-field">
+<input id="cursor-blink" type="checkbox" checked>
+<span data-i18n="cursor">显示光标</span>
+</label>
+        <p class="settings-note" data-i18n="settingsNote">仅作用于本页示意。刷新后恢复，不保存真实设置。</p>
+        <footer>
+<button id="reset-settings" type="button" class="secondary" data-i18n="reset">重置</button>
+<button type="submit" class="primary" data-i18n="apply">预览应用</button>
+</footer>
+      </form>
+    </section>
+  </section>
+  <footer class="preview-footer">
+<span data-i18n="hint">试试切换项目、终端标签，或打开右下角设置。</span>
+<span id="preview-status" role="status" aria-live="polite">海盐蓝 · 协调浅色终端</span>
+</footer>
+</body>
+</html>

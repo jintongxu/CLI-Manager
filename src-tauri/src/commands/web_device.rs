@@ -224,6 +224,10 @@ pub struct WebDeviceManager {
     generation: Arc<AtomicU64>,
     output_ready: Arc<tokio::sync::Notify>,
     connection: Arc<crate::web_daemon::DeviceConnectionControl>,
+    workers: Arc<crate::web_daemon::Workers>,
+    exit_fence: Arc<Mutex<bool>>,
+    admission: Arc<Mutex<()>>,
+    cleanup_started: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl Default for WebDeviceManager {
@@ -238,6 +242,10 @@ impl Default for WebDeviceManager {
             generation: Arc::new(AtomicU64::new(0)),
             output_ready: Arc::new(tokio::sync::Notify::new()),
             connection: Arc::new(crate::web_daemon::DeviceConnectionControl::default()),
+            workers: Arc::new(crate::web_daemon::Workers::default()),
+            exit_fence: Arc::new(Mutex::new(false)),
+            admission: Arc::new(Mutex::new(())),
+            cleanup_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 }
@@ -301,6 +309,8 @@ impl WebDeviceManager {
     }
 
     fn start(&self, app: AppHandle) -> Result<(), String> {
+        let fence = self.exit_fence.lock().map_err(|_| "web_exit_fence_lock")?;
+        if *fence { return Err("web_device_exiting".into()); }
         let profile =
             load_profile()?.ok_or_else(|| "web device profile is not configured".to_string())?;
         validate_profile(&profile)?;
@@ -318,9 +328,7 @@ impl WebDeviceManager {
         };
         let manager = self.clone();
         manager.emit_status(&app);
-        thread::Builder::new()
-            .name("web-device".to_string())
-            .spawn(move || manager.run(app, generation))
+        self.workers.spawn(move || manager.run(app, generation))
             .map_err(|err| {
                 if let Ok(mut runtime) = self.runtime.lock() {
                     if self.generation.load(Ordering::SeqCst) != generation {
@@ -332,6 +340,15 @@ impl WebDeviceManager {
                 format!("start web device worker failed: {err}")
             })?;
         Ok(())
+    }
+
+    /// Blocking completion proof, not merely cancellation acknowledgement.
+    pub fn stop_until(&self, app: &AppHandle, deadline: Instant) -> Result<(), String> {
+        *self.exit_fence.try_lock().map_err(|_| "web_exit_admission_busy")? = true;
+        self.cleanup_started.store(true, Ordering::SeqCst);
+        self.stop(app);
+        self.workers.wait_until(deadline)?;
+        self.connection.wait_until(deadline)
     }
 
     fn stop(&self, app: &AppHandle) {
@@ -891,28 +908,7 @@ fn ensure_web_daemon() -> Result<(), String> {
                 daemon_call::<serde_json::Value>(crate::web_daemon::Request::GetStatus)?;
                 return Ok(());
             }
-            let status = crate::web_daemon::upgrade_control::<WebDeviceStatus>(crate::web_daemon::Request::GetStatus)
-                .map_err(|_| "web_daemon_upgrade_blocked: existing daemon cannot be inspected; close it after its operations finish")?;
-            if status.pending_operations != 0 {
-                return Err("web_daemon_upgrade_busy: finish pending Web operations before upgrading the daemon".into());
-            }
-            // Verify the replacement exists before stopping an otherwise healthy daemon.
-            if !daemon_executable_path()?.is_file() {
-                return Err(
-                    "web_daemon_upgrade_blocked: replacement daemon executable is missing".into(),
-                );
-            }
-            crate::web_daemon::upgrade_control::<()>(crate::web_daemon::Request::Shutdown)?;
-            for _ in 0..20 {
-                if !crate::daemon::discovery::is_pid_alive(info.pid) {
-                    break;
-                }
-                std::thread::sleep(Duration::from_millis(100));
-            }
-            if crate::daemon::discovery::is_pid_alive(info.pid) {
-                return Err("web_daemon_upgrade_blocked: existing daemon has not exited".into());
-            }
-            crate::web_daemon::remove_discovery();
+            return Err("web_daemon_ownership_unsupported".into());
         } else {
             crate::web_daemon::remove_discovery();
         }
@@ -939,9 +935,8 @@ fn ensure_web_daemon() -> Result<(), String> {
         use std::os::unix::process::CommandExt;
         command.process_group(0);
     }
-    command
-        .spawn()
-        .map_err(|err| format!("spawn web daemon failed: {err}"))?;
+    let child = command.spawn().map_err(|err| format!("spawn web daemon failed: {err}"))?;
+    crate::web_daemon::retain_spawned(child)?;
     for _ in 0..20 {
         std::thread::sleep(Duration::from_millis(250));
         if daemon_call::<serde_json::Value>(crate::web_daemon::Request::GetStatus).is_ok() {
@@ -992,6 +987,9 @@ pub(crate) fn web_device_save_profile_blocking(
     manager: WebDeviceManager,
     request: SaveProfileRequest,
 ) -> Result<WebDeviceStatus, String> {
+    let _admission = manager.admission.try_lock().map_err(|_| "web_admission_busy")?;
+    if *manager.exit_fence.lock().map_err(|_| "web_exit_fence_lock")? { return Err("web_device_exiting".into()); }
+
     if use_web_daemon()? {
         return daemon_call::<WebDeviceStatus>(crate::web_daemon::Request::SaveProfile {
             server_url: request.server_url.clone(),
@@ -1023,6 +1021,9 @@ pub(crate) fn web_device_start_blocking(
     app: AppHandle,
     manager: WebDeviceManager,
 ) -> Result<WebDeviceStatus, String> {
+    let _admission = manager.admission.try_lock().map_err(|_| "web_admission_busy")?;
+    if *manager.exit_fence.lock().map_err(|_| "web_exit_fence_lock")? { return Err("web_device_exiting".into()); }
+
     if use_web_daemon()? {
         return daemon_call::<WebDeviceStatus>(crate::web_daemon::Request::Start);
     }
@@ -1043,6 +1044,9 @@ pub(crate) fn web_device_stop_blocking(
     app: AppHandle,
     manager: WebDeviceManager,
 ) -> Result<WebDeviceStatus, String> {
+    let _admission = manager.admission.try_lock().map_err(|_| "web_admission_busy")?;
+    if *manager.exit_fence.lock().map_err(|_| "web_exit_fence_lock")? { return Err("web_device_exiting".into()); }
+
     if let Ok(status) = daemon_call::<WebDeviceStatus>(crate::web_daemon::Request::Stop) {
         return Ok(status);
     }
@@ -1063,6 +1067,9 @@ pub(crate) fn web_device_restart_blocking(
     app: AppHandle,
     manager: WebDeviceManager,
 ) -> Result<WebDeviceStatus, String> {
+    let _admission = manager.admission.try_lock().map_err(|_| "web_admission_busy")?;
+    if *manager.exit_fence.lock().map_err(|_| "web_exit_fence_lock")? { return Err("web_device_exiting".into()); }
+
     if use_web_daemon()? {
         return daemon_call::<WebDeviceStatus>(crate::web_daemon::Request::Restart);
     }
@@ -1084,6 +1091,9 @@ pub(crate) fn web_device_create_pairing_blocking(
     app: AppHandle,
     manager: WebDeviceManager,
 ) -> Result<PairingResult, String> {
+    let _admission = manager.admission.try_lock().map_err(|_| "web_admission_busy")?;
+    if *manager.exit_fence.lock().map_err(|_| "web_exit_fence_lock")? { return Err("web_device_exiting".into()); }
+
     if let Ok(result) = daemon_call::<PairingResult>(crate::web_daemon::Request::CreatePairing) {
         return Ok(result);
     }
@@ -1127,6 +1137,9 @@ pub(crate) fn web_device_clear_pairing_blocking(
     app: AppHandle,
     manager: WebDeviceManager,
 ) -> Result<WebDeviceStatus, String> {
+    let _admission = manager.admission.try_lock().map_err(|_| "web_admission_busy")?;
+    if *manager.exit_fence.lock().map_err(|_| "web_exit_fence_lock")? { return Err("web_device_exiting".into()); }
+
     if let Ok(status) = daemon_call::<WebDeviceStatus>(crate::web_daemon::Request::ClearPairing) {
         return Ok(status);
     }
@@ -1172,6 +1185,9 @@ pub(crate) fn web_device_take_operations_blocking(
     app: AppHandle,
     manager: WebDeviceManager,
 ) -> Result<Vec<OperationView>, String> {
+    let _admission = manager.admission.try_lock().map_err(|_| "web_admission_busy")?;
+    if *manager.exit_fence.lock().map_err(|_| "web_exit_fence_lock")? { return Err("web_device_exiting".into()); }
+
     if let Ok(operations) =
         daemon_call::<Vec<OperationView>>(crate::web_daemon::Request::TakeOperations)
     {
@@ -1199,6 +1215,9 @@ pub(crate) fn web_device_publish_history_blocking(
     manager: WebDeviceManager,
     request: PublishHistoryRequest,
 ) -> Result<(), String> {
+    let _admission = manager.admission.try_lock().map_err(|_| "web_admission_busy")?;
+    if *manager.exit_fence.lock().map_err(|_| "web_exit_fence_lock")? { return Err("web_device_exiting".into()); }
+
     if use_web_daemon()? {
         return daemon_call::<()>(crate::web_daemon::Request::PublishHistory {
             sessions: request.sessions.clone(),
@@ -1247,6 +1266,9 @@ pub(crate) fn web_device_operation_accepted_blocking(
     manager: WebDeviceManager,
     request: OperationIdRequest,
 ) -> Result<(), String> {
+    let _admission = manager.admission.try_lock().map_err(|_| "web_admission_busy")?;
+    if *manager.exit_fence.lock().map_err(|_| "web_exit_fence_lock")? { return Err("web_device_exiting".into()); }
+
     if let Ok(()) = daemon_call::<()>(crate::web_daemon::Request::OperationAccepted {
         operation_id: request.operation_id.clone(),
     }) {
@@ -1280,6 +1302,9 @@ pub(crate) fn web_device_operation_running_blocking(
     manager: WebDeviceManager,
     request: OperationIdRequest,
 ) -> Result<(), String> {
+    let _admission = manager.admission.try_lock().map_err(|_| "web_admission_busy")?;
+    if *manager.exit_fence.lock().map_err(|_| "web_exit_fence_lock")? { return Err("web_device_exiting".into()); }
+
     if let Ok(()) = daemon_call::<()>(crate::web_daemon::Request::OperationRunning {
         operation_id: request.operation_id.clone(),
     }) {
@@ -1313,6 +1338,9 @@ pub(crate) fn web_device_operation_completed_blocking(
     manager: WebDeviceManager,
     request: OperationCompletedRequest,
 ) -> Result<(), String> {
+    let _admission = manager.admission.try_lock().map_err(|_| "web_admission_busy")?;
+    if *manager.exit_fence.lock().map_err(|_| "web_exit_fence_lock")? { return Err("web_device_exiting".into()); }
+
     if !request.status.is_terminal() {
         return Err("operation completed status must be terminal".to_string());
     }
@@ -1468,6 +1496,9 @@ pub async fn web_device_take_terminal_commands(
 pub(crate) fn web_device_take_terminal_commands_blocking(
     manager: WebDeviceManager,
 ) -> Result<Vec<TerminalCommand>, String> {
+    let _admission = manager.admission.try_lock().map_err(|_| "web_admission_busy")?;
+    if *manager.exit_fence.lock().map_err(|_| "web_exit_fence_lock")? { return Err("web_device_exiting".into()); }
+
     if let Ok(commands) = daemon_call(crate::web_daemon::Request::TakeTerminalCommands) {
         return Ok(commands);
     }
@@ -1492,6 +1523,9 @@ pub(crate) fn web_device_terminal_output_blocking(
     manager: WebDeviceManager,
     request: TerminalOutputRequest,
 ) -> Result<(), String> {
+    let _admission = manager.admission.try_lock().map_err(|_| "web_admission_busy")?;
+    if *manager.exit_fence.lock().map_err(|_| "web_exit_fence_lock")? { return Err("web_device_exiting".into()); }
+
     let frame = DeviceToServerFrame::TerminalOutput {
         session_id: request.session_id.clone(),
         sequence: request.sequence,
@@ -1525,6 +1559,9 @@ pub(crate) fn web_device_terminal_status_blocking(
     manager: WebDeviceManager,
     request: TerminalStatusRequest,
 ) -> Result<(), String> {
+    let _admission = manager.admission.try_lock().map_err(|_| "web_admission_busy")?;
+    if *manager.exit_fence.lock().map_err(|_| "web_exit_fence_lock")? { return Err("web_device_exiting".into()); }
+
     let frame = DeviceToServerFrame::TerminalStatus {
         session_id: request.session_id.clone(),
         status: request.status.clone(),
@@ -1584,11 +1621,38 @@ pub fn auto_start(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-pub fn shutdown(app: &AppHandle) {
-    if daemon_call::<()>(crate::web_daemon::Request::Shutdown).is_ok() {
-        return;
+/// Publish admission fences only; no existing socket or worker is cancelled.
+pub fn prepare_exit(app: &AppHandle, transaction: &str, deadline: Instant) -> Result<(), String> {
+    let manager = app.state::<WebDeviceManager>();
+    let _admission = manager.admission.try_lock().map_err(|_| "web_admission_busy")?;
+    *manager.exit_fence.try_lock().map_err(|_| "web_exit_admission_busy")? = true;
+    crate::web_daemon::prepare_owner_exit(transaction, deadline)
+}
+pub fn resume_after_exit(app: &AppHandle, transaction: &str, deadline: Instant) -> Result<(), String> {
+    let manager = app.state::<WebDeviceManager>();
+    let _admission = manager.admission.try_lock().map_err(|_| "web_admission_busy")?;
+    if manager.cleanup_started.load(Ordering::SeqCst) {
+        manager.workers.wait_until(Instant::now())?;
+        manager.connection.wait_until(Instant::now())?;
     }
-    app.state::<WebDeviceManager>().stop(app);
+    crate::web_daemon::resume_owner_exit(transaction, deadline)?;
+    manager.cleanup_started.store(false, Ordering::SeqCst);
+    *manager.exit_fence.try_lock().map_err(|_| "web_exit_admission_busy")? = false;
+    Ok(())
+}
+pub fn shutdown_transaction_until(app: &AppHandle, transaction: &str, deadline: Instant) -> Result<String, String> {
+    app.state::<WebDeviceManager>().stop_until(app, deadline)?;
+    crate::web_daemon::release_owner_transaction_until(transaction, deadline)
+}
+
+/// Run on a blocking worker; callers must preserve errors in their exit receipt.
+pub fn shutdown_until(app: &AppHandle, deadline: Instant) -> Result<String, String> {
+    app.state::<WebDeviceManager>().stop_until(app, deadline)?;
+    crate::web_daemon::release_owner_until(deadline)
+}
+
+pub fn shutdown(app: &AppHandle) {
+    let _ = shutdown_until(app, Instant::now() + Duration::from_secs(8));
 }
 
 #[cfg(test)]

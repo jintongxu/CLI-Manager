@@ -1,3 +1,6 @@
+import { ProjectIdentityIcon } from "./ProjectIdentityIcon";
+import { useProjectDisplay } from "../hooks/useProjectDisplay";
+import { worktreeDisplayTooltip } from "../lib/sidebarDisplay";
 import { useState, useEffect, useRef, memo, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
@@ -119,6 +122,7 @@ function TreeNodeItemImpl({
 }: TreeNodeItemProps) {
   const { t } = useI18n();
   const actions = useTreeActions();
+  const projectDisplay = useProjectDisplay(node.type === "project" ? node.project : undefined, node.type === "project" ? actions.getProjectStatus(node.project.id) : null);
   const itemId = node.type === "group" ? node.group.id : node.type === "project" ? node.project.id : `wt:${node.worktree.id}`;
   const { active, attributes, isOver, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: itemId,
@@ -161,6 +165,8 @@ function TreeNodeItemImpl({
         {...attributes}
         role="treeitem"
         data-tree-key={treeKey}
+        aria-label={getWorktreeSidebarLabel(worktree)}
+        title={worktreeDisplayTooltip(worktree, getWorktreeDisplayName(worktree), t(worktree.status === "active" ? "sidebar.display.worktreeActive" : worktree.status === "pending" ? "worktree.status.pending" : "worktree.status.missing"))}
         aria-level={depth + 1}
         aria-selected={isSelected || isMultiSelected}
         tabIndex={focusedNodeKey === treeKey ? 0 : -1}
@@ -203,7 +209,8 @@ function TreeNodeItemImpl({
           <span className="ui-tree-leading-icon ui-worktree-tree-icon" title={worktree.branch}>
             <WorktreeIcon className="h-4 w-4" />
           </span>
-          <span className="worktree-terminal-heading" title={`${getWorktreeDisplayName(worktree)}\n${worktree.description}\n${worktree.branch}\n${worktree.path}`}>
+          <span className="worktree-terminal-heading" title={worktreeDisplayTooltip(worktree, getWorktreeDisplayName(worktree),
+            t(worktree.status === "active" ? "sidebar.display.worktreeActive" : worktree.status === "pending" ? "worktree.status.pending" : "worktree.status.missing"))}>
             <span className="worktree-terminal-title-line">
               <span className="worktree-terminal-title truncate font-medium">{getWorktreeSidebarLabel(worktree)}</span>
               {providerBadge && <ProviderBadgeChip badge={providerBadge} />}
@@ -320,11 +327,7 @@ function TreeNodeItemImpl({
                   <Link2 size={11} strokeWidth={2} aria-hidden="true" />
                 </span>
               )}
-              <NodeAppearanceIcon
-                mark={appearance.emoji}
-                iconKey={appearance.iconKey}
-                cliTool={p.cli_tool}
-                fallback="folder"
+              <ProjectIdentityIcon mark={appearance.emoji} iconKey={appearance.iconKey}
                 size={14}
               />
             </span>
@@ -342,6 +345,8 @@ function TreeNodeItemImpl({
         {...attributes}
         role="treeitem"
         data-tree-key={treeKey}
+        aria-label={projectDisplay.label}
+        title={projectDisplay.tooltip}
         aria-level={depth + 1}
         aria-expanded={hasWorktrees ? worktreesOpen : undefined}
         aria-selected={isSelected || isMultiSelected}
@@ -387,16 +392,12 @@ function TreeNodeItemImpl({
                 <Link2 size={11} strokeWidth={2} aria-hidden="true" />
               </span>
             )}
-            <NodeAppearanceIcon
-              mark={appearance.emoji}
-              iconKey={appearance.iconKey}
-              cliTool={p.cli_tool}
-              fallback="folder"
+            <ProjectIdentityIcon mark={appearance.emoji} iconKey={appearance.iconKey}
               size={14}
             />
           </span>
           <span className="flex min-w-0 flex-1 items-center gap-1.5">
-            <span className="block truncate font-medium">{p.name}</span>
+            <span className="block truncate font-medium">{projectDisplay.label}</span>
             {p.environment_type === "ssh" && !p.ssh_host_id && (
               <span
                 className="ui-tree-warning-chip inline-flex shrink-0 items-center justify-center rounded-full"
@@ -411,8 +412,8 @@ function TreeNodeItemImpl({
               <span
                 className="ui-tree-meta-chip inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[10px] leading-none"
                 data-cli-tool={cliIcon ?? undefined}
-                title={t("sidebar.tree.terminalCount", { count: terminalCount })}
-                aria-label={t("sidebar.tree.terminalCount", { count: terminalCount })}
+                title={t("sidebar.display.sessionCount", { count: terminalCount })}
+                aria-label={t("sidebar.display.sessionCount", { count: terminalCount })}
               >
                 {terminalCount}
               </span>

@@ -19,9 +19,11 @@ export async function invoke() {
     transportMode: "websocket",
     url: "ws://127.0.0.1:1/pty",
     token: "token",
-    protocolVersion: 2,
+    protocolVersion: 3,
+    ownershipStatus: "session_owner_bound",
+    owner: { instance_id: "fixture-instance", owner_token: "fixture-token", daemon_epoch: "fixture-epoch" },
     binaryProtocolVersion: 1,
-    features: ["ws_binary_output_v1", "ws_binary_input_v1", "checkpoint_replay_v1", "terminal_colors_v1"],
+    features: ["session_owner_v1", "ws_binary_output_v1", "ws_binary_input_v1", "checkpoint_replay_v1", "terminal_colors_v1"],
     daemonVersion: "test",
   };
 }
@@ -73,6 +75,10 @@ class FakeWebSocket {
         // 异步发送认证成功应答。
         queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ type: "auth_ok" }) }));
       }
+      return;
+    }
+    if (frame.type === "bind_owner") {
+      queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ type: FakeWebSocket.mode === "bind-reject" ? "err" : "ok", id: frame.id }) }));
       return;
     }
     if (frame.type === "attach") {
@@ -140,24 +146,54 @@ const transpiled = ts.transpileModule(source, {
   },
   fileName: "PtyHostSocket.ts",
 }).outputText
+  .replace('from "./ptyHostHeartbeat"', 'from "./ptyHostHeartbeat.mjs"')
   .replace('from "@tauri-apps/api/core"', 'from "./tauriCore.mjs"')
   .replace('from "@tauri-apps/api/event"', 'from "./tauriEvent.mjs"')
   .replace('from "../../../shared/platform/logger"', 'from "./logger.mjs"')
   .replace('from "../../../shared/platform/resourceDiagnosticsLog"', 'from "./resourceDiagnosticsLog.mjs"');
+writeFileSync(join(tempDir, "ptyHostHeartbeat.mjs"), ts.transpileModule(
+  readFileSync(new URL("../src/features/terminal/transport/ptyHostHeartbeat.ts", import.meta.url), "utf8"),
+  { compilerOptions: { module: ts.ModuleKind.ES2022 } },
+).outputText);
 const socketPath = join(tempDir, "PtyHostSocket.mjs");
 writeFileSync(socketPath, transpiled, "utf8");
 const { PtyHostSocket, ptyHostSocket } = await import(pathToFileURL(socketPath).href);
 // Exercise the actual manager against the actual socket, stubbing only native IPC.
 await build({ entryPoints: [fileURLToPath(new URL("../src/shared/lib/terminalQueryPolicy.ts", import.meta.url))], bundle: true, platform: "node", format: "esm", outfile: join(tempDir, "terminalQueryPolicy.mjs") });
 const managerSource = readFileSync(new URL("../src/features/terminal/api/TerminalProcessManager.ts", import.meta.url), "utf8");
+writeFileSync(join(tempDir, "terminalWriteGate.mjs"), ts.transpileModule(
+  readFileSync(new URL("../src/features/terminal/api/terminalWriteGate.ts", import.meta.url), "utf8"),
+  { compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 } },
+).outputText);
 const managerCode = ts.transpileModule(managerSource, { compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 } }).outputText
   .replace('from "@tauri-apps/api/core"', 'from "./tauriCore.mjs"')
   .replace('from "../../../shared/lib/terminalQueryPolicy"', 'from "./terminalQueryPolicy.mjs"')
   .replace('from "../../../shared/platform/resourceDiagnosticsLog"', 'from "./resourceDiagnosticsLog.mjs"')
+  .replace('from "./terminalWriteGate"', 'from "./terminalWriteGate.mjs"')
   .replace('from "../transport/PtyHostSocket"', 'from "./PtyHostSocket.mjs"');
 writeFileSync(join(tempDir, "TerminalProcessManager.mjs"), managerCode);
 const { TerminalProcessManager } = await import(pathToFileURL(join(tempDir, "TerminalProcessManager.mjs")).href);
 const resourceLogStub = await import(pathToFileURL(join(tempDir, "resourceDiagnosticsLog.mjs")).href);
+
+test("owner bind precedes create and reconnect reuses the same capability", { concurrency: false }, async () => {
+  FakeWebSocket.mode = "normal";
+  FakeWebSocket.sentFrames.length = 0;
+  const socket = new PtyHostSocket();
+  await socket.create("owner-fixture", null, {}, null, null, null);
+  const frames = FakeWebSocket.sentFrames;
+  assert.ok(frames.findIndex(f => f.type === "bind_owner") < frames.findIndex(f => f.type === "create"));
+  const binding = frames.find(f => f.type === "bind_owner").binding;
+  socket.resetAfterDaemonRestart();
+  await socket.connect();
+  assert.deepEqual(frames.filter(f => f.type === "bind_owner").at(-1).binding, binding);
+  socket.socket?.close();
+});
+test("failed owner bind does not resolve connect", { concurrency: false }, async () => {
+  FakeWebSocket.mode = "bind-reject";
+  const socket = new PtyHostSocket();
+  await assert.rejects(socket.connect(), /owner binding rejected/);
+  FakeWebSocket.mode = "normal";
+});
 
 // 验证认证等待具有明确超时边界。
 test("authentication has a bounded timeout", { concurrency: false }, async () => {

@@ -84,9 +84,9 @@ export interface BtwWindowReady {
   commandSession: number;
 }
 
-const LIGHT_PALETTES: readonly LightThemePalette[] = ["clear-focus", "warm-paper", "cream-green", "ink-red", "emerald-mist",
+const LIGHT_PALETTES: readonly LightThemePalette[] = ["sea-salt", "clear-focus", "warm-paper", "cream-forest", "cream-green", "ink-red", "emerald-mist",
   "saas-analytics-dashboard", "apple-pure", "apple-mist", "apple-warm", "apple-mono"];
-const DARK_PALETTES: readonly DarkThemePalette[] = ["midnight-aurora", "terminal-acrylic", "night-indigo", "forest-night",
+const DARK_PALETTES: readonly DarkThemePalette[] = ["tokyo-night-storm", "graphite", "midnight-aurora", "terminal-acrylic", "night-indigo", "forest-night",
   "graphite-red", "investment-platform", "github-dark", "catppuccin-mocha", "terminal-green", "dracula-purple", "carbon-black"];
 
 /** Session identity comes from the IPC response, not from a potentially late old event. */

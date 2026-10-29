@@ -43,6 +43,7 @@ interface TerminalSidePanelProps {
   projectId?: string | null;
   filesTabDisabled?: boolean;
   systemResourcesEnabled?: boolean;
+  resourcesVisible?: boolean;
   providerDefaultAppType?: NativeProviderAppType;
   filesPanelContent?: ReactNode;
   btwPanelContent?: ReactNode;
@@ -60,6 +61,7 @@ export function TerminalSidePanel({
   projectId,
   filesTabDisabled = false,
   systemResourcesEnabled = false,
+  resourcesVisible = true,
   providerDefaultAppType = "claude",
   filesPanelContent = null,
   btwPanelContent = null,
@@ -189,7 +191,7 @@ export function TerminalSidePanel({
           </Suspense>
         )}
         {systemResourcesEnabled && (
-          <SystemResourcesPanel open={open} visible={activeTab === "systemResources"} embedded />
+          <SystemResourcesPanel open={open} visible={resourcesVisible && activeTab === "systemResources"} embedded />
         )}
         {replayEnabled && (
           <Suspense fallback={null}>

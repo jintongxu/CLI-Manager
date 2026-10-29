@@ -35,6 +35,8 @@ interface PtyHostEndpoint {
   binaryProtocolVersion: number;
   features: string[];
   daemonVersion: string;
+  ownershipStatus: "session_owner_bound" | "daemon_ownership_unsupported";
+  owner?: { instance_id: string; owner_token: string; daemon_epoch: string } | null;
 }
 
 interface PendingRequest {
@@ -252,6 +254,16 @@ export class PtyHostSocket {
     this.transportMode = null;
     this.connectedFeatures.clear();
     socket?.close(1000, "observer-disposed");
+  }
+
+  async sessionScopes(): Promise<Record<string, "owned" | "foreign" | "legacy">> {
+    await this.connect();
+    if (!this.connectedFeatures.has("session_owner_v1")) throw new Error("daemon_ownership_unsupported");
+    const reply = await this.request({ type: "session_scopes" });
+    if (reply.type !== "session_scopes" || !reply.scopes || typeof reply.scopes !== "object") {
+      throw new Error("session_scope_query_failed");
+    }
+    return reply.scopes as Record<string, "owned" | "foreign" | "legacy">;
   }
 
   async write(sessionId: string, data: string): Promise<void> {
@@ -612,6 +624,7 @@ export class PtyHostSocket {
       this.socket = socket;
       socket.binaryType = "arraybuffer";
       let authenticated = false;
+      let ownerBindId: number | null = null;
       let authSettled = false;
       const authTimeoutId = window.setTimeout(() => {
         if (authSettled) return;
@@ -645,7 +658,19 @@ export class PtyHostSocket {
         try {
           if (typeof event.data === "string") {
             const frame = JSON.parse(event.data) as Record<string, unknown>;
-            if (frame.type === "auth_ok") {
+            if (frame.type === "auth_ok" && endpoint.features.includes("session_owner_v1")) {
+              if (!endpoint.owner || endpoint.ownershipStatus !== "session_owner_bound") {
+                throw new Error("PtyHost owner binding unavailable");
+              }
+              ownerBindId = this.nextRequestId++;
+              this.send({ type: "bind_owner", id: ownerBindId, binding: endpoint.owner });
+              return;
+            }
+            if (ownerBindId !== null && frame.id === ownerBindId && frame.type !== "ok") {
+              throw new Error("PtyHost owner binding rejected");
+            }
+            if (frame.type === "auth_ok" || (ownerBindId !== null && frame.id === ownerBindId && frame.type === "ok")) {
+              ownerBindId = null;
               authenticated = true;
               authSettled = true;
               window.clearTimeout(authTimeoutId);

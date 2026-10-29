@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { queueSessionPersistence } from "./sessionPersistenceBarrier";
 import { Store } from "@tauri-apps/plugin-store";
 import type { TerminalSession, PersistedSplit } from "../../../shared/types/index";
 import type { TerminalPaneNode } from "./terminalPaneTree";
@@ -98,22 +99,22 @@ export const useSessionStore = create<SessionStore>(() => ({
     });
   }),
 
-  saveSessions: async (sessions) => {
+  saveSessions: (sessions) => queueSessionPersistence(async () => {
     const s = await getStore();
     // 伪会话和匿名 Pi 不参与应用重启恢复。
     const persistable = sessions.filter(isPersistableSession);
     await s.set("sessions", persistable);
     await s.save();
     useSessionStore.setState({ sessions: persistable });
-  },
+  }),
 
-  saveSplits: async (splits) => {
+  saveSplits: (splits) => queueSessionPersistence(async () => {
     const s = await getStore();
     await s.set("splits", splits);
     useSessionStore.setState({ splits });
-  },
+  }),
 
-  saveActiveSessionId: async (id) => {
+  saveActiveSessionId: (id) => queueSessionPersistence(async () => {
     const s = await getStore();
     if (id === null) {
       await s.set("activeSessionId", null);
@@ -121,9 +122,9 @@ export const useSessionStore = create<SessionStore>(() => ({
       await s.set("activeSessionId", id);
     }
     useSessionStore.setState({ activeSessionId: id });
-  },
+  }),
 
-  saveWorkspans: async (workspans, activeWorkspanId, sessions) => {
+  saveWorkspans: (workspans, activeWorkspanId, sessions) => queueSessionPersistence(async () => {
     const s = await getStore();
     const validSessionIds = new Set(sessions.filter(isPersistableSession).map((session) => session.id));
     const persistableWorkspans = sanitizeTerminalWorkspans(workspans, validSessionIds);
@@ -137,9 +138,9 @@ export const useSessionStore = create<SessionStore>(() => ({
       workspans: persistableWorkspans,
       activeWorkspanId: resolvedActiveWorkspanId,
     });
-  },
+  }),
 
-  saveCurrentWork: async (sessionIds, activeSessionId, sessions, paneTree) => {
+  saveCurrentWork: (sessionIds, activeSessionId, sessions, paneTree) => queueSessionPersistence(async () => {
     const s = await getStore();
     const liveSessionIds = new Set(sessions
       .filter((session) => session.kind !== "subagent-transcript"
@@ -174,9 +175,9 @@ export const useSessionStore = create<SessionStore>(() => ({
       currentWorkActiveSessionId,
       currentWorkPaneTree: runtimeCurrentWorkPaneTree,
     });
-  },
+  }),
 
-  clear: async () => {
+  clear: () => queueSessionPersistence(async () => {
     const s = await getStore();
     await s.set("sessions", []);
     await s.set("splits", []);
@@ -196,5 +197,27 @@ export const useSessionStore = create<SessionStore>(() => ({
       currentWorkActiveSessionId: null,
       currentWorkPaneTree: null,
     });
-  },
+  }),
 }));
+
+/** Explicit exit save bypasses only the automatic-write fence, after its queue drains. */
+export async function saveRestorableExitSnapshot(snapshot: Pick<SessionStore,
+  "sessions" | "splits" | "activeSessionId" | "workspans" | "activeWorkspanId"
+  | "currentWorkSessionIds" | "currentWorkActiveSessionId" | "currentWorkPaneTree"
+>): Promise<void> {
+  const s = await getStore();
+  const sessions = snapshot.sessions.filter(isPersistableSession);
+  const ids = new Set(sessions.map((session) => session.id));
+  const workspans = sanitizeTerminalWorkspans(snapshot.workspans, ids);
+  const currentWorkSessionIds = snapshot.currentWorkSessionIds.filter((id) => ids.has(id));
+  const values = {
+    ...snapshot, sessions, workspans, currentWorkSessionIds,
+    activeSessionId: snapshot.activeSessionId && ids.has(snapshot.activeSessionId) ? snapshot.activeSessionId : null,
+    currentWorkActiveSessionId: snapshot.currentWorkActiveSessionId && ids.has(snapshot.currentWorkActiveSessionId)
+      ? snapshot.currentWorkActiveSessionId : currentWorkSessionIds[0] ?? null,
+    currentWorkPaneTree: sanitizeCurrentWorkPaneTree(snapshot.currentWorkPaneTree, new Set(currentWorkSessionIds)),
+  };
+  for (const [key, value] of Object.entries(values)) await s.set(key, value);
+  await s.save();
+  useSessionStore.setState(values);
+}

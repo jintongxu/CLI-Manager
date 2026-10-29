@@ -57,24 +57,30 @@ pub async fn serve(
         return;
     };
 
+    let mut connections = tokio::task::JoinSet::new();
     loop {
         tokio::select! {
-            _ = &mut shutdown_rx => return,
-            accepted = listener.accept() => handle_accept(accepted, context.clone()),
+            _ = &mut shutdown_rx => break,
+            _ = connections.join_next(), if !connections.is_empty() => {},
+            accepted = listener.accept() => handle_accept(accepted, context.clone(), &mut connections),
         }
     }
+    drop(listener);
+    connections.abort_all();
+    while connections.join_next().await.is_some() {}
 }
 
 // 为成功连接启动关闭 keep-alive 的 HTTP/1 任务，接收失败仅记日志。
 fn handle_accept(
     accepted: std::io::Result<(tokio::net::TcpStream, std::net::SocketAddr)>,
     context: LiveServerHttpContext,
+    connections: &mut tokio::task::JoinSet<()>,
 ) {
     let Ok((stream, _)) = accepted else {
         log::warn!("[live_server] failed to accept TCP connection");
         return;
     };
-    tokio::spawn(async move {
+    connections.spawn(async move {
         let service = service_fn(move |request| handle_request(request, context.clone()));
         let mut builder = hyper::server::conn::http1::Builder::new();
         builder.keep_alive(false);

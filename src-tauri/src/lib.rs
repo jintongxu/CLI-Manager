@@ -53,6 +53,8 @@ pub mod codex_app_server_proxy;
 #[path = "features/statusline/codex.rs"]
 pub mod codex_statusline;
 mod commands;
+#[path = "features/terminal/exit_coordinator.rs"]
+mod exit_coordinator;
 #[path = "infrastructure/process/conpty_sideload.rs"]
 mod conpty_sideload;
 #[path = "infrastructure/diagnostics/crash_reporter.rs"]
@@ -185,8 +187,11 @@ fn app_show_main_window(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 // 请求 Tauri 以成功退出码结束应用，由退出事件执行相关清理。
-fn app_exit(app: AppHandle) {
-    app.exit(0);
+fn app_exit(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+    if window.label() != "main" { return Err("exit_main_window_only".into()); }
+    // Legacy callers may request confirmation, never authorize termination.
+    exit_coordinator::guard_requested(&app);
+    Ok(())
 }
 
 #[tauri::command]
@@ -462,15 +467,6 @@ pub fn run() {
                                     "pty daemon connected: 127.0.0.1:{}",
                                     client.info().port
                                 );
-                                if let Err(error) =
-                                    commands::routing::reconcile_persisted_service(client.clone())
-                                {
-                                    log::warn!(
-                                        "persisted local routing recovery skipped: {}",
-                                        error.code
-                                    );
-                                }
-                                handle.state::<daemon::client::DaemonBridge>().set(client);
                             }
                             Err(err) => log::warn!(
                                 "pty daemon unavailable; terminal creation disabled: {err}"
@@ -561,6 +557,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
+        .manage(std::sync::Arc::new(exit_coordinator::Coordinator::default()))
         .manage(PendingBackgroundSession::default())
         .manage(daemon::client::DaemonBridge::new())
         .manage(
@@ -623,6 +620,7 @@ pub fn run() {
             commands::terminal::pty_daemon_shutdown_if_idle,
             commands::terminal::pty_host_get_endpoint,
             commands::terminal::pty_legacy_request,
+            commands::terminal::resources::terminal_resources_get_snapshot,
             commands::terminal::pty_daemon_upgrade_if_idle,
             commands::terminal::pty_daemon_sessions,
             commands::app_data::app_get_data_storage_status,
@@ -1063,6 +1061,12 @@ pub fn run() {
             crash_reporter::frontend_crash_report,
             app_show_main_window,
             app_exit,
+            exit_coordinator::app_exit_prepare,
+            exit_coordinator::app_exit_cleanup,
+            exit_coordinator::app_exit_status,
+            exit_coordinator::app_exit_abort,
+            exit_coordinator::app_exit_resume,
+            exit_coordinator::app_exit_commit,
             commands::btw_window::btw_window_register,
             commands::btw_window::btw_window_ready,
             commands::btw_window::btw_window_publish,
@@ -1076,26 +1080,21 @@ pub fn run() {
                     invoke.resolver.reject("btw_window_command_denied");
                     return true;
                 }
+                if !exit_coordinator::command_allowed(invoke.message.webview_ref().app_handle(), invoke.message.command()) {
+                    invoke.resolver.reject("app_exit_admission_fenced");
+                    return true;
+                }
                 handler(invoke)
             }
         })
         .build(context)
         .expect("error while building tauri application")
         .run(|app, event| {
-            if matches!(&event, tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit) {
-                commands::side_question::shutdown();
+            if let tauri::RunEvent::ExitRequested { api, .. } = &event {
+                if exit_coordinator::guard_requested(app) { api.prevent_exit(); }
             }
-            if let tauri::RunEvent::Exit = &event {
-                app.state::<live_server::LiveServerManager>().shutdown();
-                app.state::<commands::cc_connect::CcConnectManager>()
-                    .shutdown();
-                commands::web_device::shutdown(app);
-                commands::web_server::shutdown(
-                    app.state::<commands::web_server::WebServerManager>()
-                        .inner(),
-                );
-                crash_reporter::mark_graceful_exit();
-            }
+            // Critical cleanup belongs to the acknowledged transaction, never the GUI Exit callback.
+            if matches!(&event, tauri::RunEvent::Exit) { crash_reporter::mark_graceful_exit(); }
 
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen {

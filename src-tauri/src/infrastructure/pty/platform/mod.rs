@@ -38,12 +38,17 @@ pub struct PlatformPtyTraits {
 }
 
 pub trait PlatformPtyChild: Send + Sync {
+    fn sample_resources(&self, id: &str, _budget: &mut crate::daemon::terminal_resources::Budget) -> crate::daemon::terminal_resources::Row {
+        crate::daemon::terminal_resources::Row::unavailable(id, "unsupported_platform")
+    }
     // 返回已创建子进程的 PID，不以此方法判断进程仍然存活。
     fn process_id(&self) -> u32;
     // 非阻塞查询退出状态；未退出返回 None，信号终止等情形可能没有数值退出码。
     fn try_wait(&self) -> Result<Option<PlatformExitStatus>, String>;
     // 请求平台终止子进程，不承担等待回收职责；后代清理范围取决于平台实现。
     fn kill(&self) -> Result<(), String>;
+    // Unsupported platforms must not infer whole-tree death from root exit.
+    fn tree_stopped(&self) -> Result<bool, String> { Err("pty_tree_proof_unsupported".into()) }
 }
 
 pub struct SpawnedPty {

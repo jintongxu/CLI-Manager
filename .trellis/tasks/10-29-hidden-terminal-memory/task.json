@@ -1,0 +1,28 @@
+{
+  "id": "hidden-terminal-memory",
+  "name": "hidden-terminal-memory",
+  "title": "Hidden terminal display memory TEMP",
+  "description": "",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "Rafael",
+  "assignee": "Rafael",
+  "createdAt": "2026-10-29",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "version": "TEMP"
+  }
+}

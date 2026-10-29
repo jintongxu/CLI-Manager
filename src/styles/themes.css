@@ -553,3 +553,187 @@
   --interactive-selected-border: color-mix(in srgb, var(--primary) 64%, var(--border) 36%);
   --interactive-shadow: 0 8px 20px color-mix(in srgb, var(--on-surface) 8%, transparent);
 }
+
+/* Graphite application palette. Content themes and user font overrides stay independent. */
+[data-theme="dark"][data-dark-palette="graphite"] {
+  --bg-primary: #292c33;
+  --bg-secondary: #32363f;
+  --bg-tertiary: #3b404b;
+  --text-primary: #eef0f6;
+  --text-secondary: #c4cad5;
+  --text-muted: #bdc5d4;
+  --accent: #aec8ff;
+  --accent-hover: #c3d6ff;
+  --border: #596171;
+  --danger: #ed9aa3;
+  --success: #82cba5;
+  --warning: #e4bf7b;
+  --surface-container-lowest: var(--bg-secondary);
+  --surface-container: var(--bg-secondary);
+  --surface-container-highest: #444b58;
+  --outline-variant: var(--border);
+  /* Emphasis stays light blue; white-label filled actions use a darker blue. */
+  --graphite-solid: #416ee8;
+  --graphite-solid-hover: #365fce;
+  --primary-gradient-start: var(--graphite-solid);
+  --primary-gradient-end: var(--graphite-solid);
+  --interactive-hover-bg: #444b58;
+  --interactive-active-bg: #394d70;
+  --interactive-selected-bg: #394d70;
+  --interactive-selected-border: var(--accent);
+  --interactive-focus-ring: var(--accent);
+  --interactive-shadow: none;
+  --graphite-overlay-shadow: 0 16px 40px #0004;
+}
+
+/* Cream Forest: warm application surfaces, independent from content themes. */
+[data-theme="light"][data-light-palette="cream-forest"] {
+  --bg-primary: #FFF9EE;
+  --bg-secondary: #F5E6CF;
+  --bg-tertiary: #FFFCF5;
+  --text-primary: #263D30;
+  --text-secondary: #52634F;
+  --text-muted: #59654F;
+  --accent: #286044;
+  --accent-hover: #1F5038;
+  --border: #C9B994;
+  --danger: #A83538;
+  --success: #286044;
+  --warning: #805510;
+  --surface-container-lowest: #FFFCF5;
+  --surface-container: #FFF9EE;
+  --surface-container-low: #F5E6CF;
+  --surface-container-high: #FFFCF5;
+  --surface-container-highest: #EEDDC0;
+  --on-surface-variant: #52634F;
+  --outline-variant: #C9B994;
+  --on-primary: #FFFFFF;
+  --primary-gradient-start: #286044;
+  --primary-gradient-end: #286044;
+  --interactive-hover-bg: #EEDDC0;
+  --interactive-active-bg: #DEECD9;
+  --interactive-selected-bg: #DEECD9;
+  --interactive-selected-border: #286044;
+  --interactive-focus-ring: #286044;
+  --interactive-shadow: none;
+  /* Chrome aliases survive local terminal/history/file content-token remaps. */
+  --cream-forest-surface: #FFF9EE;
+  --cream-forest-low: #F5E6CF;
+  --cream-forest-raised: #FFFCF5;
+  --cream-forest-text: #263D30;
+  --cream-forest-secondary: #52634F;
+  --cream-forest-muted: #59654F;
+  --cream-forest-border: #C9B994;
+  --cream-forest-control-border: #857657;
+  --cream-forest-hover: #EEDDC0;
+  --cream-forest-selected: #DEECD9;
+  --cream-forest-solid: #286044;
+  --cream-forest-solid-hover: #1F5038;
+  --cream-forest-on-solid: #FFFFFF;
+  --cream-forest-overlay-shadow: 0 16px 40px #263D3026;
+}
+
+/* Sea Salt: frozen sea preview mapping. Content themes and user fonts stay independent. */
+[data-theme="light"][data-light-palette="sea-salt"] {
+  --bg-primary: #EDF5FF;
+  --bg-secondary: #DFEDFF;
+  --bg-tertiary: #E7F1FF;
+  --text-primary: #183656;
+  --text-secondary: #486382;
+  --text-muted: #486382;
+  --accent: #2359C4;
+  --accent-hover: #19479F;
+  --border: #BCCFE9;
+  --surface-container-lowest: #EDF5FF;
+  --surface-container: #EDF5FF;
+  --surface-container-low: #DFEDFF;
+  --surface-container-high: #E7F1FF;
+  --surface-container-highest: #CCDEFC;
+  --on-surface-variant: #486382;
+  --outline-variant: #BCCFE9;
+  --on-primary: #FFFFFF;
+  --primary-gradient-start: #2359C4;
+  --primary-gradient-end: #2359C4;
+  --interactive-hover-bg: #CCDEFC;
+  --interactive-active-bg: #CCDEFC;
+  --interactive-selected-bg: #CCDEFC;
+  --interactive-selected-border: #2359C4;
+  --interactive-focus-ring: #2359C4;
+  --danger: #A83538;
+  --success: #236745;
+  --warning: #8B472B;
+  --interactive-shadow: none;
+  /* Literal chrome aliases survive local content-theme remaps. */
+  --sea-salt-surface: #EDF5FF;
+  --sea-salt-low: #DFEDFF;
+  --sea-salt-bar: #E7F1FF;
+  --sea-salt-raised: #F4F9FF;
+  --sea-salt-text: #183656;
+  --sea-salt-secondary: #486382;
+  --sea-salt-muted: #486382;
+  --sea-salt-border: #BCCFE9;
+  --sea-salt-control-border: #486382;
+  --sea-salt-hover: #CCDEFC;
+  --sea-salt-selected: #CCDEFC;
+  --sea-salt-solid: #2359C4;
+  --sea-salt-solid-hover: #19479F;
+  --sea-salt-on-solid: #FFFFFF;
+  --sea-salt-overlay-shadow: 0 16px 40px #1E407626;
+}
+
+/* Tokyo Night Storm: exact source colors from folke/tokyonight.nvim
+   https://github.com/folke/tokyonight.nvim/blob/main/lua/tokyonight/colors/storm.lua
+   bg=24283B, bg_dark=1F2335, bg_highlight=292E42, fg=C0CAF5, fg_dark=A9B1D6,
+   blue=7AA2F7, cyan=7DCFFF, fg_gutter=3B4261, bg_visual=2E3C64.
+   UI roles are project mappings, not an official App skin. Secondary text uses
+   readable fg_dark instead of the lower-contrast comment color. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] {
+  --bg-primary: #24283B;
+  --bg-secondary: #1F2335;
+  --bg-tertiary: #292E42;
+  --text-primary: #C0CAF5;
+  --text-secondary: #A9B1D6;
+  --text-muted: #A9B1D6;
+  --accent: #7AA2F7;
+  --accent-hover: #7DCFFF;
+  --border: #3B4261;
+  --surface: #24283B;
+  --surface-container-lowest: #24283B;
+  --surface-container: #24283B;
+  --surface-container-low: #1F2335;
+  --surface-container-high: #292E42;
+  --surface-container-highest: #292E42;
+  --on-surface: #C0CAF5;
+  --on-surface-variant: #A9B1D6;
+  --outline-variant: #3B4261;
+  --primary: #7AA2F7;
+  --on-primary: #1F2335;
+  --primary-gradient-start: #7AA2F7;
+  --primary-gradient-end: #7AA2F7;
+  --interactive-hover-bg: #292E42;
+  --interactive-active-bg: #2E3C64;
+  --interactive-selected-bg: #2E3C64;
+  --interactive-selected-border: #7AA2F7;
+  --interactive-focus-ring: #7AA2F7;
+  --danger: #F7768E;
+  --success: #9ECE6A;
+  --warning: #E0AF68;
+  --interactive-shadow: none;
+  /* Literal aliases survive local terminal/history/file token remaps. */
+  --storm-surface: #24283B;
+  --storm-low: #1F2335;
+  --storm-bar: #1F2335;
+  --storm-raised: #292E42;
+  --storm-text: #C0CAF5;
+  --storm-secondary: #A9B1D6;
+  --storm-muted: #A9B1D6;
+  --storm-border: #3B4261;
+  --storm-control-border: #A9B1D6;
+  --storm-hover: #292E42;
+  --storm-selected: #2E3C64;
+  --storm-solid: #7AA2F7;
+  --storm-solid-hover: #7DCFFF;
+  --storm-on-solid: #1F2335;
+  --storm-cyan: #7DCFFF;
+  --storm-overlay-shadow: 0 16px 40px #0006;
+}

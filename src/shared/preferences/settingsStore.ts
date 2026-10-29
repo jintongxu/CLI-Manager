@@ -1,3 +1,7 @@
+import { normalizeExitWithRunningTasksBehavior } from "./exitPolicy";
+export { normalizeExitWithRunningTasksBehavior } from "./exitPolicy";
+import { isAppearanceKey } from "./appearanceTransaction";
+import { createSettingsAppearance, getSystemTheme, resolveTheme } from "./settingsAppearance";
 import { createWorktreeOrderUpdater } from "./worktreeOrderPersistence";
 import type { WorktreeRecord } from "../types/index";
 import { sanitizeWorktreeOrder, type WorktreeOrderByProject } from "../lib/worktreeOrder";
@@ -6,7 +10,7 @@ import { normalizeExternalTerminalProgram, type ExternalTerminalProgram } from "
 import { normalizeWebTerminalBatchKiB, type WebTerminalBatchKiB } from "../lib/webTerminalFrames";
 import { Store } from "@tauri-apps/plugin-store";
 import { invoke } from "@tauri-apps/api/core";
-import { isKnownTerminalThemePreset, resolveAutoTerminalThemeId } from "../lib/terminalThemes";
+import { isKnownTerminalThemePreset } from "../lib/terminalThemes";
 import { FOLLOW_TERMINAL_PREVIEW_THEME } from "../lib/terminalPreviewTheme";
 import { backgroundImageExists } from "../platform/assetUrl";
 import { defaultShellForOs, getOsPlatform, isWindowsOnlyShellKey } from "../platform/shell";
@@ -72,8 +76,10 @@ export {
 
 export type ThemeMode = "dark" | "light" | "system";
 export type LightThemePalette =
+  | "sea-salt"
   | "clear-focus"
   | "warm-paper"
+  | "cream-forest"
   | "cream-green"
   | "ink-red"
   | "emerald-mist"
@@ -83,6 +89,8 @@ export type LightThemePalette =
   | "apple-warm"
   | "apple-mono";
 export type DarkThemePalette =
+  | "tokyo-night-storm"
+  | "graphite"
   | "midnight-aurora"
   | "terminal-acrylic"
   | "night-indigo"
@@ -101,6 +109,7 @@ export type GitDiffViewMode = "split" | "unified";
 export type GitDiffOpenMode = "dialog" | "editor";
 export type CloseBehavior = "ask" | "minimize" | "exit";
 /** 退出时存在运行中任务的处理方式：询问 / 后台继续 / 最小化到托盘 / 丢弃任务并退出。 */
+// Legacy background stays type-compatible with App until coordinator integration; load/update normalize it.
 export type ExitWithRunningTasksBehavior = "ask" | "background" | "minimize" | "discard";
 /** 启动检测到可恢复终端标签时的恢复方式：启动时弹窗询问 / 静默自动恢复。 */
 export type TerminalSessionRestoreMode = "ask" | "auto";
@@ -555,8 +564,8 @@ const DEFAULTS: Settings = {
   webTerminalBatchKiB: 96,
   language: "auto",
   theme: "dark",
-  lightThemePalette: "clear-focus",
-  darkThemePalette: "midnight-aurora",
+  lightThemePalette: "sea-salt",
+  darkThemePalette: "tokyo-night-storm",
   fontSize: TERMINAL_FONT_SIZE_DEFAULT,
   terminalScrollbackCustomEnabled: false,
   terminalScrollbackRows: TERMINAL_SCROLLBACK_ROWS_DEFAULT,
@@ -589,7 +598,7 @@ const DEFAULTS: Settings = {
   externalTerminalProgram: "windows-terminal",
   debugMode: false,
   terminalThemeMode: "independent",
-  terminalThemeName: "midnightAuroraTerminal",
+  terminalThemeName: "tokyoNightStormOfficial",
   terminalPreviewThemeName: FOLLOW_TERMINAL_PREVIEW_THEME,
   sidebarDensity: "comfortable",
   sidebarProjectFilterVisible: false,
@@ -791,14 +800,6 @@ const LAST_SETTINGS_TABS: readonly LastSettingsTab[] = [
 ];
 
 const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
-
-function getSystemTheme(): "dark" | "light" {
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
-function resolveTheme(mode: ThemeMode): "dark" | "light" {
-  return mode === "system" ? getSystemTheme() : mode;
-}
 
 function migrateLightThemePalette(value: unknown): LightThemePalette | undefined {
   if (typeof value !== "string") return undefined;
@@ -1334,6 +1335,14 @@ async function applyDebugMode(enabled: boolean) {
   }
 }
 
+const settingsAppearance = createSettingsAppearance(
+  () => useSettingsStore.getState(),
+  (values) => useSettingsStore.setState(values),
+  async (key, value) => { const s = await getStore(); await s.set(key, value); },
+);
+/** Dialog-scoped owner capability; subscribe/getStatus are suitable for useSyncExternalStore. */
+export const appearancePreview = settingsAppearance.transaction;
+
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
   ...DEFAULTS,
   worktreeOrderByProject: {},
@@ -1582,13 +1591,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       entries.closeBehavior === "ask" || entries.closeBehavior === "minimize" || entries.closeBehavior === "exit"
         ? entries.closeBehavior
         : DEFAULTS.closeBehavior;
-    entries.exitWithRunningTasksBehavior =
-      entries.exitWithRunningTasksBehavior === "ask" ||
-      entries.exitWithRunningTasksBehavior === "background" ||
-      entries.exitWithRunningTasksBehavior === "minimize" ||
-      entries.exitWithRunningTasksBehavior === "discard"
-        ? entries.exitWithRunningTasksBehavior
-        : DEFAULTS.exitWithRunningTasksBehavior;
+    const storedExitBehavior = entries.exitWithRunningTasksBehavior;
+    entries.exitWithRunningTasksBehavior = normalizeExitWithRunningTasksBehavior(storedExitBehavior);
+    if (storedExitBehavior !== undefined && storedExitBehavior !== entries.exitWithRunningTasksBehavior) {
+      persistSetting("exitWithRunningTasksBehavior", entries.exitWithRunningTasksBehavior);
+    }
     entries.backgroundIncludeFinishedTasks =
       typeof entries.backgroundIncludeFinishedTasks === "boolean"
         ? entries.backgroundIncludeFinishedTasks
@@ -1905,9 +1912,14 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   },
 
   update: async (key, value) => {
+    if (isAppearanceKey(key)) {
+      await appearancePreview.write(() => ({ [key]: value }));
+      return;
+    }
     const s = await getStore();
-    await s.set(key, value);
-    set({ [key]: value } as Partial<SettingsStore>);
+    const normalized = key === "exitWithRunningTasksBehavior" ? normalizeExitWithRunningTasksBehavior(value) : value;
+    await s.set(key, normalized);
+    set({ [key]: normalized } as Partial<SettingsStore>);
     if (key === "debugMode") {
       void applyDebugMode(value as boolean);
     }
@@ -1948,36 +1960,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     set({ cliArgsHistory: next });
   },
 
-  setTheme: async (mode) => {
-    const s = await getStore();
-    await s.set("theme", mode);
-    set({ theme: mode, resolvedTheme: resolveTheme(mode) });
-  },
-
-  setTerminalThemeMode: async (mode) => {
-    const s = await getStore();
-    const current = get();
-    let nextThemeName = current.terminalThemeName;
-
-    if (mode === "system") {
-      await s.set("terminalThemeMode", "system");
-      await s.set("terminalThemeName", "auto");
-      set({ terminalThemeMode: "system", terminalThemeName: "auto" });
-      return;
-    }
-
-    if (nextThemeName === "auto") {
-      nextThemeName = resolveAutoTerminalThemeId(
-        current.resolvedTheme,
-        current.lightThemePalette,
-        current.darkThemePalette
-      );
-      await s.set("terminalThemeName", nextThemeName);
-    }
-
-    await s.set("terminalThemeMode", "independent");
-    set({ terminalThemeMode: "independent", terminalThemeName: nextThemeName });
-  },
+  setTheme: settingsAppearance.setTheme,
+  setTerminalThemeMode: settingsAppearance.setTerminalThemeMode,
 
   clearTerminalBackgroundMissing: () => {
     set({ terminalBackgroundMissing: false });

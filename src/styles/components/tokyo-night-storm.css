@@ -1,0 +1,705 @@
+/* Tokyo Night Storm application chrome only: no content-theme variables, font metrics, dimensions,
+   layout, dragging, visibility or lifecycle rules. Imported after component defaults.
+   Terminal/history/Monaco/Diff bodies and independently skinned stats remain owned
+   by their content themes. Local semantic-token remaps continue to inherit locally. */
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-workspace-shell,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-main-shell {
+  background: var(--storm-surface);
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .window-titlebar {
+  background: var(--storm-low);
+  box-shadow: inset 0 -1px 0 var(--storm-border);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-shell,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-top,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-footer {
+  background: var(--storm-low);
+  border-color: var(--storm-border);
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-surface-card,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-config-modal,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-collapsed-flyout,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-appearance-picker-popover {
+  border-radius: 8px;
+  outline-color: var(--storm-border);
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-surface-card[role="dialog"],
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-config-modal,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-collapsed-flyout {
+  box-shadow: var(--storm-overlay-shadow);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-tree-project,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-tree-collapsed-item,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-pinned-project-item,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .sidebar-terminal-row,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-worktree-row,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-selection-card {
+  border-radius: 6px;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-tree-project:hover,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-tree-collapsed-item:hover,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-pinned-project-item:hover,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .sidebar-terminal-row:hover,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-worktree-row:hover {
+  background: var(--storm-hover);
+  color: var(--storm-text);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-tree-project[data-selected="true"],
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-tree-project[data-selected="true"]:hover,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .sidebar-terminal-row[data-selected="true"],
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .sidebar-terminal-row[data-selected="true"]:hover,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-worktree-row[data-selected="true"],
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-worktree-row[data-selected="true"]:hover {
+  background: var(--storm-selected);
+  border-color: transparent;
+  box-shadow: inset 2px 0 0 var(--storm-solid);
+  color: var(--storm-text);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-global-chrome,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-current-workbar,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-current-work-pane-chrome,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-current-work-pane-header {
+  background: var(--storm-bar);
+  border-color: var(--storm-border);
+  color: var(--storm-text);
+  box-shadow: inset 0 -1px 0 var(--storm-border);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome {
+  --terminal-tab-accent: var(--storm-solid);
+  --terminal-tab-accent-muted: var(--storm-muted);
+  --terminal-tab-border: var(--storm-border);
+  --terminal-tab-hover-bg: var(--storm-hover);
+  --terminal-tab-selected-bg: var(--storm-selected);
+  --terminal-chrome-surface: var(--storm-low);
+  --terminal-chrome-surface-raised: var(--storm-raised);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-tab-trigger,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-tab-trigger,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-current-work-item {
+  background: transparent;
+  border-color: transparent;
+  border-radius: 6px;
+  color: var(--storm-secondary);
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-tab-trigger:hover,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-tab-trigger:hover,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-current-work-item:hover {
+  background: var(--storm-hover);
+  color: var(--storm-text);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-tab-trigger[data-selected="true"],
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-tab-trigger[data-selected="true"],
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-current-work-item[data-selected="true"] {
+  background: var(--storm-selected);
+  border-color: transparent;
+  color: var(--storm-text);
+  box-shadow: inset 0 -2px 0 var(--storm-solid);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-current-work-heading,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-current-work-main {
+  color: var(--storm-text);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-current-work-heading-dot,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-current-work-count,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-current-work-remove,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-current-work-clear,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-current-work-exit {
+  color: var(--storm-secondary);
+  border-color: var(--storm-border);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-btn,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-icon-action,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-toolbar-button,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-scroll-button,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-list-button,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .native-provider-control {
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-btn-primary,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-primary-action,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .native-provider-control--primary,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-worktree-prompt-action-primary {
+  background: var(--storm-solid);
+  color: var(--storm-on-solid);
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-btn-primary:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-primary-action:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .native-provider-control--primary:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-worktree-prompt-action-primary:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]) {
+  background: var(--storm-solid-hover);
+  color: var(--storm-on-solid);
+  filter: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-input,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-config-modal .ui-input,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-search-shell,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-history-search-shell,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-search-focus-shell {
+  border-color: var(--storm-control-border);
+  border-radius: 6px;
+  background: var(--storm-raised);
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-input:focus-visible,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-config-modal .ui-input:focus-within,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-search-shell:focus-within,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-history-search-shell:focus-within,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-search-focus-shell:focus-within {
+  border-color: var(--storm-solid);
+  box-shadow: 0 0 0 1px var(--storm-solid);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .context-menu:not(.terminal-context-menu):not(.ui-file-editor-tab-menu),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-select-popover:not(.git-workspace-repository-menu) {
+  background: var(--storm-raised);
+  border-color: var(--storm-border);
+  outline-color: var(--storm-border);
+  border-radius: 8px;
+  box-shadow: var(--storm-overlay-shadow);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .context-menu-item[data-highlighted] {
+  background: var(--storm-hover);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sort-item[data-tooltip]::after,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-file-tooltip[data-tooltip]::after {
+  background: var(--storm-raised);
+  color: var(--storm-text);
+  border-color: var(--storm-border);
+  box-shadow: var(--storm-overlay-shadow);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-empty-state::before {
+  background: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-empty-state-icon {
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-empty-state:not([data-tone="inverse"]):not(.ui-terminal-well .ui-empty-state) .ui-empty-state-icon {
+  background: var(--storm-raised);
+  border-color: var(--storm-border);
+  color: var(--storm-solid);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-history-sidebar-top,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-history-detail-top,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-file-editor-header,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-file-editor-tabs {
+  background: var(--storm-low);
+  border-color: var(--storm-border);
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-file-editor-header::after {
+  background: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-stats-panel::before {
+  background: none;
+}
+
+/* Action rails are application chrome; panel bodies keep their selected skin. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar {
+  background: var(--storm-bar);
+  color: var(--storm-secondary);
+  box-shadow: inset 1px 0 0 var(--storm-border);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-terminal-actions .ui-primary-action {
+  background: var(--storm-solid);
+  color: var(--storm-on-solid);
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-terminal-actions .ui-primary-action:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]) {
+  background: var(--storm-solid-hover);
+  color: var(--storm-on-solid);
+  box-shadow: none;
+}
+
+/* Header labels must not inherit a light content theme's dark foreground. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-file-editor-header,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-file-editor-header .text-on-surface,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-file-editor-header .text-on-surface-variant {
+  color: var(--storm-text);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-file-editor-header .text-text-muted,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-file-editor-tab {
+  color: var(--storm-muted);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-file-editor-tab:hover {
+  background: var(--storm-hover);
+  color: var(--storm-text);
+  border-color: transparent;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-file-editor-tab[data-active="true"] {
+  background: var(--storm-hover);
+  color: var(--storm-text);
+  border-color: var(--storm-border);
+}
+
+/* Stats content owns its skin; only the surrounding title chrome is recolored. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-stats-panel-header {
+  background: var(--storm-low);
+  color: var(--storm-text);
+  border-color: var(--storm-border);
+}
+
+/* Keyboard indicators remain opaque on selected controls. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-icon-action:focus-visible,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-toolbar-button:focus-visible,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-tree-project:focus-visible,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .sidebar-terminal-row:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--storm-solid);
+}
+
+/* Actual TerminalTabRow and navigation, not just the legacy sortable trigger.
+   Preserve tab drag/close/scroll geometry and project/status data. */
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-navigation,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-row,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-row-list,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-workspan-context-row {
+  background: var(--storm-bar);
+  color: var(--storm-muted);
+  --terminal-tab-accent: var(--storm-solid);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-row-item,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-workspan-context-button,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-navigation .ui-btn,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-navigation-empty {
+  background: var(--storm-bar);
+  color: var(--storm-muted);
+  border-color: var(--storm-border);
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-row-item:hover,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-workspan-context-button:hover,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-navigation .ui-btn:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]) {
+  background: var(--storm-hover);
+  color: var(--storm-text);
+  border-color: transparent;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-row-item[data-active="true"],
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-row-item[data-active="true"]:hover {
+  background: var(--storm-selected);
+  color: var(--storm-text);
+  border-color: transparent;
+  box-shadow: inset 0 2px 0 var(--storm-solid);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-row-main,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-row-title,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-row-close,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-row-scroll {
+  color: inherit;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-row-close:hover,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-row-scroll:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]) {
+  background: var(--storm-selected);
+  color: var(--storm-cyan);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-row-main:focus-visible,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-row-close:focus-visible,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-row-scroll:focus-visible,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-workspan-context-button:focus-visible {
+  outline-color: var(--storm-solid);
+  outline-style: solid;
+  outline-width: 2px;
+  outline-offset: -2px;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-workspan-context-button[data-selected="true"],
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-navigation .ui-terminal-navigation-chip[aria-current="page"],
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-tree-collapsed-item[data-selected="true"],
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-pinned-project-item[aria-selected="true"] {
+  background: var(--storm-selected);
+  color: var(--storm-cyan);
+  border-color: var(--storm-border);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-navigation-popup,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-navigation-drawer,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-simple-drag-overlay {
+  background: var(--storm-surface);
+  color: var(--storm-text);
+  border-color: var(--storm-border);
+  box-shadow: var(--storm-overlay-shadow);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-navigation-popup .ui-input,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-navigation-popup .ui-btn,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-navigation .ui-terminal-navigation-scope {
+  background: var(--storm-raised);
+  color: var(--storm-text);
+  border-color: var(--storm-border);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-navigation-result[aria-selected="true"] {
+  background: var(--storm-selected);
+  outline-color: var(--storm-cyan);
+}
+
+/* Both dock sides, text/icon modes and drag overlay use app chrome; no --term-*
+   mutation or independent panel-body skin override. Explicit descendants beat
+   terminal-action defaults even when terminalNavigation.css is loaded later. */
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-terminal-action-sidebar,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar[data-dock-side="left"],
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-drag-overlay {
+  background: var(--storm-bar);
+  color: var(--storm-muted);
+  box-shadow: inset 1px 0 0 var(--storm-border);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-terminal-action-sidebar .ui-toolbar-button,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-terminal-action-sidebar .ui-icon-action,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar .ui-toolbar-button,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar .ui-icon-action,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-drag-overlay .ui-toolbar-button,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-drag-overlay .ui-icon-action {
+  --terminal-action-color: var(--storm-muted);
+  background: transparent;
+  color: var(--storm-muted);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-terminal-action-sidebar .ui-toolbar-button:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]):not([data-active="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-terminal-action-sidebar .ui-icon-action:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]):not([data-active="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar .ui-toolbar-button:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]):not([data-active="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar .ui-icon-action:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]):not([data-active="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-drag-overlay .ui-toolbar-button:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]):not([data-active="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-drag-overlay .ui-icon-action:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]):not([data-active="true"]) {
+  --terminal-action-color: var(--storm-text);
+  background: var(--storm-hover);
+  color: var(--storm-text);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-terminal-action-sidebar .ui-toolbar-button[data-active="true"],
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-terminal-action-sidebar .ui-icon-action[data-active="true"],
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar .ui-toolbar-button[data-active="true"],
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar .ui-icon-action[data-active="true"],
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-drag-overlay .ui-toolbar-button[data-active="true"],
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-drag-overlay .ui-icon-action[data-active="true"] {
+  --terminal-action-color: var(--storm-cyan);
+  background: var(--storm-selected);
+  color: var(--storm-cyan);
+  border-color: var(--storm-border);
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-side-panel-frame,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-panel-header {
+  background: var(--storm-surface);
+  color: var(--storm-text);
+  border-color: var(--storm-border);
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-config-modal,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-collapsed-flyout,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-appearance-picker-popover,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-surface-card[role="dialog"] {
+  background: var(--storm-surface);
+  color: var(--storm-text);
+  border-color: var(--storm-border);
+  outline-color: var(--storm-border);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-file-editor-header,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-file-editor-tabs,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-history-sidebar-top,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-history-detail-top,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-stats-panel-header {
+  background: var(--storm-bar);
+  color: var(--storm-text);
+  border-color: var(--storm-border);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-btn-outline,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-segmented,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-select-popover:not(.git-workspace-repository-menu) [role="option"] {
+  background: var(--storm-surface);
+  color: var(--storm-text);
+  border-color: var(--storm-border);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-btn-outline:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-btn-ghost:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-flat-action:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-segmented-btn:hover,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-select-popover:not(.git-workspace-repository-menu) [role="option"][data-highlighted="true"] {
+  background: var(--storm-hover);
+  color: var(--storm-text);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-segmented-btn[data-active="true"],
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-icon-action[data-active="true"] {
+  background: var(--storm-selected);
+  color: var(--storm-cyan);
+  border-color: var(--storm-border);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-segmented-btn:focus-visible,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-btn:focus-visible,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-flat-action:focus-visible,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-tree-collapsed-item:focus-visible {
+  outline-color: var(--storm-solid);
+}
+
+/* Focus and group chrome for the real navigation controls and portals. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-navigation :focus-visible,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-navigation-popup :focus-visible,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-navigation-drawer :focus-visible {
+  outline-color: var(--storm-solid);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-workspan-project-chip,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-context-switcher {
+  background: var(--storm-bar);
+  color: var(--storm-muted);
+  border-color: var(--storm-border);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-workspan-project-chip[data-selected="true"],
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-context-switcher[data-state="open"] {
+  background: var(--storm-selected);
+  color: var(--storm-cyan);
+  border-color: var(--storm-border);
+}
+
+
+/* Horizontal pane toolbar and vertical rails both ignore local content colors.
+   Disabled controls retain their native opacity, hit-testing and lifecycle. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-terminal-actions .ui-toolbar-button,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-terminal-actions .ui-icon-action {
+  --terminal-action-color: var(--storm-muted);
+  background: transparent;
+  color: var(--storm-muted);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-terminal-actions .ui-toolbar-button:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]):not([data-active="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-terminal-actions .ui-icon-action:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]):not([data-active="true"]) {
+  --terminal-action-color: var(--storm-text);
+  background: var(--storm-hover);
+  color: var(--storm-text);
+  border-color: transparent;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-terminal-actions .ui-icon-action[data-active="true"] {
+  --terminal-action-color: var(--storm-cyan);
+  background: var(--storm-selected);
+  color: var(--storm-cyan);
+  border-color: var(--storm-border);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar .ui-icon-action:disabled,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar .ui-toolbar-button:disabled,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-row-scroll:disabled {
+  background: transparent;
+  color: var(--storm-muted);
+}
+
+/* Filled light-blue actions require dark labels, including Mantine's important
+   white label defaults. No override of destructive/success or CPU warning tones. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-btn-primary,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-btn-primary:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .native-provider-control--primary,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .native-provider-control--primary:hover:not([data-disabled]):not(:disabled),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-worktree-prompt-action-primary,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-terminal-actions .ui-primary-action {
+  --terminal-action-color: var(--storm-on-solid);
+  background: var(--storm-solid) !important;
+  color: var(--storm-on-solid) !important;
+  box-shadow: none;
+  filter: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-input,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-tree-inline-input {
+  background: var(--storm-raised);
+  color: var(--storm-text);
+  border-color: var(--storm-control-border);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-input::placeholder,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-tree-inline-input::placeholder {
+  color: var(--storm-secondary);
+  opacity: 1;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-tree-project,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-worktree-row:not([data-invalid="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-tree-collapsed-item,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-pinned-project-item {
+  color: var(--storm-text);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-tree-inline-input:focus-visible,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar .ui-icon-action:focus-visible,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar .ui-toolbar-button:focus-visible,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-worktree-row:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--storm-cyan);
+}
+
+/* Flat chrome has two resting levels: low for rails, surface for controls and
+   overlays. Hover/selection are states, not another permanent card layer. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-icon-action:not([data-active="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-toolbar-button:not([data-active="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-empty-state:not([data-tone="inverse"]):not(.ui-terminal-well .ui-empty-state) .ui-empty-state-icon {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-input,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-config-modal .ui-input,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-tree-inline-input,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-search-shell,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-history-search-shell,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-search-focus-shell,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .context-menu:not(.terminal-context-menu):not(.ui-file-editor-tab-menu),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-select-popover:not(.git-workspace-repository-menu) {
+  background: var(--storm-surface);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-icon-action:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]):not([data-active="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-toolbar-button:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]):not([data-active="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-navigation-result:hover:not([aria-selected="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .context-menu:not(.terminal-context-menu):not(.ui-file-editor-tab-menu) .context-menu-item:not(.danger):hover:not(:disabled):not([data-disabled]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .context-menu:not(.terminal-context-menu):not(.ui-file-editor-tab-menu) .context-menu-item:not(.danger)[data-highlighted]:not([data-disabled]) {
+  background: var(--storm-hover);
+  color: var(--storm-text);
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-file-editor-tab[data-active="true"],
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-file-editor-tab[data-active="true"]:hover,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-tab-trigger[data-selected="true"]:hover,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-tab-trigger[data-selected="true"]:hover {
+  background: var(--storm-selected);
+  color: var(--storm-text);
+  border-color: transparent;
+  box-shadow: inset 0 -2px 0 var(--storm-solid);
+}
+
+/* A ring is separate from selection. Outline never replaces the active tab's
+   single blue stripe and works on real buttons, treeitems and portal items. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] :is(.ui-btn, .ui-icon-action, .ui-toolbar-button, .ui-flat-action, .ui-segmented-btn, .ui-tab-trigger, .ui-current-work-item, .ui-tree-project, .ui-tree-collapsed-item, .ui-pinned-project-item, .ui-worktree-row, .sidebar-terminal-row, .ui-file-editor-tab, .ui-input, .ui-tree-inline-input):focus-visible,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .context-menu:not(.terminal-context-menu):not(.ui-file-editor-tab-menu) .context-menu-item:focus-visible {
+  outline-color: var(--storm-solid);
+  outline-style: solid;
+  outline-width: 2px;
+  outline-offset: -2px;
+}
+
+/* Disabled wins over hover/active without changing native opacity, cursor,
+   hit-testing or semantics. Mantine data-disabled is a presence attribute. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] :is(.ui-btn, .ui-icon-action, .ui-toolbar-button, .ui-flat-action, .ui-segmented-btn, .ui-terminal-tab-row-scroll, .ui-input, .ui-tree-inline-input):is(:disabled, [data-disabled], [aria-disabled="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-terminal-actions :is(.ui-icon-action, .ui-toolbar-button):is(:disabled, [data-disabled], [aria-disabled="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .context-menu:not(.terminal-context-menu):not(.ui-file-editor-tab-menu) .context-menu-item:is(:disabled, [data-disabled], [aria-disabled="true"]) {
+  --terminal-action-color: var(--storm-muted);
+  background: transparent;
+  color: var(--storm-muted);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* Only recolor the existing focus marker's strokes. PaneLeafView emits it only
+   when the user enables markers in a visible split; full/tab-top geometry,
+   user hook colors, stroke width and focus opacity remain owned by that API.
+   No pane backdrop, pseudo overlay or inactive-pane dimming is introduced. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-marker[data-marker-style="full"][data-marker-status="focus"] > span,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-marker[data-marker-style="tab-top"][data-marker-status="focus"] > span {
+  background: var(--storm-solid);
+}
+
+/* FileEditorTabs sets active colors inline; its buttons own keyboard focus. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-file-editor-tab[data-active="true"] {
+  background: var(--storm-selected) !important;
+  color: var(--storm-text) !important;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-file-editor-tab button:focus-visible {
+  outline-color: var(--storm-solid);
+  outline-style: solid;
+  outline-width: 2px;
+  outline-offset: -2px;
+}
+
+/* Keep filled-button disabled and hover states above their important labels. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-btn-primary:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .native-provider-control--primary:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-terminal-actions .ui-primary-action:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]) {
+  background: var(--storm-solid-hover) !important;
+  color: var(--storm-on-solid) !important;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] :is(.ui-btn-primary, .native-provider-control--primary, .ui-worktree-prompt-action-primary):is(:disabled, [data-disabled], [aria-disabled="true"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-terminal-actions .ui-primary-action:is(:disabled, [data-disabled], [aria-disabled="true"]) {
+  background: var(--storm-surface) !important;
+  color: var(--storm-muted) !important;
+  --terminal-action-color: var(--storm-muted);
+  box-shadow: none;
+}
+
+/* Right rail blends into the terminal; keep docking geometry and focus rules. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-terminal-action-sidebar:not([data-dock-side="left"]),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar:not([data-dock-side="left"]) {
+  background: var(--storm-surface);
+  border-color: transparent;
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--storm-border) 45%, transparent);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-terminal-action-sidebar:not([data-dock-side="left"]) :is(.ui-icon-action, .ui-toolbar-button)[data-active="true"]:not(:disabled):not([data-disabled]):not([aria-disabled="true"]) {
+  --terminal-action-color: var(--storm-solid);
+  background: transparent;
+  color: var(--storm-solid);
+  border-color: transparent;
+  box-shadow: inset 2px 0 0 var(--storm-solid);
+}

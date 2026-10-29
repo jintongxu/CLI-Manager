@@ -10,11 +10,12 @@ import { singleFlight } from "../../../shared/lib/singleFlight";
 import { isValidSshAttachmentRoot, normalizeSshAttachmentRoot } from "../../remote/api/sshAttachment";
 import { validateSshToolConfigRoot } from "../../remote/api/sshToolIntegration";
 import { pickSyncableSettings, SYNCABLE_SETTING_KEYS, type SyncableSettingKey } from "../lib/syncSettings";
+import { readBackupPreferences } from "../lib/backupSettingsSnapshot";
 import { sanitizeThirdPartyHookTargets } from "../../../shared/lib/thirdPartyNotifications";
 import { useBackgroundOperationStore } from "../../terminal/api/backgroundOperationStore";
 import { useModelPricingStore } from "../../stats/api/modelPricingStore";
 import { useProjectStore } from "../../projects/api/projectStore";
-import { useSettingsStore } from "../../../shared/preferences/settingsStore";
+import { useSettingsStore, normalizeExitWithRunningTasksBehavior } from "../../../shared/preferences/settingsStore";
 import { useSshHostStore } from "../../remote/api/sshHostStore";
 import { useWorktreeStore } from "../../projects/api/worktreeStore";
 import { MAX_WORKTREE_LABEL_ORDINAL, normalizeWorktreeShortLabel } from "../../projects/api/worktreeLabels";
@@ -224,7 +225,7 @@ async function collectBackupData(db: Awaited<ReturnType<typeof getDb>>): Promise
       worktrees,
       commandTemplates,
     },
-    preferences: pickSyncableSettings(settings as unknown as Record<string, unknown>) as Record<string, unknown>,
+    preferences: readBackupPreferences() as Record<string, unknown>,
     modelPrices,
     notifications: {
       enabled: settings.thirdPartyHookNotificationsEnabled,
@@ -363,7 +364,8 @@ function sanitizePortableSshHost(host: Record<string, unknown>): Record<string, 
 async function applyPreferences(preferences: Record<string, unknown>) {
   for (const key of SYNCABLE_SETTING_KEYS) {
     if (!Object.prototype.hasOwnProperty.call(preferences, key)) continue;
-    await useSettingsStore.getState().update(key as SyncableSettingKey, preferences[key] as never);
+    await useSettingsStore.getState().update(key as SyncableSettingKey, (key === "exitWithRunningTasksBehavior"
+      ? normalizeExitWithRunningTasksBehavior(preferences[key]) : preferences[key]) as never);
   }
   await useSettingsStore.getState().load();
 }

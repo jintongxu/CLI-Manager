@@ -32,7 +32,7 @@ pub(super) fn spawn_log_reader<R: Read + Send + 'static>(
     logs: Arc<Mutex<CcConnectLogBuffer>>,
     writer: SharedLogWriter,
     secrets: Arc<Vec<String>>,
-) {
+) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
         let mut reader = reader;
         let mut chunk = [0u8; 4 * 1024];
@@ -73,7 +73,7 @@ pub(super) fn spawn_log_reader<R: Read + Send + 'static>(
                 }
             }
         }
-    });
+    })
 }
 
 // 将捕获字节解码并附加截断标记，忽略完全空的记录。

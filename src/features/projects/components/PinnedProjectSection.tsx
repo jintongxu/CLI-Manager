@@ -2,7 +2,8 @@ import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { Project } from "../../../shared/types/index";
 import { useI18n } from "../../../shared/i18n/index";
 import { AlertTriangle, ChevronRight, Folder, Pin, Play, Sparkles } from "../../../shared/ui/icons";
-import { NodeAppearanceIcon } from "../api/NodeAppearanceIcon";
+import { ProjectIdentityIcon } from "./ProjectIdentityIcon";
+import { useProjectDisplay } from "../hooks/useProjectDisplay";
 import { resolveNodeAppearance } from "../api/nodeAppearance";
 import { ProviderBadgeChip, preventSecondaryPointerFocus } from "./TreeNodeItem";
 import { useTreeActions } from "./TreeContext";
@@ -78,6 +79,7 @@ function PinnedProjectItem({ project, density }: { project: Project; density: "c
   const compact = density === "compact";
   const selected = actions.selectedId === project.id || actions.selectedProjectIds.has(project.id);
   const status = actions.getProjectStatus(project.id);
+  const display = useProjectDisplay(project, status);
   const terminalCount = actions.getProjectTerminalCount(project.id);
   const pathInvalid = actions.isPathInvalid(project.id);
   const projectPinned = actions.isProjectPinned(project.id);
@@ -108,7 +110,7 @@ function PinnedProjectItem({ project, density }: { project: Project; density: "c
       data-tree-key={"pin:p:" + project.id}
       aria-level={1}
       aria-selected={selected}
-      aria-label={t("sidebar.pinned.openProject", { name: project.name })}
+      aria-label={t("sidebar.pinned.openProject", { name: display.label })}
       tabIndex={0}
       onKeyDown={handleKeyDown}
       onPointerDownCapture={preventSecondaryPointerFocus}
@@ -122,7 +124,7 @@ function PinnedProjectItem({ project, density }: { project: Project; density: "c
         data-invalid={pathInvalid ? "true" : "false"}
         data-accent={appearance.hasColor ? "true" : undefined}
         style={rowStyle}
-        title={project.path}
+        title={display.tooltip}
         onMouseDown={(event) => {
           if (event.button === 2) event.preventDefault();
         }}
@@ -130,16 +132,14 @@ function PinnedProjectItem({ project, density }: { project: Project; density: "c
         onContextMenu={(event) => actions.onContextMenuProject(event, project, true)}
       >
         <span className="ui-tree-leading-icon">
-          <NodeAppearanceIcon
+          <ProjectIdentityIcon
             mark={appearance.emoji}
             iconKey={appearance.iconKey}
-            cliTool={project.cli_tool}
-            fallback="folder"
             size={14}
           />
         </span>
         <span className="flex min-w-0 flex-1 items-center gap-1.5">
-          <span className="block truncate font-medium">{project.name}</span>
+          <span className="block truncate font-medium">{display.label}</span>
           {project.environment_type === "ssh" && !project.ssh_host_id && (
             <span
               className="ui-tree-warning-chip inline-flex shrink-0 items-center justify-center rounded-full"
@@ -153,8 +153,8 @@ function PinnedProjectItem({ project, density }: { project: Project; density: "c
           {terminalCount > 0 && (
             <span
               className="ui-tree-meta-chip inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[10px] leading-none"
-              title={t("sidebar.tree.terminalCount", { count: terminalCount })}
-              aria-label={t("sidebar.tree.terminalCount", { count: terminalCount })}
+              title={t("sidebar.display.sessionCount", { count: terminalCount })}
+              aria-label={t("sidebar.display.sessionCount", { count: terminalCount })}
             >
               {terminalCount}
             </span>

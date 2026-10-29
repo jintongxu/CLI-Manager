@@ -1,10 +1,7 @@
 use super::{now_millis, DEFAULT_MAX_TURN_TIME_MINS, MAX_LOG_LINES};
-#[cfg(target_os = "windows")]
-use crate::process_job::ChildJob;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::path::PathBuf;
-use std::process::Child;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -364,21 +361,18 @@ pub(super) struct DetectionCache {
 }
 
 pub(super) struct ManagedProcess {
-    pub(super) child: Child,
-    #[cfg(target_os = "windows")]
-    pub(super) job: ChildJob,
+    pub(super) readers: Vec<std::thread::JoinHandle<()>>,
+    pub(super) owned: super::exit_process::OwnedProcess,
     pub(super) started_at_ms: i64,
 }
 
 pub(super) struct WeixinAuthorizationProcess {
-    pub(super) child: Child,
+    pub(super) owned: super::exit_process::OwnedProcess,
     pub(super) profile: CcConnectProfile,
     pub(super) config_path: PathBuf,
     pub(super) qr_path: PathBuf,
     pub(super) stdout_path: PathBuf,
     pub(super) stderr_path: PathBuf,
-    #[cfg(target_os = "windows")]
-    pub(super) job: ChildJob,
     pub(super) started_at_ms: i64,
 }
 

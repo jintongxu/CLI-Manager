@@ -1,3 +1,5 @@
+pub(crate) mod exit_process;
+mod exit_cleanup;
 mod model;
 use model::{
     agent_from_launcher_program, cc_connect_agent_from_cli_tool, parse_registered_command,
@@ -102,8 +104,6 @@ use logging::{format_and_check_config_syntax, push_log_line, spawn_log_reader};
 
 #[cfg(not(target_os = "windows"))]
 use crate::codex_app_server_proxy::HELPER_SUBCOMMAND as CODEX_PROXY_SUBCOMMAND;
-#[cfg(target_os = "windows")]
-use crate::process_job::ChildJob;
 use crate::shell_resolver::{output_with_timeout, silent_command};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -190,6 +190,7 @@ const VERIFIED_V1_4_1_BINARY_SHA256: &[&str] = &[
 #[derive(Clone)]
 pub struct CcConnectManager {
     operation: Arc<Mutex<()>>,
+    exit_fenced: Arc<std::sync::atomic::AtomicBool>,
     process: Arc<Mutex<ProcessState>>,
     logs: Arc<Mutex<CcConnectLogBuffer>>,
     log_writer: SharedLogWriter,
@@ -207,6 +208,7 @@ impl Default for CcConnectManager {
         }
         Self {
             operation: Arc::new(Mutex::new(())),
+            exit_fenced: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             process: Arc::new(Mutex::new(ProcessState::default())),
             logs: Arc::new(Mutex::new(CcConnectLogBuffer::default())),
             log_writer: Arc::new(Mutex::new(None)),
@@ -333,33 +335,14 @@ impl CcConnectManager {
 
     // 轮询受管子进程退出状态并记录退出时间和日志。
     fn refresh_process_state(&self) {
-        let exited = {
-            let Ok(mut state) = self.process.lock() else {
-                return;
-            };
-            let Some(process) = state.process.as_mut() else {
-                return;
-            };
-            match process.child.try_wait() {
-                Ok(Some(status)) => {
-                    let code = status.code();
-                    state.process.take();
-                    state.last_exit_code = code;
-                    state.last_exit_at_ms = Some(now_millis());
-                    Some(code)
-                }
-                Ok(None) => None,
-                Err(err) => {
-                    state.process.take();
-                    state.last_exit_code = None;
-                    state.last_exit_at_ms = Some(now_millis());
-                    self.append_system_log(format!("failed to inspect cc-connect process: {err}"));
-                    Some(None)
-                }
-            }
-        };
-        if let Some(code) = exited {
-            self.append_system_log(format!("cc-connect exited (code={code:?})"));
+        let Ok(mut state) = self.process.lock() else { return; };
+        let Some(process) = state.process.as_mut() else { return; };
+        if process.owned.complete() == Ok(true) && process.readers.iter().all(|r| r.is_finished()) {
+            let code = process.owned.child.try_wait().ok().flatten().and_then(|s| s.code());
+            for reader in process.readers.drain(..) { let _ = reader.join(); }
+            state.process = None;
+            state.last_exit_code = code;
+            state.last_exit_at_ms = Some(now_millis());
         }
     }
 
@@ -501,6 +484,7 @@ impl CcConnectManager {
             .operation
             .lock()
             .map_err(|_| "cc-connect operation lock poisoned".to_string())?;
+        self.check_exit_fence()?;
         self.refresh_process_state();
         {
             let state = self
@@ -585,34 +569,15 @@ impl CcConnectManager {
             .stdout(Stdio::from(stdout))
             .stderr(Stdio::from(stderr));
         apply_proxy_environment(&mut command, profile.proxy_enabled, proxy.as_ref());
-        let mut child = command
-            .spawn()
-            .map_err(|err| format!("start Weixin authorization failed: {err}"))?;
-        #[cfg(target_os = "windows")]
-        let job = match ChildJob::assign(&child, "Weixin authorization") {
-            Ok(job) => job,
-            Err(err) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                cleanup_weixin_authorization_files([
-                    &config_path,
-                    &qr_path,
-                    &stdout_path,
-                    &stderr_path,
-                ]);
-                return Err(err);
-            }
-        };
+        let owned = exit_process::OwnedProcess::spawn(&mut command)?;
         let started_at_ms = now_millis();
         let process = WeixinAuthorizationProcess {
-            child,
+            owned,
             profile,
             config_path,
             qr_path,
             stdout_path,
             stderr_path,
-            #[cfg(target_os = "windows")]
-            job,
             started_at_ms,
         };
         let status = CcConnectWeixinAuthorizationStatus {
@@ -729,7 +694,7 @@ impl CcConnectManager {
             WeixinAuthorizationState::Running(process) => {
                 let qr_data_url =
                     weixin_authorization_qr_data_url(&process.qr_path).unwrap_or(None);
-                match process.child.try_wait() {
+                match process.owned.child.try_wait() {
                     Ok(None) => Ok(CcConnectWeixinAuthorizationStatus {
                         phase: if qr_data_url.is_some() {
                             CcConnectWeixinAuthorizationPhase::Waiting
@@ -743,10 +708,11 @@ impl CcConnectManager {
                         started_at_ms: Some(process.started_at_ms),
                     }),
                     exit_result => {
+                        process.owned.stop_until(std::time::Instant::now() + Duration::from_secs(3))?;
                         let state = authorization
                             .take()
                             .ok_or_else(|| "Weixin authorization state is missing".to_string())?;
-                        let WeixinAuthorizationState::Running(mut process) = state else {
+                        let WeixinAuthorizationState::Running(process) = state else {
                             return Err("Weixin authorization state is invalid".to_string());
                         };
                         drop(authorization);
@@ -760,10 +726,6 @@ impl CcConnectManager {
                             ),
                             Ok(None) => unreachable!(),
                             Err(err) => {
-                                #[cfg(target_os = "windows")]
-                                process.job.terminate();
-                                let _ = process.child.kill();
-                                let _ = process.child.wait();
                                 self.failed_weixin_authorization(
                                     process,
                                     format!("inspect Weixin authorization failed: {err}"),
@@ -792,13 +754,13 @@ impl CcConnectManager {
             .weixin_authorization
             .lock()
             .map_err(|_| "Weixin authorization lock poisoned".to_string())?;
+        if let Some(WeixinAuthorizationState::Running(process)) = authorization.as_mut() {
+            process.owned.stop_until(std::time::Instant::now() + Duration::from_secs(3))?;
+        }
         let state = authorization.take();
         let started_at_ms = match state {
-            Some(WeixinAuthorizationState::Running(mut process)) => {
-                #[cfg(target_os = "windows")]
-                process.job.terminate();
-                let _ = process.child.kill();
-                let _ = process.child.wait();
+            Some(WeixinAuthorizationState::Running(process)) => {
+
                 cleanup_weixin_authorization_files([
                     &process.config_path,
                     &process.qr_path,
@@ -1044,7 +1006,7 @@ impl CcConnectManager {
             .lock()
             .map_err(|_| "cc-connect process lock poisoned".to_string())?;
         let running = process.process.is_some();
-        let pid = process.process.as_ref().map(|process| process.child.id());
+        let pid = process.process.as_ref().map(|process| process.owned.child.id());
         let started_at_ms = process
             .process
             .as_ref()
@@ -1090,6 +1052,7 @@ impl CcConnectManager {
 
     // 设置启动标记并准备进程，成功后登记进程，失败时清除标记。
     fn start_inner(&self) -> Result<(), String> {
+        self.check_exit_fence()?;
         self.refresh_process_state();
         {
             let mut state = self
@@ -1233,55 +1196,36 @@ impl CcConnectManager {
         // cc-connect app-server children merge the managed process environment,
         // so the existing Hook executable can report remote task state to the daemon.
         handoff_notification::apply_hook_environment(&mut command);
-        let mut child = command
-            .spawn()
-            .map_err(|err| format!("spawn cc-connect failed: {err}"))?;
-        #[cfg(target_os = "windows")]
-        let job = match ChildJob::assign(&child, "cc-connect") {
-            Ok(job) => job,
-            Err(err) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(err);
-            }
-        };
+        let mut owned = exit_process::OwnedProcess::spawn(&mut command)?;
+        let child = &mut owned.child;
+        let mut readers = Vec::new();
         if profile.logging_enabled {
             let stdout = child.stdout.take();
             let stderr = child.stderr.take();
             let secrets = Arc::new(secrets);
             if let Some(stdout) = stdout {
-                spawn_log_reader(
+                readers.push(spawn_log_reader(
                     stdout,
                     "stdout",
                     self.logs.clone(),
                     self.log_writer.clone(),
                     secrets.clone(),
-                );
+                ));
             }
             if let Some(stderr) = stderr {
-                spawn_log_reader(
+                readers.push(spawn_log_reader(
                     stderr,
                     "stderr",
                     self.logs.clone(),
                     self.log_writer.clone(),
                     secrets,
-                );
+                ));
             }
         }
-        std::thread::sleep(Duration::from_millis(350));
-        if let Some(status) = child
-            .try_wait()
-            .map_err(|err| format!("inspect cc-connect startup failed: {err}"))?
-        {
-            return Err(format!(
-                "cc-connect exited during startup (code={:?})",
-                status.code()
-            ));
-        }
+        // Register ownership before any fallible startup observation.
         Ok(ManagedProcess {
-            child,
-            #[cfg(target_os = "windows")]
-            job,
+            owned,
+            readers,
             started_at_ms: now_millis(),
         })
     }
@@ -1297,56 +1241,7 @@ impl CcConnectManager {
 
     // 取出并终止受管进程，Windows 限时等待后记录退出状态。
     fn stop_inner(&self) -> Result<(), String> {
-        self.refresh_process_state();
-        let mut process = {
-            let mut state = self
-                .process
-                .lock()
-                .map_err(|_| "cc-connect process lock poisoned".to_string())?;
-            if state.starting {
-                return Err("cc-connect is still starting".to_string());
-            }
-            state.process.take()
-        };
-        let Some(mut process) = process.take() else {
-            return Ok(());
-        };
-        #[cfg(target_os = "windows")]
-        process.job.terminate();
-        let _ = process.child.kill();
-        #[cfg(target_os = "windows")]
-        let status = {
-            let deadline = std::time::Instant::now() + Duration::from_secs(3);
-            loop {
-                match process.child.try_wait() {
-                    Ok(Some(status)) => break Some(status),
-                    Ok(None) if std::time::Instant::now() < deadline => {
-                        std::thread::sleep(Duration::from_millis(50))
-                    }
-                    Ok(None) => {
-                        self.append_system_log("cc-connect stop timed out; closing the Job Object");
-                        break None;
-                    }
-                    Err(err) => {
-                        self.append_system_log(format!("inspect cc-connect stop failed: {err}"));
-                        break None;
-                    }
-                }
-            }
-        };
-        #[cfg(not(target_os = "windows"))]
-        let status = process.child.wait().ok();
-        let exit_code = status.as_ref().and_then(|status| status.code());
-        {
-            let mut state = self
-                .process
-                .lock()
-                .map_err(|_| "cc-connect process lock poisoned".to_string())?;
-            state.last_exit_code = exit_code;
-            state.last_exit_at_ms = Some(now_millis());
-        }
-        self.append_system_log(format!("cc-connect stopped (code={exit_code:?})"));
-        Ok(())
+        self.stop_service_until(std::time::Instant::now() + Duration::from_secs(3))
     }
 
     // 在同一操作锁内停止并重新启动受管进程。
@@ -1443,11 +1338,8 @@ impl CcConnectManager {
 
     // 退出时取消微信授权并停止主进程，将清理失败写入日志。
     pub fn shutdown(&self) {
-        if let Err(err) = self.cancel_weixin_authorization() {
-            log::warn!("Weixin authorization shutdown cleanup failed: {err}");
-        }
-        if let Err(err) = self.stop() {
-            log::warn!("cc-connect shutdown cleanup failed: {err}");
+        if let Err(error) = self.stop_for_exit(std::time::Instant::now() + Duration::from_secs(5)) {
+            log::warn!("cc-connect exit cleanup: {error}");
         }
     }
 }

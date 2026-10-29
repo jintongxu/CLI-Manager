@@ -175,3 +175,18 @@ async fn starts_reuses_serves_and_stops_project_server() {
     assert_eq!(manager.status(root).unwrap(), None);
     assert_listener_closed(port).await;
 }
+
+#[test]
+fn exit_fence_stops_listener_and_watcher_without_touching_files() {
+    let root = tempdir().unwrap();
+    fs::write(root.path().join("index.html"), "fixture").unwrap();
+    let manager = LiveServerManager::new();
+    let session = manager.start(root.path().to_string_lossy().into_owned(), "index.html".into()).unwrap();
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    manager.prepare_exit(deadline).unwrap();
+    assert!(manager.start(root.path().to_string_lossy().into_owned(), "index.html".into()).is_err());
+    assert_eq!(manager.stop_for_exit(deadline).unwrap(), "worker_joined");
+    assert!(std::net::TcpStream::connect(("127.0.0.1", session.session.port)).is_err());
+    assert_eq!(fs::read_to_string(root.path().join("index.html")).unwrap(), "fixture");
+    manager.resume_after_exit();
+}

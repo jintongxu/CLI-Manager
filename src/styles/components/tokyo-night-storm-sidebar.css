@@ -1,0 +1,104 @@
+/* Storm project navigation only. Keep source-owned IDs, depth/indentation,
+   row metrics, user accent marks and lifecycle/warning colors unchanged.
+   This follows the general Storm chrome to beat legacy group/open selectors. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-shell :is(.ui-tree-project, .ui-tree-group, .ui-tree-collapsed-item, .ui-pinned-project-item, .sidebar-terminal-row) {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--storm-text);
+}
+
+/* Expanded is hierarchy, not selection. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-shell .ui-tree-group[data-open="true"] {
+  background: transparent;
+  border-color: transparent;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-shell :is(.ui-tree-project, .ui-tree-group, .ui-tree-collapsed-item, .ui-pinned-project-item, .sidebar-terminal-row):hover {
+  background: var(--storm-hover);
+  border-color: transparent;
+  transform: none;
+}
+
+/* One selected fill/stripe, stable on hover and expanded groups. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-shell :is(.ui-tree-project, .ui-tree-group, .ui-tree-collapsed-item, .sidebar-terminal-row)[data-selected="true"],
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-shell :is(.ui-tree-project, .ui-tree-group, .ui-tree-collapsed-item, .sidebar-terminal-row)[data-selected="true"]:hover,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-shell .ui-tree-group[data-selected="true"][data-open="true"],
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-shell .ui-pinned-project-item[aria-selected="true"],
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-shell .ui-pinned-project-item[aria-selected="true"]:hover {
+  background: var(--storm-selected);
+  border-color: transparent;
+  box-shadow: inset 2px 0 0 var(--storm-solid);
+}
+
+/* A user color already owns the left marker; do not stack a blue one on it. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-shell .ui-tree-node[data-accent="true"][data-selected="true"] {
+  box-shadow: none;
+}
+
+/* Drop target is actionable feedback, not an expanded-group decoration. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-shell .ui-tree-group[data-drop-target="true"] {
+  background: var(--storm-hover);
+  border-color: var(--storm-solid);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-shell :is(.sidebar-terminal-list, .sidebar-terminal-row)::before {
+  background: color-mix(in srgb, var(--storm-border) 45%, transparent);
+}
+
+/* Remove repeated boxes/glows, not the status colors or the status itself.
+   Invalid worktree icons deliberately keep their danger surface. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-shell :is(.ui-tree-meta-chip, .ui-tree-provider-chip, .sidebar-terminal-icon),
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-shell .ui-worktree-row:not([data-invalid="true"]) .ui-worktree-tree-icon {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-shell .ui-tree-meta-chip {
+  color: var(--storm-secondary);
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-shell .ui-tree-status-dot {
+  box-shadow: none;
+  transform: none;
+}
+
+/* Visibility:hidden and the legacy group's Tailwind hidden utility prevent
+   keyboard entry. Reserve the existing action slot; opacity alone is visual.
+   A keyboard focus reveals the whole slot before an action is activated. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-shell .ui-tree-item-actions {
+  display: flex;
+  visibility: visible;
+  opacity: 0;
+  pointer-events: none;
+  transform: none;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-shell :is(.ui-tree-node, .ui-pinned-project-item):is(:hover, :focus-within) .ui-tree-item-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-shell .ui-tree-item-actions .icon-btn {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Use outline, not a replacement shadow, so focus and selection coexist. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-shell :is(.ui-tree-node, .ui-tree-collapsed-item, .ui-pinned-project-item, .sidebar-terminal-row, .ui-tree-item-actions .icon-btn):focus-visible {
+  outline: 2px solid var(--storm-solid) !important;
+  outline-offset: -2px;
+}
+
+/* Invalid project borders and warning chips must survive neutral row chrome. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-shell .ui-tree-project[data-invalid="true"]:not([data-selected="true"]) {
+  border-color: color-mix(in srgb, var(--danger) 22%, transparent);
+}
+
+@media (hover: none), (pointer: coarse) {
+  [data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-sidebar-shell .ui-tree-item-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}

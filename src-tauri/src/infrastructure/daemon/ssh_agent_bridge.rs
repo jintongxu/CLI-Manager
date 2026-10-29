@@ -142,6 +142,10 @@ struct BridgeControl {
     connected: AtomicBool,
     pending_requests: AtomicUsize,
     child: Mutex<Option<Child>>,
+    readers: Mutex<Vec<thread::JoinHandle<()>>>,
+    cleanup_failed: AtomicBool,
+    #[cfg(windows)]
+    job: Mutex<Option<crate::process_job::ChildJob>>,
 }
 
 impl BridgeControl {
@@ -154,6 +158,10 @@ impl BridgeControl {
             connected: AtomicBool::new(false),
             pending_requests: AtomicUsize::new(0),
             child: Mutex::new(None),
+            readers: Mutex::new(Vec::new()),
+            cleanup_failed: AtomicBool::new(false),
+            #[cfg(windows)]
+            job: Mutex::new(None),
         }
     }
 
@@ -197,14 +205,51 @@ impl BridgeControl {
         self.terminate_current_child();
     }
 
-    // 取出子进程后终止并等待退出，锁异常或空槽时跳过。
+    // Never take the root out of its retained slot before successful reap.
     fn terminate_current_child(&self) {
-        if let Ok(mut child) = self.child.lock() {
-            if let Some(mut child) = child.take() {
-                terminate_child(&mut child);
-            }
-        }
+        let _ = self.cleanup_until(Instant::now() + Duration::from_secs(2));
     }
+
+    fn cleanup_until(&self, deadline: Instant) -> Result<(), String> {
+        #[cfg(windows)]
+        if let Some(job) = self.job.try_lock().map_err(|_| "ssh_job_state_failed")?.as_ref() {
+            job.terminate_checked()?;
+            job.wait_empty(deadline)?;
+        }
+        let mut slot = self.child.try_lock().map_err(|_| "ssh_child_state_failed")?;
+        if let Some(child) = slot.as_mut() {
+            if child.try_wait().map_err(|_| "ssh_reap_failed")?.is_none() {
+                child.kill().map_err(|_| "ssh_kill_failed")?;
+                loop {
+                    if child.try_wait().map_err(|_| "ssh_reap_failed")?.is_some() { break; }
+                    if Instant::now() >= deadline { return Err("ssh_root_timeout".into()); }
+                    thread::sleep(Duration::from_millis(10));
+                }
+            }
+            *slot = None;
+        }
+        drop(slot);
+        let mut readers = self.readers.try_lock().map_err(|_| "ssh_readers_unavailable")?;
+        while !readers.is_empty() {
+            let mut index = 0;
+            while index < readers.len() {
+                if readers[index].is_finished() {
+                    if readers.remove(index).join().is_err() { self.cleanup_failed.store(true, Ordering::Release); }
+                } else { index += 1; }
+            }
+            if readers.is_empty() { break; }
+            if Instant::now() >= deadline { return Err("ssh_reader_timeout".into()); }
+            thread::sleep(Duration::from_millis(10));
+        }
+        if self.cleanup_failed.load(Ordering::Acquire) { return Err("ssh_reader_panicked".into()); }
+        Ok(())
+    }
+
+    fn retain_failed_child(&self, child: Child) {
+        *self.child.lock().unwrap_or_else(|e| e.into_inner()) = Some(child);
+        self.terminate_current_child();
+    }
+
 }
 
 struct BridgeIdleReservation<'a> {
@@ -216,12 +261,6 @@ impl Drop for BridgeIdleReservation<'_> {
     fn drop(&mut self) {
         self.control.release_request();
     }
-}
-
-// 尝试杀死子进程并等待退出，忽略清理阶段的错误。
-fn terminate_child(child: &mut Child) {
-    let _ = child.kill();
-    let _ = child.wait();
 }
 
 struct BridgeEntry {
@@ -482,6 +521,8 @@ impl EventDedup {
 #[derive(Default)]
 pub struct SshAgentBridgeManager {
     bridges: Mutex<HashMap<String, BridgeEntry>>,
+    workers: Mutex<Vec<(Arc<BridgeControl>, thread::JoinHandle<()>)>>,
+    worker_failed: AtomicBool,
     resume_claims: Mutex<HashMap<String, String>>,
 }
 
@@ -588,7 +629,7 @@ impl SshAgentBridgeManager {
             replaced_control.stop();
         }
         let thread_lane = lane;
-        thread::spawn(move || {
+        let worker = thread::spawn(move || {
             run_bridge_loop(
                 host,
                 thread_plan,
@@ -597,6 +638,7 @@ impl SshAgentBridgeManager {
                 thread_lane,
             )
         });
+        self.workers.lock().unwrap().push((Arc::clone(&control), worker));
         Some(BridgeHandle {
             slot,
             request_sender,
@@ -1584,6 +1626,8 @@ fn run_bridge_once_inner(
 ) -> Result<(), String> {
     let connect_permit = CounterPermit::acquire(&CONNECT_LIMIT, MAX_CONCURRENT_CONNECTS, control)
         .ok_or_else(|| "ssh_agent_bridge_stopped".to_string())?;
+    // A previous failed attempt must be completely reaped before replacing its slots.
+    control.cleanup_until(Instant::now() + Duration::from_secs(2))?;
     let launch = plan.build_agent_bridge_launch()?;
     let mut command = silent_command(&launch.executable);
     command
@@ -1592,37 +1636,33 @@ fn run_bridge_once_inner(
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    let mut child = command
-        .spawn()
-        .map_err(|_| "ssh_agent_bridge_spawn_failed".to_string())?;
+    let mut child = owned_shutdown::spawn(&mut command, control)?;
     let Some(stdin) = child.stdin.take() else {
-        terminate_child(&mut child);
+        control.retain_failed_child(child);
         return Err("ssh_agent_bridge_stdin_missing".to_string());
     };
     let Some(stdout) = child.stdout.take() else {
-        terminate_child(&mut child);
+        control.retain_failed_child(child);
         return Err("ssh_agent_bridge_stdout_missing".to_string());
     };
     let stderr = child.stderr.take();
     let stderr_output = Arc::new(Mutex::new(Vec::new()));
-    let stderr_handle =
-        stderr.map(|stderr| spawn_stderr_reader(stderr, Arc::clone(&stderr_output)));
+    if let Some(stderr) = stderr {
+        control.readers.lock().unwrap().push(spawn_stderr_reader(stderr, Arc::clone(&stderr_output)));
+    }
     let Ok(mut child_slot) = control.child.lock() else {
-        terminate_child(&mut child);
+        control.retain_failed_child(child);
         return Err("ssh_agent_bridge_state_failed".to_string());
     };
     *child_slot = Some(child);
     drop(child_slot);
     if control.stop.load(Ordering::Acquire) {
         control.terminate_current_child();
-        if let Some(stderr_handle) = stderr_handle {
-            let _ = stderr_handle.join();
-        }
         return Err("ssh_agent_bridge_stopped".to_string());
     }
 
     let (reader_sender, reader_receiver) = mpsc::sync_channel(READER_QUEUE_CAPACITY);
-    let reader_handle = spawn_reader(stdout, reader_sender);
+    control.readers.lock().unwrap().push(spawn_reader(stdout, reader_sender));
     let result = (|| {
         let mut writer = BufWriter::new(stdin);
         let handshake_timeout = Duration::from_secs(plan.connect_timeout_sec.saturating_add(10))
@@ -1825,11 +1865,7 @@ fn run_bridge_once_inner(
 
     control.connected.store(false, Ordering::Release);
     drop(reader_receiver);
-    control.terminate_current_child();
-    let _ = reader_handle.join();
-    if let Some(stderr_handle) = stderr_handle {
-        let _ = stderr_handle.join();
-    }
+    control.cleanup_until(Instant::now() + Duration::from_secs(2))?;
     if result.is_err() && connected_at.is_none() {
         if let Ok(stderr) = stderr_output.lock() {
             if let Some(code) = classify_bridge_stderr(&stderr) {
@@ -1842,3 +1878,6 @@ fn run_bridge_once_inner(
 
 #[cfg(test)]
 mod tests;
+
+#[path = "ssh_agent_bridge/owned_shutdown.rs"]
+mod owned_shutdown;

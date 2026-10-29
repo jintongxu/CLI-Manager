@@ -1,3 +1,5 @@
+#[path = "resources.rs"]
+pub mod resources;
 use crate::daemon::client::{DaemonBridge, DaemonClient};
 use crate::daemon::protocol::{
     routing_control_id, ClientFrame, DaemonFrame, SessionMeta, FEATURE_WS_BINARY_OUTPUT,
@@ -37,7 +39,14 @@ fn provider_launch_configs(
 }
 
 // 最多查询六十次守护进程桥接，每次未就绪且仍有重试机会时等待一百毫秒。
-async fn wait_for_daemon(daemon_bridge: &DaemonBridge) -> Option<Arc<DaemonClient>> {
+async fn wait_for_daemon(app: &AppHandle, daemon_bridge: &DaemonBridge) -> Option<Arc<DaemonClient>> {
+    if daemon_bridge.get().is_none() {
+        let app = app.clone();
+        let _ = tauri::async_runtime::spawn_blocking(move || {
+            let dir = crate::app_paths::cli_manager_data_dir()?;
+            crate::daemon::client::connect_or_spawn(app, &dir, cfg!(debug_assertions))
+        }).await;
+    }
     for attempt in 0..DAEMON_READY_WAIT_ATTEMPTS {
         if let Some(client) = daemon_bridge.get() {
             return Some(client);
@@ -87,7 +96,6 @@ async fn upgrade_daemon_if_idle(
     if !daemon_is_current(&replacement) {
         return Err("pty_host_upgrade_failed".to_string());
     }
-    daemon_bridge.set(replacement.clone());
     Ok(Some((replacement, true)))
 }
 
@@ -159,7 +167,7 @@ pub async fn pty_prepare_create(
     }
 
     // Hook 上报指向 daemon 的稳定端口，确保 app 重启后仍然有效。
-    let mut daemon_client = wait_for_daemon(&daemon_bridge)
+    let mut daemon_client = wait_for_daemon(&app_handle, &daemon_bridge)
         .await
         .ok_or_else(|| "PtyHost daemon unavailable".to_string())?;
     let mut daemon_restarted = false;
@@ -295,15 +303,20 @@ pub struct PtyHostEndpoint {
     pub binary_protocol_version: u8,
     pub features: Vec<String>,
     pub daemon_version: String,
+    pub owner: Option<crate::daemon::protocol::OwnerBinding>,
+    pub ownership_status: &'static str,
 }
 
 /// WebView 只通过低频 Tauri command 获取本机 PtyHost 地址与短期鉴权信息。
 #[tauri::command]
 // 等待客户端后根据端口、协议版本与二进制能力返回 WebSocket 地址和令牌，缺能力时返回 legacy 模式。
 pub async fn pty_host_get_endpoint(
+    app_handle: AppHandle,
+    window: tauri::Window,
     daemon_bridge: tauri::State<'_, DaemonBridge>,
 ) -> Result<Option<PtyHostEndpoint>, String> {
-    let Some(client) = wait_for_daemon(&daemon_bridge).await else {
+    if window.label() != "main" { return Err("main_window_required".to_string()); }
+    let Some(client) = wait_for_daemon(&app_handle, &daemon_bridge).await else {
         return Ok(None);
     };
     let info = client.info();
@@ -325,6 +338,8 @@ pub async fn pty_host_get_endpoint(
         binary_protocol_version: info.binary_protocol_version,
         features: info.features.clone(),
         daemon_version: info.version.clone(),
+        owner: client.owner_binding().cloned(),
+        ownership_status: if client.owner_binding().is_some() { "session_owner_bound" } else { "daemon_ownership_unsupported" },
     }))
 }
 
@@ -332,7 +347,12 @@ pub async fn pty_host_get_endpoint(
 fn client_frame_id(frame: &ClientFrame) -> Option<u64> {
     match frame {
         ClientFrame::Auth { .. } => None,
-        ClientFrame::Ping { id }
+        ClientFrame::TerminalResources { id, .. }
+        | ClientFrame::RegisterOwner { id, .. }
+        | ClientFrame::BindOwner { id, .. }
+        | ClientFrame::PrepareOwnerExit { id, .. } | ClientFrame::ResumeOwnerExit { id, .. } | ClientFrame::OwnerExit { id, .. }
+        | ClientFrame::SessionScopes { id }
+        | ClientFrame::Ping { id }
         | ClientFrame::List { id }
         | ClientFrame::Create { id, .. }
         | ClientFrame::WorktreeAdmission { id, .. }
@@ -359,6 +379,10 @@ fn client_frame_id(frame: &ClientFrame) -> Option<u64> {
 
 // 旧传输拒绝路由控制和鉴权帧，其余帧返回请求编号。
 fn legacy_client_frame_id(frame: &ClientFrame) -> Result<u64, &'static str> {
+    if matches!(frame, ClientFrame::TerminalResources { .. }) { return Err(crate::daemon::terminal_resources::NATIVE_ONLY); }
+    if matches!(frame, ClientFrame::RegisterOwner { .. } | ClientFrame::BindOwner { .. } | ClientFrame::OwnerExit { .. } | ClientFrame::PrepareOwnerExit { .. } | ClientFrame::ResumeOwnerExit { .. }) {
+        return Err("native_owner_handshake_only");
+    }
     if matches!(frame, ClientFrame::WorktreeAdmission { .. }) {
         return Err("worktree_admission_protocol_unsupported");
     }
@@ -373,13 +397,16 @@ fn legacy_client_frame_id(frame: &ClientFrame) -> Result<u64, &'static str> {
 #[tauri::command]
 // 解析并校验旧传输请求，等待已鉴权客户端后转发控制帧并序列化响应。
 pub async fn pty_legacy_request(
+    app_handle: AppHandle,
+    window: tauri::Window,
     daemon_bridge: tauri::State<'_, DaemonBridge>,
     frame: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
+    if window.label() != "main" { return Err("main_window_required".to_string()); }
     let frame: ClientFrame = serde_json::from_value(frame)
         .map_err(|err| format!("invalid legacy PtyHost request: {err}"))?;
     let id = legacy_client_frame_id(&frame).map_err(str::to_string)?;
-    let client = wait_for_daemon(&daemon_bridge)
+    let client = wait_for_daemon(&app_handle, &daemon_bridge)
         .await
         .ok_or_else(|| "PtyHost daemon unavailable".to_string())?;
     let reply = client.request(id, &frame)?;
@@ -404,9 +431,10 @@ pub async fn pty_daemon_upgrade_if_idle(
 #[tauri::command]
 // 等待守护进程后返回会话元数据，日志仅记录总量和存活数量。
 pub async fn pty_daemon_sessions(
+    app_handle: AppHandle,
     daemon_bridge: tauri::State<'_, DaemonBridge>,
 ) -> Result<Vec<SessionMeta>, String> {
-    let client = wait_for_daemon(&daemon_bridge)
+    let client = wait_for_daemon(&app_handle, &daemon_bridge)
         .await
         .ok_or_else(|| "PtyHost daemon unavailable".to_string())?;
     let sessions = client.list()?;
@@ -506,4 +534,10 @@ mod tests {
         );
         assert_eq!(legacy_client_frame_id(&ClientFrame::Ping { id: 8 }), Ok(8));
     }
+}
+
+#[cfg(test)]
+#[test]
+fn terminal_resources_legacy_rejected() {
+    assert_eq!(legacy_client_frame_id(&ClientFrame::TerminalResources { id: 1, session_ids: vec![] }), Err(crate::daemon::terminal_resources::NATIVE_ONLY));
 }

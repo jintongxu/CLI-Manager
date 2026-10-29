@@ -1,0 +1,28 @@
+{
+  "id": "exit-process-cleanup",
+  "name": "exit-process-cleanup",
+  "title": "真正退出时回收所属进程（TEMP）",
+  "description": "TEMP: Windows 所属进程退出链路已实现并自动验证；完整GUI/双实例/内存及语言真机验收待完成，Unix strict不支持。见verification.md。",
+  "status": "review",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "Rafael",
+  "assignee": "Rafael",
+  "createdAt": "2026-10-28",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "Created with --no-start. Approved Plan bcaf76ae3633e47245f54c6f473e205b05fb2d71790b729d59824f09a4e24862. See prd.md, design.md, implement.md. Preserve existing dirty work.",
+  "meta": {
+    "version": "TEMP"
+  }
+}

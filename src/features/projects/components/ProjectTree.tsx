@@ -1,3 +1,6 @@
+import { ProjectIdentityIcon } from "./ProjectIdentityIcon";
+import { useProjectDisplay } from "../hooks/useProjectDisplay";
+import { worktreeDisplayTooltip } from "../lib/sidebarDisplay";
 import { findNodeById } from "../lib/treeNodeLookup";
 import { DndContext, DragOverlay, PointerSensor, closestCenter, useSensor, useSensors, type CollisionDetection, type DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -7,7 +10,6 @@ import { SidebarSkeleton } from "../../../shared/ui/Skeleton";
 import { EmptyState } from "../../../shared/ui/EmptyState";
 import { Popover, PopoverAnchor, PopoverTrigger, PopoverContent } from "../../../shared/ui/popover";
 import { Folder, Pin, Plus, Terminal } from "../../../shared/ui/icons";
-import { CliToolIcon } from "../../../shared/ui/CliToolIcon";
 import { WorktreeIcon } from "../../../shared/ui/WorktreeIcon";
 import { TreeNodeItem } from "./TreeNodeItem";
 import { SidebarTerminalList } from "./SidebarTerminalList";
@@ -20,13 +22,13 @@ import { useI18n } from "../../../shared/i18n/index";
 import { toast } from "sonner";
 import { countProjectsInNode } from "../api/projectStore";
 import { getWorktreeDisplayName, getWorktreeSidebarLabel } from "../api/worktreeMetadata";
-import { resolveCliToolIconKey } from "../../../shared/lib/cliTools";
 import { DND_ACTIVATION_CONSTRAINT } from "../../workspace/api/dragInteraction";
 import { PinnedProjectSection } from "./PinnedProjectSection";
 import { treeDragCandidate } from "../lib/sidebarOrdering";
 import type { ProjectListFilter } from "./SidebarHeader";
 
 interface ProjectTreeProps {
+  onSearchActiveChange?: (active: boolean) => void;
   tree: TNode[];
   initialLoading: boolean;
   loadError: string | null;
@@ -244,6 +246,7 @@ function flattenVisibleTree(
 
 export function ProjectTree({
   tree,
+  onSearchActiveChange,
   initialLoading,
   loadError,
   collapsed,
@@ -272,6 +275,16 @@ export function ProjectTree({
   const treeContainerRef = useRef<HTMLDivElement | null>(null);
   const suppressClickAfterDragUntilRef = useRef(0);
   const searchActive = searchOpen && searchQuery.trim().length > 0;
+  useEffect(() => {
+    onSearchActiveChange?.(searchActive);
+    return () => onSearchActiveChange?.(false);
+  }, [onSearchActiveChange, searchActive]);
+  // Clear local search without focusing a row/terminal; scrolling waits for this commit.
+  useEffect(() => {
+    if (!actions.locateRequest) return;
+    setSearchOpen(false);
+    setSearchQuery("");
+  }, [actions.locateRequest]);
   // 置顶筛选只替换普通树内容；全部/已开启仍沿用原项目树，搜索激活时隐藏重复置顶区。
   const pinnedFilterActive = projectFilter === "pinned";
   const visiblePinnedProjects = useMemo(
@@ -405,18 +418,20 @@ export function ProjectTree({
     return () => window.cancelAnimationFrame(frame);
   }, [selectedTreeKey]);
 
-  // 「定位位置」：把置顶区里的项目副本定位回主列表的真实位置。
+  // Reveal pinned copies or the current session owner in the normal tree.
   // 独立于上面的 selectedTreeKey 副作用——同一项目重复定位时选中键并没有变化，
   // 依赖值相同就不会重跑，因此改用单调递增的 nonce 驱动。
-  // locateProject 已同批提交「祖先展开 + 切回全部筛选 + 选中」，故此处 commit 后的 DOM 已含目标行。
+  // Wait for local-search reset and sidebar expansion before looking up the committed row.
   // treeContainerRef 落在列表区内部的 role="tree" 上，天然不会匹配到置顶区的 pin:p:<id> 副本。
+  const handledLocateNonceRef = useRef(0);
   const locateRequest = actions.locateRequest;
   const locateProjectId = locateRequest?.projectId ?? null;
   const locateNonce = locateRequest?.nonce ?? 0;
+  const locateWorktreeId = locateRequest?.worktreeId;
   const locateProjectName = locateRequest?.projectName ?? "";
   useEffect(() => {
-    if (!locateProjectId) return;
-    const targetKey = `p:${locateProjectId}`;
+    if (!locateProjectId || searchOpen || collapsed || pinnedFilterActive || handledLocateNonceRef.current === locateNonce) return;
+    const targetKey = locateWorktreeId ? `wt:${locateWorktreeId}` : `p:${locateProjectId}`;
     let primaryFrame = 0;
     let retryFrame = 0;
     const attempt = (isRetry: boolean) => {
@@ -424,6 +439,7 @@ export function ProjectTree({
         treeContainerRef.current?.querySelectorAll<HTMLElement>("[data-tree-key]") ?? []
       ).find((node) => node.dataset.treeKey === targetKey);
       if (targetElement) {
+        handledLocateNonceRef.current = locateNonce;
         targetElement.scrollIntoView({ block: "nearest" });
         return;
       }
@@ -432,7 +448,8 @@ export function ProjectTree({
         retryFrame = window.requestAnimationFrame(() => attempt(true));
         return;
       }
-      // 确实不可达：例如残留的搜索词把该项目过滤掉了。提示而不是静默失败。
+      handledLocateNonceRef.current = locateNonce;
+      // Target may have been removed after dispatch; report rather than silently failing.
       toast.info(t("sidebar.locate.notFound"), {
         description: t("sidebar.locate.notFoundDescription", { name: locateProjectName }),
       });
@@ -442,16 +459,14 @@ export function ProjectTree({
       window.cancelAnimationFrame(primaryFrame);
       window.cancelAnimationFrame(retryFrame);
     };
-  }, [locateNonce, locateProjectId, locateProjectName, t]);
+  }, [collapsed, pinnedFilterActive, searchOpen, locateNonce, locateProjectId, locateWorktreeId, locateProjectName, t]);
 
   const handleTreeKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement | null;
-    if (
-      target?.tagName === "INPUT" ||
-      target?.tagName === "TEXTAREA" ||
-      target?.tagName === "SELECT" ||
-      !!target?.closest("[contenteditable='true']")
-    ) {
+    if (event.nativeEvent?.isComposing || event.keyCode === 229) return;
+    // Embedded controls own their keys; sortable rows themselves may carry button attributes.
+    const control = target?.closest("button, [role='button'], a[href], input, textarea, select, [contenteditable]:not([contenteditable='false']), [role='textbox'], [role='combobox'], [role='checkbox'], [role='radio'], [role='switch'], [role='slider'], [role='spinbutton'], [role='menuitem']");
+    if (control && control !== target?.closest("[role='treeitem']")) {
       return;
     }
 
@@ -743,6 +758,7 @@ export function ProjectTree({
                 setSearchQuery(nextValue);
               }}
               onKeyDown={(event) => {
+                if (event.nativeEvent.isComposing || event.keyCode === 229) return;
                 if (event.key === "Escape") {
                   event.preventDefault();
                   closeSearch();
@@ -870,6 +886,7 @@ function CollapsedProjectButton({ node, sizeClass, pinned = false }: { node: TNo
   const { t } = useI18n();
   const actions = useTreeActions();
   const [open, setOpen] = useState(false);
+  const display = useProjectDisplay(node.type === "project" ? node.project : undefined, node.type === "project" ? actions.getProjectStatus(node.project.id) : null);
   if (node.type !== "project") return null;
   const p = node.project;
   const terminalCount = actions.getProjectTerminalCount(p.id);
@@ -882,8 +899,8 @@ function CollapsedProjectButton({ node, sizeClass, pinned = false }: { node: TNo
       className={`ui-tree-collapsed-item relative my-0.5 flex ${sizeClass} items-center justify-center rounded-xl transition-colors`}
       data-selected={selected ? "true" : "false"}
       style={(appearance.hasColor ? { "--node-accent": appearance.colorVar } : {}) as CSSProperties}
-      title={p.name}
-      aria-label={t(pinned ? "sidebar.pinned.openProject" : "sidebar.tree.openProject", { name: p.name })}
+      title={display.tooltip}
+      aria-label={t(pinned ? "sidebar.pinned.openProject" : "sidebar.tree.openProject", { name: display.label })}
       onPointerDownCapture={preventSecondaryPointerFocus}
       aria-haspopup="dialog"
       aria-expanded={open}
@@ -891,19 +908,17 @@ function CollapsedProjectButton({ node, sizeClass, pinned = false }: { node: TNo
       onContextMenu={(e) => actions.onContextMenuProject(e, p)}
     >
       <span className="ui-tree-collapsed-icon pointer-events-none" aria-hidden="true">
-        <NodeAppearanceIcon
+        <ProjectIdentityIcon
           mark={appearance.emoji}
           iconKey={appearance.iconKey}
-          cliTool={p.cli_tool}
-          fallback="folder"
           size={15}
         />
       </span>
-      {terminalCount > 0 && <span className="ui-tree-collapsed-badge">{terminalCount > 99 ? "99+" : terminalCount}</span>}
+      {terminalCount > 0 && <span className="ui-tree-collapsed-badge" title={t("sidebar.display.sessionCount", { count: terminalCount })}>{terminalCount > 99 ? "99+" : terminalCount}</span>}
     </button>
     </PopoverTrigger>
-    <PopoverContent side="right" align="start" className="ui-collapsed-flyout max-h-[60vh] overflow-y-auto p-1.5" aria-label={p.name}>
-      <div className="px-2 py-1 text-xs font-medium">{p.name}</div>
+    <PopoverContent side="right" align="start" className="ui-collapsed-flyout max-h-[60vh] overflow-y-auto p-1.5" aria-label={display.label}>
+      <div className="px-2 py-1 text-xs font-medium">{display.label}</div>
       <SidebarProjectTerminals projectId={p.id} compact />
     </PopoverContent>
     </Popover>
@@ -1007,13 +1022,13 @@ function GroupFlyout({ node, onPick }: { node: TNode; onPick: () => void }) {
       {node.children.length === 0 ? (
         <div className="px-2 py-1 text-[11px] text-text-muted">{t("sidebar.tree.emptyDirectory")}</div>
       ) : (
-        renderFlyoutNodes(node.children, 0, actions, onPick)
+        renderFlyoutNodes(node.children, 0, actions, onPick, t)
       )}
     </div>
   );
 }
 
-function renderFlyoutNodes(nodes: TNode[], depth: number, actions: TreeActions, onPick: () => void) {
+function renderFlyoutNodes(nodes: TNode[], depth: number, actions: TreeActions, onPick: () => void, t: ReturnType<typeof useI18n>["t"]) {
   return nodes.map((child) => {
     const padLeft = 8 + depth * 12;
     if (child.type === "group") {
@@ -1026,7 +1041,7 @@ function renderFlyoutNodes(nodes: TNode[], depth: number, actions: TreeActions, 
             <Folder size={13} strokeWidth={1.5} className="shrink-0" />
             <span className="truncate">{child.group.name}</span>
           </div>
-          {renderFlyoutNodes(child.children, depth + 1, actions, onPick)}
+          {renderFlyoutNodes(child.children, depth + 1, actions, onPick, t)}
         </div>
       );
     }
@@ -1037,7 +1052,8 @@ function renderFlyoutNodes(nodes: TNode[], depth: number, actions: TreeActions, 
         <button
           className="ui-collapsed-flyout-item flex min-w-0 w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-[12px] text-on-surface"
           style={{ paddingLeft: padLeft }}
-          title={child.worktree.path}
+          title={worktreeDisplayTooltip(child.worktree, getWorktreeDisplayName(child.worktree), t(child.worktree.status === "active" ? "sidebar.display.worktreeActive" : child.worktree.status === "pending" ? "worktree.status.pending" : "worktree.status.missing"))}
+          aria-label={getWorktreeSidebarLabel(child.worktree)}
           onClick={() => {
             actions.onOpenWorktree(child.project, child.worktree);
             onPick();
@@ -1058,41 +1074,32 @@ function renderFlyoutNodes(nodes: TNode[], depth: number, actions: TreeActions, 
       );
     }
 
-    const p = child.project;
-    const terminalCount = actions.getProjectTerminalCount(p.id);
-    const cliIcon = resolveCliToolIconKey(p.cli_tool);
-    return (
-      <div key={`p:${p.id}`}>
-      <button
-        className="ui-collapsed-flyout-item flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-[12px] text-on-surface"
-        style={{ paddingLeft: padLeft }}
-        title={p.name}
-        onPointerDownCapture={preventSecondaryPointerFocus}
-        onClick={(event) => actions.onSelectProject(event, p)}
-        onDoubleClick={() => {
-          actions.onOpenProject(p);
-          onPick();
-        }}
-        onContextMenu={(e) => actions.onContextMenuProject(e, p)}
-      >
-        <span className="ui-tree-leading-icon flex shrink-0 items-center">
-          {cliIcon ? (
-            <CliToolIcon icon={cliIcon} size={13} />
-          ) : (
-            <Terminal size={13} strokeWidth={1.5} />
-          )}
-        </span>
-        <span className="flex-1 truncate">{p.name}</span>
-        {terminalCount > 0 && (
-          <span className="ui-tree-meta-chip shrink-0 rounded-full px-1.5 py-0.5 text-[10px] leading-none">
-            {terminalCount}
-          </span>
-        )}
-      </button>
-      <SidebarTerminalList projectId={p.id} depth={depth + 1} compact />
-      </div>
-    );
+    return <FlyoutProject key={`p:${child.project.id}`} project={child.project} depth={depth} onPick={onPick} />;
   });
+}
+
+function FlyoutProject({ project: p, depth, onPick }: { project: Project; depth: number; onPick: () => void }) {
+  const actions = useTreeActions();
+  const { t } = useI18n();
+  const display = useProjectDisplay(p, actions.getProjectStatus(p.id));
+  const terminalCount = actions.getProjectTerminalCount(p.id);
+  const appearance = resolveNodeAppearance({ icon: p.icon, color: p.color });
+  return <div>
+    <button className="ui-collapsed-flyout-item flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-[12px] text-on-surface"
+      style={{ paddingLeft: 8 + depth * 12 }} title={display.tooltip} aria-label={display.label}
+      onPointerDownCapture={preventSecondaryPointerFocus}
+      onClick={(event) => actions.onSelectProject(event, p)}
+      onDoubleClick={() => { actions.onOpenProject(p); onPick(); }}
+      onContextMenu={(event) => actions.onContextMenuProject(event, p)}>
+      <span className="ui-tree-leading-icon flex shrink-0 items-center">
+        <ProjectIdentityIcon mark={appearance.emoji} iconKey={appearance.iconKey} size={13} />
+      </span>
+      <span className="flex-1 truncate">{display.label}</span>
+      {terminalCount > 0 && <span className="ui-tree-meta-chip shrink-0 rounded-full px-1.5 py-0.5 text-[10px] leading-none"
+        title={t("sidebar.display.sessionCount", { count: terminalCount })}>{terminalCount}</span>}
+    </button>
+    <SidebarTerminalList projectId={p.id} depth={depth + 1} compact />
+  </div>;
 }
 
 
@@ -1100,7 +1107,7 @@ function DragGhost({ activeId, tree }: { activeId: string; tree: TNode[] }) {
   const node = findNodeById(tree, activeId);
   if (!node) return null;
   const label = node.type === "group" ? node.group.name : node.type === "worktree" ? getWorktreeSidebarLabel(node.worktree) : node.project.name;
-  const icon = node.type === "group" ? <Folder size={14} strokeWidth={1.5} /> : node.type === "worktree" ? <WorktreeIcon className="h-3.5 w-3.5" /> : <Terminal size={14} strokeWidth={1.5} />;
+  const icon = node.type === "group" ? <Folder size={14} strokeWidth={1.5} /> : node.type === "worktree" ? <WorktreeIcon className="h-3.5 w-3.5" /> : <Folder size={14} strokeWidth={1.5} />;
   return (
     <div className="ui-tree-drag-ghost flex items-center gap-2 rounded-xl border border-border bg-surface-container-high px-3 py-1.5 text-[12px] font-medium shadow-lg">
       <span className="text-on-surface-variant">{icon}</span>

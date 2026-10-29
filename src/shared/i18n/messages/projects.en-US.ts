@@ -1,6 +1,11 @@
 import type { zh } from "./projects.zh-CN";
 
+
 export const en: Record<keyof typeof zh, string> = {
+  "sidebar.tools.locateCurrent": "Locate current session in tree",
+  "sidebar.tools.locateUnavailable": "Current session is unbound or its project/Worktree is no longer in the tree",
+  "sidebar.tools.collapseAll": "Collapse all",
+  "sidebar.tools.collapseSearchDisabled": "Clear project search to collapse all",
   "worktree.recovery.save": "Git worktree created; saving its record failed (persistence is unconfirmed). Creation stopped: do not recreate. Keep the identity/path below; inspect with git worktree list and open that path as a project. Refresh to check for an existing record before manual recovery. Nothing was deleted.",
   "worktree.recovery.saved": "Git worktree and record created. Creation stopped: do not recreate. Refresh/reopen the workspace, then open the existing worktree from the project sidebar (retry terminal launch there). Identity, failed stage and cause follow. Nothing was deleted.",
   "worktree.shortLabel.label": "Short label (optional)",
@@ -399,6 +404,9 @@ export const en: Record<keyof typeof zh, string> = {
   "projectIdeas.workspace.unlinkedWorktree": "Unlinked Worktree (missing)",
   "sidebar.tree.startDirectory": "Start this directory",
   "sidebar.tree.allTerminals": "All Terminals",
+  "sidebar.display.worktreeActive": "Active",
+  "sidebar.display.terminalType": "Terminal",
+  "sidebar.display.sessionCount": "{count} retained PTY sessions (including hidden; not a running count)",
   "sidebar.tree.terminalCount": "{count} open terminals",
   "sidebar.tree.searchPlaceholder": "Search projects",
   "sidebar.tree.searchAria": "Search project list",

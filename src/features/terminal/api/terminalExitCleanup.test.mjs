@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import ts from "typescript";
+import { normalizeExitWithRunningTasksBehavior } from "../../../shared/preferences/exitPolicy.ts";
 
 function loadCleanup() {
   const source = readFileSync(new URL("./terminalExitCleanup.ts", import.meta.url), "utf8");
@@ -10,7 +11,10 @@ function loadCleanup() {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const exports = {};
-  vm.runInNewContext(code, { exports, require() { throw new Error("unexpected dependency"); } });
+  vm.runInNewContext(code, { exports, require(name) {
+    assert.equal(name, "../../../shared/preferences/exitPolicy.ts");
+    return { normalizeExitWithRunningTasksBehavior };
+  } });
   return exports;
 }
 

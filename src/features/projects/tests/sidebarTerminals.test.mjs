@@ -13,6 +13,8 @@ const transpile = (code, module = ts.ModuleKind.ES2022) => ts.transpileModule(co
 const selectorUrl = `data:text/javascript;base64,${Buffer.from(transpile(source("../../../shared/lib/sidebarTerminalOrder.ts"))).toString("base64")}`;
 const taskUrl = `data:text/javascript;base64,${Buffer.from(transpile(source("../../terminal/lib/terminalTaskPresentation.ts"))).toString("base64")}`;
 const actualDomain = await import(`data:text/javascript;base64,${Buffer.from(transpile(source("../lib/sidebarTerminals.ts")).replace("../../../shared/lib/sidebarTerminalOrder", selectorUrl).replace("../../terminal/state", taskUrl)).toString("base64")}`);
+const groupPathUrl = `data:text/javascript;base64,${Buffer.from(transpile(source("../api/groupPath.ts"))).toString("base64")}`;
+const display = await import(`data:text/javascript;base64,${Buffer.from(transpile(source("../lib/sidebarDisplay.ts")).replace("../api/groupPath", groupPathUrl)).toString("base64")}`);
 // Older presentation fixtures model explicit Agents and hook-only notifications.
 const hookSources = notifications => Object.fromEntries(Object.entries(notifications ?? {}).map(([id, hook]) => [id, { hook }]));
 const domain = { ...actualDomain,
@@ -162,6 +164,9 @@ function renderList(language, options = {}) {
       ContextMenuContent: tag("div"), ContextMenuItem: tag("div"),
     },
     "../lib/sidebarTerminals": domain,
+    "../lib/sidebarDisplay": display,
+    "../hooks/useProjectDisplay": { useProjectDisplay: (p) => ({ label: p?.name ?? "", tooltip: p?.path ?? "" }) },
+    "./ProjectIdentityIcon": { ProjectIdentityIcon: () => null },
   };
   vm.runInNewContext(transpile(source("../components/SidebarTerminalSortable.tsx"), ts.ModuleKind.CommonJS), {
     exports: modules["./SidebarTerminalSortable"], require: (id) => { assert.ok(modules[id], id); return modules[id]; },
@@ -255,9 +260,11 @@ test("actual sidebar rows use shared status glyphs, complete bilingual labels an
         ? catalogs[language]["sidebar.terminals.hiddenWork"]
         : catalogs[language]["sidebar.terminals.pendingWork"];
       const membershipKind = index === 7 ? "hidden" : "pending";
-      const label = [items[index].title, catalogs[language][`sidebar.terminals.${status}`],
+      const displayLabel = display.sessionDisplayLabels(items, catalogs[language]["sidebar.display.terminalType"]).get(items[index].id);
+      const label = [displayLabel, catalogs[language][`sidebar.terminals.${status}`],
         index === 7 ? catalogs[language]["sidebar.terminals.hidden"] : "", items[index].sidebarPinned ? catalogs[language]["sidebar.terminals.pinned"] : "", membership].filter(Boolean).join(" · ");
-      assert.equal(row.props.title, label);
+      assert.equal(row.props.title, display.sessionDisplayTooltip(items[index], displayLabel, [catalogs[language][`sidebar.terminals.${status}`],
+        index === 7 ? catalogs[language]["sidebar.terminals.hidden"] : "", items[index].sidebarPinned ? catalogs[language]["sidebar.terminals.pinned"] : "", membership].filter(Boolean).join(" · ")));
       assert.ok(row.props["aria-label"].endsWith(label));
       const children = descendants(row);
       const state = children.find((el) => el.props.className === "sidebar-terminal-status");
@@ -268,7 +275,7 @@ test("actual sidebar rows use shared status glyphs, complete bilingual labels an
       assert.equal(metadata.props["aria-hidden"], "true");
       assert.ok(descendants(metadata).some((el) => el.props.className === "sidebar-terminal-status"));
       assert.ok(descendants(heading).some((el) => el.props.className === "sidebar-terminal-title-line"));
-      assert.equal(children.find((el) => el.props.className === "sidebar-terminal-title").props.children, items[index].title);
+      assert.equal(children.find((el) => el.props.className === "sidebar-terminal-title").props.children, displayLabel);
       const membershipMarker = children.find((el) => el.props.className === "sidebar-terminal-membership");
       assert.equal(membershipMarker.props.title, membership);
       assert.equal(membershipMarker.props["data-membership"], membershipKind);
@@ -403,6 +410,9 @@ function collapseHarness(language = "en-US") {
     react: { ...React, memo: (fn) => fn },
     "./TreeContext": { ...context, useTreeActions: () => actions },
     "../lib/sidebarTerminals": domain,
+    "../lib/sidebarDisplay": display,
+    "../hooks/useProjectDisplay": { useProjectDisplay: (p) => ({ label: p?.name ?? "", tooltip: p?.path ?? "" }) },
+    "./ProjectIdentityIcon": { ProjectIdentityIcon: () => null },
     "../../terminal/state": { useTerminalStore: (selector) => selector({ sessions, sessionStatuses: {}, tabNotifications: {} }) },
     "../../../shared/i18n/index": { useI18n: () => ({ t: (key) => {
       assert.ok(catalogs[language][key], `missing ${key}`); return catalogs[language][key];
@@ -456,13 +466,13 @@ function collapseHarness(language = "en-US") {
   vm.runInNewContext(transpile(flyoutSource.slice(flyoutSource.indexOf("function renderFlyoutNodes("),
     flyoutSource.indexOf("function findNodeById(")) + "\nexports.render = renderFlyoutNodes;", ts.ModuleKind.CommonJS), {
     exports: flyoutExports, require: (id) => modules[id],
-    WorktreeIcon: noop, getWorktreeDisplayName: (w) => w.name, getWorktreeSidebarLabel: (w) => w.short_label || w.name,
+    ...display, WorktreeIcon: noop, getWorktreeDisplayName: (w) => w.name, getWorktreeSidebarLabel: (w) => w.short_label || w.name,
     SidebarTerminalList: modules["./SidebarTerminalList"].SidebarTerminalList,
     worktreeTerminalsCollapseId: context.worktreeTerminalsCollapseId,
   });
   const flyout = (id) => expand(React.createElement("div", {}, flyoutExports.render([
     { type: "worktree", project: { id: "p1" }, worktree: worktrees.find((w) => w.id === id) },
-  ], 0, actions, noop)));
+  ], 0, actions, noop, (key) => catalogs[language][key])));
   return { actions, calls, context, row, shortcuts, flyout, setSessions: (value) => { sessions = value; } };
 }
 const toggleButtons = (tree) => descendants(tree).filter((el) => el.type === "button" && typeof el.props["aria-expanded"] === "boolean");
@@ -598,6 +608,9 @@ test("actual hook delegates only renameSession against live store, not activatio
     "../../terminal/api/currentWorkEvents": { dispatchCurrentWorkTarget: () => assert.fail("rename hook must not open a terminal") },
     "../../../shared/i18n/index": { useI18n: () => ({ t: (key) => key }) },
     "../lib/sidebarTerminals": domain,
+    "../lib/sidebarDisplay": display,
+    "../hooks/useProjectDisplay": { useProjectDisplay: (p) => ({ label: p?.name ?? "", tooltip: p?.path ?? "" }) },
+    "./ProjectIdentityIcon": { ProjectIdentityIcon: () => null },
   };
   const exports = {};
   vm.runInNewContext(transpile(source("../hooks/useSidebarTerminals.ts"), ts.ModuleKind.CommonJS), {
@@ -795,8 +808,9 @@ test("ordinary shell row and no-Agent summary hide all task state while retainin
     const row = renderList(language, { items: [session("plain", { isAgentSession: false, tabHidden: true })], notifications: { plain: "running" } });
     assert.equal(descendants(row.tree).filter(el => el.props.className === "sidebar-terminal-status").length, 0);
     const button = descendants(row.tree).find((el) => el.type === "button");
-    assert.equal(button.props.title, `Terminal plain · ${catalogs[language]["sidebar.terminals.hidden"]} · ${catalogs[language]["sidebar.terminals.hiddenWork"]}`);
-    assert.ok(button.props["aria-label"].endsWith(button.props.title));
+    assert.equal(button.props.title, `Terminal plain
+${catalogs[language]["sidebar.terminals.hidden"]} · ${catalogs[language]["sidebar.terminals.hiddenWork"]}`);
+    assert.ok(button.props["aria-label"].endsWith(button.props.title.replace(String.fromCharCode(10), " · ")));
     assert.equal((renderToStaticMarkup(row.tree).match(/data-icon="EyeOff"/g) ?? []).length, 1);
   }
 });

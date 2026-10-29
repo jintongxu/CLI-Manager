@@ -1,0 +1,550 @@
+/* Sea Salt application chrome only: no content-theme variables, font metrics, dimensions,
+   layout, dragging, visibility or lifecycle rules except the bounded tab/rail
+   spacing below. Imported after component defaults.
+   Terminal/history/Monaco/Diff bodies and independently skinned stats remain owned
+   by their content themes. Local semantic-token remaps continue to inherit locally. */
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-workspace-shell,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-main-shell {
+  background: var(--sea-salt-surface);
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .window-titlebar {
+  background: var(--sea-salt-surface);
+  box-shadow: inset 0 -1px 0 var(--sea-salt-border);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-sidebar-shell,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-sidebar-top,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-sidebar-footer {
+  background: var(--sea-salt-low);
+  border-color: var(--sea-salt-border);
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-surface-card,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-config-modal,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-collapsed-flyout,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-appearance-picker-popover {
+  border-radius: 8px;
+  outline-color: var(--sea-salt-border);
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-surface-card[role="dialog"],
+[data-theme="light"][data-light-palette="sea-salt"] .ui-config-modal,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-collapsed-flyout {
+  box-shadow: var(--sea-salt-overlay-shadow);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-tree-project,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-tree-collapsed-item,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-pinned-project-item,
+[data-theme="light"][data-light-palette="sea-salt"] .sidebar-terminal-row,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-worktree-row,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-selection-card {
+  border-radius: 6px;
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-tree-project:hover,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-tree-collapsed-item:hover,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-pinned-project-item:hover,
+[data-theme="light"][data-light-palette="sea-salt"] .sidebar-terminal-row:hover,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-worktree-row:hover {
+  background: var(--sea-salt-hover);
+  color: var(--sea-salt-text);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-tree-project[data-selected="true"],
+[data-theme="light"][data-light-palette="sea-salt"] .ui-tree-project[data-selected="true"]:hover,
+[data-theme="light"][data-light-palette="sea-salt"] .sidebar-terminal-row[data-selected="true"],
+[data-theme="light"][data-light-palette="sea-salt"] .sidebar-terminal-row[data-selected="true"]:hover,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-worktree-row[data-selected="true"],
+[data-theme="light"][data-light-palette="sea-salt"] .ui-worktree-row[data-selected="true"]:hover {
+  background: var(--sea-salt-selected);
+  border-color: transparent;
+  box-shadow: inset 2px 0 0 var(--sea-salt-solid);
+  color: var(--sea-salt-text);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-global-chrome,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-pane-chrome,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-current-workbar,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-current-work-pane-chrome,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-current-work-pane-header {
+  background: var(--sea-salt-bar);
+  border-color: var(--sea-salt-border);
+  color: var(--sea-salt-text);
+  box-shadow: inset 0 -1px 0 var(--sea-salt-border);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-pane-chrome {
+  --terminal-tab-accent: var(--sea-salt-solid);
+  --terminal-tab-accent-muted: var(--sea-salt-muted);
+  --terminal-tab-border: var(--sea-salt-border);
+  --terminal-tab-hover-bg: var(--sea-salt-hover);
+  --terminal-tab-selected-bg: var(--sea-salt-selected);
+  --terminal-chrome-surface: var(--sea-salt-low);
+  --terminal-chrome-surface-raised: var(--sea-salt-raised);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-tab-trigger,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-pane-chrome .ui-tab-trigger,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-current-work-item {
+  background: transparent;
+  border-color: transparent;
+  border-radius: 6px;
+  color: var(--sea-salt-secondary);
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-tab-trigger:hover,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-pane-chrome .ui-tab-trigger:hover,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-current-work-item:hover {
+  background: var(--sea-salt-hover);
+  color: var(--sea-salt-text);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-tab-trigger[data-selected="true"],
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-pane-chrome .ui-tab-trigger[data-selected="true"],
+[data-theme="light"][data-light-palette="sea-salt"] .ui-current-work-item[data-selected="true"] {
+  background: var(--sea-salt-selected);
+  border-color: var(--sea-salt-border);
+  color: var(--sea-salt-text);
+  box-shadow: inset 0 -2px 0 var(--sea-salt-solid);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-current-work-heading,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-current-work-main {
+  color: var(--sea-salt-text);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-current-work-heading-dot,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-current-work-count,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-current-work-remove,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-current-work-clear,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-current-work-exit {
+  color: var(--sea-salt-secondary);
+  border-color: var(--sea-salt-border);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-btn,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-icon-action,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-toolbar-button,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-scroll-button,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-list-button,
+[data-theme="light"][data-light-palette="sea-salt"] .native-provider-control {
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-btn-primary,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-primary-action,
+[data-theme="light"][data-light-palette="sea-salt"] .native-provider-control--primary,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-worktree-prompt-action-primary {
+  background: var(--sea-salt-solid);
+  color: var(--sea-salt-on-solid);
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-btn-primary:hover:not(:disabled),
+[data-theme="light"][data-light-palette="sea-salt"] .ui-primary-action:hover:not(:disabled),
+[data-theme="light"][data-light-palette="sea-salt"] .native-provider-control--primary:hover:not(:disabled),
+[data-theme="light"][data-light-palette="sea-salt"] .ui-worktree-prompt-action-primary:hover:not(:disabled) {
+  background: var(--sea-salt-solid-hover);
+  color: var(--sea-salt-on-solid);
+  filter: none;
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-input,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-config-modal .ui-input,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-sidebar-search-shell,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-history-search-shell,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-search-focus-shell {
+  border-color: var(--sea-salt-control-border);
+  border-radius: 6px;
+  background: var(--sea-salt-raised);
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-input:focus-visible,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-config-modal .ui-input:focus-within,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-sidebar-search-shell:focus-within,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-history-search-shell:focus-within,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-search-focus-shell:focus-within {
+  border-color: var(--sea-salt-solid);
+  box-shadow: 0 0 0 1px var(--sea-salt-solid);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .context-menu:not(.terminal-context-menu):not(.ui-file-editor-tab-menu),
+[data-theme="light"][data-light-palette="sea-salt"] .ui-select-popover:not(.git-workspace-repository-menu) {
+  background: var(--sea-salt-raised);
+  border-color: var(--sea-salt-border);
+  outline-color: var(--sea-salt-border);
+  border-radius: 8px;
+  box-shadow: var(--sea-salt-overlay-shadow);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .context-menu-item[data-highlighted] {
+  background: var(--sea-salt-hover);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-action-sort-item[data-tooltip]::after,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-file-tooltip[data-tooltip]::after {
+  background: var(--sea-salt-raised);
+  color: var(--sea-salt-text);
+  border-color: var(--sea-salt-border);
+  box-shadow: var(--sea-salt-overlay-shadow);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-empty-state::before {
+  background: none;
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-empty-state-icon {
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-empty-state:not([data-tone="inverse"]):not(.ui-terminal-well .ui-empty-state) .ui-empty-state-icon {
+  background: var(--sea-salt-raised);
+  border-color: var(--sea-salt-border);
+  color: var(--sea-salt-solid);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-history-sidebar-top,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-history-detail-top,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-file-editor-header,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-file-editor-tabs {
+  background: var(--sea-salt-low);
+  border-color: var(--sea-salt-border);
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-file-editor-header::after {
+  background: none;
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-stats-panel::before {
+  background: none;
+}
+
+/* Action rails are application chrome; panel bodies keep their selected skin. */
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-action-sidebar {
+  background: var(--sea-salt-bar);
+  color: var(--sea-salt-secondary);
+  box-shadow: inset 1px 0 0 var(--sea-salt-border);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-pane-chrome .ui-terminal-actions .ui-primary-action {
+  background: var(--sea-salt-solid);
+  color: var(--sea-salt-on-solid);
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-pane-chrome .ui-terminal-actions .ui-primary-action:hover:not(:disabled) {
+  background: var(--sea-salt-solid-hover);
+  color: var(--sea-salt-on-solid);
+  box-shadow: none;
+}
+
+/* Selected tabs must retain a visible keyboard ring after their state shadow. */
+[data-theme="light"][data-light-palette="sea-salt"] .ui-tab-trigger:focus-visible,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-pane-chrome .ui-tab-trigger:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--sea-salt-solid);
+}
+
+/* Header labels must not inherit a light content theme's dark foreground. */
+[data-theme="light"][data-light-palette="sea-salt"] .ui-file-editor-header,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-file-editor-header .text-on-surface,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-file-editor-header .text-on-surface-variant {
+  color: var(--sea-salt-text);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-file-editor-header .text-text-muted,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-file-editor-tab {
+  color: var(--sea-salt-muted);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-file-editor-tab:hover,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-file-editor-tab[data-active="true"] {
+  background: var(--sea-salt-hover);
+  color: var(--sea-salt-text);
+  border-color: var(--sea-salt-border);
+}
+
+/* Stats content owns its skin; only the surrounding title chrome is recolored. */
+[data-theme="light"][data-light-palette="sea-salt"] .ui-stats-panel-header {
+  background: var(--sea-salt-low);
+  color: var(--sea-salt-text);
+  border-color: var(--sea-salt-border);
+}
+
+/* Keyboard indicators are opaque blue on sea surfaces, including selected controls. */
+[data-theme="light"][data-light-palette="sea-salt"] .ui-icon-action:focus-visible,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-toolbar-button:focus-visible,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-tree-project:focus-visible,
+[data-theme="light"][data-light-palette="sea-salt"] .sidebar-terminal-row:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--sea-salt-solid);
+}
+
+/* Actual TerminalTabRow and navigation, not just the legacy sortable trigger.
+   Preserve tab drag/close/scroll geometry and project/status data. */
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-navigation,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-list,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-workspan-context-row {
+  background: var(--sea-salt-bar);
+  color: var(--sea-salt-muted);
+  --terminal-tab-accent: var(--sea-salt-solid);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-item,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-workspan-context-button,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-navigation .ui-btn,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-navigation-empty {
+  background: var(--sea-salt-bar);
+  color: var(--sea-salt-muted);
+  border-color: var(--sea-salt-border);
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-item:hover,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-item:focus-within,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-workspan-context-button:hover,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-navigation .ui-btn:hover:not(:disabled) {
+  background: var(--sea-salt-hover);
+  color: var(--sea-salt-text);
+  border-color: var(--sea-salt-solid);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-item[data-active="true"],
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-item[data-active="true"]:hover {
+  background: var(--sea-salt-raised);
+  color: var(--sea-salt-solid);
+  border-color: var(--sea-salt-border);
+  box-shadow: inset 0 2px 0 var(--sea-salt-solid);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-main,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-title,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-close,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-scroll {
+  color: inherit;
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-close:hover,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-scroll:hover:not(:disabled) {
+  background: var(--sea-salt-selected);
+  color: var(--sea-salt-solid);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-main:focus-visible,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-close:focus-visible,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-scroll:focus-visible,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-workspan-context-button:focus-visible {
+  outline-color: var(--sea-salt-solid);
+  box-shadow: inset 0 0 0 2px var(--sea-salt-solid);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-workspan-context-button[data-selected="true"],
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-navigation .ui-terminal-navigation-chip[aria-current="page"],
+[data-theme="light"][data-light-palette="sea-salt"] .ui-tree-collapsed-item[data-selected="true"],
+[data-theme="light"][data-light-palette="sea-salt"] .ui-pinned-project-item[aria-selected="true"] {
+  background: var(--sea-salt-selected);
+  color: var(--sea-salt-solid);
+  border-color: var(--sea-salt-border);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-navigation-popup,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-navigation-drawer,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-simple-drag-overlay {
+  background: var(--sea-salt-surface);
+  color: var(--sea-salt-text);
+  border-color: var(--sea-salt-border);
+  box-shadow: var(--sea-salt-overlay-shadow);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-navigation-popup .ui-input,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-navigation-popup .ui-btn,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-navigation .ui-terminal-navigation-scope {
+  background: var(--sea-salt-raised);
+  color: var(--sea-salt-text);
+  border-color: var(--sea-salt-border);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-navigation-result[aria-selected="true"],
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-navigation-result:hover {
+  background: var(--sea-salt-selected);
+  outline-color: var(--sea-salt-solid);
+}
+
+/* Both dock sides, text/icon modes and drag overlay use app chrome; no --term-*
+   mutation or independent panel-body skin override. Explicit descendants beat
+   terminal-action defaults even when terminalNavigation.css is loaded later. */
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-pane-chrome .ui-terminal-action-sidebar,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-action-sidebar,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-action-sidebar[data-dock-side="left"],
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-action-drag-overlay {
+  background: var(--sea-salt-bar);
+  color: var(--sea-salt-muted);
+  box-shadow: inset 1px 0 0 var(--sea-salt-border);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-pane-chrome .ui-terminal-action-sidebar .ui-toolbar-button,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-pane-chrome .ui-terminal-action-sidebar .ui-icon-action,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-action-sidebar .ui-toolbar-button,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-action-sidebar .ui-icon-action,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-action-drag-overlay .ui-toolbar-button,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-action-drag-overlay .ui-icon-action {
+  --terminal-action-color: var(--sea-salt-muted);
+  background: transparent;
+  color: var(--sea-salt-muted);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-pane-chrome .ui-terminal-action-sidebar .ui-toolbar-button:hover:not(:disabled),
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-pane-chrome .ui-terminal-action-sidebar .ui-icon-action:hover:not(:disabled),
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-action-sidebar .ui-toolbar-button:hover:not(:disabled),
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-action-sidebar .ui-icon-action:hover:not(:disabled),
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-action-drag-overlay .ui-toolbar-button:hover:not(:disabled),
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-action-drag-overlay .ui-icon-action:hover:not(:disabled),
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-pane-chrome .ui-terminal-action-sidebar .ui-toolbar-button[data-active="true"],
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-pane-chrome .ui-terminal-action-sidebar .ui-icon-action[data-active="true"],
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-action-sidebar .ui-toolbar-button[data-active="true"],
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-action-sidebar .ui-icon-action[data-active="true"],
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-action-drag-overlay .ui-toolbar-button[data-active="true"],
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-action-drag-overlay .ui-icon-action[data-active="true"] {
+  --terminal-action-color: var(--sea-salt-solid);
+  background: var(--sea-salt-selected);
+  color: var(--sea-salt-solid);
+  border-color: var(--sea-salt-border);
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-side-panel-frame,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-panel-header {
+  background: var(--sea-salt-surface);
+  color: var(--sea-salt-text);
+  border-color: var(--sea-salt-border);
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-config-modal,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-collapsed-flyout,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-appearance-picker-popover,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-surface-card[role="dialog"] {
+  background: var(--sea-salt-surface);
+  color: var(--sea-salt-text);
+  border-color: var(--sea-salt-border);
+  outline-color: var(--sea-salt-border);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-file-editor-header,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-file-editor-tabs,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-history-sidebar-top,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-history-detail-top,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-stats-panel-header {
+  background: var(--sea-salt-bar);
+  color: var(--sea-salt-text);
+  border-color: var(--sea-salt-border);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-btn-outline,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-segmented,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-select-popover:not(.git-workspace-repository-menu) [role="option"] {
+  background: var(--sea-salt-surface);
+  color: var(--sea-salt-text);
+  border-color: var(--sea-salt-border);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-btn-outline:hover:not(:disabled),
+[data-theme="light"][data-light-palette="sea-salt"] .ui-btn-ghost:hover:not(:disabled),
+[data-theme="light"][data-light-palette="sea-salt"] .ui-flat-action:hover:not(:disabled),
+[data-theme="light"][data-light-palette="sea-salt"] .ui-segmented-btn:hover,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-select-popover:not(.git-workspace-repository-menu) [role="option"][data-highlighted="true"] {
+  background: var(--sea-salt-selected);
+  color: var(--sea-salt-solid);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-segmented-btn[data-active="true"],
+[data-theme="light"][data-light-palette="sea-salt"] .ui-icon-action[data-active="true"] {
+  background: var(--sea-salt-selected);
+  color: var(--sea-salt-solid);
+  border-color: var(--sea-salt-border);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-segmented-btn:focus-visible,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-btn:focus-visible,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-flat-action:focus-visible,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-tree-collapsed-item:focus-visible {
+  outline-color: var(--sea-salt-solid);
+}
+
+/* Focus and group chrome for the real navigation controls and portals. */
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-navigation :focus-visible,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-navigation-popup :focus-visible,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-navigation-drawer :focus-visible {
+  outline-color: var(--sea-salt-solid);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-workspan-project-chip,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-context-switcher {
+  background: var(--sea-salt-bar);
+  color: var(--sea-salt-muted);
+  border-color: var(--sea-salt-border);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-workspan-project-chip[data-selected="true"],
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-context-switcher[data-state="open"] {
+  background: var(--sea-salt-selected);
+  color: var(--sea-salt-solid);
+  border-color: var(--sea-salt-border);
+}
+
+/* Bounded preview fidelity: one selection marker, not marker plus inset stripe.
+   Unselected user accents and the existing keyboard ring remain intact. */
+[data-theme="light"][data-light-palette="sea-salt"] .ui-tree-project[data-selected="true"][data-accent="true"]::before {
+  background: none;
+}
+
+/* Flatten only the worktree glyph; invalid rows keep their danger foreground. */
+[data-theme="light"][data-light-palette="sea-salt"] .ui-worktree-row .ui-worktree-tree-icon {
+  background: transparent;
+  transform: none;
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-worktree-row:not([data-invalid="true"]) .ui-worktree-tree-icon {
+  color: var(--sea-salt-muted);
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-worktree-row:not([data-invalid="true"]):hover .ui-worktree-tree-icon,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-worktree-row:not([data-invalid="true"])[data-selected="true"] .ui-worktree-tree-icon {
+  color: var(--sea-salt-solid);
+}
+
+/* Real tabs form a continuous strip; retain every hit area and drag handle. */
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-list {
+  gap: 0;
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-item {
+  border-radius: 0;
+  border-color: transparent var(--sea-salt-border) transparent transparent;
+}
+
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-item:hover,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-item[data-active="true"],
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-item[data-active="true"]:hover {
+  border-color: transparent var(--sea-salt-border) transparent transparent;
+}
+
+/* Right icon rail only: frozen preview rhythm, unchanged width/tools/text mode. */
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-action-sidebar[data-dock-side="right"]:not([data-show-text="true"]) {
+  gap: 9px;
+  padding-block: 12px;
+}

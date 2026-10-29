@@ -1,10 +1,13 @@
+import { normalizeExitWithRunningTasksBehavior } from "../../../shared/preferences/exitPolicy.ts";
+
+// Legacy return union keeps App's old background branch compiling until integration.
 // Running-task choices take precedence; idle is not proof that a PTY has exited.
 export function resolveTerminalExitAction(
   runningCount: number,
-  restoreEnabled: boolean,
+  _restoreEnabled: boolean, // Compatibility only: restore never authorizes background exit.
   behavior: "ask" | "background" | "minimize" | "discard",
 ): "cleanup" | "background" | "minimize" | "discard" | "ask" {
-  return runningCount > 0 ? behavior : restoreEnabled ? "background" : "cleanup";
+  return runningCount > 0 ? normalizeExitWithRunningTasksBehavior(behavior) : "cleanup";
 }
 
 export interface TerminalExitCleanupOptions {

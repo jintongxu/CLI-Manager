@@ -309,6 +309,8 @@ fn readonly_request_reuses_only_a_request_ready_matching_primary_bridge() {
     control.connected.store(true, Ordering::Release);
     let (request_sender, _request_receiver) = mpsc::sync_channel(1);
     let manager = SshAgentBridgeManager {
+        worker_failed: std::sync::atomic::AtomicBool::new(false),
+        workers: std::sync::Mutex::new(Vec::new()),
         bridges: std::sync::Mutex::new(HashMap::from([(
             bridge_slot("host-1", BridgeLane::Primary),
             BridgeEntry {
@@ -362,6 +364,8 @@ fn invalidating_a_reservation_only_stops_the_same_bridge_slot_and_control() {
     let (old_sender, _old_receiver) = mpsc::sync_channel(1);
     let slot = bridge_slot("host-1", BridgeLane::Primary);
     let manager = SshAgentBridgeManager {
+        worker_failed: std::sync::atomic::AtomicBool::new(false),
+        workers: std::sync::Mutex::new(Vec::new()),
         bridges: std::sync::Mutex::new(HashMap::from([(
             slot.clone(),
             BridgeEntry {
@@ -684,6 +688,8 @@ fn bridge_stays_alive_until_the_last_session_releases() {
     let control = Arc::new(BridgeControl::new());
     let (request_sender, _request_receiver) = mpsc::sync_channel(1);
     let manager = SshAgentBridgeManager {
+        worker_failed: std::sync::atomic::AtomicBool::new(false),
+        workers: std::sync::Mutex::new(Vec::new()),
         bridges: std::sync::Mutex::new(HashMap::from([(
             "host-1".to_string(),
             BridgeEntry {
@@ -712,6 +718,8 @@ fn history_consumer_keeps_bridge_alive_after_terminal_closes() {
     let control = Arc::new(BridgeControl::new());
     let (request_sender, _request_receiver) = mpsc::sync_channel(1);
     let manager = SshAgentBridgeManager {
+        worker_failed: std::sync::atomic::AtomicBool::new(false),
+        workers: std::sync::Mutex::new(Vec::new()),
         bridges: std::sync::Mutex::new(HashMap::from([(
             "host-1".to_string(),
             BridgeEntry {
@@ -742,6 +750,8 @@ fn releasing_history_consumer_also_releases_readonly_aliases() {
     let (primary_sender, _primary_receiver) = mpsc::sync_channel(1);
     let (readonly_sender, _readonly_receiver) = mpsc::sync_channel(1);
     let manager = SshAgentBridgeManager {
+        worker_failed: std::sync::atomic::AtomicBool::new(false),
+        workers: std::sync::Mutex::new(Vec::new()),
         bridges: std::sync::Mutex::new(HashMap::from([
             (
                 bridge_slot("host-1", BridgeLane::Primary),

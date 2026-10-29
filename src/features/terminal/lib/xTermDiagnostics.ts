@@ -71,6 +71,8 @@ export const withVisibleSelectionTheme = (theme: ITheme, searchActive = false): 
       selectionInactiveBackground: "rgba(0, 0, 0, 0)",
     };
   }
+  // Explicit selection pairs belong to the preset; old presets keep the fallback.
+  if (theme.selectionBackground && theme.selectionInactiveBackground) return { ...theme };
   const isLight = isLightTerminalTheme(theme);
   return {
     ...theme,

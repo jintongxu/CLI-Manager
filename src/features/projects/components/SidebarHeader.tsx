@@ -1,4 +1,4 @@
-import { ChevronRight, FolderPlus, Plus } from "../../../shared/ui/icons";
+import { ChevronRight, Minimize2, Crosshair, FolderPlus, Plus } from "../../../shared/ui/icons";
 import { useI18n } from "../../../shared/i18n/index";
 import type { WorkspaceDockSide } from "../../../shared/lib/workspaceLayout";
 
@@ -11,6 +11,10 @@ interface SidebarHeaderProps {
   onToggleCollapse: () => void;
   onCreateGroup: () => void;
   onCreateProject: () => void;
+  onLocateCurrent: () => void;
+  canLocateCurrent: boolean;
+  onCollapseAll: () => void;
+  treeSearchActive: boolean;
 }
 
 export function SidebarHeader({
@@ -20,11 +24,29 @@ export function SidebarHeader({
   onToggleCollapse,
   onCreateGroup,
   onCreateProject,
+  onLocateCurrent,
+  canLocateCurrent,
+  onCollapseAll,
+  treeSearchActive,
 }: SidebarHeaderProps) {
   const { t } = useI18n();
   const compact = density === "compact";
   const collapseIconClassName = dockSide === "right" ? "" : "rotate-180";
   const expandIconClassName = dockSide === "right" ? "rotate-180" : "";
+  const tools = <>
+    <button type="button" onClick={onLocateCurrent} disabled={!canLocateCurrent}
+      className={`ui-flat-action ui-toolbar-button-compact px-0 ${compact ? "h-7 w-7" : "h-8 w-8"}`}
+      title={t(canLocateCurrent ? "sidebar.tools.locateCurrent" : "sidebar.tools.locateUnavailable")}
+      aria-label={t("sidebar.tools.locateCurrent")}>
+      <Crosshair size={14} strokeWidth={1.5} />
+    </button>
+    <button type="button" onClick={onCollapseAll} disabled={treeSearchActive}
+      className={`ui-flat-action ui-toolbar-button-compact px-0 ${compact ? "h-7 w-7" : "h-8 w-8"}`}
+      title={t(treeSearchActive ? "sidebar.tools.collapseSearchDisabled" : "sidebar.tools.collapseAll")}
+      aria-label={t("sidebar.tools.collapseAll")}>
+      <Minimize2 size={14} strokeWidth={1.5} />
+    </button>
+  </>;
   if (collapsed) {
     return (
       <div className={`flex flex-col items-center ${compact ? "gap-1 px-1.5 pb-1.5 pt-2.5" : "gap-1.5 px-2 pb-2 pt-3"}`}>
@@ -36,6 +58,7 @@ export function SidebarHeader({
         >
           <ChevronRight size={14} strokeWidth={1.8} className={expandIconClassName} />
         </button>
+        {tools}
         <button
           onClick={onCreateGroup}
           className={`ui-flat-action ui-toolbar-button-compact px-0 ${compact ? "h-7 w-7" : "h-8 w-8"}`}
@@ -61,6 +84,7 @@ export function SidebarHeader({
       <div className={`flex items-center justify-between ${compact ? "px-2.5" : "px-3"}`}>
         <span className="text-[12px] font-semibold tracking-[0.03em] text-primary">{t("sidebar.projects")}</span>
         <div className={`flex items-center ${compact ? "gap-0.5" : "gap-1"}`}>
+          {tools}
           <button
             onClick={onToggleCollapse}
             className={`ui-flat-action ui-toolbar-button-compact px-0 ${compact ? "h-7 w-7" : "h-8 w-8"}`}

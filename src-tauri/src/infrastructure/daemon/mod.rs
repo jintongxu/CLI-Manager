@@ -7,8 +7,11 @@
 
 mod circuit;
 pub mod client;
+mod client_owner;
+mod process_identity;
 pub mod discovery;
 pub mod protocol;
+pub mod terminal_resources;
 mod route_http;
 mod routing;
 pub mod server;

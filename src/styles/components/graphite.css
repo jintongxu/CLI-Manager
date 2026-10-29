@@ -1,0 +1,274 @@
+/* Application chrome only: no content-theme variables, font metrics, dimensions,
+   layout, dragging, visibility or lifecycle rules. Imported after component defaults.
+   Terminal/history/Monaco/Diff bodies and independently skinned stats remain owned
+   by their content themes. Local semantic-token remaps continue to inherit locally. */
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-workspace-shell,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-main-shell {
+  background: var(--surface);
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .window-titlebar {
+  background: var(--surface);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-sidebar-shell,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-sidebar-top,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-sidebar-footer {
+  background: var(--surface-container-low);
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-surface-card,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-config-modal,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-collapsed-flyout,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-appearance-picker-popover {
+  border-radius: 8px;
+  outline-color: var(--border);
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-surface-card[role="dialog"],
+[data-theme="dark"][data-dark-palette="graphite"] .ui-config-modal,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-collapsed-flyout {
+  box-shadow: var(--graphite-overlay-shadow);
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-tree-project,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-tree-collapsed-item,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-pinned-project-item,
+[data-theme="dark"][data-dark-palette="graphite"] .sidebar-terminal-row,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-worktree-row,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-selection-card {
+  border-radius: 6px;
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-tree-project:hover,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-tree-collapsed-item:hover,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-pinned-project-item:hover,
+[data-theme="dark"][data-dark-palette="graphite"] .sidebar-terminal-row:hover,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-worktree-row:hover {
+  background: var(--interactive-hover-bg);
+  color: var(--on-surface);
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-tree-project[data-selected="true"],
+[data-theme="dark"][data-dark-palette="graphite"] .ui-tree-project[data-selected="true"]:hover,
+[data-theme="dark"][data-dark-palette="graphite"] .sidebar-terminal-row[data-selected="true"],
+[data-theme="dark"][data-dark-palette="graphite"] .sidebar-terminal-row[data-selected="true"]:hover,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-worktree-row[data-selected="true"],
+[data-theme="dark"][data-dark-palette="graphite"] .ui-worktree-row[data-selected="true"]:hover {
+  background: var(--interactive-selected-bg);
+  border-color: transparent;
+  box-shadow: inset 2px 0 0 var(--primary);
+  color: var(--on-surface);
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-terminal-global-chrome,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-terminal-pane-chrome,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-current-workbar,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-current-work-pane-chrome,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-current-work-pane-header {
+  background: var(--surface-container-low);
+  border-color: var(--border);
+  color: var(--on-surface);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-terminal-pane-chrome {
+  --terminal-tab-accent: var(--accent);
+  --terminal-tab-accent-muted: var(--text-muted);
+  --terminal-tab-border: var(--border);
+  --terminal-tab-hover-bg: var(--interactive-hover-bg);
+  --terminal-tab-selected-bg: var(--interactive-selected-bg);
+  --terminal-chrome-surface: var(--surface-container-low);
+  --terminal-chrome-surface-raised: var(--surface-container-high);
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-tab-trigger,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-terminal-pane-chrome .ui-tab-trigger,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-current-work-item {
+  background: transparent;
+  border-color: transparent;
+  border-radius: 6px;
+  color: var(--on-surface-variant);
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-tab-trigger:hover,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-terminal-pane-chrome .ui-tab-trigger:hover,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-current-work-item:hover {
+  background: var(--interactive-hover-bg);
+  color: var(--on-surface);
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-tab-trigger[data-selected="true"],
+[data-theme="dark"][data-dark-palette="graphite"] .ui-terminal-pane-chrome .ui-tab-trigger[data-selected="true"],
+[data-theme="dark"][data-dark-palette="graphite"] .ui-current-work-item[data-selected="true"] {
+  background: var(--interactive-selected-bg);
+  border-color: var(--border);
+  color: var(--on-surface);
+  box-shadow: inset 0 -2px 0 var(--primary);
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-current-work-heading,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-current-work-main {
+  color: var(--on-surface);
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-current-work-heading-dot,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-current-work-count,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-current-work-remove,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-current-work-clear,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-current-work-exit {
+  color: var(--on-surface-variant);
+  border-color: var(--border);
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-btn,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-icon-action,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-toolbar-button,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-terminal-tab-scroll-button,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-terminal-tab-list-button,
+[data-theme="dark"][data-dark-palette="graphite"] .native-provider-control {
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-btn-primary,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-primary-action,
+[data-theme="dark"][data-dark-palette="graphite"] .native-provider-control--primary,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-worktree-prompt-action-primary {
+  background: var(--graphite-solid);
+  color: var(--on-primary);
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-btn-primary:hover:not(:disabled),
+[data-theme="dark"][data-dark-palette="graphite"] .ui-primary-action:hover:not(:disabled),
+[data-theme="dark"][data-dark-palette="graphite"] .native-provider-control--primary:hover:not(:disabled),
+[data-theme="dark"][data-dark-palette="graphite"] .ui-worktree-prompt-action-primary:hover:not(:disabled) {
+  background: var(--graphite-solid-hover);
+  color: var(--on-primary);
+  filter: none;
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-input,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-config-modal .ui-input,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-sidebar-search-shell,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-history-search-shell,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-search-focus-shell {
+  border-color: var(--border);
+  border-radius: 6px;
+  background: var(--surface-container-high);
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-input:focus-visible,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-config-modal .ui-input:focus-within,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-sidebar-search-shell:focus-within,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-history-search-shell:focus-within,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-search-focus-shell:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--interactive-focus-ring);
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .context-menu:not(.terminal-context-menu):not(.ui-file-editor-tab-menu),
+[data-theme="dark"][data-dark-palette="graphite"] .ui-select-popover:not(.git-workspace-repository-menu) {
+  background: var(--surface-container-high);
+  border-color: var(--border);
+  outline-color: var(--border);
+  border-radius: 8px;
+  box-shadow: var(--graphite-overlay-shadow);
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .context-menu-item[data-highlighted] {
+  background: var(--interactive-hover-bg);
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-terminal-action-sort-item[data-tooltip]::after,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-file-tooltip[data-tooltip]::after {
+  background: var(--surface-container-high);
+  color: var(--on-surface);
+  border-color: var(--border);
+  box-shadow: var(--graphite-overlay-shadow);
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-empty-state::before {
+  background: none;
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-empty-state-icon {
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-empty-state:not([data-tone="inverse"]):not(.ui-terminal-well .ui-empty-state) .ui-empty-state-icon {
+  background: var(--surface-container-high);
+  border-color: var(--border);
+  color: var(--primary);
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-history-sidebar-top,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-history-detail-top,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-file-editor-header,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-file-editor-tabs {
+  background: var(--surface-container-low);
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-file-editor-header::after {
+  background: none;
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-stats-panel::before {
+  background: none;
+}
+
+/* Action rails are application chrome; panel bodies keep their selected skin. */
+[data-theme="dark"][data-dark-palette="graphite"] .ui-terminal-action-sidebar {
+  background: var(--surface-container-low);
+  color: var(--on-surface-variant);
+  box-shadow: inset 1px 0 0 var(--border);
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-terminal-pane-chrome .ui-terminal-actions .ui-primary-action {
+  background: var(--graphite-solid);
+  color: var(--on-primary);
+  box-shadow: none;
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-terminal-pane-chrome .ui-terminal-actions .ui-primary-action:hover:not(:disabled) {
+  background: var(--graphite-solid-hover);
+  color: var(--on-primary);
+  box-shadow: none;
+}
+
+/* Selected tabs must retain a visible keyboard ring after their state shadow. */
+[data-theme="dark"][data-dark-palette="graphite"] .ui-tab-trigger:focus-visible,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-terminal-pane-chrome .ui-tab-trigger:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--interactive-focus-ring);
+}
+
+/* Header labels must not inherit a light content theme's dark foreground. */
+[data-theme="dark"][data-dark-palette="graphite"] .ui-file-editor-header,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-file-editor-header .text-on-surface,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-file-editor-header .text-on-surface-variant {
+  color: var(--on-surface);
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-file-editor-header .text-text-muted,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-file-editor-tab {
+  color: var(--text-muted);
+}
+
+[data-theme="dark"][data-dark-palette="graphite"] .ui-file-editor-tab:hover,
+[data-theme="dark"][data-dark-palette="graphite"] .ui-file-editor-tab[data-active="true"] {
+  background: var(--interactive-hover-bg);
+  color: var(--on-surface);
+  border-color: var(--border);
+}

@@ -50,7 +50,16 @@ const PAIRING_LIFETIME_MS: i64 = 5 * 60 * 1000;
 const IDLE_EXIT_AFTER: Duration = Duration::from_secs(10 * 60);
 const CONTROL_CONNECT_TIMEOUT: Duration = Duration::from_millis(200);
 const CONTROL_RETRY_DELAY: Duration = Duration::from_secs(3);
-pub(crate) const PROTOCOL_VERSION: u16 = 9;
+pub(crate) const PROTOCOL_VERSION: u16 = 10;
+#[path = "infrastructure/web/owned_exit.rs"]
+mod owned_exit;
+#[cfg(test)]
+pub(crate) use owned_exit::controlled_exit_result;
+#[path = "infrastructure/web/process_identity.rs"]
+mod process_identity;
+pub use owned_exit::{release_owner_until, prepare_owner_exit, resume_owner_exit, release_owner_transaction_until};
+pub(crate) use owned_exit::retain_spawned;
+pub(crate) use owned_exit::Workers;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -108,6 +117,12 @@ pub enum Request {
         #[serde(default)]
         protocol_version: u16,
     },
+    RegisterOwner { instance_id: String, pid: u32, start: u64 },
+    BindOwner { binding: owned_exit::OwnerBinding },
+    PrepareOwnerExit { binding: owned_exit::OwnerBinding, transaction: String },
+    ResumeOwnerExit { binding: owned_exit::OwnerBinding, transaction: String },
+    OwnerExitTransaction { binding: owned_exit::OwnerBinding, transaction: String },
+    OwnerExit { binding: owned_exit::OwnerBinding },
     GetStatus,
     SaveProfile {
         server_url: String,
@@ -239,6 +254,9 @@ pub struct DaemonState {
     generation: Arc<AtomicU64>,
     connection: Arc<DeviceConnectionControl>,
     stopping: Arc<AtomicBool>,
+    owners: Arc<Mutex<owned_exit::Owners>>,
+    workers: Arc<Workers>,
+    epoch: String,
     info_path: PathBuf,
     info: DaemonInfo,
 }
@@ -256,6 +274,9 @@ impl DaemonState {
             output_ready: Arc::new(tokio::sync::Notify::new()),
             connection: Arc::new(DeviceConnectionControl::default()),
             stopping: Arc::new(AtomicBool::new(false)),
+            owners: Arc::new(Mutex::new(owned_exit::Owners::default())),
+            workers: Arc::new(Workers::default()),
+            epoch: Uuid::new_v4().to_string(),
             info_path,
             info,
         }
@@ -284,14 +305,7 @@ impl DaemonState {
             tokio::net::TcpListener::from_std(listener).map_err(|err| err.to_string())?
         };
         let mut idle_since = Instant::now();
-        let state = self.clone();
-        thread::spawn(move || {
-            if let Some(profile) = load_profile().ok().flatten() {
-                if profile.auto_start {
-                    let _ = state.start();
-                }
-            }
-        });
+        // Native auto_start explicitly registers/acquires the runtime; no unowned auto-start.
         while !self.stopping.load(Ordering::SeqCst) {
             match accept_runtime.block_on(async {
                 tokio::time::timeout(Duration::from_secs(1), listener.accept()).await
@@ -352,6 +366,7 @@ impl DaemonState {
             let _ = write_response(&mut stream, None, Some("web_daemon_protocol_mismatch"));
             return;
         }
+        let mut bound = None;
         loop {
             let Some(line) = read_line(&mut reader) else {
                 return;
@@ -361,7 +376,7 @@ impl DaemonState {
                 return;
             };
             let shutdown = matches!(request, Request::Shutdown);
-            let result = self.handle_request(request);
+            let result = self.owned_request(request, &mut bound);
             match result {
                 Ok(payload) => {
                     let _ = write_response(&mut stream, payload, None);
@@ -378,6 +393,7 @@ impl DaemonState {
 
     fn handle_request(&self, request: Request) -> Result<Option<Value>, String> {
         match request {
+            Request::RegisterOwner { .. } | Request::BindOwner { .. } | Request::OwnerExit { .. } | Request::PrepareOwnerExit { .. } | Request::ResumeOwnerExit { .. } | Request::OwnerExitTransaction { .. } => Err("web_owner_dispatch_required".into()),
             Request::Auth { .. } => Ok(None),
             Request::GetStatus => Ok(Some(serde_json::to_value(self.status()?).unwrap())),
             Request::SaveProfile {
@@ -560,11 +576,7 @@ impl DaemonState {
                     .mark_status(&operation_id, status);
                 Ok(None)
             }
-            Request::Shutdown => {
-                self.stopping.store(true, Ordering::SeqCst);
-                self.stop();
-                Ok(None)
-            }
+            Request::Shutdown => Err("web_daemon_ownership_required".into()),
             Request::ConversationEvent { event } => {
                 self.queue(DeviceToServerFrame::ConversationEvent { event })?;
                 Ok(None)
@@ -617,7 +629,7 @@ impl DaemonState {
         let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
         drop(runtime);
         let state = self.clone();
-        thread::spawn(move || state.run_connection_loop(generation));
+        self.workers.spawn(move || state.run_connection_loop(generation))?;
         Ok(())
     }
 
@@ -917,6 +929,7 @@ type DeviceSocket = WebSocket<MaybeTlsStream<TcpStream>>;
 pub(crate) struct DeviceConnectionControl {
     attempt: Mutex<()>,
     active: Mutex<Option<TcpStream>>,
+    workers: Workers,
 }
 
 pub(crate) struct DeviceConnectionAttempt<'a> {
@@ -931,6 +944,9 @@ impl Drop for DeviceConnectionAttempt<'_> {
 }
 
 impl DeviceConnectionControl {
+    pub(crate) fn wait_until(&self, deadline: Instant) -> Result<(), String> {
+        self.workers.wait_until(deadline)
+    }
     pub(crate) fn begin(&self) -> Result<DeviceConnectionAttempt<'_>, String> {
         Ok(DeviceConnectionAttempt {
             control: self,
@@ -980,13 +996,13 @@ impl DeviceConnectionControl {
                 80
             });
         let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-        thread::spawn(move || {
+        self.workers.spawn(move || {
             let addresses = (host.as_str(), port)
                 .to_socket_addrs()
                 .map(|items| items.collect::<Vec<_>>())
                 .map_err(|err| err.to_string());
             let _ = sender.send(addresses);
-        });
+        })?;
         let started = Instant::now();
         let addresses = loop {
             if generation.load(Ordering::SeqCst) != expected {
@@ -1038,14 +1054,14 @@ impl DeviceConnectionControl {
             // A peer trickling bytes must not extend the handshake indefinitely.
             let deadline_socket = stream.try_clone().map_err(|err| err.to_string())?;
             let (finished, wait_finished) = std::sync::mpsc::channel::<()>();
-            thread::spawn(move || {
+            self.workers.spawn(move || {
                 if matches!(
                     wait_finished.recv_timeout(timeout),
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout)
                 ) {
                     let _ = deadline_socket.shutdown(Shutdown::Both);
                 }
-            });
+            })?;
             let result = tungstenite::client_tls(url, stream);
             drop(finished);
             let (mut socket, _) =
@@ -1081,7 +1097,7 @@ pub fn request<T: for<'de> Deserialize<'de>>(request: Request) -> Result<T, Stri
     request_checked(request, false)
 }
 
-/// The only legacy operations allowed are inspection and an explicitly gated shutdown.
+/// Compatibility entry point retained for callers; version checks never permit legacy shutdown.
 pub(crate) fn upgrade_control<T: for<'de> Deserialize<'de>>(request: Request) -> Result<T, String> {
     if !matches!(request, Request::GetStatus | Request::Shutdown) {
         return Err("web_daemon_upgrade_control_forbidden".into());
@@ -1169,7 +1185,9 @@ fn request_with_info<T: for<'de> Deserialize<'de>>(
         })
         .map_err(|err| err.to_string())?;
         writeln!(stream, "{auth}").map_err(|err| err.to_string())?;
-        BufReader::new(stream)
+        let mut reader = BufReader::new(stream);
+        owned_exit::bind_native(&mut reader, info)?;
+        reader
     };
     let payload = serde_json::to_string(&request).map_err(|err| err.to_string())?;
     writeln!(reader.get_mut(), "{payload}").map_err(|err| err.to_string())?;
@@ -1197,8 +1215,8 @@ fn request_with_info<T: for<'de> Deserialize<'de>>(
     }
 }
 
-fn control_protocol_version(discovered: u16, upgrade: bool) -> Result<u16, String> {
-    if discovered == PROTOCOL_VERSION || (upgrade && matches!(discovered, 1..=8)) {
+fn control_protocol_version(discovered: u16, _upgrade: bool) -> Result<u16, String> {
+    if discovered == PROTOCOL_VERSION {
         Ok(discovered)
     } else {
         Err("web_daemon_protocol_mismatch: finish pending operations before upgrading the Web daemon".into())
@@ -1550,6 +1568,8 @@ mod tests {
 
     #[test]
     fn web_control_reuses_one_authenticated_socket_for_multiple_requests() {
+        let _serial = owned_exit::TEST_NATIVE_LOCK.lock().unwrap();
+        owned_exit::reset_test_owner();
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let info = control_info(listener.local_addr().unwrap().port());
         let server = thread::spawn(move || {
@@ -1562,6 +1582,7 @@ mod tests {
                 serde_json::from_str::<Request>(&read_line(&mut reader).unwrap()).unwrap(),
                 Request::Auth { .. }
             ));
+            owned_exit::mock_registration(&mut reader, &mut stream);
             for _ in 0..3 {
                 assert!(matches!(
                     serde_json::from_str::<Request>(&read_line(&mut reader).unwrap()).unwrap(),
@@ -1576,7 +1597,7 @@ mod tests {
         server.join().unwrap();
     }
 
-    fn control_info(port: u16) -> DaemonInfo {
+    pub(super) fn control_info(port: u16) -> DaemonInfo {
         DaemonInfo {
             port,
             token: "control-test-token".into(),
@@ -1621,6 +1642,8 @@ mod tests {
 
     #[test]
     fn web_control_auth_and_request_roundtrip_still_work() {
+        let _serial = owned_exit::TEST_NATIVE_LOCK.lock().unwrap();
+        owned_exit::reset_test_owner();
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let info = control_info(listener.local_addr().unwrap().port());
         let worker = thread::spawn(move || {
@@ -1631,6 +1654,7 @@ mod tests {
             let mut reader = BufReader::new(stream.try_clone().unwrap());
             let auth: Value = serde_json::from_str(&read_line(&mut reader).unwrap()).unwrap();
             assert_eq!(auth["token"], "control-test-token");
+            owned_exit::mock_registration(&mut reader, &mut stream);
             assert!(matches!(
                 serde_json::from_str::<Request>(&read_line(&mut reader).unwrap()).unwrap(),
                 Request::GetStatus
@@ -1835,9 +1859,9 @@ mod tests {
     }
 
     #[test]
-    fn legacy_upgrade_auth_uses_the_old_protocol_only_for_inspection_and_shutdown() {
+    fn legacy_upgrade_is_fail_closed_even_for_shutdown() {
         for protocol in 1..PROTOCOL_VERSION {
-            assert_eq!(control_protocol_version(protocol, true).unwrap(), protocol);
+            assert!(control_protocol_version(protocol, true).is_err());
             assert!(control_protocol_version(protocol, false).is_err());
         }
         assert!(control_protocol_version(0, true).is_err());

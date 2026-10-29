@@ -8,6 +8,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { watchTerminalWebglLoss } from "../browser/terminalWebglLoss";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { refreshTerminalViewport } from "../lib/terminalVisibility";
+import { createHiddenTerminalDisplayLifecycle, HIDDEN_TERMINAL_DISPOSE_DELAY_MS, type HiddenTerminalDisplayLifecycle } from "../lib/hiddenTerminalDisplayLifecycle";
 import {
   clearTerminalLatency,
   noteTerminalFirstFrame,
@@ -264,7 +265,7 @@ export function useTerminalDisplay({
 }: UseTerminalDisplayOptions): UseTerminalDisplayResult {
   const webglAddonRef = useRef<WebglAddon | null>(null);
   const stopWebglLossWatchRef = useRef<(() => void) | null>(null);
-  const webglDisposeTimerRef = useRef<number | null>(null);
+  const hiddenRendererLifecycleRef = useRef<{ lifecycle: HiddenTerminalDisplayLifecycle; delay: number } | null>(null);
   const webglContextLostRef = useRef(false);
   const fitRafRef = useRef<number | null>(null);
   // Invalidate delayed viewport work when a terminal is hidden, replaced, or
@@ -325,9 +326,8 @@ export function useTerminalDisplay({
   };
 
   const clearHiddenWebglDisposeTimer = () => {
-    if (webglDisposeTimerRef.current === null) return;
-    window.clearTimeout(webglDisposeTimerRef.current);
-    webglDisposeTimerRef.current = null;
+    hiddenRendererLifecycleRef.current?.lifecycle.dispose();
+    hiddenRendererLifecycleRef.current = null;
   };
 
   const disposeWebglRenderer = () => {
@@ -393,16 +393,23 @@ export function useTerminalDisplay({
   };
 
   const scheduleHiddenWebglDispose = (enabled: boolean) => {
-    clearHiddenWebglDisposeTimer();
-    if (!enabled || !webglAddonRef.current) return;
-    webglDisposeTimerRef.current = window.setTimeout(() => {
-      webglDisposeTimerRef.current = null;
-      if (isVisibleRef.current) return;
-      if (disposeWebglRenderer()) {
-        needsViewportRefreshRef.current = true;
-        onViewportRefreshNeeded?.();
-      }
-    }, HIDDEN_WEBGL_DISPOSE_DELAY_MS);
+    if (!enabled || isVisibleRef.current) {
+      clearHiddenWebglDisposeTimer();
+      return;
+    }
+    const delay = lowMemoryMode ? HIDDEN_TERMINAL_DISPOSE_DELAY_MS : HIDDEN_WEBGL_DISPOSE_DELAY_MS;
+    if (hiddenRendererLifecycleRef.current?.delay !== delay) clearHiddenWebglDisposeTimer();
+    if (!hiddenRendererLifecycleRef.current) {
+      const lifecycle = createHiddenTerminalDisplayLifecycle(() => {
+        if (isVisibleRef.current) return;
+        if (disposeWebglRenderer()) {
+          needsViewportRefreshRef.current = true;
+          onViewportRefreshNeeded?.();
+        }
+      }, () => {}, window, delay);
+      hiddenRendererLifecycleRef.current = { lifecycle, delay };
+    }
+    hiddenRendererLifecycleRef.current.lifecycle.update({ enabled: true, visible: false });
   };
 
   const clearWebglTextureAtlas = () => {

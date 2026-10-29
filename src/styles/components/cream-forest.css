@@ -1,0 +1,289 @@
+/* Cream Forest application chrome only: no content-theme variables, font metrics, dimensions,
+   layout, dragging, visibility or lifecycle rules. Imported after component defaults.
+   Terminal/history/Monaco/Diff bodies and independently skinned stats remain owned
+   by their content themes. Local semantic-token remaps continue to inherit locally. */
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-workspace-shell,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-main-shell {
+  background: var(--cream-forest-surface);
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .window-titlebar {
+  background: var(--cream-forest-surface);
+  box-shadow: inset 0 -1px 0 var(--cream-forest-border);
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-sidebar-shell,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-sidebar-top,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-sidebar-footer {
+  background: var(--cream-forest-low);
+  border-color: var(--cream-forest-border);
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-surface-card,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-config-modal,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-collapsed-flyout,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-appearance-picker-popover {
+  border-radius: 8px;
+  outline-color: var(--cream-forest-border);
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-surface-card[role="dialog"],
+[data-theme="light"][data-light-palette="cream-forest"] .ui-config-modal,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-collapsed-flyout {
+  box-shadow: var(--cream-forest-overlay-shadow);
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-tree-project,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-tree-collapsed-item,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-pinned-project-item,
+[data-theme="light"][data-light-palette="cream-forest"] .sidebar-terminal-row,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-worktree-row,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-selection-card {
+  border-radius: 6px;
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-tree-project:hover,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-tree-collapsed-item:hover,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-pinned-project-item:hover,
+[data-theme="light"][data-light-palette="cream-forest"] .sidebar-terminal-row:hover,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-worktree-row:hover {
+  background: var(--cream-forest-hover);
+  color: var(--cream-forest-text);
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-tree-project[data-selected="true"],
+[data-theme="light"][data-light-palette="cream-forest"] .ui-tree-project[data-selected="true"]:hover,
+[data-theme="light"][data-light-palette="cream-forest"] .sidebar-terminal-row[data-selected="true"],
+[data-theme="light"][data-light-palette="cream-forest"] .sidebar-terminal-row[data-selected="true"]:hover,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-worktree-row[data-selected="true"],
+[data-theme="light"][data-light-palette="cream-forest"] .ui-worktree-row[data-selected="true"]:hover {
+  background: var(--cream-forest-selected);
+  border-color: transparent;
+  box-shadow: inset 2px 0 0 var(--cream-forest-solid);
+  color: var(--cream-forest-text);
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-terminal-global-chrome,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-terminal-pane-chrome,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-current-workbar,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-current-work-pane-chrome,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-current-work-pane-header {
+  background: var(--cream-forest-low);
+  border-color: var(--cream-forest-border);
+  color: var(--cream-forest-text);
+  box-shadow: inset 0 -1px 0 var(--cream-forest-border);
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-terminal-pane-chrome {
+  --terminal-tab-accent: var(--cream-forest-solid);
+  --terminal-tab-accent-muted: var(--cream-forest-muted);
+  --terminal-tab-border: var(--cream-forest-border);
+  --terminal-tab-hover-bg: var(--cream-forest-hover);
+  --terminal-tab-selected-bg: var(--cream-forest-selected);
+  --terminal-chrome-surface: var(--cream-forest-low);
+  --terminal-chrome-surface-raised: var(--cream-forest-raised);
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-tab-trigger,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-terminal-pane-chrome .ui-tab-trigger,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-current-work-item {
+  background: transparent;
+  border-color: transparent;
+  border-radius: 6px;
+  color: var(--cream-forest-secondary);
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-tab-trigger:hover,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-terminal-pane-chrome .ui-tab-trigger:hover,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-current-work-item:hover {
+  background: var(--cream-forest-hover);
+  color: var(--cream-forest-text);
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-tab-trigger[data-selected="true"],
+[data-theme="light"][data-light-palette="cream-forest"] .ui-terminal-pane-chrome .ui-tab-trigger[data-selected="true"],
+[data-theme="light"][data-light-palette="cream-forest"] .ui-current-work-item[data-selected="true"] {
+  background: var(--cream-forest-selected);
+  border-color: var(--cream-forest-border);
+  color: var(--cream-forest-text);
+  box-shadow: inset 0 -2px 0 var(--cream-forest-solid);
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-current-work-heading,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-current-work-main {
+  color: var(--cream-forest-text);
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-current-work-heading-dot,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-current-work-count,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-current-work-remove,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-current-work-clear,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-current-work-exit {
+  color: var(--cream-forest-secondary);
+  border-color: var(--cream-forest-border);
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-btn,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-icon-action,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-toolbar-button,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-terminal-tab-scroll-button,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-terminal-tab-list-button,
+[data-theme="light"][data-light-palette="cream-forest"] .native-provider-control {
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-btn-primary,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-primary-action,
+[data-theme="light"][data-light-palette="cream-forest"] .native-provider-control--primary,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-worktree-prompt-action-primary {
+  background: var(--cream-forest-solid);
+  color: var(--cream-forest-on-solid);
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-btn-primary:hover:not(:disabled),
+[data-theme="light"][data-light-palette="cream-forest"] .ui-primary-action:hover:not(:disabled),
+[data-theme="light"][data-light-palette="cream-forest"] .native-provider-control--primary:hover:not(:disabled),
+[data-theme="light"][data-light-palette="cream-forest"] .ui-worktree-prompt-action-primary:hover:not(:disabled) {
+  background: var(--cream-forest-solid-hover);
+  color: var(--cream-forest-on-solid);
+  filter: none;
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-input,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-config-modal .ui-input,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-sidebar-search-shell,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-history-search-shell,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-search-focus-shell {
+  border-color: var(--cream-forest-control-border);
+  border-radius: 6px;
+  background: var(--cream-forest-raised);
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-input:focus-visible,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-config-modal .ui-input:focus-within,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-sidebar-search-shell:focus-within,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-history-search-shell:focus-within,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-search-focus-shell:focus-within {
+  border-color: var(--cream-forest-solid);
+  box-shadow: 0 0 0 1px var(--cream-forest-solid);
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .context-menu:not(.terminal-context-menu):not(.ui-file-editor-tab-menu),
+[data-theme="light"][data-light-palette="cream-forest"] .ui-select-popover:not(.git-workspace-repository-menu) {
+  background: var(--cream-forest-raised);
+  border-color: var(--cream-forest-border);
+  outline-color: var(--cream-forest-border);
+  border-radius: 8px;
+  box-shadow: var(--cream-forest-overlay-shadow);
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .context-menu-item[data-highlighted] {
+  background: var(--cream-forest-hover);
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-terminal-action-sort-item[data-tooltip]::after,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-file-tooltip[data-tooltip]::after {
+  background: var(--cream-forest-raised);
+  color: var(--cream-forest-text);
+  border-color: var(--cream-forest-border);
+  box-shadow: var(--cream-forest-overlay-shadow);
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-empty-state::before {
+  background: none;
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-empty-state-icon {
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-empty-state:not([data-tone="inverse"]):not(.ui-terminal-well .ui-empty-state) .ui-empty-state-icon {
+  background: var(--cream-forest-raised);
+  border-color: var(--cream-forest-border);
+  color: var(--cream-forest-solid);
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-history-sidebar-top,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-history-detail-top,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-file-editor-header,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-file-editor-tabs {
+  background: var(--cream-forest-low);
+  border-color: var(--cream-forest-border);
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-file-editor-header::after {
+  background: none;
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-stats-panel::before {
+  background: none;
+}
+
+/* Action rails are application chrome; panel bodies keep their selected skin. */
+[data-theme="light"][data-light-palette="cream-forest"] .ui-terminal-action-sidebar {
+  background: var(--cream-forest-low);
+  color: var(--cream-forest-secondary);
+  box-shadow: inset 1px 0 0 var(--cream-forest-border);
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-terminal-pane-chrome .ui-terminal-actions .ui-primary-action {
+  background: var(--cream-forest-solid);
+  color: var(--cream-forest-on-solid);
+  box-shadow: none;
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-terminal-pane-chrome .ui-terminal-actions .ui-primary-action:hover:not(:disabled) {
+  background: var(--cream-forest-solid-hover);
+  color: var(--cream-forest-on-solid);
+  box-shadow: none;
+}
+
+/* Selected tabs must retain a visible keyboard ring after their state shadow. */
+[data-theme="light"][data-light-palette="cream-forest"] .ui-tab-trigger:focus-visible,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-terminal-pane-chrome .ui-tab-trigger:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--cream-forest-solid);
+}
+
+/* Header labels must not inherit a light content theme's dark foreground. */
+[data-theme="light"][data-light-palette="cream-forest"] .ui-file-editor-header,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-file-editor-header .text-on-surface,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-file-editor-header .text-on-surface-variant {
+  color: var(--cream-forest-text);
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-file-editor-header .text-text-muted,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-file-editor-tab {
+  color: var(--cream-forest-muted);
+}
+
+[data-theme="light"][data-light-palette="cream-forest"] .ui-file-editor-tab:hover,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-file-editor-tab[data-active="true"] {
+  background: var(--cream-forest-hover);
+  color: var(--cream-forest-text);
+  border-color: var(--cream-forest-border);
+}
+
+/* Stats content owns its skin; only the surrounding title chrome is recolored. */
+[data-theme="light"][data-light-palette="cream-forest"] .ui-stats-panel-header {
+  background: var(--cream-forest-low);
+  color: var(--cream-forest-text);
+  border-color: var(--cream-forest-border);
+}
+
+/* Keyboard indicators are opaque forest on warm surfaces, including selected controls. */
+[data-theme="light"][data-light-palette="cream-forest"] .ui-icon-action:focus-visible,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-toolbar-button:focus-visible,
+[data-theme="light"][data-light-palette="cream-forest"] .ui-tree-project:focus-visible,
+[data-theme="light"][data-light-palette="cream-forest"] .sidebar-terminal-row:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--cream-forest-solid);
+}

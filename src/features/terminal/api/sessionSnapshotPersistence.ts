@@ -1,6 +1,7 @@
 import type { TerminalSnapshotCapture } from "../lib/terminalSnapshotCapture";
 import { useTerminalStore } from "../state";
 import { useSessionStore } from "./sessionStore";
+import { sessionPersistencePaused } from "./sessionPersistenceBarrier";
 import { logError } from "../../../shared/platform/logger";
 
 /**
@@ -31,6 +32,23 @@ interface SnapshotSource {
 
 const sources = new Map<string, SnapshotSource>();
 let timer: ReturnType<typeof setInterval> | null = null;
+let snapshotFlush: Promise<void> | null = null;
+let forcedFlush: Promise<void> | null = null;
+
+function queueSnapshotFlush(force: boolean): Promise<void> {
+  if (force && forcedFlush) return forcedFlush;
+  if (!force && snapshotFlush) return snapshotFlush;
+  const previous = snapshotFlush;
+  const run = () => force || !sessionPersistencePaused() ? flushSnapshots(force) : Promise.resolve();
+  const result = previous ? previous.catch(() => {}).then(run) : run();
+  snapshotFlush = result;
+  if (force) forcedFlush = result;
+  void result.finally(() => {
+    if (snapshotFlush === result) snapshotFlush = null;
+    if (forcedFlush === result) forcedFlush = null;
+  }).catch(() => {});
+  return result;
+}
 
 /**
  * 注册一个终端的快照来源。XTermTerminal 挂载时调用，dispose 时须调用返回的注销函数。
@@ -73,7 +91,7 @@ function stopTimer(): void {
 
 /** 序列化所有脏终端、addon 有界序列化、写回内存，然后统一落盘一次。 */
 async function flushDirtySnapshots(): Promise<void> {
-  await flushSnapshots(false);
+  if (!sessionPersistencePaused()) await queueSnapshotFlush(false);
 }
 
 /**
@@ -82,7 +100,7 @@ async function flushDirtySnapshots(): Promise<void> {
  * 最终画面，让恢复精确对齐"关闭前"而非最多落后一个节流间隔的旧快照。
  */
 export async function flushTerminalSnapshotsNow(): Promise<void> {
-  await flushSnapshots(true);
+  await queueSnapshotFlush(true);
 }
 
 /**
@@ -114,6 +132,7 @@ async function flushSnapshots(force: boolean): Promise<void> {
       // 单个终端序列化失败不应拖垮整轮落盘；标回脏，下轮重试。
       source.dirty = true;
       logError("Failed to serialize terminal snapshot for throttled persistence", { sessionId, err });
+      if (force) throw err;
     }
   }
 
@@ -124,5 +143,6 @@ async function flushSnapshots(force: boolean): Promise<void> {
     await useSessionStore.getState().saveSessions(useTerminalStore.getState().sessions);
   } catch (err) {
     logError("Failed to persist throttled terminal snapshots", { err });
+    if (force) throw err;
   }
 }

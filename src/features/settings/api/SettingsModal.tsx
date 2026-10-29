@@ -316,7 +316,7 @@ export function SettingsModal({ open, onClose, onAfterClose, initialTab, onActiv
   }));
   const activeConfig = SETTINGS_TAB_CONFIG[activeTab];
   const activeContent = (() => {
-    if (activeTab === "general") return <GeneralSettingsPage />;
+    if (activeTab === "general") return <GeneralSettingsPage appearancePreviewActive={open && !closing} />;
     if (activeTab === "extensions") return <GlobalExtensionsPage activeTab={extensionTab} mcpSave={mcpSave} />;
     if (activeTab === "desktop-pet") return <DesktopPetSettingsPage />;
     if (activeTab === "developer") return <DeveloperSettingsPage />;

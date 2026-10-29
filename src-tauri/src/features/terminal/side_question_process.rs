@@ -1,7 +1,8 @@
 //! Owned one-shot process lifecycle. Cancellation never addresses a PID from the frontend.
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
+use crate::commands::cc_connect::exit_process::{OwnedProcess, lock_until, reap_failed};
 use std::sync::{atomic::{AtomicBool, Ordering}, mpsc, Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -76,24 +77,52 @@ pub(super) fn cancel(id: &str) {
 // Fence new work first, then wait until run_command has killed/reaped every owned child.
 // This runs only for actual native exit, never for a tray/window hide.
 pub(super) fn shutdown() {
-    if let Ok(mut registry) = requests().lock() {
+    if let Err(error) = stop_for_exit(Instant::now() + Duration::from_secs(5)) {
+        log::warn!("side-question exit cleanup: {error}");
+    }
+}
+pub(crate) fn prepare_exit(deadline: Instant) -> Result<(), String> {
+    lock_until(requests(), deadline)?.shutting_down = true;
+    Ok(())
+}
+pub(crate) fn resume_after_exit() {
+    if let Ok(mut registry) = requests().lock() { registry.shutting_down = false; }
+}
+pub(crate) fn stop_for_exit(deadline: Instant) -> Result<&'static str, String> {
+    {
+        let mut registry = lock_until(requests(), deadline)?;
         registry.shutting_down = true;
         for flag in registry.active.values() { flag.store(true, Ordering::SeqCst); }
     }
     loop {
-        let empty = requests().lock().map(|registry| registry.active.is_empty()).unwrap_or(true);
-        if empty { break; }
-        std::thread::sleep(Duration::from_millis(10));
+        reap_closing(deadline)?;
+        if lock_until(requests(), deadline)?.active.is_empty() {
+            reap_failed(deadline)?;
+            return Ok(if cfg!(windows) { "job_empty" } else { "process_signaled" });
+        }
+        if Instant::now() >= deadline { return Err("helper_timeout".into()); }
+        std::thread::sleep(Duration::from_millis(2));
     }
 }
-
-struct OwnedChild(Child);
-impl Drop for OwnedChild {
-    fn drop(&mut self) {
-        // kill is harmless after exit; wait always reaps, including write/read/timeout errors.
-        let _ = self.0.kill();
-        let _ = self.0.wait();
+struct Closing {
+    owned: OwnedProcess,
+    readers: Vec<std::thread::JoinHandle<()>>,
+    _registration: Registration,
+}
+static CLOSING: OnceLock<Mutex<Vec<Closing>>> = OnceLock::new();
+fn closing() -> &'static Mutex<Vec<Closing>> { CLOSING.get_or_init(Default::default) }
+fn reap_closing(deadline: Instant) -> Result<(), String> {
+    let mut slots = lock_until(closing(), deadline)?;
+    while let Some(slot) = slots.last_mut() {
+        slot.owned.stop_until(deadline)?;
+        while slot.readers.iter().any(|r| !r.is_finished()) {
+            if Instant::now() >= deadline { return Err("helper_timeout".into()); }
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        for reader in slot.readers.drain(..) { let _ = reader.join(); }
+        slots.pop();
     }
+    Ok(())
 }
 
 // Release builds use installed Tauri resources exclusively; no checkout fallback.
@@ -158,22 +187,14 @@ fn run_command(
     let started = Instant::now();
     let encoded = serde_json::to_vec(&payload).map_err(|_| "side_question_encode")?;
     command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000); // CREATE_NO_WINDOW: never create a terminal.
-    }
-    let mut child = OwnedChild(command.spawn().map_err(|error| {
-        if error.kind() == std::io::ErrorKind::NotFound {
-            "side_question_node_required: install Node.js >=22.19.0 and make node available on the application PATH"
-        } else { "side_question_sidecar_start" }
-    })?);
-    let mut stdin = child.0.stdin.take().ok_or("side_question_stdin")?;
+    let mut child = OwnedProcess::spawn(&mut command)?;
+    // Piped handles are guaranteed by the command setup above.
+    let mut stdin = child.child.stdin.take().expect("configured stdin pipe");
     // Writer is separate so a nonreading child cannot block cancellation/timeout.
     let writer = std::thread::spawn(move || {
-        stdin.write_all(&encoded).and_then(|_| stdin.write_all(b"\n"))
+        let _ = stdin.write_all(&encoded).and_then(|_| stdin.write_all(b"\n"));
     });
-    let stdout = child.0.stdout.take().ok_or("side_question_stdout")?;
+    let stdout = child.child.stdout.take().expect("configured stdout pipe");
     let (sender, receiver) = mpsc::sync_channel(32);
     let reader = std::thread::spawn(move || {
         let mut reader = BufReader::new(stdout);
@@ -227,7 +248,7 @@ fn run_command(
         loop {
             if registration.is_cancelled() { return Err("side_question_cancelled".into()); }
             if started.elapsed() >= timeout { return Err("side_question_timeout".into()); }
-            match child.0.try_wait().map_err(|_| "side_question_wait")? {
+            match child.child.try_wait().map_err(|_| "side_question_wait")? {
                 Some(status) if status.success() => break,
                 Some(_) => return Err("side_question_exit".into()),
                 None => std::thread::sleep(Duration::from_millis(10)),
@@ -237,9 +258,11 @@ fn run_command(
     })();
     // Drop receiver before joining: a full reader queue must not deadlock cleanup.
     drop(receiver);
-    drop(child);
-    let _ = writer.join();
-    let _ = reader.join();
+    closing().lock().unwrap_or_else(|e| e.into_inner()).push(Closing {
+        owned: child, readers: vec![writer, reader], _registration: registration,
+    });
+    // An unsuccessful cleanup keeps the registration and all handles for exit retry.
+    reap_closing(Instant::now() + Duration::from_secs(2))?;
     result
 }
 
