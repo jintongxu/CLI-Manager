@@ -1,0 +1,29 @@
+{
+  "id": "worktree-configurable-root",
+  "name": "worktree-configurable-root",
+  "title": "可配置全局 Worktree 根目录",
+  "description": "默认用户主目录/Worktrees，通用设置可修改，全局根按仓库分组，项目根优先且不迁移旧目录。",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "Rafael",
+  "assignee": "Rafael",
+  "createdAt": "2026-10-29",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "status": "completed",
+    "description": "已实现本机可配置全局根，默认home/Worktrees；定向Rust50项与前端28项及类型/架构通过。未桌面验收，跨窗口设置无事务锁，旧labels7失败已记录。"
+  }
+}

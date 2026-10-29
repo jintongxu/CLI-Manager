@@ -1,0 +1,29 @@
+{
+  "id": "worktree-central-storage",
+  "name": "worktree-central-storage",
+  "title": "Worktree 目录集中收纳",
+  "description": "",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "Rafael",
+  "assignee": "Rafael",
+  "createdAt": "2026-10-29",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "status": "completed",
+    "description": "集中收纳新建 Worktree，保留原目录默认、自定义根与旧路径；实现和定向验证完成，桌面手工验收未执行，既有创建测试8项失败已记录。"
+  }
+}

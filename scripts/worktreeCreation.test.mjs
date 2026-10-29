@@ -13,6 +13,7 @@ function load(file, deps, fallback) {
   vm.runInNewContext(code, { exports, console, setTimeout, crypto: { randomUUID },
     require: name => {
       if (name in deps) return deps[name];
+      if (name.endsWith('/worktreeRootErrors')) return load('src/shared/preferences/worktreeRootErrors.ts', {});
     if (name.endsWith('/worktreeCreationRecovery')) return load('src/features/projects/api/worktreeCreationRecovery.ts', {});
       if (name.endsWith('/worktreeLabels')) return load('src/features/projects/api/worktreeLabels.ts', {});
       if (name.endsWith('/WorktreeShortLabelField')) return { ...load('src/features/projects/components/WorktreeShortLabelField.tsx', {
@@ -393,6 +394,7 @@ test('actual short label field exposes bilingual rules and all domain error keys
     assert.equal(api.worktreeLabelErrorKey(Error(`wrapped: worktree_short_label_${code}`)), `worktree.shortLabel.${code}`);
   }
   assert.equal(api.worktreeLabelErrorKey('worktree_label_ordinal_exhausted'), 'worktree.shortLabel.exhausted');
+  assert.equal(api.worktreeCreationErrorDescription(Error('worktree_default_root_inside_repository'), key => key), 'worktree.settings.rootInsideRepository');
   const outer = 'worktree_record_save_failed: internal; D:/created; worktree_short_label_conflict';
   assert.equal(api.worktreeLabelErrorKey(outer), null);
   const description = api.worktreeCreationErrorDescription(outer, key => key);
@@ -402,6 +404,10 @@ test('actual short label field exposes bilingual rules and all domain error keys
 
   for (const locale of ['en-US', 'zh-CN']) {
     const messages = readFileSync(`src/shared/i18n/messages/projects.${locale}.ts`, 'utf8');
+    assert.ok(messages.includes('"worktree.settings.rootInsideRepository"'));
+    assert.ok(messages.includes('/Worktrees'));
+    assert.ok(!messages.includes('sibling <project>-worktrees'));
+    assert.ok(!messages.includes('留空使用项目同级'));
     for (const code of ['reserved', 'too_long', 'invalid', 'conflict', 'exhausted', 'createHelp', 'editHelp']) assert.ok(messages.includes(`"worktree.shortLabel.${code}"`));
   }
 });

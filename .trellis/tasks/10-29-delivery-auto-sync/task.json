@@ -1,0 +1,29 @@
+{
+  "id": "delivery-auto-sync",
+  "name": "delivery-auto-sync",
+  "title": "Pi 默认推送与自动冲突恢复",
+  "description": "主分支与Worktree有明确远端默认推送，Pi处理本次交付冲突并验证继续；版本化同步恢复、不扩旧收据授权。",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "Rafael",
+  "assignee": "Rafael",
+  "createdAt": "2026-10-29",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "status": "completed",
+    "description": "v2默认push与Pi受控冲突/同步完成；两项review修复，86/86临时回归及架构通过。未真实交付，Pi语义/GitHub未手验。"
+  }
+}

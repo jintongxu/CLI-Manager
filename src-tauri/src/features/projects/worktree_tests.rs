@@ -1,9 +1,9 @@
 use super::{
     check_dependency_need, classify_worktree_registration, cleanup_empty_worktree_parent,
     cleanup_residual_worktree_dir_after_remove, cleanup_stale_unregistered_worktree,
-    default_worktree_root, git_create_error_snippet, is_retryable_worktree_remove_error,
-    is_stale_worktree_remove_error, merge_worktree_internal, parse_worktree_list_entries,
-    path_to_git_arg, remove_registered_stale_worktree_dir, remove_worktree_path_with_retry,
+    git_create_error_snippet, is_retryable_worktree_remove_error, is_stale_worktree_remove_error,
+    merge_worktree_internal, parse_worktree_list_entries, path_to_git_arg,
+    remove_registered_stale_worktree_dir, remove_worktree_path_with_retry,
     resolve_worktree_target_path, seed_trellis_developer_identity, validate_plain_branch_name,
     validate_task_name, validate_worktree_branch, worktree_root_identity, WorktreeRegistration,
     FORCE_MERGE_STASH_MESSAGE_PREFIX, WORKTREE_REMOVE_RETRY_ATTEMPTS,
@@ -14,7 +14,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-fn run_test_git<I, S>(cwd: &Path, args: I) -> String
+pub(super) fn run_test_git<I, S>(cwd: &Path, args: I) -> String
 where
     I: IntoIterator<Item = S>,
     S: AsRef<std::ffi::OsStr>,
@@ -37,7 +37,7 @@ fn commit_test_change(repo: &Path, message: &str) {
     run_test_git(repo, ["commit", "--message", message]);
 }
 
-fn create_test_worktree() -> (tempfile::TempDir, PathBuf, PathBuf) {
+pub(super) fn create_test_worktree() -> (tempfile::TempDir, PathBuf, PathBuf) {
     let temp = tempfile::tempdir().unwrap();
     let repo = temp.path().join("repo");
     fs::create_dir_all(&repo).unwrap();
@@ -166,11 +166,13 @@ fn detects_stale_worktree_remove_errors() {
 }
 
 #[test]
-// 验证默认工作树根目录位于项目同级并带固定后缀。
-fn computes_default_worktree_root_next_to_project() {
-    let project_path = Path::new("/repo/demo-app");
-    let root = default_worktree_root(project_path).unwrap();
-    assert_eq!(root, PathBuf::from("/repo/demo-app-worktrees"));
+// 纯 fixture 验证默认分支，不读取真实用户设置。
+fn computes_default_worktree_root_without_reading_real_settings() {
+    let temp = tempfile::tempdir().unwrap();
+    let expected = temp.path().join("Worktrees");
+    let root = super::select_worktree_root(None, || Ok(expected.clone())).unwrap();
+    assert_eq!(root, expected);
+    assert!(!root.exists());
 }
 
 #[test]
@@ -263,6 +265,15 @@ fn cleanup_empty_worktree_parent_removes_only_empty_root() {
     fs::remove_dir(&wt).unwrap(); // 模拟 git 已移除该 worktree 目录
     cleanup_empty_worktree_parent(&wt);
     assert!(!root.exists());
+    assert!(temp.path().exists()); // 单层清理不继续删除祖先。
+
+    let centralized = temp.path().join("data").join("worktrees");
+    let bucket = centralized.join("repo-digest");
+    fs::create_dir_all(&bucket).unwrap();
+    cleanup_empty_worktree_parent(&bucket.join("removed-task"));
+    assert!(!bucket.exists());
+    assert!(centralized.exists());
+    assert!(centralized.parent().unwrap().exists());
 
     // 非空根目录（还有其它 worktree）：保持不动
     let root2 = temp.path().join("proj2-worktrees");

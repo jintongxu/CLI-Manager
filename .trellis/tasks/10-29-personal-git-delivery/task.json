@@ -1,0 +1,29 @@
+{
+  "id": "personal-git-delivery",
+  "name": "personal-git-delivery",
+  "title": "个人开发中文提交与 Worktree 交付方案",
+  "description": "仅规划：主分支中文提交，Worktree squash整合到目标主分支后可选推送；保留现场、可恢复，不实施Git写操作。",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "Rafael",
+  "assignee": "Rafael",
+  "createdAt": "2026-10-29",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "status": "completed",
+    "description": "项目级中文交付Skill实现完成；主提交/Worktree squash+明确push/journal恢复，review两项修复，最终52测试及架构通过，Pi host/GitHub未手验，未真实交付。"
+  }
+}

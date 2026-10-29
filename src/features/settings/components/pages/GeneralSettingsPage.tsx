@@ -44,6 +44,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { FontFamilySelect } from "../FontFamilySelect";
 import { applySeaSaltScheme, applyStormScheme } from "../../lib/appearanceSchemes";
 import { AppearancePreview, useAppearancePreview } from "../AppearancePreview";
+import { WorktreeStorageSection } from "./WorktreeStorageSection";
 import { DataStorageSection } from "./DataStorageSection";
 
 const WSL_BUN_INSTALL_COMMAND = "curl -fsSL https://bun.net.cn/install | bash";
@@ -1012,6 +1013,7 @@ export function GeneralSettingsPage({ appearancePreviewActive = true }: { appear
         </Stack>
       </section>
 
+      <WorktreeStorageSection />
       <DataStorageSection />
 
       <Dialog open={ccusageWslDialogOpen} onOpenChange={setCcusageWslDialogOpen}>

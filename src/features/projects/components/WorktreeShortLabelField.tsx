@@ -1,3 +1,4 @@
+import { worktreeRootErrorKey } from "../../../shared/preferences/worktreeRootErrors";
 import { worktreeCreationPhase } from "../api/worktreeCreationRecovery";
 import { useId } from "react";
 import { useI18n } from "../../../shared/i18n/index";
@@ -14,9 +15,11 @@ export function worktreeLabelErrorKey(error: unknown) {
 }
 
 /** Preserve outer phase/identity; translate only the nested cause. */
-export function worktreeCreationErrorDescription(error: unknown, t: (key: "worktree.shortLabel.conflict" | "worktree.shortLabel.exhausted" | "worktree.shortLabel.too_long" | "worktree.shortLabel.reserved" | "worktree.shortLabel.invalid" | "worktree.recovery.save" | "worktree.recovery.saved") => string): string {
+export function worktreeCreationErrorDescription(error: unknown, t: (key: "worktree.shortLabel.conflict" | "worktree.shortLabel.exhausted" | "worktree.shortLabel.too_long" | "worktree.shortLabel.reserved" | "worktree.shortLabel.invalid" | "worktree.recovery.save" | "worktree.recovery.saved" | NonNullable<ReturnType<typeof worktreeRootErrorKey>>) => string): string {
   const phase = worktreeCreationPhase(error);
   if (!phase) {
+    const rootKey = worktreeRootErrorKey(error);
+    if (rootKey) return t(rootKey);
     const key = worktreeLabelErrorKey(error);
     return key ? t(key) : String(error);
   }

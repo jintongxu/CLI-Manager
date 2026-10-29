@@ -1000,6 +1000,8 @@ pub fn run() {
             commands::git_tools::git_rewrite_commits,
             commands::git::git_watch_start,
             commands::git::git_watch_stop,
+            commands::git_worktree::git_worktree_get_default_root,
+            commands::git_worktree::git_worktree_validate_default_root,
             commands::git_worktree::git_worktree_validate,
             commands::git_worktree::git_worktree_create,
             commands::git_worktree::git_worktree_check_deps,

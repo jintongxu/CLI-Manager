@@ -1,3 +1,5 @@
+import { createSettingsPersistence, type SettingsPersistence } from "./settingsPersistence";
+import { createWorktreeRootSaver, loadedWorktreeRoot } from "./worktreeRootPersistence";
 import { normalizeExitWithRunningTasksBehavior } from "./exitPolicy";
 export { normalizeExitWithRunningTasksBehavior } from "./exitPolicy";
 import { isAppearanceKey } from "./appearanceTransaction";
@@ -395,6 +397,7 @@ const TERMINAL_BACKGROUND_POSITIONS: readonly TerminalBackgroundPosition[] = [
 ] as const;
 
 export interface Settings {
+  worktreeDefaultRoot: string;
   webTerminalBatchKiB: WebTerminalBatchKiB;
   language: LanguagePreference;
   theme: ThemeMode;
@@ -549,6 +552,7 @@ interface SettingsStore extends Settings {
   /** Transient flag: set when the saved terminal background image was not found on disk at load. */
   terminalBackgroundMissing: boolean;
   updateWorktreeOrder: (projectId: string, orderedIds: string[], worktrees: readonly WorktreeRecord[]) => Promise<boolean>;
+  saveWorktreeDefaultRoot: (root: string) => Promise<string>;
   load: () => Promise<void>;
   update: <K extends keyof Settings>(key: K, value: Settings[K]) => Promise<void>;
   updateHistoryDetailSortDirections: (value: HistoryDetailSortDirections) => void;
@@ -561,6 +565,7 @@ interface SettingsStore extends Settings {
 }
 
 const DEFAULTS: Settings = {
+  worktreeDefaultRoot: "",
   webTerminalBatchKiB: 96,
   language: "auto",
   theme: "dark",
@@ -1312,16 +1317,19 @@ export function migrateDesktopPetSettings(value: unknown): DesktopPetSettings {
   };
 }
 
-let store: Store | null = null;
+let store: SettingsPersistence | null = null;
+let storePromise: Promise<SettingsPersistence> | null = null;
 const TERMINAL_INPUT_SUGGESTION_USAGE_SAVE_DELAY_MS = 800;
 let terminalInputSuggestionUsageSaveTimer: number | null = null;
 let historyDetailSortWriteQueue: Promise<void> = Promise.resolve();
 
 async function getStore() {
-  if (!store) {
+  if (store) return store;
+  storePromise ??= (async () => {
     const paths = await getCliManagerDataPaths();
-    store = await Store.load(paths.settingsStorePath, { autoSave: 0, defaults: {} });
-  }
+    return createSettingsPersistence(await Store.load(paths.settingsStorePath, { autoSave: 0, defaults: {} }));
+  })().catch(error => { storePromise = null; throw error; });
+  store = await storePromise;
   return store;
 }
 
@@ -1346,6 +1354,9 @@ export const appearancePreview = settingsAppearance.transaction;
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
   ...DEFAULTS,
   worktreeOrderByProject: {},
+  saveWorktreeDefaultRoot: createWorktreeRootSaver(getStore,
+    root => invoke<string>("git_worktree_validate_default_root", { root }),
+    worktreeDefaultRoot => set({ worktreeDefaultRoot })),
   updateWorktreeOrder: createWorktreeOrderUpdater(
     () => get().worktreeOrderByProject,
     (worktreeOrderByProject) => set({ worktreeOrderByProject }),
@@ -1361,6 +1372,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     const entries = Object.fromEntries(
       rawEntries.filter(([, value]) => value !== null && value !== undefined)
     ) as Partial<SettingsStore>;
+    entries.worktreeDefaultRoot = loadedWorktreeRoot(entries.worktreeDefaultRoot);
     const pendingStoreWrites: Promise<void>[] = [];
     const persistSetting = (key: keyof Settings, value: Settings[keyof Settings]) => {
       pendingStoreWrites.push(s.set(key, value));
@@ -1912,6 +1924,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   },
 
   update: async (key, value) => {
+    if (key === "worktreeDefaultRoot") throw new Error("Use saveWorktreeDefaultRoot");
     if (isAppearanceKey(key)) {
       await appearancePreview.write(() => ({ [key]: value }));
       return;

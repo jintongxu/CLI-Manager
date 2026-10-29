@@ -1,6 +1,17 @@
 import type { zh } from "./settings.zh-CN";
 
 export const en: Record<keyof typeof zh, string> = {
+  "settings.worktreeStorage.title": "Worktree storage",
+  "settings.worktreeStorage.description": "Stored only on this device, excluded from backup and sync. A project-specific root takes precedence (tasks directly inside); otherwise the global root groups tasks by repository. Leave empty for home/Worktrees. Applies only to new Worktrees; no migration, deletion, or isolation strategy changes.",
+  "settings.worktreeStorage.root": "Global Worktree root",
+  "settings.worktreeStorage.defaultPath": "Default path on this device: {path}",
+  "settings.worktreeStorage.unavailable": "unavailable",
+  "settings.worktreeStorage.choose": "Choose directory",
+  "settings.worktreeStorage.save": "Save directory",
+  "settings.worktreeStorage.restoreDefault": "Restore default and save",
+  "settings.worktreeStorage.saved": "Directory saved; applies to the next new Worktree.",
+  "settings.worktreeStorage.failed": "Operation failed; save was not confirmed. Your draft is kept. Check the error and retry.",
+  "settings.worktreeStorage.rollbackFailed": "Save and rollback failed; disk settings may have changed. Your draft is kept. Retry saving to reconcile; do not assume the old setting was restored.",
   "settings.general.previewDescription": "Preview changes the real app and terminal colors without saving. Fonts, custom colors, backgrounds and panel skins are kept. Leaving this page cancels the preview.",
   "settings.general.previewStorm": "Preview Storm",
   "settings.general.previewSeaSalt": "Preview Sea Salt Blue",

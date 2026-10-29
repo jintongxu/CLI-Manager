@@ -1,5 +1,7 @@
 #[path = "worktree_create.rs"]
 mod create;
+#[path = "worktree_default_root.rs"]
+mod default_root;
 #[path = "finish.rs"]
 pub mod finish;
 #[path = "worktree_jobs.rs"]
@@ -275,17 +277,9 @@ fn seed_trellis_developer_identity(main_repo: &Path, worktree_path: &Path) {
     let _ = fs::copy(&source, &dest);
 }
 
-// 在项目同级生成带 -worktrees 后缀的默认根目录。
+// 默认根读取执行设备本机设置；项目自定义根不读取全局配置。
 fn default_worktree_root(project_path: &Path) -> Result<PathBuf, String> {
-    let project_name = project_path
-        .file_name()
-        .and_then(OsStr::to_str)
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| "project_name_unknown".to_string())?;
-    let parent = project_path
-        .parent()
-        .ok_or_else(|| "project_parent_unknown".to_string())?;
-    Ok(parent.join(format!("{project_name}-worktrees")))
+    default_root::root(project_path)
 }
 
 // 创建并规范化工作树根目录，要求目标不存在且位于根目录下。
@@ -294,20 +288,7 @@ fn resolve_worktree_target_path(
     task_name: &str,
     worktree_root: Option<&str>,
 ) -> Result<PathBuf, String> {
-    let raw_root = match worktree_root
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        Some(root) => {
-            ensure_supported_local_path(root)?;
-            let path = local_path_from_input(root);
-            if !path.is_absolute() {
-                return Err("worktree_root_not_absolute".to_string());
-            }
-            path
-        }
-        None => default_worktree_root(project_path)?,
-    };
+    let raw_root = select_worktree_root(worktree_root, || default_worktree_root(project_path))?;
 
     fs::create_dir_all(&raw_root).map_err(|e| format!("create_worktree_root_failed: {e}"))?;
     let root = raw_root
@@ -321,6 +302,29 @@ fn resolve_worktree_target_path(
         return Err("worktree_path_escape".to_string());
     }
     Ok(target)
+}
+
+// 项目非空自定义根优先，惰性默认分支不读取坏的全局配置。
+fn select_worktree_root<F>(worktree_root: Option<&str>, default: F) -> Result<PathBuf, String>
+where
+    F: FnOnce() -> Result<PathBuf, String>,
+{
+    Ok(
+        match worktree_root
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            Some(root) => {
+                ensure_supported_local_path(root)?;
+                let path = local_path_from_input(root);
+                if !path.is_absolute() {
+                    return Err("worktree_root_not_absolute".to_string());
+                }
+                path
+            }
+            None => return default(),
+        },
+    )
 }
 
 // 在指定目录执行真实 Git，隐藏 Windows 窗口并收集输出与退出状态。
@@ -759,7 +763,7 @@ fn is_empty_dir(path: &Path) -> Result<bool, String> {
     Ok(entries.next().is_none())
 }
 
-/// worktree 移除后，若其所在的根目录（如 `<project>-worktrees`）已空，顺手清掉，
+/// worktree 移除后，若其直接父目录（仓库桶或历史/自定义根）已空，顺手清掉，
 /// 避免（尤其是批量）删除后残留一个空文件夹。`fs::remove_dir` 仅能删空目录，
 /// 非空/出错都安全忽略；git 下次 `worktree add` 会通过 create_dir_all 自动重建根目录。
 // 工作树移除后尽力删除已空的父目录，保留非空父目录。
@@ -1266,6 +1270,21 @@ where
             ));
         }
     }
+}
+
+// 查询内建默认根，不读取设置文件，返回不含桶的普通路径。
+#[tauri::command]
+pub fn git_worktree_get_default_root() -> Result<String, String> {
+    default_root::home_root(crate::app_paths::home_dir_from_env())
+        .map(|path| path_to_git_arg(&path))
+}
+
+// 只读路径校验不执行 Git、不创建目录、不修改设置。
+#[tauri::command]
+pub async fn git_worktree_validate_default_root(root: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || default_root::validate(&root))
+        .await
+        .map_err(|error| format!("task_failed: {error}"))?
 }
 
 #[tauri::command]
