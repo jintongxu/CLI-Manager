@@ -1,3 +1,4 @@
+import { runProjectNavigation } from "./projectNavigation";
 import { useWorktreeStore } from "../../projects/api/worktreeStore";
 import { resolveTerminalCreationContext } from "../../terminal/api/terminalCreationContext";
 import { useState, useEffect, useRef, useMemo } from "react";
@@ -243,7 +244,10 @@ export function CommandPalette() {
       }
     }
 
-    return result;
+    return result.map((item) => item.id === "action:toggle-theme" ? item : {
+      ...item,
+      action: () => runProjectNavigation(item.action),
+    });
   }, [projects, groups, templates, activeSessionId, activeSession, resolvedTheme, createSession, splitTerminal, unsplitTerminal, setTheme, t, viewMode, sessionHistoryShortcut]);
 
   const queryLower = useMemo(() => query.trim().toLowerCase(), [query]);

@@ -15,6 +15,7 @@ import { PaneContentDropZones } from "./PaneContentDropZones";
 import { createTerminalCliContext, isPiTerminalContext } from "../browser/TerminalCliContext";
 
 export interface PaneLeafViewProps {
+  workspaceVisible?: boolean;
   pane: TerminalPaneLeaf;
   sessions: TerminalSession[];
   sessionWorktreeBadges?: ReadonlyMap<string, TerminalWorktreeBadge>;
@@ -78,6 +79,7 @@ export interface PaneLeafViewProps {
 }
 
 export function PaneLeafView({
+  workspaceVisible = true,
   pane,
   sessions,
   sessionWorktreeBadges,
@@ -153,7 +155,7 @@ export function PaneLeafView({
     ? paneSessions.find((session) => session.id === effectivePaneActiveSessionId) ?? null
     : null;
   const paneMarker = resolveTerminalPaneMarker({
-    isLayoutVisible: isLayoutVisible && !historyActive,
+    isLayoutVisible: workspaceVisible && isLayoutVisible && !historyActive,
     isSplitLayout: allPanes.length > 1,
     isAppFocused,
     isPaneFocused: effectivePaneActiveSessionId !== null && effectivePaneActiveSessionId === activeSessionId,
@@ -227,6 +229,7 @@ export function PaneLeafView({
       <div
         className={`ui-terminal-pane-content relative min-h-0 flex-1 overflow-hidden${isPiPane ? " ui-terminal-pane-content--pi" : ""}`}
         onPointerDownCapture={() => {
+          if (!workspaceVisible) return;
           const focusSessionId = currentWorkPortalTargets?.size && currentWorkActiveSessionId
             ? currentWorkActiveSessionId
             : effectivePaneActiveSessionId;
@@ -235,6 +238,7 @@ export function PaneLeafView({
           }
         }}
         onFocusCapture={() => {
+          if (!workspaceVisible) return;
           const focusSessionId = currentWorkPortalTargets?.size && currentWorkActiveSessionId
             ? currentWorkActiveSessionId
             : effectivePaneActiveSessionId;
@@ -246,13 +250,13 @@ export function PaneLeafView({
         {paneSessions.map((session) => {
           const currentWorkPortalTarget = currentWorkPortalTargets?.get(session.id) ?? null;
           const shouldPortalCurrentWork = Boolean(currentWorkPortalTarget && currentWorkSessionIds?.includes(session.id));
-          const isCurrentWorkVisible = Boolean(!session.tabHidden && shouldPortalCurrentWork && currentWorkVisibleSessionIds?.has(session.id));
+          const isCurrentWorkVisible = Boolean(workspaceVisible && !session.tabHidden && shouldPortalCurrentWork && currentWorkVisibleSessionIds?.has(session.id));
           const isCurrentWorkActive = Boolean(isCurrentWorkVisible && currentWorkActiveSessionId === session.id);
           const sessionElement = (
           <div
             key={session.id}
             className={`absolute inset-0${isPiPane ? " ui-terminal-session--pi" : ""}`}
-            style={{ display: (!session.tabHidden && (shouldPortalCurrentWork ? isCurrentWorkVisible : isLayoutVisible && session.id === effectivePaneActiveSessionId)) ? "block" : "none" }}
+            style={{ display: (workspaceVisible && !session.tabHidden && (shouldPortalCurrentWork ? isCurrentWorkVisible : isLayoutVisible && session.id === effectivePaneActiveSessionId)) ? "block" : "none" }}
             onPointerDownCapture={() => {
               if (isCurrentWorkVisible && session.id !== currentWorkActiveSessionId && useTerminalStore.getState().sessions.some((live) => live.id === session.id && !live.tabHidden)) onActivateSession(session.id);
             }}
@@ -261,7 +265,7 @@ export function PaneLeafView({
               <Suspense fallback={null}>
                 <FileEditorPane
                   session={session}
-                  isActive={isCurrentWorkActive || (!historyActive && isLayoutVisible && session.id === activeSessionId)}
+                  isActive={workspaceVisible && (isCurrentWorkActive || (!historyActive && isLayoutVisible && session.id === activeSessionId))}
                   terminalThemeBackground={terminalThemeBackground}
                   onClose={() => onCloseSessions([session.id])}
                 />
@@ -271,7 +275,7 @@ export function PaneLeafView({
                 <SubagentTranscriptView
                   sessionId={session.id}
                   title={session.title}
-                  isVisible={isCurrentWorkVisible || (!historyActive && isLayoutVisible && session.id === effectivePaneActiveSessionId)}
+                  isVisible={workspaceVisible && (isCurrentWorkVisible || (!historyActive && isLayoutVisible && session.id === effectivePaneActiveSessionId))}
                 />
               </Suspense>
             ) : session.remoteHandoff ? (
@@ -279,8 +283,8 @@ export function PaneLeafView({
             ) : (
               <XTermTerminal
                 sessionId={session.id}
-                isActive={isCurrentWorkActive || (!historyActive && isLayoutVisible && !session.tabHidden && session.id === activeSessionId)}
-                isVisible={isCurrentWorkVisible || (!historyActive && isLayoutVisible && session.id === effectivePaneActiveSessionId)}
+                isActive={workspaceVisible && (isCurrentWorkActive || (!historyActive && isLayoutVisible && !session.tabHidden && session.id === activeSessionId))}
+                isVisible={workspaceVisible && (isCurrentWorkVisible || (!historyActive && isLayoutVisible && session.id === effectivePaneActiveSessionId))}
                 fontSize={fontSize}
                 fontFamily={fontFamily}
                 resolvedTheme={resolvedTheme}
@@ -317,7 +321,7 @@ export function PaneLeafView({
         })}
         <PaneContentDropZones
           paneId={pane.id}
-          enabled={isLayoutVisible}
+          enabled={workspaceVisible && isLayoutVisible}
           activeDropPreview={activeDropPreview}
         />
         {paneMarker && (
@@ -421,6 +425,7 @@ export function getPaneSiblingsSignature(panes: TerminalPaneLeaf[]): string {
 }
 
 export function arePaneLeafViewPropsEqual(prevProps: PaneLeafViewProps, nextProps: PaneLeafViewProps): boolean {
+  if (prevProps.workspaceVisible !== nextProps.workspaceVisible) return false;
   if (prevProps.sessionWorktreeBadges !== nextProps.sessionWorktreeBadges) return false;
   if (prevProps.projects !== nextProps.projects) return false;
   if (prevProps.pane.id !== nextProps.pane.id) return false;

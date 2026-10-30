@@ -9,6 +9,12 @@ vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../src/features/term
 }).outputText, { exports });
 const { resolveBtwSource } = exports;
 
+test('removed terminal cannot inherit a leftover runtime status identity', () => {
+  const result = resolveBtwSource('removed', [], { removed: { agentIdentity: { source: 'pi', sessionId: 'stale' } } });
+  assert.equal(result.sessionId, null);
+  assert.equal(result.reason, 'no_source_session');
+});
+
 test('contradictory or incomplete live identity never inherits stale persisted Pi identity', () => {
   const sessions = [{ id: 't', cliTool: 'pi', cliSessionId: 'old-pi' }];
   for (const identity of [{ source: 'codex', sessionId: 'codex-now' }, { source: 'pi' }, { source: 'pi', sessionId: '  ' }]) {

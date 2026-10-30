@@ -1137,7 +1137,9 @@ function global:prompt {
             diagnostics.last_resize_rows = Some(rows);
         }
         session
-            .controller.as_ref().ok_or("pty_closing")?
+            .controller
+            .as_ref()
+            .ok_or("pty_closing")?
             .resize(cols, rows, pixel_width, pixel_height)
             .map_err(|e| {
                 error!("pty resize failed: session_id={}, error={}", session_id, e);
@@ -1810,7 +1812,12 @@ impl PtyManager {
         let session = sessions.get(id)?.lock().ok()?;
         Some(session.child.clone())
     }
-    pub(crate) fn resource_child_current(&self, id: &str, child: &Arc<dyn PlatformPtyChild>) -> bool {
-        self.resource_child(id).is_some_and(|current| Arc::ptr_eq(&current, child))
+    pub(crate) fn resource_child_current(
+        &self,
+        id: &str,
+        child: &Arc<dyn PlatformPtyChild>,
+    ) -> bool {
+        self.resource_child(id)
+            .is_some_and(|current| Arc::ptr_eq(&current, child))
     }
 }

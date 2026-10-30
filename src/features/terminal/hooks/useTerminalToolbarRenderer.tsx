@@ -265,7 +265,8 @@ export function useTerminalToolbarRenderer({
           onClick={handleToggleBtwPanel}
           className="ui-focus-ring ui-icon-action ui-action-btw"
           data-active={btwPanelActive ? "true" : "false"}
-          aria-label={btwPanelActive ? t("terminal.toolbar.closeBtwPanel") : t("terminal.toolbar.openBtwPanel")}
+          aria-label={t("terminal.panel.btw")}
+          title={t("terminal.btw.historyTooltip")}
           aria-pressed={btwPanelActive}
         >
           <MessageSquare size={13} strokeWidth={1.8} />

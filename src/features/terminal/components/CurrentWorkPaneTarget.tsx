@@ -71,6 +71,7 @@ function CurrentWorkPaneHeader({
 }
 
 export const CurrentWorkPaneTarget = memo(function CurrentWorkPaneTarget({
+  workspaceVisible = true,
   paneId,
   activeDropPreview,
   session,
@@ -85,6 +86,7 @@ export const CurrentWorkPaneTarget = memo(function CurrentWorkPaneTarget({
   onRemove,
   registerTarget,
 }: {
+  workspaceVisible?: boolean;
   paneId: string;
   activeDropPreview: PaneDropPreview;
   session: TerminalSession;
@@ -104,7 +106,7 @@ export const CurrentWorkPaneTarget = memo(function CurrentWorkPaneTarget({
   }, [paneId, registerTarget]);
   const context = formatTerminalTabContext(session, project, worktree);
   return (
-    <div className="ui-current-work-pane relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden" data-active={active ? "true" : "false"}>
+    <div className="ui-current-work-pane relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden" data-active={workspaceVisible && active ? "true" : "false"} inert={!workspaceVisible} aria-hidden={!workspaceVisible}>
       {showHeader && (
         <CurrentWorkPaneHeader
           session={session}
@@ -119,7 +121,7 @@ export const CurrentWorkPaneTarget = memo(function CurrentWorkPaneTarget({
       )}
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <div ref={setTarget} className="absolute inset-0 min-h-0 min-w-0 overflow-hidden" />
-        <PaneContentDropZones paneId={paneId} enabled activeDropPreview={activeDropPreview} />
+        <PaneContentDropZones paneId={paneId} enabled={workspaceVisible} activeDropPreview={activeDropPreview} />
       </div>
     </div>
   );

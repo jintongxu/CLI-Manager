@@ -25,7 +25,8 @@ use super::protocol::{
 use super::routing::{PortAllocator, RoutingRuntime, FALLBACK_PORT_START};
 use super::ssh_agent_bridge::SshAgentBridgeManager;
 use crate::claude_hook::{
-    approval_aware_hook_sink, remote_hook_payload_from_spool, spawn_stoppable_hook_listener, HookPayloadSink,
+    approval_aware_hook_sink, remote_hook_payload_from_spool, spawn_stoppable_hook_listener,
+    HookPayloadSink,
 };
 use crate::commands::cc_connect::handoff_notification::RemoteHandoffNotifier;
 use crate::pty::manager::PtyManager;
@@ -837,7 +838,6 @@ impl DaemonHost {
             }
         }
     }
-
 }
 
 pub struct DaemonServer {
@@ -1034,25 +1034,40 @@ impl DaemonServer {
         let hook_sink = approval_aware_hook_sink(delivery_sink);
         server.host.set_hook_sink(Arc::clone(&hook_sink));
         let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let mut hook_worker = spawn_stoppable_hook_listener(hook_listener, token, hook_sink, stop.clone())
-            .map_err(|e| e.to_string())?;
+        let mut hook_worker =
+            spawn_stoppable_hook_listener(hook_listener, token, hook_sink, stop.clone())
+                .map_err(|e| e.to_string())?;
 
         server.spawn_idle_watchdog();
 
         listener.set_nonblocking(true).map_err(|e| e.to_string())?;
-        ws_listener.set_nonblocking(true).map_err(|e| e.to_string())?;
-        while !server.host.ownership.lock().map(|s| s.draining).unwrap_or(false) {
+        ws_listener
+            .set_nonblocking(true)
+            .map_err(|e| e.to_string())?;
+        while !server
+            .host
+            .ownership
+            .lock()
+            .map(|s| s.draining)
+            .unwrap_or(false)
+        {
             for (listener, websocket) in [(&listener, false), (&ws_listener, true)] {
                 if let Ok((stream, _)) = listener.accept() {
                     let _ = stream.set_nonblocking(false);
                     let server = Arc::clone(&server);
-                    std::thread::spawn(move || if websocket { server.handle_websocket_connection(stream) }
-                        else { server.handle_connection(stream) });
+                    std::thread::spawn(move || {
+                        if websocket {
+                            server.handle_websocket_connection(stream)
+                        } else {
+                            server.handle_connection(stream)
+                        }
+                    });
                 }
             }
             std::thread::sleep(Duration::from_millis(20));
         }
-        drop(listener); drop(ws_listener);
+        drop(listener);
+        drop(ws_listener);
         stop.store(true, Ordering::Release);
         // Resource drain finished before this latch was set. Give the response writer
         // time to flush; native completion is still exclusively OS-handle evidence.
@@ -1076,7 +1091,12 @@ impl DaemonServer {
         let server = Arc::clone(self);
         std::thread::spawn(move || loop {
             std::thread::sleep(IDLE_CHECK_INTERVAL);
-            let busy = server.host.ownership.lock().map(|s| s.has_registered_owners()).unwrap_or(true)
+            let busy = server
+                .host
+                .ownership
+                .lock()
+                .map(|s| s.has_registered_owners())
+                .unwrap_or(true)
                 || server.host.client_count() > 0
                 || server.host.alive_session_count() > 0
                 || server.host.routing_is_running();
@@ -1262,11 +1282,15 @@ impl DaemonServer {
                 WebSocketClientMessage::Text(line) => match decode_client_frame(&line) {
                     Ok(frame) => {
                         if let ClientFrame::TerminalResources { id, .. } = &frame {
-                            let _ = writer.send_frame(&err_frame(*id, super::terminal_resources::NATIVE_ONLY));
+                            let _ = writer.send_frame(&err_frame(
+                                *id,
+                                super::terminal_resources::NATIVE_ONLY,
+                            ));
                             continue;
                         }
                         if let ClientFrame::RegisterOwner { id, .. } = &frame {
-                            let _ = writer.send_frame(&err_frame(*id, "native_owner_registration_required"));
+                            let _ = writer
+                                .send_frame(&err_frame(*id, "native_owner_registration_required"));
                             continue;
                         }
                         if let ClientFrame::WorktreeAdmission { id, .. } = &frame {
@@ -1436,8 +1460,14 @@ impl DaemonServer {
     // 处理已鉴权的控制帧并构造应答；会话协调只报告诊断，不按 UI 列表回收 daemon 会话。
     fn handle_frame_inner(&self, client_id: u64, frame: ClientFrame) -> DaemonFrame {
         match frame {
-            ClientFrame::TerminalResources { id, .. } | ClientFrame::RegisterOwner { id, .. } | ClientFrame::BindOwner { id, .. }
-            | ClientFrame::PrepareOwnerExit { id, .. } | ClientFrame::ResumeOwnerExit { id, .. } | ClientFrame::OwnerExit { id, .. } | ClientFrame::SessionScopes { id } | ClientFrame::CloseAll { id } => err_frame(id, "owner_dispatch_required"),
+            ClientFrame::TerminalResources { id, .. }
+            | ClientFrame::RegisterOwner { id, .. }
+            | ClientFrame::BindOwner { id, .. }
+            | ClientFrame::PrepareOwnerExit { id, .. }
+            | ClientFrame::ResumeOwnerExit { id, .. }
+            | ClientFrame::OwnerExit { id, .. }
+            | ClientFrame::SessionScopes { id }
+            | ClientFrame::CloseAll { id } => err_frame(id, "owner_dispatch_required"),
             ClientFrame::Auth { .. } => DaemonFrame::Err {
                 id: 0,
                 message: "already authenticated".to_string(),
@@ -1990,9 +2020,9 @@ fn maybe_activate_app_for_hook(payload: &crate::claude_hook::ClaudeHookPayload) 
 }
 
 #[cfg(test)]
-mod tests;
-#[cfg(test)]
 mod ownership_tests;
+#[cfg(test)]
+mod tests;
 
 #[cfg(test)]
 pub(crate) use ownership_tests::controlled_exit_receipt;

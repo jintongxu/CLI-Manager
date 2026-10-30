@@ -1,4 +1,9 @@
 export const zh = {
+  "app.spaces.label": "工作空间",
+  "app.spaces.projects": "项目",
+  "app.spaces.chat": "对话",
+  "app.spaces.settings": "设置",
+  "app.spaces.chatPending": "独立对话空间准备中。",
   "app.skipToMain": "跳转到主内容",
   "app.exitProgress.syncing": "正在同步数据…",
   "app.exitProgress.closing": "正在关闭终端会话…",

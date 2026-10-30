@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/independent-chat-contracts.md", "reason": "Delivered domain and lease/secret/exit invariants"}
+{"file": ".trellis/spec/backend/ccs-provider-domain-contracts.md", "reason": "Native explicit protocol and metadata source"}
+{"file": ".trellis/spec/backend/app-data-persistence-contracts.md", "reason": "Stable main DB ownership"}
+{"file": ".trellis/spec/frontend/ai-architecture-contracts.md", "reason": "Layer and source-size gates"}

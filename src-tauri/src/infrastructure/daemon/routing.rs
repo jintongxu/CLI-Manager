@@ -37,7 +37,9 @@ pub(crate) struct RoutingRuntimeSnapshot {
 
 impl RoutingRuntime {
     pub(crate) fn stop_until(&mut self, deadline: std::time::Instant) -> Result<(), String> {
-        if let Some(server) = self.http_server.as_mut() { server.stop_until(deadline)?; }
+        if let Some(server) = self.http_server.as_mut() {
+            server.stop_until(deadline)?;
+        }
         self.http_server = None;
         self.lease = None;
         Ok(())

@@ -70,7 +70,9 @@ impl LiveServerManager {
     ) -> Result<LiveServerOpenResult, String> {
         let validated = validate_start_request(&project_path, &relative_path)?;
         let mut servers = self.lock_servers()?;
-        if self.exit_fenced.load(std::sync::atomic::Ordering::SeqCst) { return Err("helper_exit_fenced".into()); }
+        if self.exit_fenced.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err("helper_exit_fenced".into());
+        }
         prune_finished(&mut servers);
 
         if let Some(running) = servers.get(&validated.registry_key) {
@@ -99,32 +101,55 @@ impl LiveServerManager {
     pub fn stop(&self, project_path: String) -> Result<bool, String> {
         let key = registry_key(&project_path)?;
         let mut servers = self.lock_servers()?;
-        let Some(server) = servers.get_mut(&key) else { return Ok(false); };
-        stop_running(server, std::time::Instant::now() + std::time::Duration::from_secs(5))?;
+        let Some(server) = servers.get_mut(&key) else {
+            return Ok(false);
+        };
+        stop_running(
+            server,
+            std::time::Instant::now() + std::time::Duration::from_secs(5),
+        )?;
         servers.remove(&key);
         Ok(true)
     }
 
     // 清空全部服务会话，锁中毒时仅记录错误。
     pub fn shutdown(&self) {
-        if let Err(error) = self.stop_for_exit(std::time::Instant::now() + std::time::Duration::from_secs(5)) {
+        if let Err(error) =
+            self.stop_for_exit(std::time::Instant::now() + std::time::Duration::from_secs(5))
+        {
             log::error!("live server exit cleanup: {error}");
         }
     }
     pub(crate) fn prepare_exit(&self, deadline: std::time::Instant) -> Result<(), String> {
-        self.exit_fenced.store(true, std::sync::atomic::Ordering::SeqCst);
-        drop(crate::commands::cc_connect::exit_process::lock_until(&self.servers, deadline)?);
+        self.exit_fenced
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        drop(crate::commands::cc_connect::exit_process::lock_until(
+            &self.servers,
+            deadline,
+        )?);
         Ok(())
     }
-    pub(crate) fn resume_after_exit(&self) { self.exit_fenced.store(false, std::sync::atomic::Ordering::SeqCst); }
-    pub(crate) fn stop_for_exit(&self, deadline: std::time::Instant) -> Result<&'static str, String> {
-        self.exit_fenced.store(true, std::sync::atomic::Ordering::SeqCst);
-        let mut servers = crate::commands::cc_connect::exit_process::lock_until(&self.servers, deadline)?;
+    pub(crate) fn resume_after_exit(&self) {
+        self.exit_fenced
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+    pub(crate) fn stop_for_exit(
+        &self,
+        deadline: std::time::Instant,
+    ) -> Result<&'static str, String> {
+        self.exit_fenced
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let mut servers =
+            crate::commands::cc_connect::exit_process::lock_until(&self.servers, deadline)?;
         for server in servers.values_mut() {
-            if let Some(tx) = server.shutdown_tx.take() { let _ = tx.send(()); }
+            if let Some(tx) = server.shutdown_tx.take() {
+                let _ = tx.send(());
+            }
             server._watcher.request_stop();
         }
-        for server in servers.values_mut() { stop_running(server, deadline)?; }
+        for server in servers.values_mut() {
+            stop_running(server, deadline)?;
+        }
         servers.clear();
         Ok("worker_joined")
     }
@@ -186,17 +211,27 @@ fn open_result(
 
 // 移除 HTTP 任务已经结束的注册会话。
 fn prune_finished(servers: &mut HashMap<String, RunningLiveServer>) {
-    servers.retain(|_, running| !running.task.inner().is_finished() || stop_running(running, std::time::Instant::now()).is_err());
+    servers.retain(|_, running| {
+        !running.task.inner().is_finished()
+            || stop_running(running, std::time::Instant::now()).is_err()
+    });
 }
 
 #[cfg(test)]
 mod tests;
 
-fn stop_running(server: &mut RunningLiveServer, deadline: std::time::Instant) -> Result<(), String> {
-    if let Some(tx) = server.shutdown_tx.take() { let _ = tx.send(()); }
+fn stop_running(
+    server: &mut RunningLiveServer,
+    deadline: std::time::Instant,
+) -> Result<(), String> {
+    if let Some(tx) = server.shutdown_tx.take() {
+        let _ = tx.send(());
+    }
     server._watcher.request_stop();
     while !server.task.inner().is_finished() {
-        if std::time::Instant::now() >= deadline { return Err("helper_timeout".into()); }
+        if std::time::Instant::now() >= deadline {
+            return Err("helper_timeout".into());
+        }
         std::thread::sleep(std::time::Duration::from_millis(2));
     }
     server._watcher.stop_until(deadline)

@@ -1,6 +1,11 @@
 import type { zh } from "./common.zh-CN";
 
 export const en: Record<keyof typeof zh, string> = {
+  "app.spaces.label": "Spaces",
+  "app.spaces.projects": "Projects",
+  "app.spaces.chat": "Chat",
+  "app.spaces.settings": "Settings",
+  "app.spaces.chatPending": "Independent chat is being prepared.",
   "app.skipToMain": "Skip to main content",
   "app.exitProgress.syncing": "Syncing data…",
   "app.exitProgress.closing": "Closing terminal sessions…",

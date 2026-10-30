@@ -1,0 +1,29 @@
+{
+  "id": "btw-terminal-drawer",
+  "name": "btw-terminal-drawer",
+  "title": "BTW 终端右侧分栏",
+  "description": "追加批准：终端右侧分栏及历史优先侧问记录入口；当前终端过滤、搜索、新建与历史内嵌恢复，独立窗口仅明确操作；保留 owner/native 协议。 最新批准范围 2+3：跟随当前终端的 owner 内存 UI 恢复与底部跟随/新内容按钮。 最新追加：正常 ESM 持久化、卸载不删除、全部记录跨旧PTY ID、保存失败双语重试与恢复stopped。",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "Rafael",
+  "assignee": "Rafael",
+  "createdAt": "2026-10-30",
+  "completedAt": "2026-10-30",
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "BTW persistence deterministic verification 54/54, tsc, independent strict architecture1508 and diff-check pass. No real app restart/disk validation; no exit flush barrier, abrupt exit may lose pending final streaming writes; existing native ExitRequested regex failure remains unrelated/unrerun. See implement.md for complete persistence boundaries.",
+  "meta": {
+    "status": "completed",
+    "description": "BTW persistence deterministic verification 54/54, tsc, independent strict architecture1508 and diff-check pass. No real app restart/disk validation; no exit flush barrier, abrupt exit may lose pending final streaming writes; existing native ExitRequested regex failure remains unrelated/unrerun. See implement.md for complete persistence boundaries."
+  }
+}

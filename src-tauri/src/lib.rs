@@ -1,6 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+#[path = "features/chat/mod.rs"]
+pub(crate) mod chat;
 pub(crate) use app::migrations::{
     migrations, MIGRATION_ADD_CLI_ARGS_DESCRIPTION, MIGRATION_ADD_CLI_ARGS_SQL,
     MIGRATION_ADD_CLI_ARGS_VERSION, MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_DESCRIPTION,
@@ -16,8 +18,9 @@ pub(crate) use app::migrations::{
     MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_SQL, MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_VERSION,
     MIGRATION_ADD_WORKTREE_SHORT_LABELS_DESCRIPTION, MIGRATION_ADD_WORKTREE_SHORT_LABELS_SQL,
     MIGRATION_ADD_WORKTREE_SHORT_LABELS_VERSION, MIGRATION_BACKFILL_REQUEST_LOG_PROJECT_PATH_SQL,
-    MIGRATION_BACKFILL_REQUEST_LOG_PROJECT_PATH_VERSION, MIGRATION_CREATE_REQUEST_LOGS_SQL,
-    MIGRATION_CREATE_SESSION_FAVORITE_SNAPSHOTS_DESCRIPTION,
+    MIGRATION_BACKFILL_REQUEST_LOG_PROJECT_PATH_VERSION, MIGRATION_CREATE_BTW_THREADS_DESCRIPTION,
+    MIGRATION_CREATE_BTW_THREADS_SQL, MIGRATION_CREATE_BTW_THREADS_VERSION,
+    MIGRATION_CREATE_REQUEST_LOGS_SQL, MIGRATION_CREATE_SESSION_FAVORITE_SNAPSHOTS_DESCRIPTION,
     MIGRATION_CREATE_SESSION_FAVORITE_SNAPSHOTS_SQL,
     MIGRATION_CREATE_SESSION_FAVORITE_SNAPSHOTS_VERSION, MIGRATION_CREATE_SSH_HOSTS_DESCRIPTION,
     MIGRATION_CREATE_SSH_HOSTS_SQL, MIGRATION_CREATE_SSH_HOSTS_VERSION,
@@ -53,14 +56,14 @@ pub mod codex_app_server_proxy;
 #[path = "features/statusline/codex.rs"]
 pub mod codex_statusline;
 mod commands;
-#[path = "features/terminal/exit_coordinator.rs"]
-mod exit_coordinator;
 #[path = "infrastructure/process/conpty_sideload.rs"]
 mod conpty_sideload;
 #[path = "infrastructure/diagnostics/crash_reporter.rs"]
 mod crash_reporter;
 #[path = "infrastructure/storage/credential_store.rs"]
 pub(crate) mod credential_store;
+#[path = "features/terminal/exit_coordinator.rs"]
+mod exit_coordinator;
 #[path = "features/extensions/mod.rs"]
 pub(crate) mod extensions;
 // daemon 二进制（src/bin/cli-manager-daemon.rs）经 lib 复用以下模块，
@@ -188,7 +191,9 @@ fn app_show_main_window(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 // 请求 Tauri 以成功退出码结束应用，由退出事件执行相关清理。
 fn app_exit(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
-    if window.label() != "main" { return Err("exit_main_window_only".into()); }
+    if window.label() != "main" {
+        return Err("exit_main_window_only".into());
+    }
     // Legacy callers may request confirmation, never authorize termination.
     exit_coordinator::guard_requested(&app);
     Ok(())
@@ -578,7 +583,27 @@ pub fn run() {
         )
         .plugin(tauri_plugin_opener::init())
         .invoke_handler({
-            let handler: Box<dyn Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync> = Box::new(tauri::generate_handler![
+            let handler: Box<dyn Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync> =
+                Box::new(tauri::generate_handler![
+            chat::commands::chat_initialize,
+            chat::commands::chat_list,
+            chat::commands::chat_get,
+            chat::commands::chat_create,
+            chat::commands::chat_update,
+            chat::commands::chat_delete,
+            chat::commands::chat_provider_options,
+            chat::commands::chat_provider_catalog_list,
+            chat::commands::chat_provider_catalog_upsert,
+            chat::commands::chat_provider_catalog_delete,
+            chat::commands::chat_provider_model_upsert,
+            chat::commands::chat_provider_model_delete,
+            chat::commands::chat_provider_test,
+            chat::commands::chat_provider_test_probe,
+            chat::commands::chat_provider_fetch_remote_models,
+            chat::commands::chat_provider_batch_sync_models,
+            chat::commands::chat_generate,
+            chat::commands::chat_cancel,
+            chat::commands::chat_flush_drafts,
             commands::agent_capabilities::agent_capabilities_inspect,
             commands::agent_capabilities::agent_capabilities_probe,
             commands::extensions::extensions_mcp_capabilities,
@@ -1077,12 +1102,24 @@ pub fn run() {
             ]);
             move |invoke: tauri::ipc::Invoke<tauri::Wry>| {
                 if !commands::btw_window::child_command_allowed(
-                    invoke.message.webview_ref().label(), invoke.message.command(),
+                    invoke.message.webview_ref().label(),
+                    invoke.message.command(),
                 ) {
                     invoke.resolver.reject("btw_window_command_denied");
                     return true;
                 }
-                if !exit_coordinator::command_allowed(invoke.message.webview_ref().app_handle(), invoke.message.command()) {
+                // Reject privileged chat/exit callers before consulting managed exit state.
+                if !exit_coordinator::window_command_allowed(
+                    invoke.message.webview_ref().label(),
+                    invoke.message.command(),
+                ) {
+                    invoke.resolver.reject("main_window_required");
+                    return true;
+                }
+                if !exit_coordinator::command_allowed(
+                    invoke.message.webview_ref().app_handle(),
+                    invoke.message.command(),
+                ) {
                     invoke.resolver.reject("app_exit_admission_fenced");
                     return true;
                 }
@@ -1093,10 +1130,14 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if let tauri::RunEvent::ExitRequested { api, .. } = &event {
-                if exit_coordinator::guard_requested(app) { api.prevent_exit(); }
+                if exit_coordinator::guard_requested(app) {
+                    api.prevent_exit();
+                }
             }
             // Critical cleanup belongs to the acknowledged transaction, never the GUI Exit callback.
-            if matches!(&event, tauri::RunEvent::Exit) { crash_reporter::mark_graceful_exit(); }
+            if matches!(&event, tauri::RunEvent::Exit) {
+                crash_reporter::mark_graceful_exit();
+            }
 
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen {

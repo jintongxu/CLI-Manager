@@ -1,6 +1,7 @@
 export const zh = {
   "settings.worktreeStorage.title": "Worktree 存储目录",
-  "settings.worktreeStorage.description": "仅保存在本机，不参与备份同步。项目自定义目录优先（直接存放任务）；否则在全局根下按仓库分桶，留空使用主目录/Worktrees。仅影响新建，不迁移或删除已有目录，不改变隔离策略。",
+  "settings.worktreeStorage.description":
+    "仅保存在本机，不参与备份同步。项目自定义目录优先（直接存放任务）；否则在全局根下按仓库分桶，留空使用主目录/Worktrees。仅影响新建，不迁移或删除已有目录，不改变隔离策略。",
   "settings.worktreeStorage.root": "全局 Worktree 根目录",
   "settings.worktreeStorage.defaultPath": "本机默认路径：{path}",
   "settings.worktreeStorage.unavailable": "暂不可用",
@@ -8,66 +9,90 @@ export const zh = {
   "settings.worktreeStorage.save": "保存目录",
   "settings.worktreeStorage.restoreDefault": "恢复默认并保存",
   "settings.worktreeStorage.saved": "目录已保存；下次新建 Worktree 时生效。",
-  "settings.worktreeStorage.failed": "操作失败，未确认保存。草稿已保留，请检查错误后重试。",
-  "settings.worktreeStorage.rollbackFailed": "保存及回滚失败，磁盘设置可能已变化。草稿已保留；请重试保存以恢复一致，勿假定旧配置已恢复。",
-  "settings.general.previewDescription": "预览会即时改变真实应用和终端配色，但不会保存。保留字体、自定义颜色、背景和面板皮肤；离开本页即取消预览。",
+  "settings.worktreeStorage.failed":
+    "操作失败，未确认保存。草稿已保留，请检查错误后重试。",
+  "settings.worktreeStorage.rollbackFailed":
+    "保存及回滚失败，磁盘设置可能已变化。草稿已保留；请重试保存以恢复一致，勿假定旧配置已恢复。",
+  "settings.general.previewDescription":
+    "预览会即时改变真实应用和终端配色，但不会保存。保留字体、自定义颜色、背景和面板皮肤；离开本页即取消预览。",
   "settings.general.previewStorm": "预览 Storm 风暴",
   "settings.general.previewSeaSalt": "预览海盐蓝",
   "settings.general.previewUnsaved": "仅预览 — 尚未保存",
-  "settings.general.previewSaving": "正在保存外观…关闭时会等待保存结果，成功保存的更改将保留。",
+  "settings.general.previewSaving":
+    "正在保存外观…关闭时会等待保存结果，成功保存的更改将保留。",
   "settings.general.previewConfirm": "确认并保存",
   "settings.general.previewCancel": "取消预览",
-  "settings.general.previewStartFailed": "无法开始或更新预览。设置可能尚未加载完成，或其他外观更改正在进行。请重试。",
-  "settings.general.previewSaveFailed": "外观未能保存。预览已结束并恢复原外观，请重试。",
-  "settings.general.previewCompensationFailed": "保存外观及恢复已保存设置均失败。界面已恢复原外观，但持久化设置可能部分改变。请检查外观设置并重试，不要认为已完全恢复。",
+  "settings.general.previewStartFailed":
+    "无法开始或更新预览。设置可能尚未加载完成，或其他外观更改正在进行。请重试。",
+  "settings.general.previewSaveFailed":
+    "外观未能保存。预览已结束并恢复原外观，请重试。",
+  "settings.general.previewCompensationFailed":
+    "保存外观及恢复已保存设置均失败。界面已恢复原外观，但持久化设置可能部分改变。请检查外观设置并重试，不要认为已完全恢复。",
   "settings.palette.dark.tokyoNightStorm.label": "Tokyo Night Storm 风暴",
-  "settings.palette.dark.tokyoNightStorm.description": "官方 Storm 靛蓝底色、蓝色强调与淡紫文字",
+  "settings.palette.dark.tokyoNightStorm.description":
+    "官方 Storm 靛蓝底色、蓝色强调与淡紫文字",
   "settings.general.applyStormScheme": "应用 Tokyo Night Storm 整套方案",
-  "settings.general.stormSchemeDescription": "将界面设为深色、Tokyo Night Storm 应用配色，并搭配官方 Storm 终端预设（独立于原有 Tokyo Night Storm 预设）。保留字体、文字/TUI 颜色、背景、预览覆盖与独立面板皮肤；自定义项及 CLI 真彩色输出可能与参考图不同。",
+  "settings.general.stormSchemeDescription":
+    "将界面设为深色、Tokyo Night Storm 应用配色，并搭配官方 Storm 终端预设（独立于原有 Tokyo Night Storm 预设）。保留字体、文字/TUI 颜色、背景、预览覆盖与独立面板皮肤；自定义项及 CLI 真彩色输出可能与参考图不同。",
   "settings.general.stormApplied": "已应用 Tokyo Night Storm 整套方案",
-  "settings.general.stormApplyFailed": "未能完整应用 Storm 方案，部分偏好可能已更改，请重试完成。",
+  "settings.general.stormApplyFailed":
+    "未能完整应用 Storm 方案，部分偏好可能已更改，请重试完成。",
 
   "settings.palette.light.seaSalt.label": "海盐蓝",
-  "settings.palette.light.seaSalt.description": "冰透蓝底色、钴蓝强调与深蓝文字",
+  "settings.palette.light.seaSalt.description":
+    "冰透蓝底色、钴蓝强调与深蓝文字",
   "settings.general.applySeaSaltScheme": "应用海盐蓝整套方案",
-  "settings.general.seaSaltSchemeDescription": "将界面设为浅色、海盐蓝配色，并搭配 Tokyo Night Storm 深靛蓝终端。保留字体、文字/TUI 颜色、背景和预览覆盖；这些自定义项及 CLI 真彩色输出可能与参考图不同。",
+  "settings.general.seaSaltSchemeDescription":
+    "将界面设为浅色、海盐蓝配色，并搭配 Tokyo Night Storm 深靛蓝终端。保留字体、文字/TUI 颜色、背景和预览覆盖；这些自定义项及 CLI 真彩色输出可能与参考图不同。",
   "settings.general.seaSaltApplied": "已应用海盐蓝整套方案",
-  "settings.general.seaSaltApplyFailed": "未能完整应用方案，部分偏好可能已更改，请重试完成。",
+  "settings.general.seaSaltApplyFailed":
+    "未能完整应用方案，部分偏好可能已更改，请重试完成。",
   "settings.terminal.externalProgram": "外部终端程序",
-  "settings.terminal.externalProgramDescription": "选择打开外部窗口的程序，项目 Shell 决定命令运行环境。适用于外部终端开关和“打开外部终端”操作；Windows 可能使用系统默认终端承载窗口。",
+  "settings.terminal.externalProgramDescription":
+    "选择打开外部窗口的程序，项目 Shell 决定命令运行环境。适用于外部终端开关和“打开外部终端”操作；Windows 可能使用系统默认终端承载窗口。",
   "settings.terminal.externalOpenFailed": "无法打开外部终端",
-  "settings.terminal.externalProgramMissing": "未找到所选终端程序或项目 Shell，请先安装，或调整终端设置。",
+  "settings.terminal.externalProgramMissing":
+    "未找到所选终端程序或项目 Shell，请先安装，或调整终端设置。",
   "settings.dialogLabel": "设置窗口",
   "settings.navTitle": "设置",
   "settings.searchLabel": "设置搜索",
   "settings.closeLabel": "关闭设置窗口",
   "settings.tabs.general.label": "通用",
   "settings.tabs.general.title": "通用设置",
-  "settings.tabs.general.description": "配置应用主题、配色、界面字体与全局偏好。",
+  "settings.tabs.general.description":
+    "配置应用主题、配色、界面字体与全局偏好。",
   "settings.tabs.extensions.label": "MCP 与 Skills",
   "settings.tabs.desktopPet.label": "桌面宠物",
   "settings.tabs.desktopPet.title": "CLI-Manager 桌面宠物",
-  "settings.tabs.desktopPet.description": "显示会话状态、管理宠物外观，并从公开宠物中心下载或导入宠物包。",
+  "settings.tabs.desktopPet.description":
+    "显示会话状态、管理宠物外观，并从公开宠物中心下载或导入宠物包。",
   "settings.tabs.developer.label": "开发者",
   "settings.tabs.developer.title": "开发者",
-  "settings.tabs.developer.description": "管理兼容性、诊断和资源占用相关的高级开关。",
+  "settings.tabs.developer.description":
+    "管理兼容性、诊断和资源占用相关的高级开关。",
   "settings.tabs.sidebar.label": "侧边栏",
   "settings.tabs.sidebar.title": "侧边栏",
-  "settings.tabs.sidebar.description": "配置侧边栏行为、终端侧边面板皮肤与实时统计卡片。",
+  "settings.tabs.sidebar.description":
+    "配置侧边栏行为、终端侧边面板皮肤与实时统计卡片。",
   "settings.tabs.terminal.label": "终端",
   "settings.tabs.terminal.title": "终端",
-  "settings.tabs.terminal.description": "配置终端行为、主题、字体、Shell、背景与实时预览。",
+  "settings.tabs.terminal.description":
+    "配置终端行为、主题、字体、Shell、背景与实时预览。",
   "settings.terminalBackground.fillWorkspace": "背景铺满工作区",
-  "settings.terminalBackground.fillWorkspaceDescription": "开启后，背景图会从终端扩展到主工作区侧栏和 Tab 区域。",
-  "settings.terminalBackground.fillWorkspaceDisabled": "启用背景并选择图片后才可使用。",
+  "settings.terminalBackground.fillWorkspaceDescription":
+    "开启后，背景图会从终端扩展到主工作区侧栏和 Tab 区域。",
+  "settings.terminalBackground.fillWorkspaceDisabled":
+    "启用背景并选择图片后才可使用。",
   "settings.terminalBackground.enableFillWorkspace": "开启工作区背景铺满",
   "settings.terminalBackground.disableFillWorkspace": "关闭工作区背景铺满",
   "settings.terminal.textColor": "终端字体颜色",
   "settings.terminal.textColorPicker": "终端字体颜色选择器",
   "settings.terminal.textColorHex": "终端字体颜色十六进制值",
-  "settings.terminal.textColorDefaultHint": "影响普通终端默认文字和当前输入；留空时跟随当前主题。",
+  "settings.terminal.textColorDefaultHint":
+    "影响普通终端默认文字和当前输入；留空时跟随当前主题。",
   "settings.terminal.colorGroupTitle": "终端颜色",
-  "settings.terminal.colorGroupDescription": "普通终端使用终端字体颜色；Codex/Claude TUI 可分别覆盖用户输入和 AI 输出。",
+  "settings.terminal.colorGroupDescription":
+    "普通终端使用终端字体颜色；Codex/Claude TUI 可分别覆盖用户输入和 AI 输出。",
   "settings.terminal.textColorInvalid": "请输入 #RRGGBB 格式，例如 #c0caf5。",
   "settings.terminal.restoreThemeColor": "恢复跟随主题",
   "settings.terminal.restoreNativeColor": "恢复 TUI 原生颜色",
@@ -77,9 +102,11 @@ export const zh = {
   "settings.terminal.tuiAssistantColor": "TUI AI 输出颜色",
   "settings.terminal.tuiAssistantColorPicker": "TUI AI 输出颜色选择器",
   "settings.terminal.tuiAssistantColorHex": "TUI AI 输出颜色十六进制值",
-  "settings.terminal.tuiColorNativeHint": "仅作用于 Codex/Claude TUI 主内容区；留空时保留 TUI 原生颜色。",
+  "settings.terminal.tuiColorNativeHint":
+    "仅作用于 Codex/Claude TUI 主内容区；留空时保留 TUI 原生颜色。",
   "settings.terminal.paneMarker.title": "终端状态标记",
-  "settings.terminal.paneMarker.description": "用线条区分分屏中的当前焦点终端，以及等待处理或已结束的主会话。",
+  "settings.terminal.paneMarker.description":
+    "用线条区分分屏中的当前焦点终端，以及等待处理或已结束的主会话。",
   "settings.terminal.paneMarker.enabled": "启用终端状态标记",
   "settings.terminal.paneMarker.enableAria": "开启终端状态标记",
   "settings.terminal.paneMarker.disableAria": "关闭终端状态标记",
@@ -98,56 +125,136 @@ export const zh = {
   "settings.tabs.shortcuts.search": "搜索快捷键",
   "settings.tabs.templates.label": "命令模板",
   "settings.tabs.templates.title": "命令模板",
-  "settings.tabs.templates.description": "管理全局模板与项目模板的新增、编辑与删除。",
+  "settings.tabs.templates.description":
+    "管理全局模板与项目模板的新增、编辑与删除。",
   "settings.tabs.templates.search": "搜索命令模板",
   "settings.tabs.nativeProviders.label": "供应商",
   "settings.tabs.nativeProviders.title": "供应商目录",
-  "settings.tabs.nativeProviders.description": "管理 CLI-Manager 自有的供应商目录；cc-switch 仅作为导入来源。",
+  "settings.tabs.nativeProviders.description":
+    "管理 CLI-Manager 自有的供应商目录；cc-switch 仅作为导入来源。",
   "settings.tabs.nativeProviders.search": "搜索供应商",
+  "settings.tabs.chatModels.label": "对话模型",
+  "settings.tabs.chatModels.title": "对话模型供应商",
+  "settings.tabs.chatModels.description":
+    "独立对话供应商与 Native Providers 完全分离。",
+  "settings.chatModels.blockedTitle": "配置功能尚未开放",
+  "settings.chatModels.blockedDescription":
+    "在由 Rust 原生服务安全保存凭据并完成请求路由前，这里不会暴露配置表单，也不会显示无法路由的模型。",
+  "settings.chatModels.protocols":
+    "支持的协议将明确选择：OpenAI Chat Completions、OpenAI Responses、Anthropic Messages。",
+  "settings.chatModels.security":
+    "API 密钥不会暴露给渲染层、日志、导出内容或聊天供应商列表。",
+  "settings.chatModels.providerSelect": "供应商",
+  "settings.chatModels.id": "标识",
+  "settings.chatModels.name": "名称",
+  "settings.chatModels.baseUrl": "基础地址",
+  "settings.chatModels.protocol": "协议",
+  "settings.chatModels.apiKey": "API 密钥",
+  "settings.chatModels.keyPlaceholder": "留空以保留已有密钥",
+  "settings.chatModels.enabled": "启用",
+  "settings.chatModels.defaultProvider": "默认供应商",
+  "settings.chatModels.save": "保存供应商",
+  "settings.chatModels.models": "模型",
+  "settings.chatModels.modelId": "模型 ID",
+  "settings.chatModels.addModel": "添加模型",
+  "settings.chatModels.saved": "已保存",
+  "settings.chatModels.saveError": "供应商保存失败",
+  "settings.chatModels.loadError": "供应商加载失败",
+  "settings.chatModels.test": "测试连接",
+  "settings.chatModels.testPassed": "配置有效",
+  "settings.chatModels.testFailed": "连接测试失败",
+  "settings.chatModels.addProvider": "添加供应商",
+  "settings.chatModels.empty": "暂无供应商",
+  "settings.chatModels.newProvider": "新供应商",
+  "settings.chatModels.delete": "删除供应商",
+  "settings.chatModels.config": "配置",
+  "settings.chatModels.authMethod": "认证方式",
+  "settings.chatModels.authApiKey": "API Key",
+  "settings.chatModels.authApiKeyOnly": "当前仅支持 API Key 鉴权。",
+  "settings.chatModels.interfaceAddress": "接口地址",
+  "settings.chatModels.endpointInvalid":
+    "请填写以 http:// 或 https:// 开头且包含主机的地址，不要携带账号、密码或查询参数。",
+  "settings.chatModels.keyHint":
+    "密钥由本地后端保存，不会出现在供应商列表、日志或导出内容中。",
+  "settings.chatModels.revealKey": "显示或隐藏密钥",
+  "settings.chatModels.modelsEmpty": "暂无模型，可在下方手动添加模型 ID。",
+  "settings.chatModels.advanced": "高级",
+  "settings.chatModels.idHint": "保存后不可修改，未填写时按名称自动生成。",
+  "settings.chatModels.statusIdle": "未测试",
+  "settings.chatModels.statusPassed": "连接正常",
+  "settings.chatModels.statusFailed": "连接失败",
+  "settings.chatModels.defaultModel": "默认",
+  "settings.chatModels.available": "已添加",
+  "settings.chatModels.addModelLabel": "手动添加模型",
+  "settings.chatModels.manageModels": "管理模型",
+  "settings.chatModels.manageModelsDesc":
+    "从该供应商自动获取可用模型列表，勾选需要启用的模型。",
+  "settings.chatModels.searchModels": "搜索模型名称...",
+  "settings.chatModels.fetchingModels": "正在从供应商接口获取模型列表...",
+  "settings.chatModels.noModelsFound": "未获取到模型，请检查接口地址或网络连接。",
+  "settings.chatModels.selectAll": "全选",
+  "settings.chatModels.clearSelection": "清除",
+  "settings.chatModels.applyModels": "应用所选模型",
+  "settings.chatModels.fillNameAndUrlFirst": "请先填写供应商名称和有效的接口地址",
   "settings.tabs.modelPricing.label": "模型价格",
   "settings.tabs.modelPricing.title": "模型价格",
-  "settings.tabs.modelPricing.description": "管理本地模型定价、识别历史模型，并从 LiteLLM / OpenRouter 同步候选价格。",
+  "settings.tabs.modelPricing.description":
+    "管理本地模型定价、识别历史模型，并从 LiteLLM / OpenRouter 同步候选价格。",
   "settings.tabs.modelPricing.search": "搜索模型价格",
   "settings.tabs.ccConnect.label": "远程连接",
   "settings.tabs.ccConnect.title": "cc-connect 远程连接",
-  "settings.tabs.ccConnect.description": "检测并托管本机 cc-connect，通过 Telegram、飞书、微信或企业微信连接远程会话。",
+  "settings.tabs.ccConnect.description":
+    "检测并托管本机 cc-connect，通过 Telegram、飞书、微信或企业微信连接远程会话。",
   "settings.tabs.sshHosts.label": "SSH 主机",
   "settings.tabs.sshHosts.title": "SSH 主机",
-  "settings.tabs.sshHosts.description": "管理远程项目与远程终端使用的 OpenSSH 连接配置。",
+  "settings.tabs.sshHosts.description":
+    "管理远程项目与远程终端使用的 OpenSSH 连接配置。",
   "settings.tabs.sshHosts.search": "搜索名称、地址、分组或备注",
   "settings.tabs.sync.label": "同步",
   "settings.tabs.sync.title": "同步",
-  "settings.tabs.sync.description": "选择云端（WebDAV）或本地目录方式同步配置。",
+  "settings.tabs.sync.description":
+    "选择云端（WebDAV）或本地目录方式同步配置。",
   "settings.tabs.historySources.label": "历史会话",
   "settings.tabs.historySources.title": "历史会话",
-  "settings.tabs.historySources.description": "管理各 CLI 的历史会话目录、索引来源与备份恢复。",
+  "settings.tabs.historySources.description":
+    "管理各 CLI 的历史会话目录、索引来源与备份恢复。",
   "settings.tabs.hooks.label": "Hook",
   "settings.tabs.hooks.title": "Hook",
-  "settings.tabs.hooks.description": "安装或移除 Claude Code / Codex / Kimi Code / Pi / Grok Build 到 CLI-Manager 标签通知的桥接。",
+  "settings.tabs.hooks.description":
+    "安装或移除 Claude Code / Codex / Kimi Code / Pi / Grok Build 到 CLI-Manager 标签通知的桥接。",
   "settings.tabs.statusline.label": "状态栏",
   "settings.tabs.statusline.title": "Claude 状态栏",
-  "settings.tabs.statusline.description": "在 CLI-Manager 中可视化配置并安装 Claude Code 状态栏。",
+  "settings.tabs.statusline.description":
+    "在 CLI-Manager 中可视化配置并安装 Claude Code 状态栏。",
   "settings.tabs.statusline.search": "搜索状态栏组件",
   "settings.tabs.commandSuggestions.label": "命令提示",
   "settings.tabs.commandSuggestions.title": "命令提示",
-  "settings.tabs.commandSuggestions.description": "配置终端输入提示、本地历史、模板和历史存储清理。",
+  "settings.tabs.commandSuggestions.description":
+    "配置终端输入提示、本地历史、模板和历史存储清理。",
   "settings.commandSuggestions.title": "命令提示",
-  "settings.commandSuggestions.description": "本地历史、模板和内置 AI CLI 命令会快速显示为输入提示；明显不是命令的自然语言输入不会写入历史。",
+  "settings.commandSuggestions.description":
+    "本地历史、模板和内置 AI CLI 命令会快速显示为输入提示；明显不是命令的自然语言输入不会写入历史。",
   "settings.commandSuggestions.enableSuggestions": "启用命令提示",
-  "settings.commandSuggestions.enableSuggestionsDesc": "关闭后不显示任何终端输入 ghost 提示。",
+  "settings.commandSuggestions.enableSuggestionsDesc":
+    "关闭后不显示任何终端输入 ghost 提示。",
   "settings.commandSuggestions.enableLlm": "启用大模型推测",
-  "settings.commandSuggestions.enableLlmDesc": "大模型只作为第二阶段候选，不会自动执行命令。",
+  "settings.commandSuggestions.enableLlmDesc":
+    "大模型只作为第二阶段候选，不会自动执行命令。",
   "settings.commandSuggestions.baseUrl": "Base URL",
   "settings.commandSuggestions.apiKey": "API Key",
   "settings.commandSuggestions.model": "模型",
-  "settings.commandSuggestions.baseUrlAutoDetectHelp": "Base URL 可填根地址、/v1、/v1/chat/completions 或 /v1/responses，系统会自动识别接口。",
-  "settings.commandSuggestions.apiKeyStorageHint": "API Key 仅发送到配置的模型端点，保存在本机设置中，不写入日志、文档或同步数据。",
+  "settings.commandSuggestions.baseUrlAutoDetectHelp":
+    "Base URL 可填根地址、/v1、/v1/chat/completions 或 /v1/responses，系统会自动识别接口。",
+  "settings.commandSuggestions.apiKeyStorageHint":
+    "API Key 仅发送到配置的模型端点，保存在本机设置中，不写入日志、文档或同步数据。",
   "settings.commandSuggestions.modelTest": "模型可用性检测",
-  "settings.commandSuggestions.modelTestNotTested": "尚未检测；慢模型不建议用于输入时推测。",
+  "settings.commandSuggestions.modelTestNotTested":
+    "尚未检测；慢模型不建议用于输入时推测。",
   "settings.commandSuggestions.testModel": "检测模型",
   "settings.commandSuggestions.testing": "检测中...",
   "settings.commandSuggestions.prompt": "提示词",
-  "settings.commandSuggestions.promptDesc": "默认使用内置命令补全提示词；关闭后可自定义。",
+  "settings.commandSuggestions.promptDesc":
+    "默认使用内置命令补全提示词；关闭后可自定义。",
   "settings.commandSuggestions.useBuiltinPrompt": "使用内置提示词",
   "settings.commandSuggestions.promptAria": "命令提示提示词",
   "settings.commandSuggestions.metricRequests": "请求",
@@ -160,7 +267,8 @@ export const zh = {
   "settings.commandSuggestions.accepted": "采纳",
   "settings.commandSuggestions.modelConfigIncomplete": "命令提示模型配置不完整",
   "settings.commandSuggestions.modelAvailable": "命令提示模型可用",
-  "settings.commandSuggestions.modelSlow": "模型可用但响应偏慢，不建议用于命令提示",
+  "settings.commandSuggestions.modelSlow":
+    "模型可用但响应偏慢，不建议用于命令提示",
   "settings.commandSuggestions.modelUnavailable": "命令提示模型不可用",
   "settings.commandSuggestions.modelTestFailed": "命令提示模型检测失败",
   "settings.commandSuggestions.statusAvailable": "可用",
@@ -171,50 +279,65 @@ export const zh = {
   "settings.commandSuggestions.responseTimeMs": "{ms}ms",
   "settings.commandSuggestions.statusLocal": "本地",
   "settings.commandSuggestions.storageTitle": "历史存储",
-  "settings.commandSuggestions.storageDescription": "命令提示会使用本地命令历史提升候选质量。",
+  "settings.commandSuggestions.storageDescription":
+    "命令提示会使用本地命令历史提升候选质量。",
   "settings.commandSuggestions.storageCommandCount": "已存指令",
   "settings.commandSuggestions.storageUsage": "占用空间",
   "settings.commandSuggestions.clearStorage": "清理存储",
   "settings.commandSuggestions.clearStorageTitle": "清理命令历史存储",
-  "settings.commandSuggestions.clearStorageConfirm": "确定清理全部命令历史存储？此操作不可撤销。",
+  "settings.commandSuggestions.clearStorageConfirm":
+    "确定清理全部命令历史存储？此操作不可撤销。",
   "settings.commandSuggestions.clearStorageConfirmAction": "确认清理",
   "settings.commandSuggestions.clearStorageCancel": "取消",
-  "settings.commandSuggestions.storageHint": "占用空间为按命令历史记录估算的本地 SQLite 文本数据大小。",
+  "settings.commandSuggestions.storageHint":
+    "占用空间为按命令历史记录估算的本地 SQLite 文本数据大小。",
   "settings.developer.compatibility": "兼容性与诊断",
-  "settings.developer.compatibilityDescription": "这些选项面向特殊环境、旧系统和排障场景；普通使用保持默认即可。",
+  "settings.developer.compatibilityDescription":
+    "这些选项面向特殊环境、旧系统和排障场景；普通使用保持默认即可。",
   "settings.developer.windowsConptyCompatibilityFix": "Windows 兼容修复",
-  "settings.developer.windowsConptyCompatibilityFixDescription": "默认开启。使用随包新版 ConPTY/OpenConsole，规避旧 Windows ConPTY 在 Codex 清屏重绘时导致 scrollback 和滚动条异常的问题，并修复 Codex CLI 在内部终端运行期间光标乱闪；如需排查兼容性问题可手动关闭。",
-  "settings.developer.disableWindowsConptyCompatibilityFix": "关闭 Windows 兼容修复",
-  "settings.developer.enableWindowsConptyCompatibilityFix": "开启 Windows 兼容修复",
+  "settings.developer.windowsConptyCompatibilityFixDescription":
+    "默认开启。使用随包新版 ConPTY/OpenConsole，规避旧 Windows ConPTY 在 Codex 清屏重绘时导致 scrollback 和滚动条异常的问题，并修复 Codex CLI 在内部终端运行期间光标乱闪；如需排查兼容性问题可手动关闭。",
+  "settings.developer.disableWindowsConptyCompatibilityFix":
+    "关闭 Windows 兼容修复",
+  "settings.developer.enableWindowsConptyCompatibilityFix":
+    "开启 Windows 兼容修复",
   "settings.developer.hideCodexRuntimeCursor": "隐藏CODEX运行时光标",
-  "settings.developer.hideCodexRuntimeCursorDescription": "默认关闭。开启后，Codex 执行期间会隐藏终端光标，减少 MCP 加载和模型输出时的光标闪烁；停止执行后恢复显示。",
+  "settings.developer.hideCodexRuntimeCursorDescription":
+    "默认关闭。开启后，Codex 执行期间会隐藏终端光标，减少 MCP 加载和模型输出时的光标闪烁；停止执行后恢复显示。",
   "settings.developer.disableHideCodexRuntimeCursor": "显示CODEX运行时光标",
   "settings.developer.enableHideCodexRuntimeCursor": "隐藏CODEX运行时光标",
   "settings.developer.linuxGraphicsMode": "Linux 图形兼容模式",
-  "settings.developer.linuxGraphicsModeDescription": "用于处理 WebKitGTK 在 Wayland/NVIDIA 下的白屏、黑屏、闪烁和缩放崩溃。自动模式仅对检测到的 NVIDIA Wayland 环境应用低损耗修复。",
+  "settings.developer.linuxGraphicsModeDescription":
+    "用于处理 WebKitGTK 在 Wayland/NVIDIA 下的白屏、黑屏、闪烁和缩放崩溃。自动模式仅对检测到的 NVIDIA Wayland 环境应用低损耗修复。",
   "settings.developer.linuxGraphicsModeAuto": "自动检测（推荐）",
   "settings.developer.linuxGraphicsModeSystem": "使用系统默认",
   "settings.developer.linuxGraphicsModeDisableDmabuf": "禁用 DMABUF 渲染",
-  "settings.developer.linuxGraphicsModeDisableCompositing": "禁用加速合成（最后手段）",
+  "settings.developer.linuxGraphicsModeDisableCompositing":
+    "禁用加速合成（最后手段）",
   "settings.developer.graphicsDiagnostics": "图形诊断",
   "settings.developer.copyGraphicsDiagnostics": "复制图形诊断",
   "settings.developer.graphicsDiagnosticsCopied": "图形诊断已复制",
   "settings.developer.graphicsDiagnosticsCopyFailed": "复制图形诊断失败",
-  "settings.developer.linuxGraphicsRestartMessage": "Linux 图形模式必须在 WebKitGTK 创建前应用，修改后需要重启 CLI-Manager。",
+  "settings.developer.linuxGraphicsRestartMessage":
+    "Linux 图形模式必须在 WebKitGTK 创建前应用，修改后需要重启 CLI-Manager。",
   "settings.developer.terminalSessionRestore": "恢复上次终端会话",
-  "settings.developer.terminalSessionRestoreDescription": "启动时检测当前环境遗留的终端标签，并按常规设置中的恢复方式询问或自动恢复。关闭后不再恢复，并清理当前环境的恢复快照。",
+  "settings.developer.terminalSessionRestoreDescription":
+    "启动时检测当前环境遗留的终端标签，并按常规设置中的恢复方式询问或自动恢复。关闭后不再恢复，并清理当前环境的恢复快照。",
   "settings.developer.disableTerminalSessionRestore": "关闭终端会话恢复",
   "settings.developer.enableTerminalSessionRestore": "开启终端会话恢复",
   "settings.developer.projectWorktreeConfig": "Worktree开发",
-  "settings.developer.projectWorktreeConfigDescription": "控制新增和编辑项目时的 Worktree 配置区域。关闭后同项目已有终端时也会直接普通打开，不再提示或自动隔离。",
+  "settings.developer.projectWorktreeConfigDescription":
+    "控制新增和编辑项目时的 Worktree 配置区域。关闭后同项目已有终端时也会直接普通打开，不再提示或自动隔离。",
   "settings.developer.disableProjectWorktreeConfig": "关闭 Worktree开发",
   "settings.developer.enableProjectWorktreeConfig": "开启 Worktree开发",
   "settings.developer.restartRequiredTitle": "需要重启 CLI-Manager",
-  "settings.developer.restartRequiredMessage": "Windows 兼容修复会影响启动时加载的 ConPTY/OpenConsole。修改后必须重启应用才会生效。",
+  "settings.developer.restartRequiredMessage":
+    "Windows 兼容修复会影响启动时加载的 ConPTY/OpenConsole。修改后必须重启应用才会生效。",
   "settings.developer.restartNow": "立马重启",
   "settings.developer.restartLater": "稍后重启",
   "settings.developer.restartFailed": "重启 CLI-Manager 失败",
-  "settings.developer.debugModeDescription": "开启后输出更多前端与后端诊断日志，并允许使用 F12 打开 DevTools；正常使用建议关闭。",
+  "settings.developer.debugModeDescription":
+    "开启后输出更多前端与后端诊断日志，并允许使用 F12 打开 DevTools；正常使用建议关闭。",
   "settings.tabs.about.label": "关于",
   "settings.tabs.about.title": "关于 CLI-Manager",
   "settings.tabs.about.description": "查看应用更新、项目介绍与作者信息。",
@@ -230,23 +353,28 @@ export const zh = {
   "settings.shortcuts.action.toggleSidebar": "展开/收起项目侧边栏",
   "settings.shortcuts.action.toggleTerminalFullscreen": "终端全屏",
   "settings.shortcuts.terminalKeys": "终端键位",
-  "settings.shortcuts.terminalKeysDescription": "在终端中按下该组合键时，向 PTY 发送换行符 \\n。单按 Enter 行为不变。",
+  "settings.shortcuts.terminalKeysDescription":
+    "在终端中按下该组合键时，向 PTY 发送换行符 \\n。单按 Enter 行为不变。",
   "settings.shortcuts.osc52Clipboard": "OSC 52 写入本机剪贴板",
-  "settings.shortcuts.osc52ClipboardDescription": "拦截远程或全屏 TUI 发出的 OSC 52，写入本机剪贴板。关闭后仍剥离序列，但不改剪贴板。",
+  "settings.shortcuts.osc52ClipboardDescription":
+    "拦截远程或全屏 TUI 发出的 OSC 52，写入本机剪贴板。关闭后仍剥离序列，但不改剪贴板。",
   "settings.shortcuts.osc52ClipboardOn": "开启",
   "settings.shortcuts.osc52ClipboardOff": "关闭",
   "settings.shortcuts.osc52ClipboardAria": "OSC 52 剪贴板开关",
   "settings.shortcuts.osc52ClipboardQuery": "允许 OSC 52 读取本机剪贴板",
-  "settings.shortcuts.osc52ClipboardQueryDescription": "允许终端通过 OSC 52 查询并接收本机剪贴板内容。此内容会发送给运行中的本地或远程进程；默认关闭。",
+  "settings.shortcuts.osc52ClipboardQueryDescription":
+    "允许终端通过 OSC 52 查询并接收本机剪贴板内容。此内容会发送给运行中的本地或远程进程；默认关闭。",
   "settings.shortcuts.osc52ClipboardQueryAria": "OSC 52 读取本机剪贴板开关",
   "settings.shortcuts.action.copyTerminalSelection": "复制终端选区",
   "settings.shortcuts.terminalNewlineAria": "终端换行快捷键",
   "settings.shortcuts.tabSwitch": "终端标签切换",
-  "settings.shortcuts.tabSwitchDescription": "左方向键切到上一个标签，右方向键切到下一个标签。",
+  "settings.shortcuts.tabSwitchDescription":
+    "左方向键切到上一个标签，右方向键切到下一个标签。",
   "settings.shortcuts.tabModifier.alt": "Alt + 方向键",
   "settings.shortcuts.tabModifier.ctrl": "Ctrl + 方向键",
   "settings.shortcuts.tabModifier.shift": "Shift + 方向键",
-  "settings.shortcuts.customTabSwitch": "当前为自定义标签切换快捷键，可在下方单独修改。",
+  "settings.shortcuts.customTabSwitch":
+    "当前为自定义标签切换快捷键，可在下方单独修改。",
   "settings.shortcuts.bindings": "快捷键绑定",
   "settings.shortcuts.resetDefault": "恢复默认",
   "settings.shortcuts.conflictWith": "与「{action}」冲突",
@@ -265,7 +393,8 @@ export const zh = {
   "settings.templates.empty": "暂无匹配模板，可从右侧新建。",
   "settings.templates.createTitle": "新建模板",
   "settings.templates.editTitle": "编辑模板",
-  "settings.templates.formDescription": "新建与编辑共用同一表单，避免行为分叉。",
+  "settings.templates.formDescription":
+    "新建与编辑共用同一表单，避免行为分叉。",
   "settings.templates.cancelEdit": "取消编辑",
   "settings.templates.saving": "保存中...",
   "settings.templates.confirmSave": "确认保存",
@@ -274,34 +403,41 @@ export const zh = {
   "settings.templates.name": "名称",
   "settings.templates.namePlaceholder": "例如：启动后端服务",
   "settings.templates.command": "命令",
-  "settings.templates.commandPlaceholder": "支持 ${projectPath}, ${projectName}",
+  "settings.templates.commandPlaceholder":
+    "支持 ${projectPath}, ${projectName}",
   "settings.templates.description": "描述",
   "settings.templates.optional": "可选",
   "settings.templates.scopeLabel": "作用域",
   "settings.templates.noActiveSession": "当前无活跃会话，不能创建会话模板。",
-  "settings.templates.lockedScope": "编辑模式锁定作用域，避免跨作用域迁移造成误操作。",
+  "settings.templates.lockedScope":
+    "编辑模式锁定作用域，避免跨作用域迁移造成误操作。",
   "settings.templates.targetProject": "目标项目",
   "settings.templates.bindSession": "将绑定到当前会话：{sessionId}",
-  "settings.templates.activateSessionFirst": "请先激活一个会话后再创建会话模板。",
+  "settings.templates.activateSessionFirst":
+    "请先激活一个会话后再创建会话模板。",
   "settings.general.appearance": "外观",
   "settings.general.language": "界面语言",
-  "settings.general.languageDescription": "首次安装默认按系统地区推荐；手动选择后会持久保存。",
+  "settings.general.languageDescription":
+    "首次安装默认按系统地区推荐；手动选择后会持久保存。",
   "settings.general.theme": "应用主题",
   "settings.general.lightTheme": "浅色配色",
   "settings.general.darkTheme": "暗色配色",
   "settings.general.uiFont": "应用字体",
   "settings.general.uiFontLoading": "正在读取系统字体...",
   "settings.general.uiFontEmpty": "未找到匹配字体",
-  "settings.general.uiFontDescription": "影响除终端外的应用整体界面字体；已读取 {count} 个系统字体。终端字体在「终端」中单独配置。",
+  "settings.general.uiFontDescription":
+    "影响除终端外的应用整体界面字体；已读取 {count} 个系统字体。终端字体在「终端」中单独配置。",
   "settings.general.uiFontError": "系统字体读取失败，已使用内置字体选项。",
   "settings.general.uiFontSize": "应用字体大小",
   "settings.general.uiFontSizeValue": "应用字体大小数值",
   "settings.general.uiFontSizeSlider": "应用字体大小滑杆",
-  "settings.general.uiFontSizeDescription": "影响除内置终端外的应用界面；终端字号仍在「终端」中单独配置。",
+  "settings.general.uiFontSizeDescription":
+    "影响除内置终端外的应用界面；终端字号仍在「终端」中单独配置。",
   "settings.general.uiTextColor": "应用字体颜色",
   "settings.general.uiTextColorPicker": "应用字体颜色选择器",
   "settings.general.uiTextColorHex": "应用字体颜色十六进制值",
-  "settings.general.uiTextColorDefaultHint": "仅影响除终端外的应用主文字颜色；留空时跟随当前主题。",
+  "settings.general.uiTextColorDefaultHint":
+    "仅影响除终端外的应用主文字颜色；留空时跟随当前主题。",
   "settings.general.uiTextColorInvalid": "请输入 #RRGGBB 格式，例如 #c0caf5。",
   "settings.general.uiTextColorTooClose": "颜色与背景过于接近，未应用。",
   "settings.general.uiTextColorLowContrast": "对比度较低，可能影响可读性。",
@@ -310,50 +446,62 @@ export const zh = {
   "settings.general.currentThemeColor": "当前跟随主题 {color}",
   "settings.general.sidebarBehavior": "侧栏与行为",
   "settings.general.compactMode": "精简模式",
-  "settings.general.compactModeDescription": "隐藏内嵌终端，把项目列表作为启动器。",
+  "settings.general.compactModeDescription":
+    "隐藏内嵌终端，把项目列表作为启动器。",
   "settings.general.closeCompactMode": "关闭精简模式",
   "settings.general.openCompactMode": "开启精简模式",
   "settings.general.sidebarDensity": "侧栏密度",
   "settings.general.mergePanels": "合并实时统计与 Git 变更面板",
-  "settings.general.mergePanelsDescription": "默认开启：两者合并为一个可切换 Tab 的侧边面板。关闭后实时统计与 Git 变更各自独立，可同时并排显示。",
+  "settings.general.mergePanelsDescription":
+    "默认开启：两者合并为一个可切换 Tab 的侧边面板。关闭后实时统计与 Git 变更各自独立，可同时并排显示。",
   "settings.general.disableMergePanels": "关闭面板合并",
   "settings.general.enableMergePanels": "开启面板合并",
   "settings.general.closeBehavior": "关闭按钮行为",
   "settings.general.closeBehaviorDescription": "控制点击窗口关闭按钮时的动作。",
   "settings.general.confirmCloseTab": "关闭终端标签页前确认",
-  "settings.general.confirmCloseTabDescription": "开启后，点击标签页关闭按钮或使用关闭终端快捷键时会先弹窗确认，避免误关。",
+  "settings.general.confirmCloseTabDescription":
+    "开启后，点击标签页关闭按钮或使用关闭终端快捷键时会先弹窗确认，避免误关。",
   "settings.general.disableCloseTabConfirm": "关闭终端标签页关闭确认",
   "settings.general.enableCloseTabConfirm": "开启终端标签页关闭确认",
   "settings.general.tabHoverInfo": "终端 Tab 悬浮信息",
-  "settings.general.tabHoverInfoDescription": "开启后，鼠标悬停在终端标签页上会显示 CLI、Shell、项目、路径与 Session ID。",
+  "settings.general.tabHoverInfoDescription":
+    "开启后，鼠标悬停在终端标签页上会显示 CLI、Shell、项目、路径与 Session ID。",
   "settings.general.disableTabHoverInfo": "关闭终端 Tab 悬浮信息",
   "settings.general.enableTabHoverInfo": "开启终端 Tab 悬浮信息",
   "settings.general.inputSuggestions": "终端输入提示",
-  "settings.general.inputSuggestionsDescription": "开启后，在光标后以内联灰字显示本地历史、模板和内置 AI CLI 命令建议；Tab、方向键右键或 Ctrl+Space 只补全后缀，不自动执行。",
+  "settings.general.inputSuggestionsDescription":
+    "开启后，在光标后以内联灰字显示本地历史、模板和内置 AI CLI 命令建议；Tab、方向键右键或 Ctrl+Space 只补全后缀，不自动执行。",
   "settings.general.disableInputSuggestions": "关闭终端输入提示",
   "settings.general.enableInputSuggestions": "开启终端输入提示",
   "settings.general.inputSuggestionProvider": "输入提示来源",
-  "settings.general.inputSuggestionProviderLocal": "本地历史 / 模板 / 内置 AI 命令",
+  "settings.general.inputSuggestionProviderLocal":
+    "本地历史 / 模板 / 内置 AI 命令",
   "settings.general.inputSuggestionProviderAi": "AI 推测",
-  "settings.general.inputSuggestionProviderDescription": "AI 来源使用 {model} 等 OpenAI 兼容模型；详细配置在「命令提示」页。",
+  "settings.general.inputSuggestionProviderDescription":
+    "AI 来源使用 {model} 等 OpenAI 兼容模型；详细配置在「命令提示」页。",
   "settings.general.singleSidePanel": "一次只打开一个终端侧边面板",
-  "settings.general.singleSidePanelDescription": "默认开启：打开历史会话、实时统计、系统资源、Git 变更、时间轴或文件面板时，会自动收起其它终端侧边面板。",
+  "settings.general.singleSidePanelDescription":
+    "默认开启：打开历史会话、实时统计、系统资源、Git 变更、时间轴或文件面板时，会自动收起其它终端侧边面板。",
   "settings.general.disableSingleSidePanel": "允许同时打开多个终端侧边面板",
   "settings.general.enableSingleSidePanel": "限制为一次只打开一个终端侧边面板",
   "settings.general.projectScopedTerminalView": "按项目聚焦终端",
-  "settings.general.projectScopedTerminalViewDescription": "开启后，左侧点击项目只显示该项目的终端；顶部会出现“全部终端”入口用于回到完整列表。",
+  "settings.general.projectScopedTerminalViewDescription":
+    "开启后，左侧点击项目只显示该项目的终端；顶部会出现“全部终端”入口用于回到完整列表。",
   "settings.general.disableProjectScopedTerminalView": "关闭按项目聚焦终端",
   "settings.general.enableProjectScopedTerminalView": "开启按项目聚焦终端",
   "settings.general.workspanDevelopment": "Workspan开发",
-  "settings.general.workspanDevelopmentDescription": "开启后使用 Workspan 顶层工作区；关闭后恢复传统分屏，并在每个 Pane 保留终端 Tab。",
+  "settings.general.workspanDevelopmentDescription":
+    "开启后使用 Workspan 顶层工作区；关闭后恢复传统分屏，并在每个 Pane 保留终端 Tab。",
   "settings.general.disableWorkspanDevelopment": "关闭 Workspan开发",
   "settings.general.enableWorkspanDevelopment": "开启 Workspan开发",
   "settings.general.lowMemoryMode": "低内存模式",
-  "settings.general.lowMemoryModeDescription": "开启后，后台终端隐藏超过 60 秒会释放 WebGL/GPU 渲染资源，切回时重建渲染器。滚动缓冲区与输出解析保持运行，PTY 与 Pi/CLI 进程继续运行，不会进入进程休眠。",
+  "settings.general.lowMemoryModeDescription":
+    "开启后，后台终端隐藏超过 60 秒会释放 WebGL/GPU 渲染资源，切回时重建渲染器。滚动缓冲区与输出解析保持运行，PTY 与 Pi/CLI 进程继续运行，不会进入进程休眠。",
   "settings.general.disableLowMemoryMode": "关闭低内存模式",
   "settings.general.enableLowMemoryMode": "开启低内存模式",
   "settings.general.disableHardwareAcceleration": "禁用硬件加速",
-  "settings.general.disableHardwareAccelerationDescription": "主要用于降低核显/GPU 占用。开启后渲染改走非 GPU 路径，GPU 占用通常会下降，但界面和终端重绘可能更吃 CPU；WebView2 部分需重启后生效，内置终端 WebGL 会立即停用。",
+  "settings.general.disableHardwareAccelerationDescription":
+    "主要用于降低核显/GPU 占用。开启后渲染改走非 GPU 路径，GPU 占用通常会下降，但界面和终端重绘可能更吃 CPU；WebView2 部分需重启后生效，内置终端 WebGL 会立即停用。",
   "settings.general.allowHardwareAcceleration": "允许硬件加速",
   "settings.general.disableHardwareAccelerationAction": "禁用硬件加速",
   "settings.general.debugMode": "调试模式",
@@ -376,10 +524,12 @@ export const zh = {
   "settings.general.showStatsButton": "显示用量分析按钮",
   "settings.general.hideStatsButton": "隐藏用量分析按钮",
   "settings.general.showStatsButtonAria": "显示用量分析按钮",
-  "settings.general.showStatsButtonDescription": "在侧边栏底部显示历史用量统计按钮",
+  "settings.general.showStatsButtonDescription":
+    "在侧边栏底部显示历史用量统计按钮",
   "settings.sidebar.behavior": "侧栏与行为",
   "settings.sidebar.projectFilterVisibility": "显示项目过滤按钮",
-  "settings.sidebar.projectFilterVisibilityDescription": "在项目栏中显示“全部 / 已开启”过滤按钮；关闭后自动恢复为全部项目。",
+  "settings.sidebar.projectFilterVisibilityDescription":
+    "在项目栏中显示“全部 / 已开启”过滤按钮；关闭后自动恢复为全部项目。",
   "settings.sidebar.hideProjectFilter": "隐藏项目过滤按钮",
   "settings.sidebar.showProjectFilter": "显示项目过滤按钮",
   "settings.sidebar.panelSkin": "侧边面板皮肤",
@@ -401,15 +551,19 @@ export const zh = {
   "settings.sidebar.showAllResourceCards": "显示全部资源卡片",
   "settings.sidebar.resetResourceCardOrder": "恢复资源卡片默认排序",
   "settings.sidebar.systemResources": "系统资源cat",
-  "settings.sidebar.systemResourcesDescription": "只控制终端侧边栏下方 CPU 小猫的显示隐藏；系统资源监控按钮在工具栏设置中控制。",
+  "settings.sidebar.systemResourcesDescription":
+    "只控制终端侧边栏下方 CPU 小猫的显示隐藏；系统资源监控按钮在工具栏设置中控制。",
   "settings.sidebar.enableSystemResources": "显示系统资源cat",
   "settings.sidebar.disableSystemResources": "隐藏系统资源cat",
   "settings.sidebar.skin.terminal.label": "跟随终端",
-  "settings.sidebar.skin.terminal.description": "沿用当前终端主题生成面板颜色。",
+  "settings.sidebar.skin.terminal.description":
+    "沿用当前终端主题生成面板颜色。",
   "settings.sidebar.skin.classicTerminal.label": "经典终端",
-  "settings.sidebar.skin.classicTerminal.description": "保留旧版黑底实时统计配色。",
+  "settings.sidebar.skin.classicTerminal.description":
+    "保留旧版黑底实时统计配色。",
   "settings.sidebar.skin.warmPaper.label": "暖米纸",
-  "settings.sidebar.skin.warmPaper.description": "柔和纸感底色，适合长时间查看。",
+  "settings.sidebar.skin.warmPaper.description":
+    "柔和纸感底色，适合长时间查看。",
   "settings.sidebar.skin.sunrise.label": "晨光杏",
   "settings.sidebar.skin.sunrise.description": "偏亮杏色基底，强调色更鲜明。",
   "settings.sidebar.skin.linen.label": "亚麻白",
@@ -418,7 +572,8 @@ export const zh = {
   "settings.sidebar.skin.latte.description": "奶咖色面板，边界更清楚。",
   "settings.general.usageAnalysis": "用量分析",
   "settings.dataStorage.title": "数据存储",
-  "settings.dataStorage.description": "管理 CLI-Manager 自身的数据根目录。切换仅在完整重启后生效，不会管理 .claude、.codex、WSL 或项目目录。",
+  "settings.dataStorage.description":
+    "管理 CLI-Manager 自身的数据根目录。切换仅在完整重启后生效，不会管理 .claude、.codex、WSL 或项目目录。",
   "settings.dataStorage.distributionInstalled": "安装版",
   "settings.dataStorage.distributionPortable": "便携版",
   "settings.dataStorage.modeDefault": "默认目录",
@@ -428,51 +583,71 @@ export const zh = {
   "settings.dataStorage.chooseCustom": "选择自定义目录",
   "settings.dataStorage.restoreDefault": "恢复默认目录",
   "settings.dataStorage.chooseDialogTitle": "选择 CLI-Manager 数据目录",
-  "settings.dataStorage.tasksActiveHint": "存在运行中的终端、后台操作或更新任务。请先结束全部任务，再切换数据目录。",
+  "settings.dataStorage.tasksActiveHint":
+    "存在运行中的终端、后台操作或更新任务。请先结束全部任务，再切换数据目录。",
   "settings.dataStorage.lastErrorTitle": "上次数据目录切换失败",
   "settings.dataStorage.inspectFailed": "无法使用所选目录",
   "settings.dataStorage.switchFailed": "数据目录切换准备失败",
   "settings.dataStorage.confirmTitle": "切换数据目录并重启",
-  "settings.dataStorage.confirmEmptyDescription": "目标目录为空。你可以完整迁移当前数据，也可以直接使用一个新的空目录。",
-  "settings.dataStorage.confirmNonEmptyDescription": "目标目录已有内容。CLI-Manager 不会合并或覆盖，只能直接使用该目录并重启。",
+  "settings.dataStorage.confirmEmptyDescription":
+    "目标目录为空。你可以完整迁移当前数据，也可以直接使用一个新的空目录。",
+  "settings.dataStorage.confirmNonEmptyDescription":
+    "目标目录已有内容。CLI-Manager 不会合并或覆盖，只能直接使用该目录并重启。",
   "settings.dataStorage.useWithoutMigration": "不迁移，直接重启",
   "settings.dataStorage.migrateAndRestart": "迁移数据并重启",
   "settings.dataStorage.switching": "正在准备切换...",
-  "settings.dataStorage.error.tasksActive": "仍有终端或后台任务在运行，请全部结束后重试。",
-  "settings.dataStorage.error.targetNotEmpty": "目标目录已有内容，不能自动迁移。",
-  "settings.dataStorage.error.targetNotWritable": "目标目录不可写，请选择其他目录。",
-  "settings.dataStorage.error.pathOverlap": "新旧数据目录不能互为父目录或子目录。",
+  "settings.dataStorage.error.tasksActive":
+    "仍有终端或后台任务在运行，请全部结束后重试。",
+  "settings.dataStorage.error.targetNotEmpty":
+    "目标目录已有内容，不能自动迁移。",
+  "settings.dataStorage.error.targetNotWritable":
+    "目标目录不可写，请选择其他目录。",
+  "settings.dataStorage.error.pathOverlap":
+    "新旧数据目录不能互为父目录或子目录。",
   "settings.dataStorage.error.samePath": "所选目录就是当前数据目录。",
-  "settings.dataStorage.error.symlink": "数据目录不能是符号链接或 Windows 重解析点。",
+  "settings.dataStorage.error.symlink":
+    "数据目录不能是符号链接或 Windows 重解析点。",
   "settings.general.ccusageDashboard": "使用 ccusage 看板",
-  "settings.general.ccusageDashboardDescription": "默认关闭。开启后侧栏分析入口切换到独立 ccusage 看板，支持 Claude / Codex / 全部来源；Windows 缺少 Bun/bunx 时可确认安装，WSL 需手动安装。",
+  "settings.general.ccusageDashboardDescription":
+    "默认关闭。开启后侧栏分析入口切换到独立 ccusage 看板，支持 Claude / Codex / 全部来源；Windows 缺少 Bun/bunx 时可确认安装，WSL 需手动安装。",
   "settings.general.disableCcusageDashboard": "关闭 ccusage 看板",
   "settings.general.enableCcusageDashboard": "开启 ccusage 看板",
-  "settings.general.ccusageUseWslRequiresDashboard": "需先开启“使用 ccusage 看板”，才能启用 WSL ccusage。",
+  "settings.general.ccusageUseWslRequiresDashboard":
+    "需先开启“使用 ccusage 看板”，才能启用 WSL ccusage。",
   "settings.general.ccusageUseWsl": "启用 WSL ccusage",
-  "settings.general.ccusageUseWslDescription": "默认关闭。关闭时始终使用 Windows 环境中的 ccusage；开启后才会按当前 Hook 配置目录解析并切换到 WSL 环境。",
+  "settings.general.ccusageUseWslDescription":
+    "默认关闭。关闭时始终使用 Windows 环境中的 ccusage；开启后才会按当前 Hook 配置目录解析并切换到 WSL 环境。",
   "settings.general.disableCcusageUseWsl": "关闭 WSL ccusage",
   "settings.general.enableCcusageUseWsl": "开启 WSL ccusage",
   "settings.general.symlinkCompatibility": "软连接兼容性",
-  "settings.general.symlinkCompatibilityDescription": "默认关闭。开启后，新建/编辑项目路径旁显示小号 WSL 入口，用于选择 Windows 原生弹窗无法进入的 WSL 目录软连接。",
+  "settings.general.symlinkCompatibilityDescription":
+    "默认关闭。开启后，新建/编辑项目路径旁显示小号 WSL 入口，用于选择 Windows 原生弹窗无法进入的 WSL 目录软连接。",
   "settings.general.disableSymlinkCompatibility": "关闭软连接兼容性",
   "settings.general.enableSymlinkCompatibility": "开启软连接兼容性",
   "settings.general.ccusageWslButton": "WSL 状态",
   "settings.general.ccusageWslDialogTitle": "WSL 状态",
-  "settings.general.ccusageWslDialogDescription": "CLI-Manager 不再代替你在 WSL 中执行安装命令。请手动安装 Bun 与 ccusage，完成后点击“重新检测”即可刷新状态。",
+  "settings.general.ccusageWslDialogDescription":
+    "CLI-Manager 不再代替你在 WSL 中执行安装命令。请手动安装 Bun 与 ccusage，完成后点击“重新检测”即可刷新状态。",
   "settings.general.ccusageWslDetectedTarget": "当前 WSL 目标",
-  "settings.general.ccusageWslTargetUnavailable": "未从当前配置中识别到 WSL 目标",
+  "settings.general.ccusageWslTargetUnavailable":
+    "未从当前配置中识别到 WSL 目标",
   "settings.general.ccusageWslStatusChecking": "检测中",
-  "settings.general.ccusageWslStatusCheckingDescription": "正在检测当前 WSL 环境中的 bun / bunx 状态。",
+  "settings.general.ccusageWslStatusCheckingDescription":
+    "正在检测当前 WSL 环境中的 bun / bunx 状态。",
   "settings.general.ccusageWslStatusUnavailable": "未配置",
-  "settings.general.ccusageWslStatusUnavailableDescription": "当前未从 Claude/Codex 配置目录识别到 WSL 目标。若要在 WSL 使用 ccusage，请先在 Hook 页面中把配置目录指向对应的 \\\\wsl.localhost\\<发行版> 路径。",
+  "settings.general.ccusageWslStatusUnavailableDescription":
+    "当前未从 Claude/Codex 配置目录识别到 WSL 目标。若要在 WSL 使用 ccusage，请先在 Hook 页面中把配置目录指向对应的 \\\\wsl.localhost\\<发行版> 路径。",
   "settings.general.ccusageWslStatusConflict": "多发行版",
-  "settings.general.ccusageWslStatusConflictDescription": "检测到多个 WSL 发行版：{distros}。请先统一 Claude / Codex 配置目录使用的发行版，再检测状态。",
+  "settings.general.ccusageWslStatusConflictDescription":
+    "检测到多个 WSL 发行版：{distros}。请先统一 Claude / Codex 配置目录使用的发行版，再检测状态。",
   "settings.general.ccusageWslStatusReady": "已就绪",
-  "settings.general.ccusageWslStatusReadyDescription": "已检测到当前 WSL 目标中的 bunx，ccusage 看板可以直接使用它。",
+  "settings.general.ccusageWslStatusReadyDescription":
+    "已检测到当前 WSL 目标中的 bunx，ccusage 看板可以直接使用它。",
   "settings.general.ccusageWslStatusManual": "需手动安装",
-  "settings.general.ccusageWslStatusManualDescription": "已识别到 WSL（{distro}），但还未检测到可用的 bunx。请按下方命令手动安装。",
-  "settings.general.ccusageWslConfigHint": "建议先打开目标发行版的 WSL 终端，再执行下面的命令。为避免 PATH 尚未刷新导致“bun not found”，这里直接使用 ~/.bun/bin 路径。",
+  "settings.general.ccusageWslStatusManualDescription":
+    "已识别到 WSL（{distro}），但还未检测到可用的 bunx。请按下方命令手动安装。",
+  "settings.general.ccusageWslConfigHint":
+    "建议先打开目标发行版的 WSL 终端，再执行下面的命令。为避免 PATH 尚未刷新导致“bun not found”，这里直接使用 ~/.bun/bin 路径。",
   "settings.general.ccusageWslCommandBun": "1. 安装 Bun",
   "settings.general.ccusageWslCommandCcusage": "2. 安装 ccusage",
   "settings.general.ccusageWslCommandVerify": "3. 验证状态",
@@ -481,11 +656,13 @@ export const zh = {
   "settings.general.ccusageWslCopyFailed": "复制命令失败",
   "settings.general.ccusageWslRefreshStatus": "重新检测",
   "settings.palette.light.clearFocus.label": "Clear Focus 清晰浅色",
-  "settings.palette.light.clearFocus.description": "浅灰蓝应用壳层，高对比终端正文，优先保证命令和输出清晰",
+  "settings.palette.light.clearFocus.description":
+    "浅灰蓝应用壳层，高对比终端正文，优先保证命令和输出清晰",
   "settings.palette.light.warmPaper.label": "暖米纸",
   "settings.palette.light.warmPaper.description": "温暖纸感，橙棕强调",
   "settings.palette.light.creamForest.label": "奶油森林",
-  "settings.palette.light.creamForest.description": "温暖奶油底色，森林绿强调与深绿文字",
+  "settings.palette.light.creamForest.description":
+    "温暖奶油底色，森林绿强调与深绿文字",
   "settings.palette.light.creamGreen.label": "奶油绿",
   "settings.palette.light.creamGreen.description": "清新中性，绿色强调",
   "settings.palette.light.inkRed.label": "黑白朱砂",
@@ -493,17 +670,22 @@ export const zh = {
   "settings.palette.light.emeraldMist.label": "翡翠雾",
   "settings.palette.light.emeraldMist.description": "微冷雾白，翡翠绿强调",
   "settings.palette.light.saasAnalyticsDashboard.label": "SaaS Dashboard",
-  "settings.palette.light.saasAnalyticsDashboard.description": "冷静浅色，适合数据驾驶舱与 Bento 卡片层级",
+  "settings.palette.light.saasAnalyticsDashboard.description":
+    "冷静浅色，适合数据驾驶舱与 Bento 卡片层级",
   "settings.palette.light.applePure.label": "Apple Pure",
-  "settings.palette.light.applePure.description": "纯白基底 + SF System Blue，最贴近 macOS 原生扁平",
+  "settings.palette.light.applePure.description":
+    "纯白基底 + SF System Blue，最贴近 macOS 原生扁平",
   "settings.palette.light.appleMist.label": "Apple Mist",
   "settings.palette.light.appleMist.description": "微冷雾白，长时间盯屏更柔和",
   "settings.palette.light.appleWarm.label": "Apple Warm",
-  "settings.palette.light.appleWarm.description": "暖米白纸感，琥珀强调，低对比阅读友好",
+  "settings.palette.light.appleWarm.description":
+    "暖米白纸感，琥珀强调，低对比阅读友好",
   "settings.palette.light.appleMono.label": "Apple Mono",
-  "settings.palette.light.appleMono.description": "极简单色，黑色强调，最克制的 Pro 工具气质",
+  "settings.palette.light.appleMono.description":
+    "极简单色，黑色强调，最克制的 Pro 工具气质",
   "settings.palette.dark.graphite.label": "Graphite 石墨",
-  "settings.palette.dark.graphite.description": "中性石墨底色，明亮蓝色强调与钴蓝控件",
+  "settings.palette.dark.graphite.description":
+    "中性石墨底色，明亮蓝色强调与钴蓝控件",
   "settings.palette.dark.nightIndigo.label": "夜靛蓝",
   "settings.palette.dark.nightIndigo.description": "经典冷色，蓝系强调",
   "settings.palette.dark.forestNight.label": "森林夜",
@@ -511,21 +693,29 @@ export const zh = {
   "settings.palette.dark.graphiteRed.label": "石墨红",
   "settings.palette.dark.graphiteRed.description": "中性黑灰，朱红强调",
   "settings.palette.dark.investmentPlatform.label": "Investment Platform",
-  "settings.palette.dark.investmentPlatform.description": "深海军蓝与琥珀金，克制的专业金融终端气质",
+  "settings.palette.dark.investmentPlatform.description":
+    "深海军蓝与琥珀金，克制的专业金融终端气质",
   "settings.palette.dark.githubDark.label": "GitHub Dark",
-  "settings.palette.dark.githubDark.description": "中性深灰，蓝色强调，适合长时间阅读代码",
+  "settings.palette.dark.githubDark.description":
+    "中性深灰，蓝色强调，适合长时间阅读代码",
   "settings.palette.dark.catppuccinMocha.label": "Catppuccin Mocha",
-  "settings.palette.dark.catppuccinMocha.description": "柔和紫黑，粉蓝强调，低刺激暗色",
+  "settings.palette.dark.catppuccinMocha.description":
+    "柔和紫黑，粉蓝强调，低刺激暗色",
   "settings.palette.dark.midnightAurora.label": "Midnight Aurora 午夜极光",
-  "settings.palette.dark.midnightAurora.description": "深海军蓝基底，青蓝与紫色极光强调，适合沉浸式终端工作",
+  "settings.palette.dark.midnightAurora.description":
+    "深海军蓝基底，青蓝与紫色极光强调，适合沉浸式终端工作",
   "settings.palette.dark.terminalAcrylic.label": "终端 Acrylic 蓝灰",
-  "settings.palette.dark.terminalAcrylic.description": "One Half 蓝灰终端风格，JetBrains Mono 字体与蓝色强调，适合沉浸开发",
+  "settings.palette.dark.terminalAcrylic.description":
+    "One Half 蓝灰终端风格，JetBrains Mono 字体与蓝色强调，适合沉浸开发",
   "settings.palette.dark.terminalGreen.label": "终端监控绿",
-  "settings.palette.dark.terminalGreen.description": "btop 监控风格碳黑，荧光绿强调，呼应实时统计面板",
+  "settings.palette.dark.terminalGreen.description":
+    "btop 监控风格碳黑，荧光绿强调，呼应实时统计面板",
   "settings.palette.dark.draculaPurple.label": "Dracula Purple",
-  "settings.palette.dark.draculaPurple.description": "经典紫黑，高辨识度，强调色更鲜明",
+  "settings.palette.dark.draculaPurple.description":
+    "经典紫黑，高辨识度，强调色更鲜明",
   "settings.palette.dark.carbonBlack.label": "Carbon Black",
-  "settings.palette.dark.carbonBlack.description": "近黑碳色，高对比蓝紫强调，适合沉浸工作",
+  "settings.palette.dark.carbonBlack.description":
+    "近黑碳色，高对比蓝紫强调，适合沉浸工作",
   "settings.uiFont.systemDefault": "系统默认（Segoe UI + 中文回退）",
   "settings.uiFont.pingFang": "苹方 PingFang SC",
   "settings.uiFont.microsoftYaHei": "微软雅黑 Microsoft YaHei",
@@ -540,35 +730,45 @@ export const zh = {
   "settings.terminalTheme.group.pinkPurple.label": "粉紫 / 柔和",
   "settings.terminalTheme.group.pinkPurple.description": "柔和、糖果、低饱和",
   "settings.terminalTheme.group.highContrast.label": "经典高对比",
-  "settings.terminalTheme.group.highContrast.description": "黑底、鲜明 ANSI、高可读性",
+  "settings.terminalTheme.group.highContrast.description":
+    "黑底、鲜明 ANSI、高可读性",
   "settings.terminalTheme.group.lightOffice.label": "浅色办公",
-  "settings.terminalTheme.group.lightOffice.description": "白底、纸感、适合明亮环境",
+  "settings.terminalTheme.group.lightOffice.description":
+    "白底、纸感、适合明亮环境",
   "settings.options.theme.light": "浅色",
   "settings.options.theme.dark": "深色",
   "settings.options.theme.system": "跟随系统",
   "settings.options.sidebarDensity.comfortable": "舒适",
-  "settings.options.sidebarDensity.comfortableDescription": "默认间距，强调可读性",
+  "settings.options.sidebarDensity.comfortableDescription":
+    "默认间距，强调可读性",
   "settings.options.sidebarDensity.compact": "紧凑",
-  "settings.options.sidebarDensity.compactDescription": "减少行高与缩进，显示更多条目",
+  "settings.options.sidebarDensity.compactDescription":
+    "减少行高与缩进，显示更多条目",
   "settings.options.close.ask": "每次询问",
   "settings.options.close.minimize": "最小化到托盘",
   "settings.options.close.exit": "直接退出",
   "settings.general.exitWithRunningTasks": "退出时有任务运行中",
-  "settings.general.exitWithRunningTasksDescription": "退出应用时若有终端任务正在运行：每次询问、最小化到托盘，或停止任务后退出。退出应用不再保留后台运行任务。",
+  "settings.general.exitWithRunningTasksDescription":
+    "退出应用时若有终端任务正在运行：每次询问、最小化到托盘，或停止任务后退出。退出应用不再保留后台运行任务。",
   "settings.general.backgroundIncludeFinished": "退出时也检测已完成的任务",
-  "settings.general.backgroundIncludeFinishedDescription": "开启后，Claude / Codex 等已运行完毕或失败的会话也会参与退出拦截；关闭时仅检测仍在运行中的任务。",
+  "settings.general.backgroundIncludeFinishedDescription":
+    "开启后，Claude / Codex 等已运行完毕或失败的会话也会参与退出拦截；关闭时仅检测仍在运行中的任务。",
   "settings.options.exitTasks.ask": "每次询问",
   "settings.options.exitTasks.minimize": "最小化到托盘",
   "settings.options.exitTasks.discard": "终止任务，退出应用",
   "settings.general.terminalSessionRestoreMode": "会话恢复方式",
-  "settings.general.terminalSessionRestoreModeDescription": "下次启动检测到上次遗留的终端标签时：弹窗询问是否恢复，或静默自动恢复（含 CLI 对话与分屏布局）。仅在应用启动时触发一次。",
-  "settings.general.terminalSessionRestoreModeDisabledHint": "已关闭「恢复上次终端会话」总开关，恢复方式不生效。请先在开发者选项中开启。",
+  "settings.general.terminalSessionRestoreModeDescription":
+    "下次启动检测到上次遗留的终端标签时：弹窗询问是否恢复，或静默自动恢复（含 CLI 对话与分屏布局）。仅在应用启动时触发一次。",
+  "settings.general.terminalSessionRestoreModeDisabledHint":
+    "已关闭「恢复上次终端会话」总开关，恢复方式不生效。请先在开发者选项中开启。",
   "settings.options.sessionRestore.ask": "启动时询问",
   "settings.options.sessionRestore.auto": "自动恢复",
   "settings.general.toolbar.backgroundTasks": "后台任务",
-  "settings.remoteConnections.ccConnect.description": "通过 Telegram 或飞书连接本机项目，并管理 cc-connect 服务与凭据。",
+  "settings.remoteConnections.ccConnect.description":
+    "通过 Telegram 或飞书连接本机项目，并管理 cc-connect 服务与凭据。",
   "settings.remoteConnections.ccConnect.open": "打开本机 cc-connect 设置",
-  "settings.remoteConnections.webDevice.description": "将浏览器或移动设备与本机配对，远程管理 CLI-Manager。",
+  "settings.remoteConnections.webDevice.description":
+    "将浏览器或移动设备与本机配对，远程管理 CLI-Manager。",
   "settings.remoteConnections.webDevice.open": "打开 Web 设备连接设置",
   "settings.remoteConnections.status.unconfigured": "未配置",
   "settings.remoteConnections.status.configured": "已配置",
@@ -576,38 +776,52 @@ export const zh = {
   "settings.webDevice.title": "Web 设备连接",
   "settings.webDevice.outputBatch": "最大输出批次（高级）",
   "settings.webDevice.outputBatchDefault": "默认（96 KiB）",
-  "settings.webDevice.outputBatchHint": "自动保存，即时生效。控制单批上限，小段输出仍立即发送。较大批次可减少大量日志的分包，但可能增加单次渲染耗时。",
+  "settings.webDevice.outputBatchHint":
+    "自动保存，即时生效。控制单批上限，小段输出仍立即发送。较大批次可减少大量日志的分包，但可能增加单次渲染耗时。",
   "settings.webMobile.title": "手机扫码访问",
-  "settings.webMobile.hint": "扫码授权此浏览器访问当前电脑。已授权浏览器可在 Web 主机页管理和撤销。",
-  "settings.webMobile.httpsRequired": "请设置手机可达的访问地址：HTTPS 域名，或明确启用受信任网络后的 HTTP 地址。不能使用 localhost / 127.0.0.1。",
+  "settings.webMobile.hint":
+    "扫码授权此浏览器访问当前电脑。已授权浏览器可在 Web 主机页管理和撤销。",
+  "settings.webMobile.httpsRequired":
+    "请设置手机可达的访问地址：HTTPS 域名，或明确启用受信任网络后的 HTTP 地址。不能使用 localhost / 127.0.0.1。",
   "settings.webMobile.create": "生成手机二维码",
   "settings.webMobile.refresh": "刷新二维码",
   "settings.webMobile.stop": "停止此二维码",
   "settings.webMobile.expiry": "二维码 {seconds} 秒后失效",
   "settings.webMobile.expired": "二维码已过期，请刷新。",
-  "settings.webMobile.failed": "手机授权失败，请确认服务已更新、设备已配对且地址可访问。",
-  "settings.webDevice.description": "让 Web 服务通过安全设备通道连接本机，并由桌面端执行真实 AI 任务。",
+  "settings.webMobile.failed":
+    "手机授权失败，请确认服务已更新、设备已配对且地址可访问。",
+  "settings.webDevice.description":
+    "让 Web 服务通过安全设备通道连接本机，并由桌面端执行真实 AI 任务。",
   "settings.webDevice.connectionTitle": "连接地址",
-  "settings.webDevice.connectionDescription": "区分桌面端连接服务地址与浏览器打开页面的访问地址。",
+  "settings.webDevice.connectionDescription":
+    "区分桌面端连接服务地址与浏览器打开页面的访问地址。",
   "settings.webDevice.identityTitle": "设备信息",
-  "settings.webDevice.identityDescription": "设置设备名称和应用启动时是否自动连接。",
+  "settings.webDevice.identityDescription":
+    "设置设备名称和应用启动时是否自动连接。",
   "settings.webDevice.advancedTitle": "高级连接设置",
-  "settings.webDevice.advancedDescription": "输出批次、内网 HTTP 信任和壁纸上传等低频选项。",
+  "settings.webDevice.advancedDescription":
+    "输出批次、内网 HTTP 信任和壁纸上传等低频选项。",
   "settings.webDevice.pairingTitle": "配对与手机访问",
-  "settings.webDevice.pairingDescription": "生成配对码后，可通过二维码让手机访问此设备。",
+  "settings.webDevice.pairingDescription":
+    "生成配对码后，可通过二维码让手机访问此设备。",
   "settings.webDevice.serverUrl": "Web 服务地址",
-  "settings.webDevice.serverUrlHint": "这是桌面连接服务的地址，不是浏览器地址。同机使用回环地址；远程使用 HTTPS/WSS，或显式开启受信任网络。",
+  "settings.webDevice.serverUrlHint":
+    "这是桌面连接服务的地址，不是浏览器地址。同机使用回环地址；远程使用 HTTPS/WSS，或显式开启受信任网络。",
   "settings.webDevice.trustedNetwork": "信任此设备连接的网络",
-  "settings.webDevice.trustedNetworkHint": "允许此配置的地址使用 HTTP/WS，支持内网 IP 或域名。普通 HTTP 不加密，请限制在受信任局域网或加密组网内。",
+  "settings.webDevice.trustedNetworkHint":
+    "允许此配置的地址使用 HTTP/WS，支持内网 IP 或域名。普通 HTTP 不加密，请限制在受信任局域网或加密组网内。",
   "settings.webDevice.publicAccessUrl": "浏览器访问地址",
   "settings.webDevice.useLocalServer": "使用本机服务地址",
-  "settings.webDevice.publicAccessUrlHint": "用于链接和二维码，与设备连接地址独立。填写 HTTPS 域名或受信任网络中的 HTTP 来源，不包含子路径。",
+  "settings.webDevice.publicAccessUrlHint":
+    "用于链接和二维码，与设备连接地址独立。填写 HTTPS 域名或受信任网络中的 HTTP 来源，不包含子路径。",
   "settings.webDevice.deviceName": "设备名称",
   "settings.webDevice.defaultName": "CLI-Manager 桌面端",
   "settings.webDevice.autoStart": "启动应用时自动连接",
-  "settings.webDevice.autoStartHint": "窗口最小化或进入托盘后仍由 Rust 后台保持连接。",
+  "settings.webDevice.autoStartHint":
+    "窗口最小化或进入托盘后仍由 Rust 后台保持连接。",
   "settings.webDevice.uploadWallpaper": "上传系统壁纸缩略图",
-  "settings.webDevice.uploadWallpaperHint": "启动或重连时读取一次系统壁纸，压缩后用于 Web 主机卡片识别。",
+  "settings.webDevice.uploadWallpaperHint":
+    "启动或重连时读取一次系统壁纸，压缩后用于 Web 主机卡片识别。",
   "settings.webDevice.deviceId": "设备 ID",
   "settings.webDevice.clientId": "软件 ID",
   "settings.webDevice.pairingCode": "配对码",
@@ -629,30 +843,40 @@ export const zh = {
   "settings.webDevice.toast.pairingCreated": "配对码已生成并复制",
   "settings.webDevice.toast.pairingCleared": "设备身份已重置，请重新配对",
   "settings.webDevice.operationApproval.title": "确认远程管理操作",
-  "settings.webDevice.operationApproval.message": "Web 请求在本机执行 {kind}。\n\n目标：\n{target}\n\n请确认无误后继续。",
+  "settings.webDevice.operationApproval.message":
+    "Web 请求在本机执行 {kind}。\n\n目标：\n{target}\n\n请确认无误后继续。",
   "settings.webServer.title": "本机 Web 服务",
-  "settings.webServer.description": "可手动启动本机 Web 管理服务；默认不会随 CLI-Manager 自动启动。",
+  "settings.webServer.description":
+    "可手动启动本机 Web 管理服务；默认不会随 CLI-Manager 自动启动。",
   "settings.webServer.basicTitle": "基础监听配置",
-  "settings.webServer.basicDescription": "选择服务监听的网卡、地址和端口；修改后保存并按需重启服务。",
+  "settings.webServer.basicDescription":
+    "选择服务监听的网卡、地址和端口；修改后保存并按需重启服务。",
   "settings.webServer.advancedTitle": "高级网络设置",
-  "settings.webServer.advancedDescription": "浏览器来源、内网 HTTP 信任和网络暴露提示。",
+  "settings.webServer.advancedDescription":
+    "浏览器来源、内网 HTTP 信任和网络暴露提示。",
   "settings.webServer.securityTitle": "登录安全",
-  "settings.webServer.securityDescription": "管理员账号用于登录 Web 页面，密码会安全保存在系统凭据存储中。",
+  "settings.webServer.securityDescription":
+    "管理员账号用于登录 Web 页面，密码会安全保存在系统凭据存储中。",
   "settings.webServer.bind": "监听地址",
   "settings.webServer.bindHint": "回环地址、局域网/虚拟网卡 IP，或 0.0.0.0。",
   "settings.webServer.port": "监听端口",
   "settings.webServer.allowedOrigin": "浏览器访问地址 / 域名",
-  "settings.webServer.allowedOriginHint": "填写浏览器实际访问的协议、IP 或域名及端口，例如 https://cli.example.com。Nginx 转发到本机 HTTP 即可；暂不支持子路径挂载。",
+  "settings.webServer.allowedOriginHint":
+    "填写浏览器实际访问的协议、IP 或域名及端口，例如 https://cli.example.com。Nginx 转发到本机 HTTP 即可；暂不支持子路径挂载。",
   "settings.webServer.interface": "选择本机网卡",
   "settings.webServer.interfaceHint": "选择网卡地址，或在下方手动填写监听 IP",
   "settings.webServer.trustedNetwork": "允许受信任内网 HTTP 访问",
-  "settings.webServer.trustedNetworkHint": "适用于局域网、NetBird、Tailscale 等。仅允许配置的浏览器来源，保留登录和配对。地址类型不能证明网络可信；公网请使用 HTTPS。",
+  "settings.webServer.trustedNetworkHint":
+    "适用于局域网、NetBird、Tailscale 等。仅允许配置的浏览器来源，保留登录和配对。地址类型不能证明网络可信；公网请使用 HTTPS。",
   "settings.webServer.localDeviceUrl": "本机设备连接地址",
-  "settings.webServer.networkWarning": "该地址可被对应网络中的其他设备访问。请使用强密码，并确认虚拟组网或局域网访问范围可信。",
-  "settings.webServer.allInterfacesWarning": "正在监听所有网卡，暴露范围最大。必须填写准确的访问来源，并配置系统防火墙限制访问范围。",
+  "settings.webServer.networkWarning":
+    "该地址可被对应网络中的其他设备访问。请使用强密码，并确认虚拟组网或局域网访问范围可信。",
+  "settings.webServer.allInterfacesWarning":
+    "正在监听所有网卡，暴露范围最大。必须填写准确的访问来源，并配置系统防火墙限制访问范围。",
   "settings.webServer.adminUsername": "管理员用户名",
   "settings.webServer.adminPassword": "管理员密码",
-  "settings.webServer.adminPasswordHint": "密码保存在系统凭据存储中，不会写入配置文件。",
+  "settings.webServer.adminPasswordHint":
+    "密码保存在系统凭据存储中，不会写入配置文件。",
   "settings.webServer.passwordUnchanged": "留空表示保持不变",
   "settings.webServer.autoStart": "启动应用时自动启动 Web 服务",
   "settings.webServer.autoStartHint": "关闭后只能通过本页面手动启动。",
@@ -663,7 +887,8 @@ export const zh = {
   "settings.webServer.state.running": "运行中",
   "settings.webServer.state.stopped": "已停止",
   "settings.webServer.state.stopping": "正在停止（等待资源释放）",
-  "settings.webServer.error.stopping": "Web 服务仍在释放资源，请稍后重试停止，再启动服务。",
+  "settings.webServer.error.stopping":
+    "Web 服务仍在释放资源，请稍后重试停止，再启动服务。",
   "settings.webServer.state.unconfigured": "未配置密码",
   "settings.webServer.toast.loadFailed": "Web 服务状态加载失败",
   "settings.webServer.toast.actionFailed": "Web 服务操作失败",

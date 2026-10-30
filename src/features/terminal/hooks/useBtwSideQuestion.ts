@@ -5,9 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { BtwThreadModel, type BtwAsk, type BtwContext, type BtwContextRequest, type BtwProgress } from "../lib/btwThreadModel";
-// Repository is loaded defensively so isolated model/IPC harnesses can run without SQL.
-let threadRepository: { listBtwThreads: typeof import("../lib/btwThreadRepository").listBtwThreads; saveBtwThread: typeof import("../lib/btwThreadRepository").saveBtwThread; deleteBtwThread: typeof import("../lib/btwThreadRepository").deleteBtwThread; updateBtwThread: typeof import("../lib/btwThreadRepository").updateBtwThread } | null = null;
-try { threadRepository = require("../lib/btwThreadRepository"); } catch { /* test/native-lite environments */ }
+import { listBtwThreads, saveBtwThread, deleteBtwThread } from "../lib/btwThreadRepository";
 
 /** One main-controller lifetime: the native child never instantiates this model. */
 export function useBtwSideQuestion() {
@@ -16,7 +14,7 @@ export function useBtwSideQuestion() {
     ask: (request: BtwAsk) => invoke<string>("side_question_ask", { request }),
     cancel: (requestId: string) => invoke("side_question_cancel", { requestId }),
     listen: (callback) => listen<BtwProgress>("side-question-progress", (event) => callback(event.payload)),
-  }, threadRepository ? { list: (options) => threadRepository!.listBtwThreads(options), save: threadRepository!.saveBtwThread, remove: threadRepository!.deleteBtwThread, patch: threadRepository!.updateBtwThread } : undefined), []);
+  }, { list: listBtwThreads, save: saveBtwThread, remove: deleteBtwThread }), []);
   useBtwNativeWindow(model);
   const state = useSyncExternalStore(model.subscribe, model.getSnapshot, model.getSnapshot);
   // Defer disposal one microtask so React StrictMode's effect probe can reattach.

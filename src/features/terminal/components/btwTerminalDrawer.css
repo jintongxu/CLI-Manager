@@ -1,0 +1,167 @@
+/* A real right-hand flex split: terminal ResizeObserver receives the remaining width. */
+.btw-terminal-split { display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; overflow: hidden; }
+.btw-terminal-split-pane { flex: 0 1 auto; min-width: 0; max-width: 60%; min-height: 0; }
+.btw-drawer {
+  position: relative;
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 0;
+  border-inline-start: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--surface-container-low) 96%, var(--surface-container-lowest));
+  overflow-wrap: anywhere;
+  color: var(--on-surface);
+  font-size: 12px;
+}
+
+.btw-drawer[data-collapsed="true"] {
+  grid-template-rows: auto 1fr;
+  align-content: start;
+}
+
+.btw-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px 6px 12px;
+}
+
+.btw-drawer-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--on-surface-variant);
+  font-weight: 600;
+}
+
+.btw-drawer-status-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btw-drawer-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--on-surface-variant) 70%, transparent);
+}
+
+.btw-drawer-status[data-btw-drawer-status="pending"] .btw-drawer-dot {
+  background: var(--primary);
+  animation: btw-drawer-pulse 1.4s ease-in-out infinite;
+}
+
+.btw-drawer-status[data-btw-drawer-status="done"] .btw-drawer-dot { background: var(--primary); }
+.btw-drawer-status[data-btw-drawer-status="failed"] .btw-drawer-dot,
+.btw-drawer-status[data-btw-drawer-status="stopped"] .btw-drawer-dot { background: #d15349; }
+
+@keyframes btw-drawer-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btw-drawer-status[data-btw-drawer-status="pending"] .btw-drawer-dot { animation: none; }
+}
+
+.btw-drawer-actions {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.btw-drawer-actions .ui-btn { min-height: 26px; gap: 4px; padding-inline: 6px; border-radius: 6px; }
+
+/* Pointer capture releases automatically on unmount; no global resize listeners. */
+.btw-drawer-resizer {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 6px;
+  z-index: 1;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.btw-drawer-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 2px 12px 10px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.btw-drawer-quote { border: 1px solid color-mix(in srgb, var(--border) 80%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--surface-container-lowest) 90%, transparent); }
+.btw-drawer-quote summary { padding: 5px 9px; cursor: pointer; color: var(--on-surface-variant); font-weight: 600; }
+.btw-drawer-quote pre { max-height: 132px; margin: 0; padding: 0 9px 9px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: inherit; }
+
+.btw-drawer-staged {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  padding: 4px 12px 6px;
+  overflow: auto;
+}
+
+.btw-drawer-question {
+  align-self: flex-end;
+  max-width: 88%;
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--primary) 34%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.btw-drawer-answer { min-width: 0; }
+.btw-drawer-inherit { display: flex; align-items: center; gap: 6px; }
+.btw-drawer-transcript > * { flex-shrink: 0; min-width: 0; }
+
+.btw-drawer-hint { margin: 0; padding: 4px 12px 10px; color: var(--on-surface-variant); }
+.btw-drawer-error { margin: 0; padding: 6px 10px; border-radius: 8px; background: color-mix(in srgb, #d15349 14%, transparent); color: color-mix(in srgb, #d15349 72%, var(--on-surface)); overflow-wrap: anywhere; }
+
+.btw-drawer-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 12px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.btw-drawer-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 56px;
+  max-height: 132px;
+  padding: 6px 9px;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 8px;
+  background: var(--surface-container-lowest);
+  color: inherit;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.btw-drawer-input:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--primary) 52%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 20%, transparent);
+}

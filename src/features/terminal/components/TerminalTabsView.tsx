@@ -26,12 +26,14 @@ import { TerminalNavigationAdapter } from "./TerminalNavigationAdapter";
 import { SortableWorkspanTab } from "./SortableTerminalTabs";
 import { TerminalTabDragOverlay } from "./TerminalTabDragOverlay";
 import { BtwSideQuestionPanel } from "./BtwSideQuestionPanel";
+import { BtwTerminalDrawer } from "./BtwTerminalDrawer";
 import { CurrentWorkPaneTarget } from "./CurrentWorkPaneTarget";
 import { SplitProjectPicker, TerminalCloseConfirmBubble } from "./TerminalTabDialogs";
 import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
 import { CurrentWorkTabBar } from "./CurrentWorkTabBar";
 
 export function TerminalTabsView({
+  workspaceVisible,
   fullscreen,
   historyActive,
   editorActive,
@@ -93,6 +95,9 @@ export function TerminalTabsView({
   systemResourcesOpen,
   providersOpen,
   btwPanelOpen,
+  btwDrawerOpen,
+  closeBtwDrawer,
+  openBtwReader,
   btwSideQuestion,
   renderToolbarActions,
   sensors,
@@ -384,6 +389,7 @@ export function TerminalTabsView({
       data-workspace-view={historyActive ? "history" : "terminal"}
       style={terminalWellStyle}
     >
+      {workspaceVisible && <>
       {promptDialog}
       {confirmDialog}
       {saveSessionDialog}
@@ -427,6 +433,7 @@ export function TerminalTabsView({
         onClose={() => setDiscardTarget(null)}
       />
 
+      </>}
       <div className="relative flex-1 min-h-0 overflow-hidden">
         {historyOpen && (
           <div
@@ -434,7 +441,7 @@ export function TerminalTabsView({
             style={{ display: historyActive ? "block" : "none" }}
           >
             <Suspense fallback={null}>
-              <HistoryWorkspace active={historyActive} onOpenSettings={onOpenHistorySettings} />
+              <HistoryWorkspace active={workspaceVisible && historyActive} onOpenSettings={onOpenHistorySettings} />
             </Suspense>
           </div>
         )}
@@ -457,7 +464,7 @@ export function TerminalTabsView({
             </div>
             <Suspense fallback={null}>
               <GitWorkspace
-                active={gitWorkspaceOpen}
+                active={workspaceVisible && gitWorkspaceOpen}
                 project={gitWorkspaceProject}
                 projectPath={gitWorkspaceProjectPath}
                 onClose={closeGitWorkspace}
@@ -489,11 +496,11 @@ export function TerminalTabsView({
                   projectId={panelSession?.projectId}
                   filesTabDisabled={!filePanelProject}
                   systemResourcesEnabled
-                  resourcesVisible={terminalSidePanelVisible && !historyActive}
+                  resourcesVisible={workspaceVisible && terminalSidePanelVisible && !historyActive}
                   providerDefaultAppType={panelProviderAppType}
                   filesPanelContent={<FileExplorerSidebar mode="panel" onClosePanel={closeFilesPanel} editorActive={editorActive} hasEditorWorkspace={hasEditorWorkspace} onSwitchToTerminalWorkspace={switchToTerminalWorkspace} onSwitchToEditorWorkspace={switchToEditorWorkspace} />}
                   btwPanelContent={
-                    <BtwSideQuestionPanel controller={btwSideQuestion} />
+                    <BtwSideQuestionPanel controller={btwSideQuestion} onOpenReader={openBtwReader} />
                   }
                   onTabChange={handleSidePanelTabChange}
                   onOpenProviderSettings={onOpenProviderSettings}
@@ -562,7 +569,7 @@ export function TerminalTabsView({
                   resizeLabel={t("terminal.panel.resizeSystemResourcesLabel")}
                   resizeTitle={t("terminal.panel.resizeSystemResourcesTitle")}
                 >
-                  <SystemResourcesPanel open={systemResourcesOpen} visible={terminalSidePanelVisible && !historyActive} embedded />
+                  <SystemResourcesPanel open={systemResourcesOpen} visible={workspaceVisible && terminalSidePanelVisible && !historyActive} embedded />
                 </ResizableTerminalPanelFrame>
               ) : null,
               !sidePanelMerged && providersOpen ? (
@@ -586,12 +593,13 @@ export function TerminalTabsView({
                   resizeLabel={t("terminal.panel.resizeProvidersLabel")}
                   resizeTitle={t("terminal.panel.resizeProvidersTitle")}
                 >
-                  <BtwSideQuestionPanel controller={btwSideQuestion} />
+                  <BtwSideQuestionPanel controller={btwSideQuestion} onOpenReader={openBtwReader} />
                 </ResizableTerminalPanelFrame>
               ) : null,
             ]}
             actions={renderToolbarActions()}
           >
+          <div className="btw-terminal-split">
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             {(
               <DndContext
@@ -669,6 +677,7 @@ export function TerminalTabsView({
                         if (!paneSession || paneSession.tabHidden) return null;
                         return (
                           <CurrentWorkPaneTarget
+                            workspaceVisible={workspaceVisible}
                             paneId={pane.id}
                             activeDropPreview={activeDropPreview}
                             session={paneSession}
@@ -727,6 +736,12 @@ export function TerminalTabsView({
                 />
               </div>
             )}
+          </div>
+          {btwDrawerOpen ? (
+            <div className="btw-terminal-split-pane" style={{ display: gitWorkspaceOpen ? "none" : "flex" }}>
+              <BtwTerminalDrawer controller={btwSideQuestion} onClose={closeBtwDrawer} />
+            </div>
+          ) : null}
           </div>
           </TerminalWorkspaceFrame>
         </div>

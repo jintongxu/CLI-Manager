@@ -80,6 +80,7 @@ import { useSshFileEditorCurrentWork } from "./useSshFileEditorCurrentWork";
 import { useCurrentWorkPortalTargets } from "./useCurrentWorkPortalTargets";
 import { createTerminalRecoveryHandlers } from "./terminalRecoveryController";
 export function useTerminalTabsController({
+  workspaceVisible = true,
   fullscreen = false,
   onToggleFullscreen,
   projectScopedTerminalViewEnabled = false,
@@ -302,6 +303,12 @@ export function useTerminalTabsController({
   const [providersOpen, setProvidersOpen] = useState(false);
   const [btwPanelOpen, setBtwPanelOpen] = useState(false);
   const btwSideQuestion = useBtwSideQuestion();
+  const btwDrawerOpen = btwSideQuestion.state.terminalId === activeSessionId && btwSideQuestion.state.drawerOpen;
+  const setBtwDrawerOpen = btwSideQuestion.model.setDrawerOpen;
+  useEffect(() => {
+    btwSideQuestion.model.activateTerminal(activeSessionId);
+    btwSideQuestion.model.reconcileTerminals(sessions.map((session) => session.id));
+  }, [activeSessionId, sessions, btwSideQuestion.model]);
   const [finishTarget, setFinishTarget] = useState<{ project: Project; worktree: WorktreeRecord } | null>(null);
   const [discardTarget, setDiscardTarget] = useState<{ project: Project; worktree: WorktreeRecord } | null>(null);
   const [activeToolbarDragId, setActiveToolbarDragId] = useState<string | null>(null);
@@ -1689,7 +1696,6 @@ export function useTerminalTabsController({
     btwPanelActive: sidePanelMerged ? sidePanelOpen && sidePanelTab === "btw" : btwPanelOpen,
     handleToggleBtwPanel: () => {
       const opening = sidePanelMerged ? !(sidePanelOpen && sidePanelTab === "btw") : !btwPanelOpen;
-      if (opening) btwSideQuestion.stageFromTerminal("");
       if (sidePanelMerged) {
         if (!opening) setSidePanelOpen(false);
         else { setSidePanelTab("btw"); setSidePanelOpen(true); }
@@ -1767,6 +1773,7 @@ export function useTerminalTabsController({
   }, []);
 
   const { renderWorkspanLeaf, paneNavigationProps } = useTerminalPaneAdapter({
+    workspaceVisible,
     sessions: sessions,
     visibleSessionIds: visibleSessionIds,
     sessionWorktreeBadges: sessionWorktreeBadges,
@@ -1796,7 +1803,7 @@ export function useTerminalTabsController({
     onAskBtw: (quote: string, sourceTerminalId: string) => {
       btwSideQuestion.stageFromTerminal(quote, sourceTerminalId);
       closeHistory(); setActiveWorkspaceTab("terminal");
-      if (sidePanelMerged) { setSidePanelOpen(true); setSidePanelTab("btw"); } else setBtwPanelOpen(true);
+      setBtwDrawerOpen(true);
     },
     onDuplicateSession: handleDuplicateSession,
     onProbeSession: handleProbeSession,
@@ -1833,6 +1840,7 @@ export function useTerminalTabsController({
   });
 
   return {
+    workspaceVisible,
     fullscreen,
     historyActive,
     editorActive,
@@ -1894,6 +1902,9 @@ export function useTerminalTabsController({
     systemResourcesOpen,
     providersOpen,
     btwPanelOpen,
+    btwDrawerOpen,
+    closeBtwDrawer: () => setBtwDrawerOpen(false),
+    openBtwReader: () => { closeHistory(); closeGitWorkspace(); setActiveWorkspaceTab("terminal"); setBtwDrawerOpen(true); },
     btwSideQuestion,
     renderToolbarActions,
     visibleWorkspanLayouts,

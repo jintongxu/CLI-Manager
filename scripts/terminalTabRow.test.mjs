@@ -73,9 +73,10 @@ test("context menu exposes ask-btw entry gated on real selection state", () => {
   assert.match(paneLeaf, /onAskBtw=\{onAskBtw\}/);
   const tabsController = readFileSync(new URL("../src/features/terminal/hooks/useTerminalTabsController.tsx", import.meta.url), "utf8");
   const askBtwCallback = tabsController.slice(tabsController.indexOf("onAskBtw:"), tabsController.indexOf("onDuplicateSession:"));
-  assert.match(askBtwCallback, /if \(sidePanelMerged\)/);
-  assert.match(askBtwCallback, /setBtwPanelOpen\(true\)/);
   assert.match(askBtwCallback, /btwSideQuestion\.stageFromTerminal\(quote, sourceTerminalId\)/);
+  assert.match(askBtwCallback, /setBtwDrawerOpen\(true\)/);
+  assert.doesNotMatch(askBtwCallback, /setSidePanelTab\("btw"\)/);
+  assert.doesNotMatch(askBtwCallback, /setBtwPanelOpen\(true\)/);
   assert.doesNotMatch(askBtwCallback, /btwSideQuestion\.submit/);
 });
 

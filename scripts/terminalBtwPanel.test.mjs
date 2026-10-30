@@ -12,9 +12,10 @@ const catalogs = {
   "zh-CN": require("../src/shared/i18n/messages/terminal.zh-CN.ts").zh,
   "en-US": require("../src/shared/i18n/messages/terminal.en-US.ts").en,
 };
-function loader(language, reset = null, scrollElement = null) {
+function loader(language, reset = null, scrollElement = null, allHistory = false) {
   const cache = new Map();
   let resetState = reset;
+  let stateIndex = 0;
   const missing = [];
   const t = (key) => { if (!catalogs[language][key]) missing.push(key); return catalogs[language][key] ?? key; };
   function load(file) {
@@ -23,10 +24,13 @@ function loader(language, reset = null, scrollElement = null) {
     vm.runInNewContext(ts.transpileModule(readFileSync(new URL(`../src/features/terminal/${file}`, import.meta.url), "utf8"), {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
     }).outputText, { exports, require: (name) => {
-      if (name === "react") return { ...React, useRef: () => ({ current: scrollElement }), useEffect: () => {}, useState: (initial) => initial === null ? [resetState, (next) => { resetState = next; }] : [initial, () => {}] };
+      if (name === "react") return { ...React, useRef: () => ({ current: scrollElement }), useEffect: () => {}, useState: (initial) => { const index = stateIndex++; return initial === null ? [resetState, (next) => { resetState = next; }] : [index === 1 ? allHistory : initial, () => {}]; } };
       if (name.endsWith(".css")) return {};
       if (name === "./btwQuestionNavigation") return load("components/btwQuestionNavigation.ts");
       if (name.endsWith("shared/ui/MarkdownContent")) return { MarkdownContent: ({ content, linkBehavior }) => React.createElement("div", { "data-markdown": linkBehavior }, content) };
+      if (name === "../state") return { useTerminalStore: (select) => select({ activeSessionId: "rightclicked-terminal" }) };
+      if (name.endsWith("shared/ui/popover")) return Object.fromEntries(
+        ["Popover", "PopoverTrigger", "PopoverContent"].map((key) => [key, ({ children }) => React.createElement("div", null, children)]));
       if (name === "react/jsx-runtime") return require(name);
       if (name.endsWith("shared/i18n/index")) return { useI18n: () => ({ t }) };
       if (name.endsWith("shared/ui/button")) return { Button: ({ size, variant, children, ...props }) => React.createElement("button", props, children) };
@@ -38,6 +42,7 @@ function loader(language, reset = null, scrollElement = null) {
         DialogDescription: (props) => React.createElement("p", props),
       };
       if (name.endsWith("shared/platform/systemClipboard")) return { copyTextToClipboard: async () => {} };
+      if (name === "./BtwPersistenceStatus") return load("components/BtwPersistenceStatus.tsx");
       if (name === "./BtwContextDetails") return load("components/BtwContextDetails.tsx");
       if (name === "../lib/btwThreadModel") return load("lib/btwThreadModel.ts");
       throw new Error(`Unexpected dependency ${name}`);
@@ -62,8 +67,10 @@ test("bilingual compact cards stay collapsed; native reader exposes all conversa
     const Dialog = load("components/BtwThreadDialog.tsx").BtwThreadReader;
     const c = controller([thread(), { ...thread("failed"), id: "failed" }, { ...thread("pending"), id: "pending" }]);
     const markup = renderToStaticMarkup(React.createElement(Panel, { controller: c }));
-    for (const label of ["newQuestion", "clear", "ask", "open", "retry", "copyThread", "delete", "inherit", "contextTruncated", "rename", "pin"])
+    for (const label of ["newQuestion", "more", "openEmbedded", "retry", "copyThread", "delete", "rename", "pin"])
       assert.ok(markup.includes(catalogs[language][`terminal.btw.${label}`]), label);
+    assert.ok(!markup.includes(catalogs[language]["terminal.btw.openSeparate"]));
+    assert.ok(!markup.includes('data-action="popout"'));
     assert.ok(markup.includes(`data-action="rename"`));
     assert.ok(markup.includes(`data-action="pin"`));
     assert.ok(markup.includes('data-btw-preview="true"')); assert.ok(!markup.includes("data-btw-turns"));
@@ -89,6 +96,54 @@ test("bilingual compact cards stay collapsed; native reader exposes all conversa
     }
     assert.deepEqual(missing, []);
   }
+});
+
+test("history filters current terminal without deleting owner threads; More and row share embedded restoration, never native", () => {
+  const { load } = loader("en-US");
+  const Panel = load("components/BtwSideQuestionPanel.tsx").BtwSideQuestionPanel;
+  const c = controller([thread(), { ...thread(), id: "other-project", source: { ...source, terminalId: "other" } }]);
+  const calls = [];
+  c.model = { selectEmbedded: (id) => calls.push(["embedded", id]), open: (id) => calls.push(["native", id]) };
+  c.stageFromTerminal = (...args) => calls.push(["stage", ...args]);
+  const tree = Panel({ controller: c, onOpenReader: () => calls.push(["reader"]) });
+  const nodes = (node) => !node || typeof node !== "object" ? [] : [node, ...React.Children.toArray(node.props?.children).flatMap(nodes)];
+  const all = nodes(tree);
+  assert.equal(all.filter((node) => node.props?.["data-btw-entry"]).length, 1);
+  assert.equal(c.state.entries.length, 2);
+  all.find((node) => node.props?.["data-action"] === "open-embedded").props.onClick();
+  assert.deepEqual(calls, [["embedded", "card"], ["reader"]]);
+  const menuOpen = all.find((node) => node.props?.["data-action"] === "open-side-question");
+  assert.equal(menuOpen.props.onClick, all.find((node) => node.props?.["data-action"] === "open-embedded").props.onClick);
+  menuOpen.props.onClick();
+  assert.deepEqual(calls, [["embedded", "card"], ["reader"], ["embedded", "card"], ["reader"]]);
+  assert.ok(!all.some((node) => node.props?.["data-action"] === "popout"));
+  all.find((node) => node.props?.["data-action"] === "new-question").props.onClick();
+  assert.deepEqual(calls.slice(-2), [["stage", "", "rightclicked-terminal"], ["reader"]]);
+});
+
+test("More opens the persisted transcript and draft through owner embedded state without changing native reveal", async () => {
+  const { load } = loader("en-US");
+  const { BtwThreadModel } = load("lib/btwThreadModel.ts");
+  const saved = { ...thread(), draft: "saved follow-up", createdAt: 1234 };
+  const model = new BtwThreadModel({
+    ask: async () => { throw new Error("Opening history must not infer"); },
+    listen: async () => () => {}, cancel: async () => {}, context: async () => {},
+  }, { list: async () => [saved], save: async () => {}, remove: async () => {} });
+  await model.loadHistory("", false, source.terminalId);
+  const before = model.getSnapshot();
+  model.open = () => assert.fail("History More must not call native open/reveal");
+  let readerOpens = 0;
+  const Panel = load("components/BtwSideQuestionPanel.tsx").BtwSideQuestionPanel;
+  const tree = Panel({ controller: { state: before, model }, onOpenReader: () => { readerOpens++; } });
+  const nodes = (node) => !node || typeof node !== "object" ? [] : [node, ...React.Children.toArray(node.props?.children).flatMap(nodes)];
+  nodes(tree).find((node) => node.props?.["data-action"] === "open-side-question").props.onClick();
+  const after = model.getSnapshot();
+  assert.equal(readerOpens, 1);
+  assert.equal(after.embeddedId, saved.id);
+  assert.equal(after.openId, before.openId);
+  assert.equal(after.openVersion, before.openVersion);
+  assert.equal(after.entries[0].draft, "saved follow-up");
+  assert.deepEqual(after.entries[0].messages, saved.messages);
 });
 
 test("history cards expose inline rename controls and persistent pinned status", () => {
@@ -240,4 +295,20 @@ test("outline button executes a jump against its own transcript ref", () => {
   assert.equal(buttons.length, 2);
   buttons[1].props.onClick();
   assert.deepEqual(calls, [["scroll", 364], ["focus", true]]);
+});
+
+
+test("all-history toggle exposes old PTY rows and bilingual persistence error has retry action", () => {
+  for (const language of Object.keys(catalogs)) {
+    const { load, missing } = loader(language, null, null, true);
+    const Panel = load("components/BtwSideQuestionPanel.tsx").BtwSideQuestionPanel;
+    const c = controller([{ ...thread(), source: { ...source, terminalId: "old-runtime-pty" } }]);
+    c.state.persistenceError = "disk full";
+    const markup = renderToStaticMarkup(React.createElement(Panel, { controller: c }));
+    assert.ok(markup.includes('data-btw-entry="card"'));
+    assert.ok(markup.includes(catalogs[language]["terminal.btw.allHistory"]));
+    assert.ok(markup.includes('role="alert"'));
+    assert.ok(markup.includes(catalogs[language]["terminal.btw.retryPersistence"]));
+    assert.deepEqual(missing, []);
+  }
 });

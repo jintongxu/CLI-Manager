@@ -37,6 +37,7 @@ import { HookSettingsPage } from "../index";
 import { StatuslineSettingsPage } from "../components/pages/StatuslineSettingsPage";
 import { CommandSuggestionSettingsPage } from "../components/pages/CommandSuggestionSettingsPage";
 import { NativeProviderSettingsPage } from "../components/pages/NativeProviderSettingsPage";
+import { ChatModelSettingsPage } from "../components/pages/ChatModelSettingsPage";
 import { ModelPricingSettingsPage } from "../components/pages/ModelPricingSettingsPage";
 import { AboutSettingsPage } from "../components/pages/AboutSettingsPage";
 import { DesktopPetSettingsPage } from "../components/pages/DesktopPetSettingsPage";
@@ -58,6 +59,7 @@ export type SettingsTab =
   | "shortcuts"
   | "templates"
   | "native-providers"
+  | "chat-models"
   | "model-pricing"
   | "cc-connect"
   | "ssh-hosts"
@@ -84,6 +86,7 @@ const SETTINGS_TAB_ORDER: SettingsTab[] = [
   "native-providers",
   "extensions",
   "model-pricing",
+  "chat-models",
   "cc-connect",
   "ssh-hosts",
   "sync",
@@ -155,6 +158,12 @@ const SETTINGS_TAB_CONFIG: Record<SettingsTab, SettingsTabConfig> = {
     description: "settings.tabs.nativeProviders.description",
     icon: Sparkles,
     searchPlaceholder: "settings.tabs.nativeProviders.search",
+  },
+  "chat-models": {
+    label: "settings.tabs.chatModels.label",
+    title: "settings.tabs.chatModels.title",
+    description: "settings.tabs.chatModels.description",
+    icon: Sparkles,
   },
   "model-pricing": {
     label: "settings.tabs.modelPricing.label",
@@ -325,6 +334,7 @@ export function SettingsModal({ open, onClose, onAfterClose, initialTab, onActiv
     if (activeTab === "shortcuts") return <ShortcutSettingsPage searchValue={searchValue} />;
     if (activeTab === "templates") return <TemplateSettingsPage searchValue={searchValue} />;
     if (activeTab === "native-providers") return <NativeProviderSettingsPage searchValue={searchValue} />;
+    if (activeTab === "chat-models") return <ChatModelSettingsPage />;
     if (activeTab === "model-pricing") return <ModelPricingSettingsPage searchValue={searchValue} />;
     if (activeTab === "cc-connect") return <CcConnectSettingsPage />;
     if (activeTab === "ssh-hosts") return <SshHostsSettingsPage searchValue={searchValue} onTerminalOpened={onClose} />;

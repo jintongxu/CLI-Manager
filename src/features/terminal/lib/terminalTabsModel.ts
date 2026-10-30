@@ -519,6 +519,7 @@ export function buildProjectSplitOptions(project: Project, groups: Group[]): Spl
 }
 
 export interface TerminalTabsProps {
+  workspaceVisible?: boolean;
   fullscreen?: boolean;
   onToggleFullscreen?: () => void;
   projectScopedTerminalViewEnabled?: boolean;

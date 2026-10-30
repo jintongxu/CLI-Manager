@@ -10,8 +10,6 @@ pub mod cc_connect;
 pub mod ccusage;
 #[path = "../features/terminal/suggestions.rs"]
 pub mod command_suggestion;
-#[path = "../features/terminal/side_question.rs"]
-pub mod side_question;
 #[path = "../features/app-data/repair/mod.rs"]
 pub mod db_repair;
 #[path = "../features/desktop-pet/commands.rs"]
@@ -62,6 +60,8 @@ pub mod provider;
 pub mod routing;
 #[path = "../features/terminal/shell_commands.rs"]
 pub mod shell;
+#[path = "../features/terminal/side_question.rs"]
+pub mod side_question;
 #[path = "../features/remote/ssh/mod.rs"]
 pub mod ssh;
 #[path = "../features/remote/config.rs"]

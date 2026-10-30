@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use windows_sys::Win32::Foundation::{
     CloseHandle, FreeLibrary, GetLastError, SetHandleInformation, HANDLE, HANDLE_FLAG_INHERIT,
-    HMODULE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0, WAIT_FAILED,
+    HMODULE, INVALID_HANDLE_VALUE, WAIT_FAILED, WAIT_OBJECT_0,
 };
 use windows_sys::Win32::Security::{SECURITY_ATTRIBUTES, TOKEN_DUPLICATE, TOKEN_QUERY};
 use windows_sys::Win32::System::Console::{
@@ -23,8 +23,8 @@ use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 use windows_sys::Win32::System::Pipes::CreatePipe;
 use windows_sys::Win32::System::Threading::{
     CreateProcessW, DeleteProcThreadAttributeList, GetCurrentProcess, GetExitCodeProcess,
-    InitializeProcThreadAttributeList, OpenProcessToken, ResumeThread, TerminateProcess, CREATE_SUSPENDED,
-    UpdateProcThreadAttribute, WaitForSingleObject, CREATE_UNICODE_ENVIRONMENT,
+    InitializeProcThreadAttributeList, OpenProcessToken, ResumeThread, TerminateProcess,
+    UpdateProcThreadAttribute, WaitForSingleObject, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT,
     EXTENDED_STARTUPINFO_PRESENT, PROCESS_INFORMATION, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
     STARTF_USESTDHANDLES, STARTUPINFOEXW,
 };
@@ -196,8 +196,13 @@ impl Drop for WindowsPtyChild {
 }
 
 impl PlatformPtyChild for WindowsPtyChild {
-    fn sample_resources(&self, id: &str, budget: &mut crate::daemon::terminal_resources::Budget) -> crate::daemon::terminal_resources::Row {
-        self.job.sample_resources(self.process, self.pid, id, budget)
+    fn sample_resources(
+        &self,
+        id: &str,
+        budget: &mut crate::daemon::terminal_resources::Budget,
+    ) -> crate::daemon::terminal_resources::Row {
+        self.job
+            .sample_resources(self.process, self.pid, id, budget)
     }
     // 返回创建时记录的 PID，不探测进程存活状态。
     fn process_id(&self) -> u32 {
@@ -579,12 +584,18 @@ mod tests {
         fn fixture(script: &str) -> SpawnedPty {
             spawn(PtyLaunchOptions {
                 exe: "powershell.exe".into(),
-                args: vec!["-NoProfile".into(), "-NonInteractive".into(), "-Command".into(), script.into()],
+                args: vec![
+                    "-NoProfile".into(),
+                    "-NonInteractive".into(),
+                    "-Command".into(),
+                    script.into(),
+                ],
                 cwd: None,
                 env: Default::default(),
                 cols: 80,
                 rows: 24,
-            }).expect("spawn test-owned PTY")
+            })
+            .expect("spawn test-owned PTY")
         }
         // Both trees are test owned. No discovery, enumeration or external PID kill.
         let mut control = fixture("Start-Sleep -Seconds 60");
@@ -597,7 +608,9 @@ mod tests {
             let mut buffer = [0u8; 4096];
             let mut output = String::new();
             while let Ok(count) = reader.read(&mut buffer) {
-                if count == 0 { break; }
+                if count == 0 {
+                    break;
+                }
                 output.push_str(&String::from_utf8_lossy(&buffer[..count]));
                 if output.contains("OWNED_CHILD_READY") {
                     let _ = ready_tx.send(());
@@ -630,7 +643,10 @@ mod tests {
         assert_eq!(stopped, Ok(true));
         assert_eq!(control_alive, Ok(true));
         assert!(control_kill.is_ok());
-        assert!(drain.is_finished() && control_drain.is_finished(), "reader completion timeout");
+        assert!(
+            drain.is_finished() && control_drain.is_finished(),
+            "reader completion timeout"
+        );
         drain.join().unwrap();
         control_drain.join().unwrap();
     }

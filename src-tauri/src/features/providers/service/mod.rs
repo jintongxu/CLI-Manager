@@ -1,4 +1,5 @@
 pub(crate) mod auxiliary_text;
+pub(crate) mod chat_runtime;
 mod database;
 pub(crate) mod environment;
 pub(crate) mod global;

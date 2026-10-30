@@ -5,6 +5,7 @@ import { pauseSessionPersistence, resumeSessionPersistence } from "../features/t
 import { saveRestorableExitSnapshot, useSessionStore } from "../features/terminal/api/sessionStore";
 import { flushTerminalSnapshotsNow } from "../features/terminal/api/sessionSnapshotPersistence";
 import { useTerminalStore } from "../features/terminal/state";
+import { suspendChatEditing, flushChatPersistence, resumeChatEditing } from "../features/chat/api/lifecycle";
 
 export function useAppExit(show: () => Promise<void>, backup: () => Promise<void>) {
   const [view, setView] = useState<ExitView>({ phase: null, receipt: null, error: null });
@@ -13,12 +14,19 @@ export function useAppExit(show: () => Promise<void>, backup: () => Promise<void
   const controller = useRef<ReturnType<typeof createExitTransaction> | null>(null);
   if (!controller.current) controller.current = createExitTransaction({
     invoke,
-    pause: pauseSessionPersistence,
-    resume: resumeSessionPersistence,
+    pause: async () => {
+      suspendChatEditing();
+      await pauseSessionPersistence();
+    },
+    resume: () => {
+      resumeSessionPersistence();
+      resumeChatEditing();
+    },
     show: () => callbacks.current.show(),
     changed: setView,
     wait: () => new Promise((resolve) => setTimeout(resolve, 250)),
     save: async () => {
+      await flushChatPersistence();
       await flushTerminalSnapshotsNow();
       const terminal = useTerminalStore.getState();
       const persisted = useSessionStore.getState();

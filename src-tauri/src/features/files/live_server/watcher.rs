@@ -32,15 +32,25 @@ pub struct LiveReloadWatcher {
 
 impl LiveReloadWatcher {
     pub(super) fn request_stop(&mut self) {
-        if let Some(tx) = self.shutdown_tx.take() { let _ = tx.send(()); }
+        if let Some(tx) = self.shutdown_tx.take() {
+            let _ = tx.send(());
+        }
     }
     pub(super) fn stop_until(&mut self, deadline: Instant) -> Result<(), String> {
         self.request_stop();
-        while self.worker.as_ref().is_some_and(|worker| !worker.is_finished()) {
-            if Instant::now() >= deadline { return Err("helper_timeout".into()); }
+        while self
+            .worker
+            .as_ref()
+            .is_some_and(|worker| !worker.is_finished())
+        {
+            if Instant::now() >= deadline {
+                return Err("helper_timeout".into());
+            }
             thread::sleep(Duration::from_millis(2));
         }
-        if let Some(worker) = self.worker.take() { let _ = worker.join(); }
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+        }
         Ok(())
     }
     // 递归登记非生成目录的非递归监听，再启动去抖事件处理线程。

@@ -1,33 +1,82 @@
 use super::*;
 use std::{cell::Cell, collections::VecDeque};
 
-struct Enumeration { ids: Vec<u32>, assigned: u32, error: Option<u32> }
-impl Enumeration {
-    fn ids(ids: &[u32]) -> Self { Self { ids: ids.to_vec(), assigned: ids.len() as u32, error: None } }
-    fn retry() -> Self { Self { ids: vec![1], assigned: 2, error: Some(ERROR_MORE_DATA) } }
+struct Enumeration {
+    ids: Vec<u32>,
+    assigned: u32,
+    error: Option<u32>,
 }
-struct Candidate { pid: u32, before: Option<u64>, after: Option<u64>, bytes: Option<u64>, stage: Cell<u8> }
+impl Enumeration {
+    fn ids(ids: &[u32]) -> Self {
+        Self {
+            ids: ids.to_vec(),
+            assigned: ids.len() as u32,
+            error: None,
+        }
+    }
+    fn retry() -> Self {
+        Self {
+            ids: vec![1],
+            assigned: 2,
+            error: Some(ERROR_MORE_DATA),
+        }
+    }
+}
+struct Candidate {
+    pid: u32,
+    before: Option<u64>,
+    after: Option<u64>,
+    bytes: Option<u64>,
+    stage: Cell<u8>,
+}
 impl Candidate {
-    fn valid(pid: u32) -> Self { Self { pid, before: Some(100 + pid as u64), after: Some(100 + pid as u64), bytes: Some(pid as u64 * 10), stage: Cell::new(0) } }
+    fn valid(pid: u32) -> Self {
+        Self {
+            pid,
+            before: Some(100 + pid as u64),
+            after: Some(100 + pid as u64),
+            bytes: Some(pid as u64 * 10),
+            stage: Cell::new(0),
+        }
+    }
 }
 struct Fake {
-    roots: VecDeque<Option<u64>>, enumerations: VecDeque<Enumeration>,
-    candidates: VecDeque<Option<Candidate>>, opens: Vec<u32>, queries: usize,
+    roots: VecDeque<Option<u64>>,
+    enumerations: VecDeque<Enumeration>,
+    candidates: VecDeque<Option<Candidate>>,
+    opens: Vec<u32>,
+    queries: usize,
 }
 impl Fake {
     fn stable(ids: &[u32]) -> Self {
-        Self { roots: [Some(101), Some(101)].into(),
+        Self {
+            roots: [Some(101), Some(101)].into(),
             enumerations: [Enumeration::ids(ids), Enumeration::ids(ids)].into(),
-            candidates: ids.iter().map(|pid| Some(Candidate::valid(*pid))).collect(), opens: vec![], queries: 0 }
+            candidates: ids.iter().map(|pid| Some(Candidate::valid(*pid))).collect(),
+            opens: vec![],
+            queries: 0,
+        }
     }
-    fn run(&mut self) -> Row { sample_with(self, 1, "fixture", &mut Budget::for_test(std::time::Duration::from_secs(60), 0)) }
+    fn run(&mut self) -> Row {
+        sample_with(
+            self,
+            1,
+            "fixture",
+            &mut Budget::for_test(std::time::Duration::from_secs(60), 0),
+        )
+    }
 }
 impl Sampling for Fake {
     type Process = Candidate;
-    fn root_identity(&mut self) -> Option<u64> { self.roots.pop_front().expect("unexpected root lookup") }
+    fn root_identity(&mut self) -> Option<u64> {
+        self.roots.pop_front().expect("unexpected root lookup")
+    }
     fn query_members(&mut self, buffer: &mut [usize]) -> Result<(), u32> {
         self.queries += 1;
-        let item = self.enumerations.pop_front().expect("unbounded enumeration retry");
+        let item = self
+            .enumerations
+            .pop_front()
+            .expect("unbounded enumeration retry");
         assert!(item.ids.len() <= 1024);
         // Populate the actual aligned native buffer, not a parallel enumeration algorithm.
         unsafe {
@@ -35,14 +84,21 @@ impl Sampling for Fake {
             *header = item.assigned;
             *header.add(1) = item.ids.len() as u32;
             let ids = buffer.as_mut_ptr().cast::<u8>().add(8).cast::<usize>();
-            for (i, pid) in item.ids.iter().enumerate() { *ids.add(i) = *pid as usize; }
+            for (i, pid) in item.ids.iter().enumerate() {
+                *ids.add(i) = *pid as usize;
+            }
         }
         item.error.map_or(Ok(()), Err)
     }
     fn open(&mut self, pid: u32) -> Option<Candidate> {
         self.opens.push(pid);
-        let candidate = self.candidates.pop_front().expect("unexpected reopen by PID");
-        if let Some(c) = &candidate { assert_eq!(c.pid, pid); }
+        let candidate = self
+            .candidates
+            .pop_front()
+            .expect("unexpected reopen by PID");
+        if let Some(c) = &candidate {
+            assert_eq!(c.pid, pid);
+        }
         candidate
     }
     fn identity(&mut self, process: &Candidate) -> Option<u64> {
@@ -53,16 +109,40 @@ impl Sampling for Fake {
         }
     }
     fn working_set(&mut self, process: &Candidate) -> Option<u64> {
-        assert_eq!(process.stage.replace(2), 1, "memory must follow identity on this handle");
+        assert_eq!(
+            process.stage.replace(2),
+            1,
+            "memory must follow identity on this handle"
+        );
         process.bytes
     }
 }
-fn reason(row: &Row, expected: &str) { assert!(row.reason_codes.iter().any(|r| r == expected), "{row:?}"); }
+fn reason(row: &Row, expected: &str) {
+    assert!(row.reason_codes.iter().any(|r| r == expected), "{row:?}");
+}
 fn private_null(row: &Row) {
     let value = serde_json::to_value(row).unwrap();
-    let mut keys = value.as_object().unwrap().keys().map(String::as_str).collect::<Vec<_>>();
+    let mut keys = value
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
     keys.sort_unstable();
-    assert_eq!(keys, ["coverage", "enumeratedCount", "observedCount", "reasonCodes", "rootCreatedFiletime", "rootPid", "sessionId", "status", "workingSetSumBytes"]);
+    assert_eq!(
+        keys,
+        [
+            "coverage",
+            "enumeratedCount",
+            "observedCount",
+            "reasonCodes",
+            "rootCreatedFiletime",
+            "rootPid",
+            "sessionId",
+            "status",
+            "workingSetSumBytes"
+        ]
+    );
     assert!(value["workingSetSumBytes"].is_null());
 }
 #[test]
@@ -70,7 +150,15 @@ fn terminal_resources_denied_member_never_complete_root_only() {
     let mut fake = Fake::stable(&[1, 2]);
     fake.candidates[1] = None;
     let row = fake.run();
-    assert_eq!((row.status.as_str(), row.enumerated_count, row.observed_count, row.working_set_sum_bytes), ("partial", 2, 1, Some(10)));
+    assert_eq!(
+        (
+            row.status.as_str(),
+            row.enumerated_count,
+            row.observed_count,
+            row.working_set_sum_bytes
+        ),
+        ("partial", 2, 1, Some(10))
+    );
     reason(&row, "member_unavailable");
     fake = Fake::stable(&[1, 2]);
     fake.candidates = [None, None].into();
@@ -116,7 +204,10 @@ fn terminal_resources_root_exit_or_reuse_discards_subtotal_and_identity() {
         fake.roots[1] = root;
         let row = fake.run();
         assert_eq!(row.status, "unavailable");
-        assert_eq!((row.root_pid, row.root_created_filetime.as_deref()), (None, None));
+        assert_eq!(
+            (row.root_pid, row.root_created_filetime.as_deref()),
+            (None, None)
+        );
         assert_eq!(row.observed_count, 0);
         reason(&row, "root_changed");
         private_null(&row);
@@ -159,9 +250,16 @@ fn terminal_resources_membership_churn_and_retry_bounds() {
 }
 #[test]
 fn terminal_resources_member_cap_and_enumeration_failure() {
-    for (assigned, error, expected) in [(1025, Some(ERROR_MORE_DATA), "member_limit"), (1, Some(ERROR_ACCESS_DENIED), "enumeration_failed")] {
+    for (assigned, error, expected) in [
+        (1025, Some(ERROR_MORE_DATA), "member_limit"),
+        (1, Some(ERROR_ACCESS_DENIED), "enumeration_failed"),
+    ] {
         let mut fake = Fake::stable(&[1]);
-        fake.enumerations[0] = Enumeration { ids: vec![1], assigned, error };
+        fake.enumerations[0] = Enumeration {
+            ids: vec![1],
+            assigned,
+            error,
+        };
         let row = fake.run();
         assert_eq!(fake.queries, 1);
         assert!(fake.opens.is_empty());
@@ -170,13 +268,23 @@ fn terminal_resources_member_cap_and_enumeration_failure() {
     }
     let ids = (1..=1024).collect::<Vec<_>>();
     let row = Fake::stable(&ids).run();
-    assert_eq!((row.status.as_str(), row.observed_count), ("complete", 1024));
+    assert_eq!(
+        (row.status.as_str(), row.observed_count),
+        ("complete", 1024)
+    );
 }
 #[test]
 fn terminal_resources_request_candidate_budget_is_shared_and_bounded() {
     let mut budget = Budget::for_test(std::time::Duration::from_secs(60), 4095);
     let first = sample_with(&mut Fake::stable(&[1, 2]), 1, "fixture", &mut budget);
-    assert_eq!((first.status.as_str(), first.observed_count, first.working_set_sum_bytes), ("partial", 1, Some(10)));
+    assert_eq!(
+        (
+            first.status.as_str(),
+            first.observed_count,
+            first.working_set_sum_bytes
+        ),
+        ("partial", 1, Some(10))
+    );
     reason(&first, "budget_exhausted");
     let mut fake = Fake::stable(&[1]);
     let row = sample_with(&mut fake, 1, "fixture", &mut budget);
@@ -188,7 +296,12 @@ fn terminal_resources_request_candidate_budget_is_shared_and_bounded() {
 #[test]
 fn terminal_resources_expired_deadline_never_enumerates() {
     let mut fake = Fake::stable(&[1]);
-    let row = sample_with(&mut fake, 1, "fixture", &mut Budget::for_test(std::time::Duration::ZERO, 0));
+    let row = sample_with(
+        &mut fake,
+        1,
+        "fixture",
+        &mut Budget::for_test(std::time::Duration::ZERO, 0),
+    );
     assert_eq!(fake.queries, 0);
     assert!(fake.opens.is_empty());
     reason(&row, "budget_exhausted");

@@ -5,6 +5,7 @@ import type { BtwSource } from "./btwThreadModel";
 export function resolveBtwSource(terminalId: string | null, sessions: readonly TerminalSession[],
   statuses: Record<string, { agentIdentity?: { source: string; sessionId?: string } } | undefined>): BtwSource {
   const terminal = sessions.find((item) => item.id === terminalId);
+  if (!terminal) return { terminalId, sessionId: null, reason: "no_source_session" };
   const identity = terminalId ? statuses[terminalId]?.agentIdentity : undefined;
   // An observed runtime identity (including an incomplete one) must never
   // fall back to a saved identity from an earlier process in the same terminal.

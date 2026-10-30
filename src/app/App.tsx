@@ -7,6 +7,9 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Sidebar } from "../features/projects/index";
 import { TerminalTabs } from "../features/terminal/index";
+import { AppWorkspace } from "./components/AppWorkspace";
+import { PrimarySpaceNav } from "./components/PrimarySpaceNav";
+import { usePrimarySpaceStore, showProjectSpace } from "../features/workspace/api/primarySpaceState";
 import { WorkspaceLayoutShell } from "../features/workspace/api/WorkspaceLayoutShell";
 import { ProjectFileRefreshController } from "../features/files/api/ProjectFileRefreshController";
 import { CommandPalette } from "../features/workspace/api/CommandPalette";
@@ -639,6 +642,9 @@ function runDeferredStartupTasks(openSettings?: (tab?: SettingsTab) => void): vo
 
 function App() {
   const { language, t } = useI18n();
+  const space = usePrimarySpaceStore((s) => s.space);
+  const setSpace = usePrimarySpaceStore((s) => s.setSpace);
+  const workspaceVisible = space === "projects";
   const loadSettings = useSettingsStore((s) => s.load);
   const settingsLoaded = useSettingsStore((s) => s.loaded);
   const resolvedTheme = useSettingsStore((s) => s.resolvedTheme);
@@ -897,6 +903,7 @@ function App() {
       return;
     }
 
+    flushSync(showProjectSpace);
     useHistoryStore.getState().closeHistory();
     if (useSettingsStore.getState().projectScopedTerminalViewEnabled) {
       const projects = useProjectStore.getState().projects;
@@ -939,6 +946,7 @@ function App() {
   useWebDeviceBridge(settingsLoaded && startupReady);
 
   useKeyboardShortcuts({
+    workspaceVisible,
     onToggleSidebar: handleToggleSidebarShortcut,
     onToggleTerminalFullscreen: handleToggleTerminalFullscreen,
   });
@@ -1034,6 +1042,7 @@ function App() {
           toast.warning(t("terminal.backgroundTasks.restoreFailed"));
           return;
         }
+        showProjectSpace();
         await focusMainWindow();
       } catch (err) {
         logWarn("Failed to activate background session from hook", { sessionId, err });
@@ -1743,36 +1752,26 @@ function App() {
         {t("app.skipToMain")}
       </a>
       <WorkspaceLayoutShell>
-        {(!terminalFullscreen || viewMode === "compact") && <WindowTitleBar />}
-        {viewMode === "compact" ? (
-          <div id="main-content" className="flex min-h-0 flex-1" tabIndex={-1}>
-            <Sidebar
-              onOpenSettings={handleOpenSettings}
-              onOpenStats={handleOpenStats}
-              compactMode
-              dockSide={projectSidebarSide}
-              projectScopedTerminalViewEnabled={projectScopedTerminalViewEnabled}
-              terminalScope={terminalScope}
-              onTerminalScopeChange={setTerminalScope}
-            />
-          </div>
-        ) : (
-          <div
-            className="ui-workspace-main-layout flex min-h-0 h-full"
-            data-project-sidebar-side={projectSidebarSide}
-          >
-            {!terminalFullscreen && (
+        {(!workspaceVisible || !terminalFullscreen || viewMode === "compact") && <WindowTitleBar />}
+        <PrimarySpaceNav space={space} onChange={setSpace} onOpenSettings={() => handleOpenSettings()} />
+        <AppWorkspace space={space}>
+          <div className="ui-workspace-main-layout flex min-h-0 h-full flex-1" data-project-sidebar-side={projectSidebarSide}>
+            {(!terminalFullscreen || viewMode === "compact") && (
               <Sidebar
                 onOpenSettings={handleOpenSettings}
                 onOpenStats={handleOpenStats}
+                compactMode={viewMode === "compact"}
                 dockSide={projectSidebarSide}
                 projectScopedTerminalViewEnabled={projectScopedTerminalViewEnabled}
                 terminalScope={terminalScope}
                 onTerminalScopeChange={setTerminalScope}
               />
             )}
-            <main id="main-content" className="ui-main-shell flex min-w-0 flex-1 flex-col" tabIndex={-1}>
+            <main id="main-content" className="ui-main-shell flex min-w-0 flex-1 flex-col" tabIndex={-1}
+              hidden={viewMode === "compact"} inert={viewMode === "compact"}
+              style={{ display: viewMode === "compact" ? "none" : undefined }}>
               <TerminalTabs
+                workspaceVisible={workspaceVisible && viewMode !== "compact"}
                 fullscreen={terminalFullscreen}
                 onToggleFullscreen={handleToggleTerminalFullscreen}
                 projectScopedTerminalViewEnabled={projectScopedTerminalViewEnabled}
@@ -1783,7 +1782,7 @@ function App() {
               />
             </main>
           </div>
-        )}
+        </AppWorkspace>
       <Suspense fallback={null}>
         {settingsEverOpened && (
             <SettingsModal

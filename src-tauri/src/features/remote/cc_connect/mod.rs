@@ -1,5 +1,5 @@
-pub(crate) mod exit_process;
 mod exit_cleanup;
+pub(crate) mod exit_process;
 mod model;
 use model::{
     agent_from_launcher_program, cc_connect_agent_from_cli_tool, parse_registered_command,
@@ -335,11 +335,23 @@ impl CcConnectManager {
 
     // 轮询受管子进程退出状态并记录退出时间和日志。
     fn refresh_process_state(&self) {
-        let Ok(mut state) = self.process.lock() else { return; };
-        let Some(process) = state.process.as_mut() else { return; };
+        let Ok(mut state) = self.process.lock() else {
+            return;
+        };
+        let Some(process) = state.process.as_mut() else {
+            return;
+        };
         if process.owned.complete() == Ok(true) && process.readers.iter().all(|r| r.is_finished()) {
-            let code = process.owned.child.try_wait().ok().flatten().and_then(|s| s.code());
-            for reader in process.readers.drain(..) { let _ = reader.join(); }
+            let code = process
+                .owned
+                .child
+                .try_wait()
+                .ok()
+                .flatten()
+                .and_then(|s| s.code());
+            for reader in process.readers.drain(..) {
+                let _ = reader.join();
+            }
             state.process = None;
             state.last_exit_code = code;
             state.last_exit_at_ms = Some(now_millis());
@@ -708,7 +720,9 @@ impl CcConnectManager {
                         started_at_ms: Some(process.started_at_ms),
                     }),
                     exit_result => {
-                        process.owned.stop_until(std::time::Instant::now() + Duration::from_secs(3))?;
+                        process
+                            .owned
+                            .stop_until(std::time::Instant::now() + Duration::from_secs(3))?;
                         let state = authorization
                             .take()
                             .ok_or_else(|| "Weixin authorization state is missing".to_string())?;
@@ -725,12 +739,10 @@ impl CcConnectManager {
                                 format!("Weixin authorization exited with code {:?}", exit.code()),
                             ),
                             Ok(None) => unreachable!(),
-                            Err(err) => {
-                                self.failed_weixin_authorization(
-                                    process,
-                                    format!("inspect Weixin authorization failed: {err}"),
-                                )
-                            }
+                            Err(err) => self.failed_weixin_authorization(
+                                process,
+                                format!("inspect Weixin authorization failed: {err}"),
+                            ),
                         };
                         let mut authorization = self
                             .weixin_authorization
@@ -755,12 +767,13 @@ impl CcConnectManager {
             .lock()
             .map_err(|_| "Weixin authorization lock poisoned".to_string())?;
         if let Some(WeixinAuthorizationState::Running(process)) = authorization.as_mut() {
-            process.owned.stop_until(std::time::Instant::now() + Duration::from_secs(3))?;
+            process
+                .owned
+                .stop_until(std::time::Instant::now() + Duration::from_secs(3))?;
         }
         let state = authorization.take();
         let started_at_ms = match state {
             Some(WeixinAuthorizationState::Running(process)) => {
-
                 cleanup_weixin_authorization_files([
                     &process.config_path,
                     &process.qr_path,
@@ -1006,7 +1019,10 @@ impl CcConnectManager {
             .lock()
             .map_err(|_| "cc-connect process lock poisoned".to_string())?;
         let running = process.process.is_some();
-        let pid = process.process.as_ref().map(|process| process.owned.child.id());
+        let pid = process
+            .process
+            .as_ref()
+            .map(|process| process.owned.child.id());
         let started_at_ms = process
             .process
             .as_ref()

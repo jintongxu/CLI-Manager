@@ -1,3 +1,5 @@
+import { zh as chatZh } from "./messages/chat.zh-CN";
+import { en as chatEn } from "./messages/chat.en-US";
 import { zh as agentIntegrationsZh } from "./messages/agent-integrations.zh-CN";
 import { en as agentIntegrationsEn } from "./messages/agent-integrations.en-US";
 import { zh as analyticsZh } from "./messages/analytics.zh-CN";
@@ -30,6 +32,7 @@ import { zh as terminalZh } from "./messages/terminal.zh-CN";
 import { en as terminalEn } from "./messages/terminal.en-US";
 
 export const zh = {
+  ...chatZh,
   ...agentIntegrationsZh,
   ...analyticsZh,
   ...commandToolsZh,
@@ -48,6 +51,7 @@ export const zh = {
 } as const;
 
 export const en: Record<keyof typeof zh, string> = {
+  ...chatEn,
   ...agentIntegrationsEn,
   ...analyticsEn,
   ...commandToolsEn,

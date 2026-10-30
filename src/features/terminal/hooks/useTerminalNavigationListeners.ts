@@ -1,3 +1,4 @@
+import { showProjectSpace } from "../../workspace/api/primarySpaceState";
 import { useEffect } from "react";
 import { CURRENT_WORK_ACTION_EVENT, CURRENT_WORK_TARGET_EVENT, type CurrentWorkAction, type CurrentWorkTarget } from "../api/currentWorkEvents";
 import { useHistoryStore } from "../../history/index";
@@ -32,6 +33,7 @@ export function useTerminalNavigationListeners({
 }: NavigationListeners) {
   useEffect(() => {
     const handleCurrentWorkTarget = (event: Event) => {
+      showProjectSpace();
       const { sessionId } = (event as CustomEvent<CurrentWorkTarget>).detail;
       if (currentWorkMode) {
         if (!activateCurrentWorkSession(sessionId)) return;
@@ -53,6 +55,7 @@ export function useTerminalNavigationListeners({
   }, [activateCurrentWork, activateCurrentWorkSession, currentWorkMode, currentWorkSessionIds, setActive, setActiveWorkspaceTab]);
   useEffect(() => {
     const handleCurrentWorkAction = (event: Event) => {
+      showProjectSpace();
       const action = (event as CustomEvent<CurrentWorkAction>).detail;
       if (action === "toggle-view") {
         if (currentWorkMode) leaveCurrentWork(); else activateCurrentWork();
@@ -83,6 +86,7 @@ export function useTerminalNavigationListeners({
           activateCurrentWork(id);
         },
         showTerminal: () => {
+          showProjectSpace();
           useHistoryStore.getState().closeHistory();
           setActiveWorkspaceTab("terminal");
         },

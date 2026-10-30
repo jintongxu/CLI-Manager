@@ -57,9 +57,11 @@ mod owned_exit;
 pub(crate) use owned_exit::controlled_exit_result;
 #[path = "infrastructure/web/process_identity.rs"]
 mod process_identity;
-pub use owned_exit::{release_owner_until, prepare_owner_exit, resume_owner_exit, release_owner_transaction_until};
 pub(crate) use owned_exit::retain_spawned;
 pub(crate) use owned_exit::Workers;
+pub use owned_exit::{
+    prepare_owner_exit, release_owner_transaction_until, release_owner_until, resume_owner_exit,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -117,12 +119,29 @@ pub enum Request {
         #[serde(default)]
         protocol_version: u16,
     },
-    RegisterOwner { instance_id: String, pid: u32, start: u64 },
-    BindOwner { binding: owned_exit::OwnerBinding },
-    PrepareOwnerExit { binding: owned_exit::OwnerBinding, transaction: String },
-    ResumeOwnerExit { binding: owned_exit::OwnerBinding, transaction: String },
-    OwnerExitTransaction { binding: owned_exit::OwnerBinding, transaction: String },
-    OwnerExit { binding: owned_exit::OwnerBinding },
+    RegisterOwner {
+        instance_id: String,
+        pid: u32,
+        start: u64,
+    },
+    BindOwner {
+        binding: owned_exit::OwnerBinding,
+    },
+    PrepareOwnerExit {
+        binding: owned_exit::OwnerBinding,
+        transaction: String,
+    },
+    ResumeOwnerExit {
+        binding: owned_exit::OwnerBinding,
+        transaction: String,
+    },
+    OwnerExitTransaction {
+        binding: owned_exit::OwnerBinding,
+        transaction: String,
+    },
+    OwnerExit {
+        binding: owned_exit::OwnerBinding,
+    },
     GetStatus,
     SaveProfile {
         server_url: String,
@@ -393,7 +412,12 @@ impl DaemonState {
 
     fn handle_request(&self, request: Request) -> Result<Option<Value>, String> {
         match request {
-            Request::RegisterOwner { .. } | Request::BindOwner { .. } | Request::OwnerExit { .. } | Request::PrepareOwnerExit { .. } | Request::ResumeOwnerExit { .. } | Request::OwnerExitTransaction { .. } => Err("web_owner_dispatch_required".into()),
+            Request::RegisterOwner { .. }
+            | Request::BindOwner { .. }
+            | Request::OwnerExit { .. }
+            | Request::PrepareOwnerExit { .. }
+            | Request::ResumeOwnerExit { .. }
+            | Request::OwnerExitTransaction { .. } => Err("web_owner_dispatch_required".into()),
             Request::Auth { .. } => Ok(None),
             Request::GetStatus => Ok(Some(serde_json::to_value(self.status()?).unwrap())),
             Request::SaveProfile {
@@ -629,7 +653,8 @@ impl DaemonState {
         let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
         drop(runtime);
         let state = self.clone();
-        self.workers.spawn(move || state.run_connection_loop(generation))?;
+        self.workers
+            .spawn(move || state.run_connection_loop(generation))?;
         Ok(())
     }
 

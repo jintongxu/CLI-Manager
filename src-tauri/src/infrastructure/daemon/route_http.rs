@@ -405,7 +405,9 @@ impl RouteHttpServer {
     pub(crate) fn stop_until(&mut self, deadline: Instant) -> Result<(), String> {
         self.stop.store(true, Ordering::Release);
         while self.workers.iter().any(|w| !w.is_finished()) {
-            if Instant::now() >= deadline { return Err("routing_stop_timeout".into()); }
+            if Instant::now() >= deadline {
+                return Err("routing_stop_timeout".into());
+            }
             thread::sleep(Duration::from_millis(10));
         }
         for worker in self.workers.drain(..) {

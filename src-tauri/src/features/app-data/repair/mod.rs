@@ -14,7 +14,8 @@ use crate::{
     MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_VERSION, MIGRATION_ADD_WORKTREE_SHORT_LABELS_DESCRIPTION,
     MIGRATION_ADD_WORKTREE_SHORT_LABELS_SQL, MIGRATION_ADD_WORKTREE_SHORT_LABELS_VERSION,
     MIGRATION_BACKFILL_REQUEST_LOG_PROJECT_PATH_SQL,
-    MIGRATION_BACKFILL_REQUEST_LOG_PROJECT_PATH_VERSION,
+    MIGRATION_BACKFILL_REQUEST_LOG_PROJECT_PATH_VERSION, MIGRATION_CREATE_BTW_THREADS_DESCRIPTION,
+    MIGRATION_CREATE_BTW_THREADS_SQL, MIGRATION_CREATE_BTW_THREADS_VERSION,
     MIGRATION_CREATE_SESSION_FAVORITE_SNAPSHOTS_DESCRIPTION,
     MIGRATION_CREATE_SESSION_FAVORITE_SNAPSHOTS_SQL,
     MIGRATION_CREATE_SESSION_FAVORITE_SNAPSHOTS_VERSION, MIGRATION_CREATE_SSH_HOSTS_DESCRIPTION,
@@ -146,6 +147,7 @@ struct SchemaFeatures {
     worktree_isolation: SchemaState,
     ssh_hosts: SchemaState,
     ssh_host_groups: SchemaState,
+    btw_threads: SchemaState,
 }
 
 #[derive(Debug, Serialize)]
@@ -1732,6 +1734,16 @@ fn expected_migrations_for_features(
         SchemaState::Partial => return Err("migration_repair_partial_ssh_group_schema".to_string()),
     }
 
+    match features.btw_threads {
+        SchemaState::Complete => expected.push(ExpectedMigration {
+            version: MIGRATION_CREATE_BTW_THREADS_VERSION,
+            description: MIGRATION_CREATE_BTW_THREADS_DESCRIPTION,
+            sql: MIGRATION_CREATE_BTW_THREADS_SQL,
+        }),
+        SchemaState::Absent => {}
+        SchemaState::Partial => return Err("migration_repair_partial_btw_schema".to_string()),
+    }
+
     expected.sort_by_key(|migration| migration.version);
     Ok(expected)
 }
@@ -1759,13 +1771,14 @@ async fn read_known_migration_rows(
 ) -> Result<Vec<MigrationRow>, String> {
     let rows = sqlx::query(
         "SELECT version, description, checksum FROM _sqlx_migrations
-         WHERE version BETWEEN ?1 AND ?2 OR version IN (?3, ?4)
+         WHERE version BETWEEN ?1 AND ?2 OR version IN (?3, ?4) OR version IN (?5)
          ORDER BY version",
     )
     .bind(KNOWN_DRIFT_START_VERSION)
     .bind(KNOWN_DRIFT_END_VERSION)
     .bind(MIGRATION_CREATE_SSH_HOSTS_VERSION)
     .bind(MIGRATION_CREATE_SSH_HOST_GROUPS_VERSION)
+    .bind(MIGRATION_CREATE_BTW_THREADS_VERSION)
     .fetch_all(&mut *conn)
     .await
     .map_err(|err| format!("migration_repair_query_failed: {err}"))?;
@@ -1817,12 +1830,13 @@ async fn rewrite_known_migration_rows_in_transaction(
 ) -> Result<(), String> {
     sqlx::query(
         "DELETE FROM _sqlx_migrations
-         WHERE version BETWEEN ?1 AND ?2 OR version IN (?3, ?4)",
+         WHERE version BETWEEN ?1 AND ?2 OR version IN (?3, ?4) OR version IN (?5)",
     )
     .bind(KNOWN_DRIFT_START_VERSION)
     .bind(KNOWN_DRIFT_END_VERSION)
     .bind(MIGRATION_CREATE_SSH_HOSTS_VERSION)
     .bind(MIGRATION_CREATE_SSH_HOST_GROUPS_VERSION)
+    .bind(MIGRATION_CREATE_BTW_THREADS_VERSION)
     .execute(&mut *conn)
     .await
     .map_err(|err| format!("migration_repair_delete_failed: {err}"))?;
@@ -1851,6 +1865,30 @@ async fn detect_schema_features(conn: &mut SqliteConnection) -> Result<SchemaFea
     let worktree_columns = table_columns(conn, "worktrees").await?;
     let ssh_host_columns = table_columns(conn, "ssh_hosts").await?;
     let ssh_group_columns = table_columns(conn, "ssh_host_groups").await?;
+    let btw_thread_columns = table_columns(conn, "btw_threads").await?;
+    let btw_message_columns = table_columns(conn, "btw_messages").await?;
+    const BTW_THREAD_COLUMNS: [&str; 5] = ["id", "title", "status", "draft", "created_at"];
+    const BTW_MESSAGE_COLUMNS: [&str; 6] = [
+        "id",
+        "thread_id",
+        "ordinal",
+        "role",
+        "content",
+        "created_at",
+    ];
+    let btw_threads = match (
+        btw_thread_columns.is_empty(),
+        btw_message_columns.is_empty(),
+    ) {
+        (true, true) => SchemaState::Absent,
+        (false, false)
+            if has_columns(&btw_thread_columns, &BTW_THREAD_COLUMNS)
+                && has_columns(&btw_message_columns, &BTW_MESSAGE_COLUMNS) =>
+        {
+            SchemaState::Complete
+        }
+        _ => SchemaState::Partial,
+    };
 
     Ok(SchemaFeatures {
         favorite_snapshots: classify_table_schema(&favorite_columns, &FAVORITE_SNAPSHOT_COLUMNS),
@@ -1862,6 +1900,7 @@ async fn detect_schema_features(conn: &mut SqliteConnection) -> Result<SchemaFea
         worktree_isolation: classify_worktree_schema(&projects_columns, &worktree_columns),
         ssh_hosts: classify_ssh_host_schema(&projects_columns, &ssh_host_columns),
         ssh_host_groups: classify_ssh_group_schema(&ssh_host_columns, &ssh_group_columns),
+        btw_threads,
     })
 }
 
@@ -1937,52 +1976,8 @@ fn has_columns(columns: &HashSet<String>, required: &[&str]) -> bool {
     required.iter().all(|column| columns.contains(*column))
 }
 
-// 通过 sqlite_master 查询指定表是否存在。
-async fn table_exists(conn: &mut SqliteConnection, table: &str) -> Result<bool, String> {
-    let exists: Option<(i64,)> =
-        sqlx::query_as("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1 LIMIT 1")
-            .bind(table)
-            .fetch_optional(&mut *conn)
-            .await
-            .map_err(|err| format!("migration_repair_schema_query_failed: {err}"))?;
-    Ok(exists.is_some())
-}
-
-// 对支持的固定表执行 PRAGMA 并返回列名集合，缺失表返回空集合。
-async fn table_columns(
-    conn: &mut SqliteConnection,
-    table: &'static str,
-) -> Result<HashSet<String>, String> {
-    if !table_exists(conn, table).await? {
-        return Ok(HashSet::new());
-    }
-
-    let query = match table {
-        "groups" => "PRAGMA table_info(groups)",
-        "projects" => "PRAGMA table_info(projects)",
-        "session_favorite_snapshots" => "PRAGMA table_info(session_favorite_snapshots)",
-        "worktrees" => "PRAGMA table_info(worktrees)",
-        "ssh_hosts" => "PRAGMA table_info(ssh_hosts)",
-        "ssh_host_groups" => "PRAGMA table_info(ssh_host_groups)",
-        "usage_records" => "PRAGMA table_info(usage_records)",
-        "providers" => "PRAGMA table_info(providers)",
-        "command_templates" => "PRAGMA table_info(command_templates)",
-        _ => return Err("migration_repair_unsupported_table".to_string()),
-    };
-    let rows = sqlx::query(query)
-        .fetch_all(&mut *conn)
-        .await
-        .map_err(|err| format!("migration_repair_schema_query_failed: {err}"))?;
-
-    let mut columns = HashSet::new();
-    for row in rows {
-        let name: String = row
-            .try_get("name")
-            .map_err(|err| format!("migration_repair_schema_row_failed: {err}"))?;
-        columns.insert(name);
-    }
-    Ok(columns)
-}
+mod schema_queries;
+use schema_queries::{table_columns, table_exists};
 
 #[cfg(test)]
 mod tests;

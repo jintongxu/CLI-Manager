@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { showProjectSpace } from "../../workspace/api/primarySpaceState";
 import { toast } from "sonner";
 import type { Project, SshHost, TerminalSession, WorktreeRecord } from "../../../shared/types/index";
 import { logError } from "../../../shared/platform/logger";
@@ -35,6 +36,7 @@ export function useTerminalFileNavigation({
       const sourceSession = sessions.find((session) => session.id === request.sessionId) ?? null;
       const project = resolveProjectForSessionFileContext(sourceSession, sessions, projects, projectById, worktrees, sshHosts);
       if (!project) return;
+      showProjectSpace();
       void openFilesPanelForProject(project).then(async (opened) => {
         if (!opened) return;
         try {

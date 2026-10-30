@@ -1,5 +1,35 @@
 # Changelog
 
+- Added a separate **Chat model providers** settings surface. It is intentionally read-only until the native Rust provider database gains dedicated independent-chat storage and routing; no unroutable provider/model options are exposed.
+
+### TEMP — Independent chat polish
+
+- Chat layout keeps a desktop history rail (220–300px) and centered ~850px reading/composer column; narrow windows use an accessible history drawer rather than a third rail.
+- Draft persistence now exposes per-conversation clean/debouncing/saving/failed state. Typing is not presented as persistent “Saving”; failed saves retain local text and offer retry while serialized revision writes protect newer drafts.
+- Pi Agent discovery is an explicit empty/unavailable source until a documented allowlisted non-secret configuration contract exists; no home files, environment variables, or raw user configuration are read. Manual model entry and existing providers remain available.
+
+### TEMP — 独立 AI 对话 / Independent text chat
+
+- 新增「项目 / 对话」一级空间及独立聊天历史、搜索分页、重命名/确认删除、供应商与模型选择、流式文本、停止/重试、复制和 Markdown/公式；不绑定项目/终端，不执行工具或命令。切换保留终端与 BTW owner，并隔离隐藏终端输入。/ Independent text-only chat workspace; terminal and BTW owners remain mounted.
+- Rust 直接使用三种显式协议（Messages / Chat Completions / Responses），沿用活动密钥及代理，不向前端暴露密钥/配置，不探测或自动重试；尊重 Claude 显式协议与完整 URL，不支持 Gemini/OAuth-only 时明确不可用。
+- 主库新增迁移55，事务保存消息/草稿、revision CAS、租约恢复、检查点与显式保存重试；重试回答不清空独立草稿。读取刷新恢复过期租约；过期未保存快照按请求身份修复，若新 owner 已接管则另存独立对话，绝不覆盖新 owner。仅显式删除清除数据。
+- 接入已有正常退出屏障，保存失败阻止提交，取消退出恢复编辑但不重发。新增中英 UTF8 文案与实际值测试。崩溃只保证已提交检查点，最新流片段/未提交草稿/内存快照仍可能丢失；不承诺零丢失。
+- 定向 SQLite/本地 mock HTTP/前端 harness/退出协调器及编译/严格架构验证，不等同真实模型、桌面视觉、语言切换或实际退出重开验收；这些仍待明确授权。详见 output/chat-final-handoff.md。
+
+
+### TEMP — BTW 持久化修复 / Durable side-question history
+
+- 已提交侧问及追问草稿接入正常 ESM SQLite 仓库；关闭终端或 controller 卸载不删除记录，仅明确删除/确认清空已加载记录会删除。无需新迁移，无时间/数量淘汰。/ Submitted side questions and follow-up drafts use the ESM SQLite repository; terminal closure and controller teardown never delete history. Only explicit delete/confirmed clear of loaded records is destructive; no retention cleanup or migration.
+- 默认当前终端，提供「全部记录 / All history」跨旧 PTY ID 搜索和「加载更早记录 / Load older records」分页；显示限额不删数据。旧线程打开保留当前终端 UI 与原始来源，不触发 native reveal。
+- 读取/保存/删除失败显示双语错误及存储重试；序列化完整保存、合并流式快照、读取不回写旧数据，重载遗留 pending 恢复 stopped，已保存流式片段保留。
+- 确定性 fake persistence/SQL 与真正 ESM import harness 验证，不等同真实 app 退出重启/磁盘验收。异步写入未接入退出等待屏障：立即退出或崩溃可能丢失尚未提交的最后片段/新更改；多条 SQL 不是单事务，电源故障仍可能保留部分写入。初始未发送问题、阅读/折叠状态仍仅当前 owner 内存。
+
+### TEMP — BTW approved scope 2+3 / 已批准范围 2+3
+
+- 终端右侧侧问分栏跟随当前终端，分别恢复所选侧问、未发送初始问题/追问草稿、阅读位置与展开/收起状态；关闭终端清理该终端 UI 记忆，不取消已发起侧问。/ The right split follows the active terminal and restores its selection, unsent drafts, reading position and collapsed state; closing a terminal clears its UI memory without cancelling submitted questions.
+- 流式阅读仅在底部跟随，向上滚动暂停，出现「有新内容 ↓ / New content ↓」按钮，点击回到底部并恢复跟随；手动打开历史不强制跳到底部，完成时最终内容也遵循同一规则。/ Streaming follows only at the bottom; scrolling up pauses it, and the latest-content button resumes following, including the final response.
+- 新增 UI 记忆仅限当前 owner/controller 生命周期，不写数据库或跨重启恢复；既有侧问记录与追问草稿仍沿用已有持久化。/ New UI memory lasts for the owner/controller lifetime only; existing persisted threads and follow-up drafts keep their existing persistence semantics. Deterministic tests/typecheck/strict architecture only; no new real browser/Tauri validation.
+
 ## [V1.4.10] - 2026-10-21
 
 ### Windows 发布
@@ -35,6 +65,14 @@
 ### Pi Agent 退出清理
 
 - 修复匿名及项目级 Pi Agent 未携带 Hook 状态时未被退出任务检测纳入的问题；现在运行中的 Pi PTY 会进入退出事务，沿用现有按实例归属的 daemon/Job Object 进程树清理，避免应用退出后 Pi 继续运行。
+
+### BTW 终端右侧分栏
+
+- 终端右键「用 btw 侧问」在终端区域右侧打开可调宽分栏，不再使用底部覆盖抽屉；带入选中引用，用户补充问题后提交，不触发原生窗口 reveal。
+- 提交前显示“继承来源对话”开关，默认关闭；无准确本地 Pi 来源或 SSH/WSL 来源时禁用继承。回答复用 Markdown 预览的 `SessionTranscriptContent`、terminal variant、`useTerminalPreviewTheme` 与 `subagent-transcript-markdown` 渲染链。
+- 支持流式回答、追问、停止（包括上下文读取阶段）、重试、复制与 Esc 收起。新引用清除旧的内嵌绑定；临时显示 Git 或重挂载不丢失线程与追问草稿；历史查询不覆盖活跃内嵌线程。
+- 右侧 BTW 气泡入口改为「侧问记录 / Side question history」，侧栏优先展示当前终端的历史、搜索、新建侧问及时间/状态/答案摘要；重命名、置顶、归档等收进更多操作。点击记录恢复内嵌阅读器与追问草稿，新建侧问在同一阅读器输入，不唤起原生窗口；历史卡片更多菜单首项改为「打开侧问 / Open side question」，与点击记录复用同一内嵌恢复路径，移除该菜单原生窗口操作，其他入口的单 owner/reveal 协议不变。
+- 历史查询在持久化 LIMIT 前按终端过滤，并在 UI 过滤合并的活跃线程，不删除其他终端正在生成的 owner 状态。未执行 Tauri/native/系统剪贴板或界面语言切换验证，不以旧底部抽屉 fixture 截图证明新界面验收。
 
 ### Pi 中文提交与个人任务交付
 
@@ -4546,5 +4584,6 @@ px tauri icon` 生成全尺寸）
 - **[Medium]** `Sidebar.tsx` — `getProjectStatus` 改用 `useCallback` 稳定引用，状态回退使用 `?? "running"`
 
 ## TEMP
+- Independent chat now has a Rust-owned separate provider catalog with protocol allowlisting (OpenAI Chat/Responses and Anthropic Messages), secret storage, enabled/default model metadata, and a real bilingual Settings configuration UI; chat options route catalog entries without exposing keys. Chat workspace titlebar, responsive history drawer, centered message layout, hover actions, auto-growing composer, and send/stop states were refined.
 - 新增 Rust 工作树删除后台作业队列基础设施：持久化队列状态、去重、容量上限与有限重试。
 - 前端工作树丢弃、完成清理与强制删除后台操作会先取消依赖安装任务并强制关闭关联 PTY 进程树，确认占用消失后再删除；完成任务合并成功后，用户确认即可删除整个 Worktree（包括未知内容）；递归清理前自动取消 Windows 只读属性，处理“拒绝访问”文件；后台任务完成后分别提示丢弃成功、清理成功或强制删除成功；已退出的 PTY session 在清理时按幂等关闭处理，不再显示误导性的“Session not found”；遇到文件占用、Git 锁或数据库忙等瞬态失败时自动指数退避重试，身份与安全校验错误立即停止；应用重启后强制删除与完成清理任务要求重新确认。

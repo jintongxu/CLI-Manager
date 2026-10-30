@@ -212,36 +212,61 @@ impl BridgeControl {
 
     fn cleanup_until(&self, deadline: Instant) -> Result<(), String> {
         #[cfg(windows)]
-        if let Some(job) = self.job.try_lock().map_err(|_| "ssh_job_state_failed")?.as_ref() {
+        if let Some(job) = self
+            .job
+            .try_lock()
+            .map_err(|_| "ssh_job_state_failed")?
+            .as_ref()
+        {
             job.terminate_checked()?;
             job.wait_empty(deadline)?;
         }
-        let mut slot = self.child.try_lock().map_err(|_| "ssh_child_state_failed")?;
+        let mut slot = self
+            .child
+            .try_lock()
+            .map_err(|_| "ssh_child_state_failed")?;
         if let Some(child) = slot.as_mut() {
             if child.try_wait().map_err(|_| "ssh_reap_failed")?.is_none() {
                 child.kill().map_err(|_| "ssh_kill_failed")?;
                 loop {
-                    if child.try_wait().map_err(|_| "ssh_reap_failed")?.is_some() { break; }
-                    if Instant::now() >= deadline { return Err("ssh_root_timeout".into()); }
+                    if child.try_wait().map_err(|_| "ssh_reap_failed")?.is_some() {
+                        break;
+                    }
+                    if Instant::now() >= deadline {
+                        return Err("ssh_root_timeout".into());
+                    }
                     thread::sleep(Duration::from_millis(10));
                 }
             }
             *slot = None;
         }
         drop(slot);
-        let mut readers = self.readers.try_lock().map_err(|_| "ssh_readers_unavailable")?;
+        let mut readers = self
+            .readers
+            .try_lock()
+            .map_err(|_| "ssh_readers_unavailable")?;
         while !readers.is_empty() {
             let mut index = 0;
             while index < readers.len() {
                 if readers[index].is_finished() {
-                    if readers.remove(index).join().is_err() { self.cleanup_failed.store(true, Ordering::Release); }
-                } else { index += 1; }
+                    if readers.remove(index).join().is_err() {
+                        self.cleanup_failed.store(true, Ordering::Release);
+                    }
+                } else {
+                    index += 1;
+                }
             }
-            if readers.is_empty() { break; }
-            if Instant::now() >= deadline { return Err("ssh_reader_timeout".into()); }
+            if readers.is_empty() {
+                break;
+            }
+            if Instant::now() >= deadline {
+                return Err("ssh_reader_timeout".into());
+            }
             thread::sleep(Duration::from_millis(10));
         }
-        if self.cleanup_failed.load(Ordering::Acquire) { return Err("ssh_reader_panicked".into()); }
+        if self.cleanup_failed.load(Ordering::Acquire) {
+            return Err("ssh_reader_panicked".into());
+        }
         Ok(())
     }
 
@@ -249,7 +274,6 @@ impl BridgeControl {
         *self.child.lock().unwrap_or_else(|e| e.into_inner()) = Some(child);
         self.terminate_current_child();
     }
-
 }
 
 struct BridgeIdleReservation<'a> {
@@ -638,7 +662,10 @@ impl SshAgentBridgeManager {
                 thread_lane,
             )
         });
-        self.workers.lock().unwrap().push((Arc::clone(&control), worker));
+        self.workers
+            .lock()
+            .unwrap()
+            .push((Arc::clone(&control), worker));
         Some(BridgeHandle {
             slot,
             request_sender,
@@ -1648,7 +1675,11 @@ fn run_bridge_once_inner(
     let stderr = child.stderr.take();
     let stderr_output = Arc::new(Mutex::new(Vec::new()));
     if let Some(stderr) = stderr {
-        control.readers.lock().unwrap().push(spawn_stderr_reader(stderr, Arc::clone(&stderr_output)));
+        control
+            .readers
+            .lock()
+            .unwrap()
+            .push(spawn_stderr_reader(stderr, Arc::clone(&stderr_output)));
     }
     let Ok(mut child_slot) = control.child.lock() else {
         control.retain_failed_child(child);
@@ -1662,7 +1693,11 @@ fn run_bridge_once_inner(
     }
 
     let (reader_sender, reader_receiver) = mpsc::sync_channel(READER_QUEUE_CAPACITY);
-    control.readers.lock().unwrap().push(spawn_reader(stdout, reader_sender));
+    control
+        .readers
+        .lock()
+        .unwrap()
+        .push(spawn_reader(stdout, reader_sender));
     let result = (|| {
         let mut writer = BufWriter::new(stdin);
         let handshake_timeout = Duration::from_secs(plan.connect_timeout_sec.saturating_add(10))

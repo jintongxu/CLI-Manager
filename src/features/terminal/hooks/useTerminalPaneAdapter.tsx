@@ -16,7 +16,7 @@ export function useTerminalPaneAdapter(base: Base, state: {
       activeSessionId={options?.activeSessionId ?? activeSessionId}
       visibleSessionIds={options?.visibleIds ?? state.visibleSessionIds}
       isPaneFullscreen={visible && state.activeFullscreenPaneId === pane.id}
-      isLayoutVisible={visible && (!state.activeFullscreenPaneId || state.activeFullscreenPaneId === pane.id)}
+      isLayoutVisible={base.workspaceVisible !== false && visible && (!state.activeFullscreenPaneId || state.activeFullscreenPaneId === pane.id)}
       activeDropPreview={visible ? state.activeDropPreview : null}
       onActivateSession={options?.onActivate ?? base.onActivateSession}
       currentWorkSessionIds={options?.currentWorkSessionIds} onToggleCurrentWork={options?.onToggleCurrentWork}

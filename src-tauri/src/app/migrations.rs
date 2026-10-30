@@ -963,7 +963,8 @@ pub(crate) const MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_SQL: &str =
 
 pub(crate) const MIGRATION_CREATE_BTW_THREADS_VERSION: i64 = 54;
 pub(crate) const MIGRATION_CREATE_BTW_THREADS_DESCRIPTION: &str = "create_btw_threads_and_messages";
-pub(crate) const MIGRATION_CREATE_BTW_THREADS_SQL: &str = include_str!("migrations/btw_threads.sql");
+pub(crate) const MIGRATION_CREATE_BTW_THREADS_SQL: &str =
+    include_str!("migrations/btw_threads.sql");
 
 // 按既定版本顺序返回向上迁移注册表，由 SQL 插件在初始化时应用；此函数本身不执行 SQL。
 pub(crate) fn migrations() -> Vec<Migration> {
@@ -1394,6 +1395,26 @@ pub(crate) fn migrations() -> Vec<Migration> {
             version: MIGRATION_CREATE_BTW_THREADS_VERSION,
             description: MIGRATION_CREATE_BTW_THREADS_DESCRIPTION,
             sql: MIGRATION_CREATE_BTW_THREADS_SQL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 55,
+            description: "create_independent_chat",
+            sql: crate::chat::SCHEMA,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 56,
+            description: "create_independent_chat_provider_catalog",
+            sql: concat!(
+                "CREATE TABLE IF NOT EXISTS chat_providers (id TEXT PRIMARY KEY, name TEXT NOT NULL, base_url TEXT NOT NULL, ",
+                "protocol TEXT NOT NULL CHECK(protocol IN ('openai_chat','openai_responses','anthropic_messages')), enabled INTEGER NOT NULL DEFAULT 1, ",
+                "is_default INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); ",
+                "CREATE TABLE IF NOT EXISTS chat_provider_models (provider_id TEXT NOT NULL REFERENCES chat_providers(id) ON DELETE CASCADE, ",
+                "model_id TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, is_default INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(provider_id, model_id)); ",
+                "CREATE TABLE IF NOT EXISTS chat_provider_secrets (provider_id TEXT PRIMARY KEY REFERENCES chat_providers(id) ON DELETE CASCADE, ",
+                "api_key TEXT NOT NULL); CREATE INDEX IF NOT EXISTS idx_chat_provider_models_enabled ON chat_provider_models(provider_id, enabled);",
+            ),
             kind: MigrationKind::Up,
         },
     ]

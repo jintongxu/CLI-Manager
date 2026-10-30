@@ -127,6 +127,7 @@ type LastSettingsTab =
   | "shortcuts"
   | "templates"
   | "native-providers"
+  | "chat-models"
   | "model-pricing"
   | "cc-connect"
   | "ssh-hosts"
@@ -793,6 +794,7 @@ const LAST_SETTINGS_TABS: readonly LastSettingsTab[] = [
   "shortcuts",
   "templates",
   "native-providers",
+  "chat-models",
   "model-pricing",
   "cc-connect",
   "ssh-hosts",

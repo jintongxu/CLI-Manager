@@ -1,0 +1,11 @@
+# Implementation / T1–T7
+
+T1–T3 Todo38: additive schema, secret-safe provider resolution, transaction leases/checkpoints and three explicit protocol streams. T4 Todo39: stable primary navigation, terminal visibility and explicit navigation routing. T5 Todo40: persistent chat owner/UI/drafts/search/paging/Markdown/IME/bilingual controls. T6 Todo41: existing native and frontend exit fence/flush/receipt/abort integration. T7 Todo42: independent fresh review consumed once, source verification, seven material fixes in one bounded batch, regression tests, contracts and TEMP delivery records.
+
+Root cause: repository conflated retry with draft consumption and recovery with loss of request identity; read lifecycle lacked expiry reconciliation. Fix at transactional persistence boundary, not UI error suppression. Provider resolver discarded persisted protocol/full-URL metadata; fixed at resolution. Catalog bytes were invalid UTF8 (strict decode failed), not merely terminal rendering; restored UTF8 and actual-value tests.
+
+Touchpoints checked: repository begin/recover/save + runtime retained registry/drain + command get/list/initialize + controller retryPersistence; provider support api_format/claudeIsFullUrl to resolver and options; chat catalogs to catalog imports/UI tests. Existing exit hooks/ACL and terminal visibility/navigation reviewed, no further authority change. Source stream/Markdown/security paths reviewed with no further material finding. Unrelated BTW/process behavior left unchanged.
+
+Evidence, all seven dispositions, exact final counts and manual gaps: `output/chat-final-handoff.md`. No active Run lifecycle exists; reusable knowledge candidates assessed there, no knowledge-store writes.
+
+Independent polish follow-up: chat history remains a desktop 220–300px rail with centered ~850px message/composer content; narrow layouts expose an accessible history drawer. Draft state is per conversation (`clean`, `debouncing`, `saving`, `failed`) and stale saves cannot clear newer local text. Pi Agent discovery is explicitly empty/unavailable until a documented allowlisted non-secret source exists; no filesystem, environment, or raw config probing is performed. Added `scripts/chatPolish.test.mjs` coverage for layout, status scoping, and safe discovery contract.

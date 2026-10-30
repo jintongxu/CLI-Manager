@@ -39,13 +39,17 @@ fn provider_launch_configs(
 }
 
 // 最多查询六十次守护进程桥接，每次未就绪且仍有重试机会时等待一百毫秒。
-async fn wait_for_daemon(app: &AppHandle, daemon_bridge: &DaemonBridge) -> Option<Arc<DaemonClient>> {
+async fn wait_for_daemon(
+    app: &AppHandle,
+    daemon_bridge: &DaemonBridge,
+) -> Option<Arc<DaemonClient>> {
     if daemon_bridge.get().is_none() {
         let app = app.clone();
         let _ = tauri::async_runtime::spawn_blocking(move || {
             let dir = crate::app_paths::cli_manager_data_dir()?;
             crate::daemon::client::connect_or_spawn(app, &dir, cfg!(debug_assertions))
-        }).await;
+        })
+        .await;
     }
     for attempt in 0..DAEMON_READY_WAIT_ATTEMPTS {
         if let Some(client) = daemon_bridge.get() {
@@ -315,7 +319,9 @@ pub async fn pty_host_get_endpoint(
     window: tauri::Window,
     daemon_bridge: tauri::State<'_, DaemonBridge>,
 ) -> Result<Option<PtyHostEndpoint>, String> {
-    if window.label() != "main" { return Err("main_window_required".to_string()); }
+    if window.label() != "main" {
+        return Err("main_window_required".to_string());
+    }
     let Some(client) = wait_for_daemon(&app_handle, &daemon_bridge).await else {
         return Ok(None);
     };
@@ -339,7 +345,11 @@ pub async fn pty_host_get_endpoint(
         features: info.features.clone(),
         daemon_version: info.version.clone(),
         owner: client.owner_binding().cloned(),
-        ownership_status: if client.owner_binding().is_some() { "session_owner_bound" } else { "daemon_ownership_unsupported" },
+        ownership_status: if client.owner_binding().is_some() {
+            "session_owner_bound"
+        } else {
+            "daemon_ownership_unsupported"
+        },
     }))
 }
 
@@ -350,7 +360,9 @@ fn client_frame_id(frame: &ClientFrame) -> Option<u64> {
         ClientFrame::TerminalResources { id, .. }
         | ClientFrame::RegisterOwner { id, .. }
         | ClientFrame::BindOwner { id, .. }
-        | ClientFrame::PrepareOwnerExit { id, .. } | ClientFrame::ResumeOwnerExit { id, .. } | ClientFrame::OwnerExit { id, .. }
+        | ClientFrame::PrepareOwnerExit { id, .. }
+        | ClientFrame::ResumeOwnerExit { id, .. }
+        | ClientFrame::OwnerExit { id, .. }
         | ClientFrame::SessionScopes { id }
         | ClientFrame::Ping { id }
         | ClientFrame::List { id }
@@ -379,8 +391,17 @@ fn client_frame_id(frame: &ClientFrame) -> Option<u64> {
 
 // 旧传输拒绝路由控制和鉴权帧，其余帧返回请求编号。
 fn legacy_client_frame_id(frame: &ClientFrame) -> Result<u64, &'static str> {
-    if matches!(frame, ClientFrame::TerminalResources { .. }) { return Err(crate::daemon::terminal_resources::NATIVE_ONLY); }
-    if matches!(frame, ClientFrame::RegisterOwner { .. } | ClientFrame::BindOwner { .. } | ClientFrame::OwnerExit { .. } | ClientFrame::PrepareOwnerExit { .. } | ClientFrame::ResumeOwnerExit { .. }) {
+    if matches!(frame, ClientFrame::TerminalResources { .. }) {
+        return Err(crate::daemon::terminal_resources::NATIVE_ONLY);
+    }
+    if matches!(
+        frame,
+        ClientFrame::RegisterOwner { .. }
+            | ClientFrame::BindOwner { .. }
+            | ClientFrame::OwnerExit { .. }
+            | ClientFrame::PrepareOwnerExit { .. }
+            | ClientFrame::ResumeOwnerExit { .. }
+    ) {
         return Err("native_owner_handshake_only");
     }
     if matches!(frame, ClientFrame::WorktreeAdmission { .. }) {
@@ -402,7 +423,9 @@ pub async fn pty_legacy_request(
     daemon_bridge: tauri::State<'_, DaemonBridge>,
     frame: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-    if window.label() != "main" { return Err("main_window_required".to_string()); }
+    if window.label() != "main" {
+        return Err("main_window_required".to_string());
+    }
     let frame: ClientFrame = serde_json::from_value(frame)
         .map_err(|err| format!("invalid legacy PtyHost request: {err}"))?;
     let id = legacy_client_frame_id(&frame).map_err(str::to_string)?;
@@ -539,5 +562,11 @@ mod tests {
 #[cfg(test)]
 #[test]
 fn terminal_resources_legacy_rejected() {
-    assert_eq!(legacy_client_frame_id(&ClientFrame::TerminalResources { id: 1, session_ids: vec![] }), Err(crate::daemon::terminal_resources::NATIVE_ONLY));
+    assert_eq!(
+        legacy_client_frame_id(&ClientFrame::TerminalResources {
+            id: 1,
+            session_ids: vec![]
+        }),
+        Err(crate::daemon::terminal_resources::NATIVE_ONLY)
+    );
 }

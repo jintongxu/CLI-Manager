@@ -20,3 +20,7 @@
 @import "./components/graphite.css";
 @import "./components/tokyo-night-storm.css";
 @import "./components/tokyo-night-storm-sidebar.css";
+
+@import "../features/chat/components/chatWorkspace.css";
+
+@import "./components/chat-model-settings.css";

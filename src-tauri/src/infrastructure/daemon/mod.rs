@@ -8,14 +8,14 @@
 mod circuit;
 pub mod client;
 mod client_owner;
-mod process_identity;
 pub mod discovery;
+mod process_identity;
 pub mod protocol;
-pub mod terminal_resources;
 mod route_http;
 mod routing;
 pub mod server;
 mod ssh_agent_bridge;
+pub mod terminal_resources;
 pub mod worktree_admission;
 
 /// 进程治理兜底（契约★）：Windows 上把 daemon 自身挂进

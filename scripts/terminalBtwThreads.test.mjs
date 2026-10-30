@@ -82,7 +82,7 @@ test("delete, reset, clear and dispose cancel active work, release listeners imm
     const h = harness(); const id = h.create(); await tick(); const request = h.requests[0];
     h.model[action](id); assert.equal(h.events.size, 0); assert.equal(h.cancels[0], request.request.requestId);
     h.progress(request.request, "late"); request.resolve("late final"); await tick();
-    assert.equal(h.find(id)?.messages.length ?? 0, 0); assert.notEqual(h.find(id)?.answer, "late final");
+    assert.equal(h.find(id)?.messages.length ?? 0, action === "dispose" ? 1 : 0); assert.notEqual(h.find(id)?.answer, "late final");
     assert.equal(h.subscriptions[0].closeCount, 1);
   }
 });
@@ -105,7 +105,7 @@ test("pending snapshots are fenced by source, generation, delete, clear and unmo
   h.model.reset(a, true); h.model.reset(a, false); h.contexts[3].resolve(context("late reset")); await tick();
   assert.equal(h.find(a).inherit, false); assert.equal(h.find(a).context.text, "");
   h.create("dispose", true); h.model.dispose(); h.contexts[4].resolve(context()); await tick();
-  assert.equal(h.model.getSnapshot().entries.length, 0);
+  assert.equal(h.model.getSnapshot().entries.length, 2);
 });
 
 test("unavailable context remains precisely explained and noninherit inference usable", async () => {
@@ -149,6 +149,7 @@ test("hook IPC adapter subscribes before structured ask; StrictMode probe surviv
       { id: "clicked", cliTool: "pi", cliSessionId: "clicked-pi" }, { id: "active", cliTool: "pi", cliSessionId: "active-pi" },
     ], tabStatuses: {} }) } };
     if (name === "../lib/btwSource") return { resolveBtwSource };
+    if (name === "../lib/btwThreadRepository") return { listBtwThreads: async () => [], saveBtwThread: async () => {}, deleteBtwThread: async () => {} };
     if (name === "../lib/btwThreadModel") return { BtwThreadModel };
     if (name === "@tauri-apps/api/event") return { listen: async (event, callback) => {
       calls.push(["listen", event]); callbacks.push(callback); subscriptions.add(callback);
@@ -174,7 +175,7 @@ test("hook IPC adapter subscribes before structured ask; StrictMode probe surviv
   assert.equal(hook.model.getSnapshot().entries[0].answer, "stream");
   unmount(); await tick();
   assert.equal(subscriptions.size, 0); assert.equal(calls[3][0], "side_question_cancel"); assert.equal(calls[3][1].requestId, request.requestId);
-  requests[0].resolve("late after unmount"); await tick(); assert.equal(hook.model.getSnapshot().entries.length, 0);
+  requests[0].resolve("late after unmount"); await tick(); assert.equal(hook.model.getSnapshot().entries.length, 1);
 });
 
 test("listener and snapshot failures are safe; clear fences unresolved context", async () => {

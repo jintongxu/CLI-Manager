@@ -57,8 +57,8 @@ export function createExitTransaction(deps: Dependencies) {
       else await status();
       if (!saved) {
         if (receipt!.phase !== "prepared") throw new Error("exit_not_prepared");
-        await deps.pause();
         try {
+          await deps.pause();
           await deps.save();
           saved = true;
         } catch (error) {

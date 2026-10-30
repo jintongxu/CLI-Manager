@@ -3,7 +3,7 @@ import type { BtwContext, BtwMessage, BtwStatus, BtwThread } from "./btwThreadMo
 
 export const BTW_LIMITS = { title: 512, quote: 32_000, question: 32_000, message: 128_000, context: 128_000, error: 16_000 } as const;
 export interface BtwThreadPatch { title?: string; draft?: string; status?: BtwStatus; error?: string | null; pinned?: boolean; archived?: boolean; inherit?: boolean; context?: BtwContext; }
-export interface BtwThreadSearchOptions { query?: string; includeArchived?: boolean; limit?: number; }
+export interface BtwThreadSearchOptions { query?: string; includeArchived?: boolean; limit?: number; offset?: number; terminalId?: string; }
 let writeQueue: Promise<unknown> = Promise.resolve();
 const serialized = <T>(work: () => Promise<T>): Promise<T> => {
   const next = writeQueue.then(work, work);
@@ -18,8 +18,13 @@ const text = (value: string | null | undefined, limit: number, field: string) =>
 const bool = (v: unknown) => Number(v) !== 0;
 function mapThread(row: Record<string, unknown>, messages: BtwMessage[] = []): BtwThread {
   const context: BtwContext = { available: Boolean(row.context_snapshot), text: String(row.context_snapshot ?? ""), truncated: bool(row.context_truncated), reason: row.context_reason == null ? null : String(row.context_reason) };
+  const status = String(row.status ?? "idle") as BtwStatus;
+  // A pending/stopped trailing assistant row is a durable partial, not a completed turn.
+  const partial = (status === "pending" || status === "stopped" || status === "failed") && messages[messages.length - 1]?.role === "assistant"
+    ? messages[messages.length - 1]!.content : "";
+  if (partial) messages = messages.slice(0, -1);
   return {
-    id: String(row.id), pinned: bool(row.pinned), archived: bool(row.archived),
+    id: String(row.id), pinned: bool(row.pinned), archived: bool(row.archived), createdAt: Number(row.created_at),
     source: {
       terminalId: row.source_terminal_id == null ? null : String(row.source_terminal_id),
       sessionId: row.source_session_id == null ? null : String(row.source_session_id),
@@ -27,8 +32,8 @@ function mapThread(row: Record<string, unknown>, messages: BtwMessage[] = []): B
     },
     quote: String(row.quote ?? ""), title: String(row.title ?? ""), inherit: bool(row.inherit),
     context, contextLoading: false, messages, draft: String(row.draft ?? ""),
-    status: String(row.status ?? "idle") as BtwStatus,
-    answer: [...messages].reverse().find((message) => message.role === "assistant")?.content ?? "",
+    status: status === "pending" ? "stopped" : status,
+    answer: partial || (status === "done" ? ([...messages].reverse().find((message) => message.role === "assistant")?.content ?? "") : ""),
     error: row.error == null ? null : String(row.error), generation: 0,
     requestId: null, contextRequestId: null,
   };
@@ -47,6 +52,11 @@ async function loadMessages(ids: string[]): Promise<Map<string, BtwMessage[]>> {
 export async function listBtwThreads(options: BtwThreadSearchOptions = {}): Promise<BtwThread[]> {
   const db = await getDb(); const limit = Math.max(1, Math.min(200, Math.trunc(options.limit ?? 50))); const args: unknown[] = [];
   let where = options.includeArchived ? "1=1" : "archived = 0";
+  // Filter before LIMIT so other projects cannot crowd out this terminal's history.
+  if (options.terminalId !== undefined) {
+    args.push(options.terminalId);
+    where += ` AND source_terminal_id = $${args.length}`;
+  }
   if (options.query?.trim()) {
     const q = `%${options.query.trim().replace(/[\\%_]/g, "\\$&")}%`;
     args.push(q);
@@ -57,7 +67,7 @@ export async function listBtwThreads(options: BtwThreadSearchOptions = {}): Prom
       OR EXISTS (SELECT 1 FROM btw_messages m
         WHERE m.thread_id = btw_threads.id AND m.content LIKE ${slot} ESCAPE '\\'))`;
   }
-  args.push(limit); const rows = await db.select<Record<string, unknown>[]>(`SELECT * FROM btw_threads WHERE ${where} ORDER BY pinned DESC, updated_at DESC LIMIT $${args.length}`, args);
+  args.push(limit, Math.max(0, Math.trunc(options.offset ?? 0))); const rows = await db.select<Record<string, unknown>[]>(`SELECT * FROM btw_threads WHERE ${where} ORDER BY pinned DESC, updated_at DESC LIMIT $${args.length - 1} OFFSET $${args.length}`, args);
   const messages = await loadMessages(rows.map(r => String(r.id))); return rows.map(r => mapThread(r, messages.get(String(r.id)) ?? []));
 }
 export async function getBtwThread(id: string): Promise<BtwThread | null> {
@@ -67,8 +77,8 @@ export async function getBtwThread(id: string): Promise<BtwThread | null> {
   const messages = await loadMessages([id]);
   return mapThread(rows[0], messages.get(id) ?? []);
 }
-export async function createBtwThread(thread: Pick<BtwThread, "id" | "source" | "quote" | "title" | "inherit" | "context" | "messages" | "draft" | "status" | "error">): Promise<void> {
-  return serialized(async () => { const db = await getDb(); const now = Date.now(); const title = text(thread.title, BTW_LIMITS.title, "title"); const quote = text(thread.quote, BTW_LIMITS.quote, "quote"); const context = text(thread.context.text, BTW_LIMITS.context, "context");
+async function createThread(thread: Pick<BtwThread, "id" | "source" | "quote" | "title" | "inherit" | "context" | "messages" | "draft" | "status" | "error">): Promise<void> {
+  const db = await getDb(); const now = Date.now(); const title = text(thread.title, BTW_LIMITS.title, "title"); const quote = text(thread.quote, BTW_LIMITS.quote, "quote"); const context = text(thread.context.text, BTW_LIMITS.context, "context");
     await db.execute(
       "INSERT INTO btw_threads " +
       "(id,source_terminal_id,source_session_id,source_reason,quote,title,inherit," +
@@ -81,20 +91,25 @@ export async function createBtwThread(thread: Pick<BtwThread, "id" | "source" | 
         thread.error == null ? null : text(thread.error, BTW_LIMITS.error, "error"), now],
     );
     await replaceBtwMessages(thread.id, thread.messages);
-  });
 }
+/** One complete save is serialized, including existence check and message replacement. */
 export async function saveBtwThread(thread: BtwThread): Promise<void> {
-  const existing = await getBtwThread(thread.id);
-  if (!existing) return createBtwThread(thread);
-  await updateBtwThread(thread.id, {
-    title: thread.title, draft: thread.draft, status: thread.status,
-    error: thread.error, inherit: thread.inherit, context: thread.context,
-    pinned: thread.pinned, archived: thread.archived,
-  });
-  await serialized(() => replaceBtwMessages(thread.id, thread.messages));
-}
-export async function updateBtwThread(id: string, patch: BtwThreadPatch): Promise<void> {
   return serialized(async () => {
+    const messages = thread.status !== "done" && thread.answer
+      ? [...thread.messages, { role: "assistant" as const, content: thread.answer }] : thread.messages;
+    const existing = await getBtwThread(thread.id);
+    if (!existing) return createThread({ ...thread, messages });
+    await replaceBtwMessages(thread.id, messages);
+    await updateThread(thread.id, {
+      title: thread.title, draft: thread.draft, status: thread.status,
+      error: thread.error, inherit: thread.inherit, context: thread.context,
+      pinned: thread.pinned, archived: thread.archived,
+    });
+  });
+}
+export const createBtwThread = (thread: Parameters<typeof createThread>[0]) => serialized(() => createThread(thread));
+export const updateBtwThread = (id: string, patch: BtwThreadPatch) => serialized(() => updateThread(id, patch));
+async function updateThread(id: string, patch: BtwThreadPatch): Promise<void> {
     const db = await getDb(); const sets: string[] = []; const values: unknown[] = [];
     const add = (sql: string, value: unknown) => { values.push(value); sets.push(`${sql}=$${values.length}`); };
     if (patch.title !== undefined) add("title", text(patch.title, BTW_LIMITS.title, "title"));
@@ -111,20 +126,19 @@ export async function updateBtwThread(id: string, patch: BtwThreadPatch): Promis
     if (!sets.length) return;
     values.push(Date.now(), id);
     await db.execute(`UPDATE btw_threads SET ${sets.join(",")}, updated_at=$${values.length - 1} WHERE id=$${values.length}`, values);
-  });
 }
 export async function replaceBtwMessages(threadId: string, messages: readonly BtwMessage[]): Promise<void> {
   if (messages.length > 500) throw new Error("btw_messages_too_many");
   for (const message of messages) text(message.content, BTW_LIMITS.message, "message");
   const db = await getDb();
-  await db.execute("DELETE FROM btw_messages WHERE thread_id=$1", [threadId]);
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i];
     await db.execute(
-      "INSERT INTO btw_messages(thread_id,ordinal,role,content,created_at) VALUES($1,$2,$3,$4,$5)",
+      "INSERT INTO btw_messages(thread_id,ordinal,role,content,created_at) VALUES($1,$2,$3,$4,$5) ON CONFLICT(thread_id,ordinal) DO UPDATE SET role=excluded.role,content=excluded.content",
       [threadId, i, message.role, message.content, Date.now()],
     );
   }
+  await db.execute("DELETE FROM btw_messages WHERE thread_id=$1 AND ordinal >= $2", [threadId, messages.length]);
 }
 export const archiveBtwThread = (id: string) => updateBtwThread(id, { archived: true });
 export const restoreBtwThread = (id: string) => updateBtwThread(id, { archived: false });

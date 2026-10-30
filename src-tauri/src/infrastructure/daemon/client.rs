@@ -63,7 +63,9 @@ impl DaemonClient {
     }
 
     /// None means legacy daemon ownership unsupported, not absent or exclusively owned.
-    pub fn owner_binding(&self) -> Option<&super::protocol::OwnerBinding> { self.owner.as_ref() }
+    pub fn owner_binding(&self) -> Option<&super::protocol::OwnerBinding> {
+        self.owner.as_ref()
+    }
 
     // 读取接收线程维护的连接状态标记，不主动探测网络。
     pub fn is_connected(&self) -> bool {
@@ -73,10 +75,15 @@ impl DaemonClient {
     /// 连接并完成鉴权握手；成功后启动推送分发线程。
     // 连接本机 daemon 并完成鉴权，更新协议能力后启动后台接收线程。
     pub fn connect(info: DaemonInfo, app_handle: AppHandle) -> Result<Arc<Self>, String> {
-        Self::connect_transport(info, move |client, frame| client.route_frame(frame, &app_handle))
+        Self::connect_transport(info, move |client, frame| {
+            client.route_frame(frame, &app_handle)
+        })
     }
 
-    fn connect_transport(mut info: DaemonInfo, dispatch: impl Fn(&DaemonClient, DaemonFrame) + Send + 'static) -> Result<Arc<Self>, String> {
+    fn connect_transport(
+        mut info: DaemonInfo,
+        dispatch: impl Fn(&DaemonClient, DaemonFrame) + Send + 'static,
+    ) -> Result<Arc<Self>, String> {
         let addr = SocketAddr::from(([127, 0, 0, 1], info.port));
         let stream = TcpStream::connect_timeout(&addr, CONNECT_TIMEOUT)
             .map_err(|err| format!("daemon connect failed: {err}"))?;
@@ -104,7 +111,8 @@ impl DaemonClient {
         match decode_daemon_frame(&first) {
             Ok(DaemonFrame::AuthOk {
                 daemon_version,
-                pid, process_start_time,
+                pid,
+                process_start_time,
                 protocol_version,
                 binary_protocol_version,
                 features,
@@ -117,7 +125,9 @@ impl DaemonClient {
                     );
                 }
                 if let Some(start) = process_start_time {
-                    if pid != info.pid { return Err("daemon_identity_mismatch".into()); }
+                    if pid != info.pid {
+                        return Err("daemon_identity_mismatch".into());
+                    }
                     process = Some(super::process_identity::VerifiedProcess::open(pid, start)?);
                 }
                 info.protocol_version = protocol_version;
@@ -129,7 +139,8 @@ impl DaemonClient {
             }
             other => return Err(format!("daemon auth unexpected reply: {other:?}")),
         }
-        let owner = super::client_owner::establish(&info.features, &info.token, &mut writer, &mut reader)?;
+        let owner =
+            super::client_owner::establish(&info.features, &info.token, &mut writer, &mut reader)?;
         let _ = reader.get_ref().set_read_timeout(None);
 
         let client = Arc::new(DaemonClient {
@@ -150,7 +161,11 @@ impl DaemonClient {
     }
 
     // 启动接收分发线程，读取结束或帧损坏后标记断连并清除等待请求。
-    fn spawn_reader(self: &Arc<Self>, mut reader: BufReader<TcpStream>, dispatch: impl Fn(&DaemonClient, DaemonFrame) + Send + 'static) {
+    fn spawn_reader(
+        self: &Arc<Self>,
+        mut reader: BufReader<TcpStream>,
+        dispatch: impl Fn(&DaemonClient, DaemonFrame) + Send + 'static,
+    ) {
         let client = Arc::clone(self);
         std::thread::spawn(move || {
             while let Some(line) = read_line_bounded(&mut reader) {
@@ -290,7 +305,13 @@ impl DaemonClient {
             .try_lock()
             .map_err(|_| "daemon writer poisoned".to_string())
             .and_then(|mut writer| {
-                writer.set_write_timeout(Some(deadline.saturating_duration_since(std::time::Instant::now()).max(Duration::from_millis(1)))).map_err(|e| e.to_string())?;
+                writer
+                    .set_write_timeout(Some(
+                        deadline
+                            .saturating_duration_since(std::time::Instant::now())
+                            .max(Duration::from_millis(1)),
+                    ))
+                    .map_err(|e| e.to_string())?;
                 writer
                     .write_all(encode_frame(frame).as_bytes())
                     .map_err(|err| {
@@ -323,89 +344,191 @@ impl DaemonClient {
     }
 
     /// Owner runtime drain with OS exit proof; not application exit authorization.
-    pub fn owner_exit(&self, transaction_id: &str) -> Result<super::protocol::OwnerExitReceipt, String> {
-        self.owner_exit_until(transaction_id, std::time::Instant::now() + Duration::from_secs(15))
+    pub fn owner_exit(
+        &self,
+        transaction_id: &str,
+    ) -> Result<super::protocol::OwnerExitReceipt, String> {
+        self.owner_exit_until(
+            transaction_id,
+            std::time::Instant::now() + Duration::from_secs(15),
+        )
     }
 
-    pub fn owner_exit_until(&self, transaction_id: &str, deadline: std::time::Instant) -> Result<super::protocol::OwnerExitReceipt, String> {
-        if !self.info.features.iter().any(|f| f == super::protocol::FEATURE_RUNTIME_OWNER_EXIT) {
+    pub fn owner_exit_until(
+        &self,
+        transaction_id: &str,
+        deadline: std::time::Instant,
+    ) -> Result<super::protocol::OwnerExitReceipt, String> {
+        if !self
+            .info
+            .features
+            .iter()
+            .any(|f| f == super::protocol::FEATURE_RUNTIME_OWNER_EXIT)
+        {
             return Err("daemon_ownership_unsupported".into());
         }
-        if self.process.is_none() { return Err("daemon_identity_unsupported".into()); }
-        let binding = self.owner.clone().ok_or("daemon_ownership_unsupported")?;
-        let mut cached = self.exit_receipt.try_lock().map_err(|_| "owner_exit_state_failed")?;
-        if let Some(receipt) = cached.as_ref() {
-            if receipt.transaction_id != transaction_id { return Err("owner_exit_transaction_conflict".into()); }
+        if self.process.is_none() {
+            return Err("daemon_identity_unsupported".into());
         }
-        let mut receipt = if let Some(receipt) = cached.as_ref().filter(|r| r.owner_released) { receipt.clone() }
-        else {
+        let binding = self.owner.clone().ok_or("daemon_ownership_unsupported")?;
+        let mut cached = self
+            .exit_receipt
+            .try_lock()
+            .map_err(|_| "owner_exit_state_failed")?;
+        if let Some(receipt) = cached.as_ref() {
+            if receipt.transaction_id != transaction_id {
+                return Err("owner_exit_transaction_conflict".into());
+            }
+        }
+        let mut receipt = if let Some(receipt) = cached.as_ref().filter(|r| r.owner_released) {
+            receipt.clone()
+        } else {
             let id = self.next_request_id();
-            match self.request_with_timeout(id, &ClientFrame::OwnerExit {
-                id, transaction_id: transaction_id.into(), binding: binding.clone(),
-            }, deadline.saturating_duration_since(std::time::Instant::now()))? {
+            match self.request_with_timeout(
+                id,
+                &ClientFrame::OwnerExit {
+                    id,
+                    transaction_id: transaction_id.into(),
+                    binding: binding.clone(),
+                },
+                deadline.saturating_duration_since(std::time::Instant::now()),
+            )? {
                 DaemonFrame::OwnerExitResult { receipt, .. } => receipt,
                 DaemonFrame::Err { message, .. } => return Err(message),
                 _ => return Err("owner_exit_reply_invalid".into()),
             }
         };
-        if receipt.transaction_id != transaction_id { return Err("owner_exit_transaction_mismatch".into()); }
+        if receipt.transaction_id != transaction_id {
+            return Err("owner_exit_transaction_mismatch".into());
+        }
         *cached = Some(receipt.clone());
         if receipt.daemon_status == "stopping" {
-            self.process.as_ref().ok_or("daemon_identity_unsupported")?
+            self.process
+                .as_ref()
+                .ok_or("daemon_identity_unsupported")?
                 .wait_until(deadline)?;
             receipt.daemon_status = "stopped".into();
             if let Ok(mut child) = self.spawned_child.lock() {
-                if let Some(child) = child.as_mut() { let _ = child.try_wait(); }
+                if let Some(child) = child.as_mut() {
+                    let _ = child.try_wait();
+                }
             }
         }
-        if receipt.owner_released && matches!(receipt.daemon_status.as_str(), "stopped" | "retained_shared") {
+        if receipt.owner_released
+            && matches!(
+                receipt.daemon_status.as_str(),
+                "stopped" | "retained_shared"
+            )
+        {
             self.owner_released.store(true, Ordering::Release);
-            if receipt.daemon_status == "stopped" { super::client_owner::released(&self.info.token, &binding); }
+            if receipt.daemon_status == "stopped" {
+                super::client_owner::released(&self.info.token, &binding);
+            }
         }
         *cached = Some(receipt.clone());
         Ok(receipt)
     }
 
-    pub fn prepare_owner_exit(&self, transaction: &str, deadline: std::time::Instant) -> Result<(), String> {
+    pub fn prepare_owner_exit(
+        &self,
+        transaction: &str,
+        deadline: std::time::Instant,
+    ) -> Result<(), String> {
         let binding = self.owner.clone().ok_or("daemon_ownership_unsupported")?;
-        *self.prepare_pending.lock().map_err(|_| "owner_prepare_lock")? = Some(transaction.into());
+        *self
+            .prepare_pending
+            .lock()
+            .map_err(|_| "owner_prepare_lock")? = Some(transaction.into());
         loop {
-            if std::time::Instant::now() >= deadline { return Err("owner_prepare_timeout".into()); }
+            if std::time::Instant::now() >= deadline {
+                return Err("owner_prepare_timeout".into());
+            }
             let id = self.next_request_id();
-            match self.request_with_timeout(id, &ClientFrame::PrepareOwnerExit { id, transaction_id: transaction.into(), binding: binding.clone() }, deadline.saturating_duration_since(std::time::Instant::now()))? {
+            match self.request_with_timeout(
+                id,
+                &ClientFrame::PrepareOwnerExit {
+                    id,
+                    transaction_id: transaction.into(),
+                    binding: binding.clone(),
+                },
+                deadline.saturating_duration_since(std::time::Instant::now()),
+            )? {
                 DaemonFrame::Ok { .. } => return Ok(()),
-                DaemonFrame::Err { message, .. } if matches!(message.as_str(), "owner_prepare_inflight" | "owner_state_busy_retry") => std::thread::sleep(Duration::from_millis(5)),
+                DaemonFrame::Err { message, .. }
+                    if matches!(
+                        message.as_str(),
+                        "owner_prepare_inflight" | "owner_state_busy_retry"
+                    ) =>
+                {
+                    std::thread::sleep(Duration::from_millis(5))
+                }
                 DaemonFrame::Err { message, .. } => return Err(message),
                 _ => return Err("owner_prepare_reply_invalid".into()),
             }
         }
     }
-    pub fn resume_owner_exit(&self, transaction: &str, deadline: std::time::Instant) -> Result<(), String> {
-        let mut cached = self.exit_receipt.try_lock().map_err(|_| "owner_exit_in_progress")?;
+    pub fn resume_owner_exit(
+        &self,
+        transaction: &str,
+        deadline: std::time::Instant,
+    ) -> Result<(), String> {
+        let mut cached = self
+            .exit_receipt
+            .try_lock()
+            .map_err(|_| "owner_exit_in_progress")?;
         if let Some(receipt) = cached.as_ref() {
-            if receipt.transaction_id != transaction { return Err("owner_exit_transaction_mismatch".into()); }
+            if receipt.transaction_id != transaction {
+                return Err("owner_exit_transaction_mismatch".into());
+            }
             if receipt.owner_released && receipt.daemon_status == "stopped" {
                 return Ok(()); // OS exit already verified; never RPC the dead daemon.
             }
         }
-        let mut pending = self.prepare_pending.lock().map_err(|_| "owner_prepare_lock")?;
-        if pending.is_none() && cached.is_none() { return Ok(()); }
-        if pending.as_deref().is_some_and(|t| t != transaction) { return Err("owner_transaction_conflict".into()); }
+        let mut pending = self
+            .prepare_pending
+            .lock()
+            .map_err(|_| "owner_prepare_lock")?;
+        if pending.is_none() && cached.is_none() {
+            return Ok(());
+        }
+        if pending.as_deref().is_some_and(|t| t != transaction) {
+            return Err("owner_transaction_conflict".into());
+        }
         let binding = self.owner.clone().ok_or("daemon_ownership_unsupported")?;
         let id = self.next_request_id();
-        match self.request_with_timeout(id, &ClientFrame::ResumeOwnerExit { id, transaction_id: transaction.into(), binding: binding.clone() }, deadline.saturating_duration_since(std::time::Instant::now()))? {
-            DaemonFrame::Ok { .. } => { super::client_owner::restore(&self.info.token, &binding)?; *cached = None; *pending = None; self.owner_released.store(false, Ordering::Release); Ok(()) },
+        match self.request_with_timeout(
+            id,
+            &ClientFrame::ResumeOwnerExit {
+                id,
+                transaction_id: transaction.into(),
+                binding: binding.clone(),
+            },
+            deadline.saturating_duration_since(std::time::Instant::now()),
+        )? {
+            DaemonFrame::Ok { .. } => {
+                super::client_owner::restore(&self.info.token, &binding)?;
+                *cached = None;
+                *pending = None;
+                self.owner_released.store(false, Ordering::Release);
+                Ok(())
+            }
             DaemonFrame::Err { message, .. } => Err(message),
             _ => Err("owner_resume_reply_invalid".into()),
         }
     }
-    pub fn abort_owner_exit(&self, transaction: &str, deadline: std::time::Instant) -> Result<(), String> {
+    pub fn abort_owner_exit(
+        &self,
+        transaction: &str,
+        deadline: std::time::Instant,
+    ) -> Result<(), String> {
         self.resume_owner_exit(transaction, deadline)
     }
 
     /// Ownership query for restore/OwnerExit callers; never infers ownership from attach/list.
     pub fn session_scopes(&self) -> Result<HashMap<String, super::protocol::SessionScope>, String> {
-        if self.owner.is_none() { return Err("daemon_ownership_unsupported".into()); }
+        if self.owner.is_none() {
+            return Err("daemon_ownership_unsupported".into());
+        }
         let id = self.next_request_id();
         match self.request(id, &ClientFrame::SessionScopes { id })? {
             DaemonFrame::SessionScopes { scopes, .. } => Ok(scopes),
@@ -534,7 +657,11 @@ pub fn connect_or_spawn(
     })
 }
 
-fn connect_or_spawn_inner(app_handle: AppHandle, data_dir: &Path, is_dev: bool) -> Result<Arc<DaemonClient>, String> {
+fn connect_or_spawn_inner(
+    app_handle: AppHandle,
+    data_dir: &Path,
+    is_dev: bool,
+) -> Result<Arc<DaemonClient>, String> {
     let info_path = daemon_info_path(data_dir, is_dev);
 
     // 1) 已有存活 daemon → 直接连。
@@ -570,9 +697,14 @@ fn spawn_and_connect(app_handle: AppHandle, info_path: &Path) -> Result<Arc<Daem
     for _ in 0..SPAWN_RETRY_MAX {
         std::thread::sleep(SPAWN_RETRY_INTERVAL);
         if let Some(info) = read_daemon_info(info_path)? {
-            if info.pid != spawned_pid { continue; }
+            if info.pid != spawned_pid {
+                continue;
+            }
             match DaemonClient::connect(info, app_handle.clone()) {
-                Ok(client) => { *client.spawned_child.lock().unwrap() = child.take(); return Ok(client); },
+                Ok(client) => {
+                    *client.spawned_child.lock().unwrap() = child.take();
+                    return Ok(client);
+                }
                 Err(_) => continue,
             }
         }

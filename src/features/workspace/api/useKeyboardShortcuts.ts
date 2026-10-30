@@ -41,6 +41,7 @@ function getMouseTabSwitchDelta(button: number): 1 | -1 | null {
 }
 
 interface KeyboardShortcutOptions {
+  workspaceVisible?: boolean;
   onToggleSidebar?: () => void;
   onToggleTerminalFullscreen?: () => void;
 }
@@ -50,6 +51,8 @@ export function useKeyboardShortcuts(options: KeyboardShortcutOptions = {}) {
   const viewMode = useSettingsStore((s) => s.viewMode);
 
   // Refs hold the latest values; the actual handler is bound once.
+  const workspaceVisibleRef = useRef(options.workspaceVisible ?? true);
+  workspaceVisibleRef.current = options.workspaceVisible ?? true;
   const shortcutsRef = useRef(shortcuts);
   const viewModeRef = useRef(viewMode);
   const onToggleSidebarRef = useRef(options.onToggleSidebar);
@@ -75,6 +78,8 @@ export function useKeyboardShortcuts(options: KeyboardShortcutOptions = {}) {
         useCommandPaletteStore.getState().toggle();
         return;
       }
+
+      if (!workspaceVisibleRef.current) return;
 
       if (combo === "Ctrl+Shift+W") {
         e.preventDefault();
@@ -201,7 +206,7 @@ export function useKeyboardShortcuts(options: KeyboardShortcutOptions = {}) {
       e.preventDefault();
       e.stopPropagation();
 
-      if (viewModeRef.current === "compact") return;
+      if (!workspaceVisibleRef.current || viewModeRef.current === "compact") return;
       const terminalState = useTerminalStore.getState();
       if (terminalState.sessions.length < 2) return;
       const nextSessionId = terminalState.getNextSessionIdForShortcut(delta);

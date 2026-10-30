@@ -1,0 +1,29 @@
+{
+  "id": "independent-ai-chat",
+  "name": "independent-ai-chat",
+  "title": "独立 AI 对话空间",
+  "description": "新增与项目平级的 ChatGPT 式独立聊天空间，不绑定项目、目录或终端；先规划确认，再实施。",
+  "status": "completed",
+  "dev_type": "fullstack",
+  "scope": "independent text chat T1–T7",
+  "package": null,
+  "priority": "P2",
+  "creator": "Rafael",
+  "assignee": "Rafael",
+  "createdAt": "2026-10-30",
+  "completedAt": "2026-10-30",
+  "branch": "wt/task-1027-2130-3c711d70c03c",
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    ".trellis/spec/backend/independent-chat-contracts.md",
+    "output/chat-final-handoff.md"
+  ],
+  "notes": "Approved implementation and automated verification complete; manual desktop/provider/language/exit-reopen acceptance pending explicit authorization. No commit or app lifecycle operations.",
+  "meta": {}
+}

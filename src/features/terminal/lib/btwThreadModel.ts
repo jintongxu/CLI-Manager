@@ -27,11 +27,18 @@ export interface BtwThread {
   error: string | null;
   pinned?: boolean;
   archived?: boolean;
+  createdAt?: number;
   generation: number;
   requestId: string | null;
   contextRequestId: string | null;
 }
+export interface BtwReaderState { scrollTop: number; following: boolean; content: string; unread: boolean }
+export const freshBtwReader = (): BtwReaderState => ({ scrollTop: 0, following: true, content: "", unread: false });
 export interface BtwState {
+  persistenceError: string | null;
+  terminalId: string | null;
+  drawerOpen: boolean;
+  collapsed: boolean;
   question: string;
   quote: string;
   source: BtwSource;
@@ -41,6 +48,8 @@ export interface BtwState {
   entries: BtwThread[];
   openId: string | null;
   openVersion: number;
+  embeddedId: string | null;
+  stageVersion: number;
 }
 export interface BtwProgress { requestId: string; threadId: string; text: string }
 export interface BtwAsk {
@@ -52,7 +61,7 @@ export interface BtwAsk {
 }
 export interface BtwContextRequest { requestId: string; sourceSessionId: string }
 export interface BtwThreadPersistence {
-  list: (options?: { query?: string; includeArchived?: boolean; limit?: number }) => Promise<BtwThread[]>;
+  list: (options?: { query?: string; includeArchived?: boolean; limit?: number; offset?: number; terminalId?: string }) => Promise<BtwThread[]>;
   save: (thread: BtwThread) => Promise<void>;
   remove: (threadId: string) => Promise<void>;
   patch?: (threadId: string, patch: { pinned?: boolean; archived?: boolean; title?: string }) => Promise<void>;
@@ -65,41 +74,104 @@ export interface BtwTransport {
 }
 const missingSource = (): BtwSource => ({ terminalId: null, sessionId: null, reason: "no_source_session" });
 const unavailable = (reason = "no_source_session"): BtwContext => ({ available: false, text: "", truncated: false, reason });
-const initial = (): BtwState => ({ question: "", quote: "", source: missingSource(), inherit: false,
-  context: unavailable(), contextLoading: false, entries: [], openId: null, openVersion: 0 });
+const initial = (): BtwState => ({ persistenceError: null, terminalId: null, drawerOpen: false, collapsed: false, question: "", quote: "", source: missingSource(), inherit: false,
+  context: unavailable(), contextLoading: false, entries: [], openId: null, openVersion: 0, embeddedId: null, stageVersion: 0 });
 let serial = 0;
 const id = () => `btw-${Date.now()}-${++serial}`;
 
 export class BtwThreadModel {
   private state = initial();
+  // UI snapshots are session-memory only; source objects are captured, never re-resolved on switch.
+  private terminalViews = new Map<string, Partial<BtwState>>();
+  private readers = new Map<string, BtwReaderState>();
+  getReader = (threadId: string) => this.readers.get(threadId) ?? freshBtwReader();
+  setReader = (threadId: string, reader: BtwReaderState) => {
+    if (this.find(threadId)) this.readers.set(threadId, reader);
+  };
+  setCollapsed = (collapsed: boolean) => this.publish({ collapsed });
+  setDrawerOpen = (drawerOpen: boolean) => this.publish({ drawerOpen });
+  activateTerminal = (terminalId: string | null) => {
+    if (terminalId === this.state.terminalId) return;
+    if (this.state.terminalId) {
+      const { question, quote, source, inherit, context, contextLoading, embeddedId, drawerOpen, collapsed } = this.state;
+      this.terminalViews.set(this.state.terminalId, { question, quote, source, inherit, context, contextLoading, embeddedId, drawerOpen, collapsed });
+    }
+    const saved = terminalId ? this.terminalViews.get(terminalId) : undefined;
+    this.publish({ question: "", quote: "", source: { ...missingSource(), terminalId }, inherit: false,
+      context: unavailable(), contextLoading: false, embeddedId: null, drawerOpen: false, collapsed: false,
+      ...saved, terminalId, stageVersion: this.state.stageVersion + 1 });
+  };
+  reconcileTerminals = (terminalIds: string[]) => {
+    const live = new Set(terminalIds);
+    for (const key of this.terminalViews.keys()) if (!live.has(key)) this.terminalViews.delete(key);
+    for (const thread of this.state.entries) if (thread.source.terminalId && !live.has(thread.source.terminalId)) this.readers.delete(thread.id);
+    if (this.state.terminalId && !live.has(this.state.terminalId)) this.activateTerminal(null);
+    // activateTerminal saved the closing view; it must not resurrect on an ID reuse.
+    for (const key of this.terminalViews.keys()) if (!live.has(key)) this.terminalViews.delete(key);
+  };
   private listeners = new Set<() => void>();
   private subscriptions = new Map<string, () => void>();
   private disposed = false;
-  private persistenceQueue: Promise<unknown> = Promise.resolve();
-  private hydrating = false;
-  private persist(thread: BtwThread | null) {
-    if (this.hydrating || !this.persistence || this.disposed) return;
-    const work = thread ? () => this.persistence!.save(thread) : () => Promise.resolve();
-    this.persistenceQueue = this.persistenceQueue.then(work, work).catch(() => {});
+  private persistenceQueue: Promise<void> = Promise.resolve();
+  private pendingWrites = new Map<string, () => Promise<void>>();
+  private failedWrites = new Map<string, () => Promise<void>>();
+  private scheduledWrites = new Set<string>();
+  private historyError: string | null = null;
+  private deletedIds = new Set<string>();
+  private historyVersion = 0;
+  private starting: Promise<void> | null = null;
+  /** Coalesce streaming snapshots by thread; deletes share the same ordered queue. */
+  private enqueue(key: string, work: () => Promise<void>) {
+    this.pendingWrites.set(key, work);
+    if (this.scheduledWrites.has(key)) return;
+    this.scheduledWrites.add(key);
+    this.persistenceQueue = this.persistenceQueue.then(async () => {
+      this.scheduledWrites.delete(key);
+      const next = this.pendingWrites.get(key);
+      if (!next) return;
+      this.pendingWrites.delete(key);
+      try {
+        await next();
+        this.failedWrites.delete(key);
+        if (!this.failedWrites.size) this.publish({ persistenceError: this.historyError });
+      } catch (error) {
+        this.failedWrites.set(key, next);
+        this.publish({ persistenceError: String(error) });
+      }
+    });
   }
-  constructor(private transport: BtwTransport, private persistence?: BtwThreadPersistence) {}
-  /** Hydration is display-only: it never invokes context or inference. */
-  async start() {
+  private persist(thread: BtwThread) {
     if (!this.persistence || this.disposed) return;
-    this.hydrating = true;
-    try { const entries = await this.persistence.list(); if (!this.disposed) this.publish({ entries: entries.map((thread) => ({ ...thread, contextLoading: false, requestId: null, contextRequestId: null, generation: 0 })) }); }
-    finally { this.hydrating = false; }
+    this.enqueue(thread.id, () => this.persistence!.save(thread));
   }
+  /** Await accepted writes for reads/tests; this is not an application-exit barrier. */
+  flushPersistence = async () => { do { const pending = this.persistenceQueue; await pending; if (pending === this.persistenceQueue) break; } while (true); };
+  retryPersistence = async () => {
+    for (const [key, work] of this.failedWrites) if (!this.pendingWrites.has(key)) this.enqueue(key, work);
+    await this.flushPersistence();
+    if (!this.failedWrites.size) await this.loadHistory("", true);
+  };
+  constructor(private transport: BtwTransport, private persistence?: BtwThreadPersistence) {}
+  private recovered(thread: BtwThread): BtwThread {
+    return { ...thread, status: thread.status === "pending" || thread.contextLoading || (thread.inherit && !thread.context.available && !!thread.draft) ? "stopped" : thread.status,
+      contextLoading: false, requestId: null, contextRequestId: null, generation: 0 };
+  }
+  /** Hydration never suppresses concurrent user writes or invokes inference. */
+  start = (): Promise<void> => {
+    if (!this.starting) this.starting = this.loadHistory("", false);
+    return this.starting;
+  };
   getSnapshot = () => this.state;
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   private publish(update: Partial<BtwState>) {
     if (this.disposed) return;
     this.state = { ...this.state, ...update };
     this.listeners.forEach((listener) => listener());
-    if (update.entries) update.entries.forEach((thread) => this.persist(thread));
+
   }
   private replace(thread: BtwThread, update: Partial<BtwThread>) {
     const next = { ...thread, ...update };
+    this.persist(next);
     this.publish({ entries: this.state.entries.map((item) => item === thread ? next : item) });
     return next;
   }
@@ -137,39 +209,67 @@ export class BtwThreadModel {
     } catch (error) { finish(unavailable(String(error))); }
   }
   stage = (quote: string, source: BtwSource) => {
+    this.activateTerminal(source.terminalId);
     // Draft staging captures identity only, never transcript text. Snapshot at creation.
-    this.publish({ question: "", quote, source: { ...source }, inherit: true,
+    this.publish({ question: "", quote, source: { ...source }, inherit: false,
+      embeddedId: null, drawerOpen: true, collapsed: false, stageVersion: this.state.stageVersion + 1,
       context: unavailable(source.reason ?? "inherit_off"), contextLoading: false });
   };
   setQuestion = (question: string) => this.publish({ question });
-  setInherit = (inherit: boolean) => this.publish({ inherit });
-  open = (openId: string | null) => this.publish({ openId, openVersion: this.state.openVersion + 1 });
-  rename = (threadId: string, title: string) => { const thread = this.find(threadId); if (thread) { this.replace(thread, { title }); this.patchPersist(threadId, { title }); } };
-  pin = (threadId: string, pinned = true) => { const thread = this.find(threadId); if (thread) { this.replace(thread, { pinned }); this.patchPersist(threadId, { pinned }); } };
-  archive = (threadId: string, archived = true) => { const thread = this.find(threadId); if (thread) { this.replace(thread, { archived }); this.patchPersist(threadId, { archived }); } };
-  search = async (query: string, options: { includeArchived?: boolean; limit?: number } = {}) => this.persistence?.list({ ...options, query }) ?? [];
-  /** Replace the visible history from the repository; hydration never invokes inference. */
-  loadHistory = async (query = "", includeArchived = false) => {
-    if (!this.persistence) return;
-    const entries = await this.persistence.list({ query, includeArchived, limit: 100 });
-    if (!this.disposed) this.publish({ entries: entries.slice().sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned))) });
+  setInherit = (inherit: boolean) => this.publish({ inherit: inherit && !this.state.source.reason && !!this.state.source.sessionId });
+  /** Embedded selection is owner state, independent of native-window reveal state. */
+  submitEmbedded = (): string | null => {
+    const embeddedId = this.submit();
+    if (embeddedId) this.publish({ embeddedId });
+    return embeddedId;
   };
-  private patchPersist(threadId: string, patch: { pinned?: boolean; archived?: boolean; title?: string }) {
-    if (this.persistence?.patch) void this.persistence.patch(threadId, patch).catch(() => {});
-  }
+  /** Restoring an embedded reader never changes the native reveal revision. */
+  selectEmbedded = (embeddedId: string) => {
+    const thread = this.find(embeddedId);
+    if (!thread) return;
+    // All-history records keep the current terminal UI/source identity.
+    // The thread itself retains its original immutable source snapshot.
+    if (!this.readers.has(embeddedId)) this.readers.set(embeddedId, { ...freshBtwReader(), following: false,
+      content: JSON.stringify([thread.messages, thread.answer, thread.error]) });
+    this.publish({ embeddedId, drawerOpen: true, collapsed: false, stageVersion: this.state.stageVersion + 1 });
+  };
+  open = (openId: string | null) => this.publish({ openId, openVersion: this.state.openVersion + 1 });
+  rename = (threadId: string, title: string) => { const thread = this.find(threadId); if (thread) { this.replace(thread, { title }); } };
+  pin = (threadId: string, pinned = true) => { const thread = this.find(threadId); if (thread) { this.replace(thread, { pinned }); } };
+  archive = (threadId: string, archived = true) => { const thread = this.find(threadId); if (thread) { this.replace(thread, { archived }); } };
+  search = async (query: string, options: { includeArchived?: boolean; limit?: number } = {}) => this.persistence?.list({ ...options, query }) ?? [];
+  /** Latest query wins; projections never write stale rows back to storage. */
+  loadHistory = async (query = "", includeArchived = false, terminalId?: string, offset = 0) => {
+    if (!this.persistence || this.disposed) return;
+    const version = ++this.historyVersion;
+    try {
+      await this.flushPersistence();
+      const entries = await this.persistence.list({ query, includeArchived, limit: 100, terminalId, offset });
+      if (this.disposed || version !== this.historyVersion) return;
+      this.historyError = null;
+      if (!this.failedWrites.size) this.publish({ persistenceError: null });
+      const live = this.state.entries;
+      const liveIds = new Set(live.map((thread) => thread.id));
+      this.publish({ entries: [...live, ...entries.filter((thread) => !liveIds.has(thread.id) && !this.deletedIds.has(thread.id))
+        .map((thread) => this.recovered(thread))] });
+    } catch (error) { this.historyError = String(error); this.publish({ persistenceError: this.historyError }); }
+  };
   setDraft = (threadId: string, draft: string) => {
     const thread = this.find(threadId);
     if (thread) this.replace(thread, { draft });
   };
-  submit = () => {
+  submit = (): string | null => {
     const question = this.state.question.trim();
-    if (!question || (this.state.inherit && this.state.contextLoading)) return;
+    if (!question || (this.state.inherit && this.state.contextLoading)) return null;
     const thread: BtwThread = { id: id(), source: { ...this.state.source }, quote: this.state.quote, title: question,
-      inherit: this.state.inherit, context: unavailable(this.state.source.reason ?? "inherit_off"), contextLoading: this.state.inherit,
+      createdAt: Date.now(), inherit: this.state.inherit,
+      context: unavailable(this.state.source.reason ?? "inherit_off"), contextLoading: this.state.inherit,
       messages: [], draft: question, status: "idle", answer: "", error: null, generation: 0, requestId: null, contextRequestId: null };
-    this.publish({ entries: [...this.state.entries, thread], question: "", inherit: true });
+    this.persist(thread);
+    this.publish({ entries: [...this.state.entries, thread], question: "", inherit: false });
     if (!thread.inherit) this.send(thread.id);
     else this.loadContext(thread, true);
+    return thread.id;
   };
   send = (threadId: string, retry = false) => {
     const thread = this.find(threadId);
@@ -218,15 +318,21 @@ export class BtwThreadModel {
   };
   stop = (threadId: string) => {
     const thread = this.find(threadId);
-    if (!thread?.requestId) return;
-    this.replace(thread, { status: "stopped", requestId: null, generation: thread.generation + 1 });
+    if (!thread || (!thread.requestId && !thread.contextRequestId)) return;
+    this.replace(thread, { status: "stopped", requestId: null, contextRequestId: null,
+      contextLoading: false, generation: thread.generation + 1 });
     this.cancel(thread.requestId);
+    this.cancel(thread.contextRequestId);
   };
   remove = (threadId: string) => {
     const thread = this.find(threadId);
+    this.deletedIds.add(threadId);
+    this.readers.delete(threadId);
+    for (const view of this.terminalViews.values()) if (view.embeddedId === threadId) view.embeddedId = null;
     this.publish({ entries: this.state.entries.filter((item) => item.id !== threadId),
-      openId: this.state.openId === threadId ? null : this.state.openId });
-    if (this.persistence && !this.hydrating) this.persistenceQueue = this.persistenceQueue.then(() => this.persistence!.remove(threadId), () => this.persistence!.remove(threadId)).catch(() => {});
+      openId: this.state.openId === threadId ? null : this.state.openId,
+      embeddedId: this.state.embeddedId === threadId ? null : this.state.embeddedId });
+    if (this.persistence) this.enqueue(threadId, () => this.persistence!.remove(threadId));
     this.cancel(thread?.requestId ?? null);
     this.cancel(thread?.contextRequestId ?? null);
   };
@@ -244,13 +350,23 @@ export class BtwThreadModel {
   };
   clear = () => {
     const entries = this.state.entries;
+    this.terminalViews.clear(); this.readers.clear();
     this.publish(initial());
     entries.forEach((thread) => { this.cancel(thread.requestId); this.cancel(thread.contextRequestId); });
-    if (this.persistence && !this.hydrating) for (const thread of entries) this.persistenceQueue = this.persistenceQueue.then(() => this.persistence!.remove(thread.id), () => this.persistence!.remove(thread.id)).catch(() => {});
+    for (const thread of entries) {
+      this.deletedIds.add(thread.id);
+      if (this.persistence) this.enqueue(thread.id, () => this.persistence!.remove(thread.id));
+    }
   };
   dispose = () => {
-    this.clear();
+    // Teardown is not a user deletion. Accepted snapshots remain queued.
     this.disposed = true;
+    for (const thread of this.state.entries) {
+      this.cancel(thread.requestId);
+      this.cancel(thread.contextRequestId);
+    }
+    for (const release of this.subscriptions.values()) release();
+    this.subscriptions.clear();
     this.listeners.clear();
   };
 }

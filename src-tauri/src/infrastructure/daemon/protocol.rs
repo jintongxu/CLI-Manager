@@ -47,7 +47,11 @@ pub struct OwnerBinding {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum SessionScope { Owned, Foreign, Legacy }
+pub enum SessionScope {
+    Owned,
+    Foreign,
+    Legacy,
+}
 
 /// PTY-only receipt. Never an application exit permit or a daemon death proof.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -103,13 +107,36 @@ pub enum ClientFrame {
         token: String,
         client_version: String,
     },
-    RegisterOwner { id: u64, instance_id: InstanceId },
-    BindOwner { id: u64, binding: OwnerBinding },
-    TerminalResources { id: u64, session_ids: Vec<String> },
-    SessionScopes { id: u64 },
-    PrepareOwnerExit { id: u64, transaction_id: String, binding: OwnerBinding },
-    ResumeOwnerExit { id: u64, transaction_id: String, binding: OwnerBinding },
-    OwnerExit { id: u64, transaction_id: String, binding: OwnerBinding },
+    RegisterOwner {
+        id: u64,
+        instance_id: InstanceId,
+    },
+    BindOwner {
+        id: u64,
+        binding: OwnerBinding,
+    },
+    TerminalResources {
+        id: u64,
+        session_ids: Vec<String>,
+    },
+    SessionScopes {
+        id: u64,
+    },
+    PrepareOwnerExit {
+        id: u64,
+        transaction_id: String,
+        binding: OwnerBinding,
+    },
+    ResumeOwnerExit {
+        id: u64,
+        transaction_id: String,
+        binding: OwnerBinding,
+    },
+    OwnerExit {
+        id: u64,
+        transaction_id: String,
+        binding: OwnerBinding,
+    },
     Ping {
         id: u64,
     },
@@ -498,10 +525,22 @@ pub struct ReplayEntry {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DaemonFrame {
-    TerminalResources { id: u64, snapshot: super::terminal_resources::Snapshot },
-    OwnerExitResult { id: u64, receipt: OwnerExitReceipt },
-    OwnerRegistered { id: u64, binding: OwnerBinding },
-    SessionScopes { id: u64, scopes: HashMap<String, SessionScope> },
+    TerminalResources {
+        id: u64,
+        snapshot: super::terminal_resources::Snapshot,
+    },
+    OwnerExitResult {
+        id: u64,
+        receipt: OwnerExitReceipt,
+    },
+    OwnerRegistered {
+        id: u64,
+        binding: OwnerBinding,
+    },
+    SessionScopes {
+        id: u64,
+        scopes: HashMap<String, SessionScope>,
+    },
     AuthOk {
         daemon_version: String,
         pid: u32,
@@ -738,7 +777,13 @@ fn decode_with_known_types<T: for<'de> Deserialize<'de>>(
 }
 
 const CLIENT_FRAME_TYPES: &[&str] = &[
-    "terminal_resources", "register_owner", "bind_owner", "session_scopes", "owner_exit", "prepare_owner_exit", "resume_owner_exit",
+    "terminal_resources",
+    "register_owner",
+    "bind_owner",
+    "session_scopes",
+    "owner_exit",
+    "prepare_owner_exit",
+    "resume_owner_exit",
     "auth",
     "ping",
     "list",
@@ -764,7 +809,10 @@ const CLIENT_FRAME_TYPES: &[&str] = &[
 ];
 
 const DAEMON_FRAME_TYPES: &[&str] = &[
-    "terminal_resources", "owner_registered", "session_scopes", "owner_exit_result",
+    "terminal_resources",
+    "owner_registered",
+    "session_scopes",
+    "owner_exit_result",
     "auth_ok",
     "auth_err",
     "pong",

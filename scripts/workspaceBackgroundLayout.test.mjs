@@ -49,7 +49,7 @@ test("workspace background is decorative and exposes the shared image through su
   assert.match(stylesSource, /data-workspace-bg-fit="contain"/);
   assert.match(stylesSource, /data-workspace-bg-position="bottom-right"/);
   assert.match(stylesSource, /\.ui-workspace-background-root\[data-workspace-background="true"\] \.ui-sidebar-shell/);
-  assert.match(appSource, /<WorkspaceLayoutShell>\s*\{\(!terminalFullscreen \|\| viewMode === "compact"\) && <WindowTitleBar \/>\}/);
+  assert.match(appSource, /<WorkspaceLayoutShell>\s*\{\(!workspaceVisible \|\| !terminalFullscreen \|\| viewMode === "compact"\) && <WindowTitleBar \/>\}/);
   const workspaceShellSource = appSource.match(/<WorkspaceLayoutShell>[\s\S]*?<\/WorkspaceLayoutShell>/)?.[0] ?? "";
   assert.match(workspaceShellSource, /<Suspense fallback=\{null\}>[\s\S]*?<SettingsModal/);
   assert.match(settingsModalSource, /useWorkspaceBackground/);

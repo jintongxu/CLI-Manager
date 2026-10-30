@@ -1,0 +1,75 @@
+/* Mantine's neutral dark scale (#2e2e2e, #424242 …) is a warm gray that reads as
+   olive against the app's cool surface tokens. Re-point the Mantine neutral
+   variables at theme tokens for this page subtree AND modals, so inputs, default
+   buttons, modals and disabled states inherit the app palette instead of Mantine gray. */
+.chat-model-settings,
+.chat-model-settings-modal {
+  --mantine-color-dark-0: var(--text-primary);
+  --mantine-color-dark-1: var(--text-secondary);
+  --mantine-color-dark-2: var(--text-muted);
+  --mantine-color-dark-3: var(--text-muted);
+  --mantine-color-dark-4: color-mix(in srgb, var(--border) 85%, transparent);
+  --mantine-color-dark-5: var(--surface-container-high);
+  --mantine-color-dark-6: color-mix(in srgb, var(--surface-container-high) 86%, var(--bg-primary) 14%);
+  --mantine-color-dark-7: var(--surface-container-lowest);
+  --mantine-color-dark-8: var(--surface-container-lowest);
+  --mantine-color-dark-9: var(--surface-container-lowest);
+
+  --mantine-color-body: var(--surface-container-lowest);
+  --mantine-color-default: color-mix(in srgb, var(--surface-container-high) 86%, var(--bg-primary) 14%);
+  --mantine-color-default-hover: var(--surface-container-highest);
+  --mantine-color-default-border: color-mix(in srgb, var(--border) 85%, transparent);
+  --mantine-color-disabled: color-mix(in srgb, var(--surface-container-high) 70%, transparent);
+  --mantine-color-disabled-color: var(--text-muted);
+  --mantine-color-disabled-border: color-mix(in srgb, var(--border) 60%, transparent);
+  --mantine-color-placeholder: var(--text-muted);
+  --mantine-color-dimmed: var(--text-muted);
+}
+
+/* Modal styling: align modal container and header with app surface token */
+.chat-model-settings-modal .mantine-Modal-content {
+  background: var(--surface-container-lowest) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-primary) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45) !important;
+}
+
+.chat-model-settings-modal .mantine-Modal-header {
+  background: var(--surface-container-lowest) !important;
+  color: var(--text-primary) !important;
+}
+
+.chat-model-settings-modal .mantine-Modal-title {
+  color: var(--text-primary) !important;
+  font-weight: 600 !important;
+}
+
+.chat-model-settings-modal .mantine-Modal-close {
+  color: var(--text-muted) !important;
+}
+
+.chat-model-settings-modal .mantine-Modal-close:hover {
+  background: var(--surface-container-high) !important;
+  color: var(--text-primary) !important;
+}
+
+/* The combobox dropdown is portaled outside the page subtree, so it needs the
+   theme surface applied inline rather than through the variables above. */
+.chat-model-settings-dropdown {
+  background: var(--surface-container-lowest);
+  border-color: var(--border);
+}
+
+.chat-model-settings-dropdown [data-combobox-option] {
+  color: var(--text-primary);
+}
+
+.chat-model-settings-dropdown [data-combobox-option][data-hovered],
+.chat-model-settings-dropdown [data-combobox-option]:hover {
+  background: var(--interactive-hover-bg);
+}
+
+.chat-model-settings-dropdown [data-combobox-option][data-selected] {
+  background: var(--interactive-selected-bg);
+  color: var(--text-primary);
+}

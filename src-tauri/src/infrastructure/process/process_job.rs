@@ -64,7 +64,13 @@ impl ChildJob {
         }
     }
 
-    pub(crate) fn sample_resources(&self, root: windows_sys::Win32::Foundation::HANDLE, pid: u32, id: &str, budget: &mut crate::daemon::terminal_resources::Budget) -> crate::daemon::terminal_resources::Row {
+    pub(crate) fn sample_resources(
+        &self,
+        root: windows_sys::Win32::Foundation::HANDLE,
+        pid: u32,
+        id: &str,
+        budget: &mut crate::daemon::terminal_resources::Budget,
+    ) -> crate::daemon::terminal_resources::Row {
         job_resources::sample(self.0, root, pid, id, budget)
     }
     // Compatibility for existing callers. Exit proof must use the checked API.
@@ -74,14 +80,17 @@ impl ChildJob {
 
     pub(crate) fn terminate_checked(&self) -> Result<(), String> {
         if unsafe { windows_sys::Win32::System::JobObjects::TerminateJobObject(self.0, 1) } == 0 {
-            return Err(format!("terminate owned job failed: {}", std::io::Error::last_os_error()));
+            return Err(format!(
+                "terminate owned job failed: {}",
+                std::io::Error::last_os_error()
+            ));
         }
         Ok(())
     }
 
     pub(crate) fn is_empty(&self) -> Result<bool, String> {
         use windows_sys::Win32::System::JobObjects::{
-            QueryInformationJobObject, JobObjectBasicAccountingInformation,
+            JobObjectBasicAccountingInformation, QueryInformationJobObject,
             JOBOBJECT_BASIC_ACCOUNTING_INFORMATION,
         };
         let mut info: JOBOBJECT_BASIC_ACCOUNTING_INFORMATION = unsafe { std::mem::zeroed() };
@@ -93,8 +102,12 @@ impl ChildJob {
                 std::mem::size_of_val(&info) as u32,
                 std::ptr::null_mut(),
             )
-        } == 0 {
-            return Err(format!("query owned job failed: {}", std::io::Error::last_os_error()));
+        } == 0
+        {
+            return Err(format!(
+                "query owned job failed: {}",
+                std::io::Error::last_os_error()
+            ));
         }
         Ok(info.ActiveProcesses == 0)
     }
@@ -125,7 +138,8 @@ mod tests {
         let mut child = std::process::Command::new("cmd.exe")
             .args(["/D", "/C", "exit 0"])
             .creation_flags(windows_sys::Win32::System::Threading::CREATE_SUSPENDED)
-            .spawn().unwrap();
+            .spawn()
+            .unwrap();
         let job = match ChildJob::assign(&child, "test suspended child") {
             Ok(job) => job,
             Err(error) => {
@@ -134,15 +148,21 @@ mod tests {
                 panic!("{error}");
             }
         };
-        assert_eq!(job.wait_empty(Instant::now()), Err("owned_job_timeout".into()));
+        assert_eq!(
+            job.wait_empty(Instant::now()),
+            Err("owned_job_timeout".into())
+        );
         assert_eq!(job.is_empty(), Ok(false));
         job.terminate_checked().unwrap();
-        job.wait_empty(Instant::now() + Duration::from_secs(5)).unwrap();
+        job.wait_empty(Instant::now() + Duration::from_secs(5))
+            .unwrap();
         // ActiveProcesses can reach zero before the root handle is signaled.
         // Both observations are required; never treat the accounting query as reap proof.
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
-            if child.try_wait().unwrap().is_some() { break; }
+            if child.try_wait().unwrap().is_some() {
+                break;
+            }
             assert!(Instant::now() < deadline, "owned root signal timeout");
             std::thread::sleep(Duration::from_millis(10));
         }

@@ -10,6 +10,7 @@ fn maps_complete_feature_schema_to_current_migration_versions() {
         worktree_isolation: SchemaState::Complete,
         ssh_hosts: SchemaState::Complete,
         ssh_host_groups: SchemaState::Complete,
+        btw_threads: SchemaState::Complete,
     };
 
     let expected = expected_migrations_for_features(&features).unwrap();
@@ -36,6 +37,7 @@ fn rejects_partial_worktree_schema() {
         worktree_isolation: SchemaState::Partial,
         ssh_hosts: SchemaState::Absent,
         ssh_host_groups: SchemaState::Absent,
+        btw_threads: SchemaState::Absent,
     };
 
     assert_eq!(
@@ -86,6 +88,7 @@ async fn rewrites_old_worktree_lineage_rows_to_current_versions() {
                 worktree_isolation: SchemaState::Complete,
                 ssh_hosts: SchemaState::Absent,
                 ssh_host_groups: SchemaState::Absent,
+        btw_threads: SchemaState::Absent,
             })
             .unwrap()
         )
