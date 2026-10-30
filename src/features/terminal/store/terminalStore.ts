@@ -1955,6 +1955,8 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       return state.sessions
         .filter((session) => shouldIncludeTerminalExitTask({
           kind: session.kind,
+          isAgentSession: session.isAgentSession,
+          cliTool: session.cliTool,
           processStatus: state.sessionStatuses[session.id],
           mergedStatus: state.tabNotifications[session.id],
           hookStatus: state.tabStatuses[session.id]?.hook,
@@ -1967,6 +1969,8 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       return state.sessions
         .filter((session) => shouldIncludeTerminalExitTask({
           kind: session.kind,
+          isAgentSession: session.isAgentSession,
+          cliTool: session.cliTool,
           processStatus: state.sessionStatuses[session.id],
           mergedStatus: state.tabNotifications[session.id],
           hookStatus: state.tabStatuses[session.id]?.hook,

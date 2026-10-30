@@ -17,6 +17,42 @@ test("keeps the existing running PTY task rule for hook and shell tasks", () => 
   }
 });
 
+// 验证没有 Hook 状态的 Pi Agent 仍按存活 PTY 纳入退出拦截。
+test("includes running Pi agent sessions without hook status", () => {
+  assert.equal(shouldIncludeTerminalExitTask({
+    kind: "ephemeral-pi",
+    processStatus: "running",
+    mergedStatus: "none",
+    hookStatus: "none",
+  }), true);
+  assert.equal(shouldIncludeTerminalExitTask({
+    kind: "ephemeral-pi",
+    processStatus: "done",
+    mergedStatus: "none",
+    hookStatus: "none",
+  }), false);
+});
+
+// 验证普通项目 PTY 中的 Pi Agent 也不依赖 ephemeral-pi 类型或 Hook 状态。
+test("includes project Pi agent sessions without hook status", () => {
+  assert.equal(shouldIncludeTerminalExitTask({
+    kind: "pty",
+    isAgentSession: true,
+    cliTool: "pi",
+    processStatus: "running",
+    mergedStatus: "none",
+    hookStatus: "none",
+  }), true);
+  assert.equal(shouldIncludeTerminalExitTask({
+    kind: "pty",
+    isAgentSession: true,
+    cliTool: "PI",
+    processStatus: "done",
+    mergedStatus: "none",
+    hookStatus: "none",
+  }), false);
+});
+
 // 验证非 PTY 会话不参与终端退出任务。
 test("excludes non-PTY sessions", () => {
   assert.equal(shouldIncludeTerminalExitTask({

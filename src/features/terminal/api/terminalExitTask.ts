@@ -7,6 +7,8 @@ export type TerminalExitNotificationState =
 
 export interface TerminalExitTaskCandidate {
   kind?: string | null;
+  isAgentSession?: boolean;
+  cliTool?: string | null;
   processStatus?: string | null;
   mergedStatus?: TerminalExitNotificationState | null;
   hookStatus?: TerminalExitNotificationState | null;
@@ -21,8 +23,12 @@ export function shouldIncludeTerminalExitTask(
   candidate: TerminalExitTaskCandidate,
   includeFinished = false
 ): boolean {
-  if (candidate.kind && candidate.kind !== "pty") return false;
+  const isPiAgent = candidate.kind === "ephemeral-pi"
+    || (candidate.isAgentSession === true && candidate.cliTool?.trim().toLowerCase() === "pi");
+  if (candidate.kind && candidate.kind !== "pty" && candidate.kind !== "ephemeral-pi") return false;
 
+  // Pi is an agent PTY without hook status; its live process is the exit task.
+  if (isPiAgent && candidate.processStatus === "running") return true;
   if (candidate.processStatus === "running" && candidate.mergedStatus === "running") {
     return true;
   }
