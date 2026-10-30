@@ -10,15 +10,34 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf
 const scope = '[data-theme="dark"][data-dark-palette="tokyo-night-storm"]';
 const themes = postcss.parse(read("src/styles/themes.css"));
 const chrome = postcss.parse(read("src/styles/components/tokyo-night-storm.css"));
-test("Right Storm rail blends into content and uses a thin active marker", () => {
+test("Right Storm rail blends into content and uses functional active accents", () => {
   const rail = '.ui-terminal-action-sidebar:not([data-dock-side="left"])';
   const actual = declarations(rail);
   assert.equal(actual.background, "var(--storm-surface)");
   assert.match(actual["box-shadow"], /^inset 1px 0 0 color-mix/);
-  const active = declarations(`.ui-terminal-pane-chrome ${rail} :is(.ui-icon-action, .ui-toolbar-button)[data-active="true"]:not(:disabled):not([data-disabled]):not([aria-disabled="true"])`);
-  assert.equal(active.background, "transparent");
-  assert.equal(active.color, "var(--storm-solid)");
-  assert.equal(active["box-shadow"], "inset 2px 0 0 var(--storm-solid)");
+  const active = declarations(`${rail} :is(.ui-icon-action, .ui-toolbar-button)[data-active="true"]:not(:disabled):not([data-disabled]):not([aria-disabled="true"])`);
+  assert.match(active.background, /color-mix.*--terminal-action-accent/);
+  assert.equal(active.color, "var(--terminal-action-accent, var(--storm-solid))");
+  assert.equal(active["box-shadow"], "inset 2px 0 0 var(--terminal-action-accent, var(--storm-solid))");
+  for (const [classes, color] of [
+    [".ui-action-new, .ui-action-new-anonymous-pi", "#9ECE6A"],
+    [".ui-action-template, .ui-action-replay, .ui-action-git, .ui-action-project-ideas", "#BB9AF7"],
+    [".ui-action-files, .ui-action-session-history", "#E0AF68"],
+    [".ui-action-command-history, .ui-action-stats, .ui-action-providers", "#7DCFFF"],
+    [".ui-action-btw, .ui-action-background-tasks", "#FF9EAD"],
+    [".ui-action-fullscreen, .ui-action-system-resources, .ui-action-font-size", "#7AA2F7"],
+  ]) assert.equal(declarations(`${rail} :is(${classes})`)["--terminal-action-accent"], color);
+  const enabled = rail + ' :is(.ui-icon-action, .ui-toolbar-button):not(:disabled):not([data-disabled]):not([aria-disabled="true"])';
+  assert.equal(declarations(enabled).color, "var(--terminal-action-accent, var(--storm-solid))");
+  const renderer = read("src/features/terminal/hooks/useTerminalToolbarRenderer.tsx");
+  const navClass = renderer.match(/<nav\s+className="([^"]+)"/)[1];
+  assert.ok(navClass.includes("ui-terminal-action-sidebar"));
+  assert.ok(!navClass.includes("ui-terminal-pane-chrome"));
+  chrome.walkRules(rule => {
+    if (rule.selector.includes(rail) && rule.nodes.some(node => node.prop === "color" && node.value.includes("--terminal-action-accent"))) {
+      assert.ok(!rule.selector.includes(".ui-terminal-pane-chrome"), "Functional colors must match the independent production nav");
+    }
+  });
 });
 
 const palette = themes.nodes.find((node) => node.selector === scope);
@@ -51,10 +70,10 @@ test("Strict dark Storm scope; no geometry, font, canvas, warning or independent
     assert.doesNotMatch(rule.selector, /\.monaco|\.xterm|\.terminal-skin|data-term-stats-skin|data-terminal-side-panel-content|ui-cpu-cat|data-invalid="true"\]\s*\{/);
   });
   chrome.walkDecls((decl) => {
-    assert.match(decl.prop, /^(?:--terminal-(?:tab-|chrome-|action-color$)|background(?:-color)?$|border-(?:color|radius)$|outline(?:-color|-style|-width|-offset)?$|box-shadow$|color$|filter$|opacity$)/);
+    assert.match(decl.prop, /^(?:--terminal-(?:tab-|chrome-|action-(?:color|accent)$)|background(?:-color)?$|border-(?:color|radius)$|outline(?:-color|-style|-width|-offset)?$|box-shadow$|color$|filter$|opacity$)/);
     if (decl.prop === "opacity") assert.equal(decl.parent.selectors.every((s) => s.endsWith("::placeholder")), true);
     if (decl.important) assert.ok(["color", "background"].includes(decl.prop));
-    for (const match of decl.value.matchAll(/var\((--[^),]+)/g)) assert.match(match[1], /^--storm-/);
+    for (const match of decl.value.matchAll(/var\((--[^),]+)/g)) assert.match(match[1], /^--(?:storm-|terminal-action-(?:accent|color)$)/);
   });
   palette.walkDecls((decl) => assert.doesNotMatch(decl.prop, /^--(?:term-|terminal-|font-)/));
 });

@@ -76,8 +76,8 @@ test("history-only integration uses the shared helper and theme variables", () =
   assert.match(historySource, /import \{ unwrapFencedMarkdown \} from "\.\.\/\.\.\/\.\.\/shared\/lib\/markdownSource"/);
   assert.match(historySource, /variant === "history"[\s\S]*unwrapFencedMarkdown\(props\.content\)/);
   assert.match(previewSource, /import \{ unwrapFencedMarkdown \} from "\.\.\/\.\.\/\.\.\/shared\/lib\/markdownSource"/);
-  assert.match(stylesSource, /\.ui-markdown-code-block \{[\s\S]*background-color: var\(--md-canvas-subtle\);/);
-  assert.match(stylesSource, /\.ui-markdown-code-header \{[\s\S]*border-bottom: 1px solid var\(--md-border\);[\s\S]*background-color: var\(--md-canvas-muted\);[\s\S]*color: var\(--md-subtle\);/);
-  assert.match(stylesSource, /\.ui-markdown-terminal \.ui-markdown-code-block \{[\s\S]*background-color: #0a0a0a;/);
-  assert.match(stylesSource, /\.ui-markdown-terminal \.ui-markdown-code-header \{[\s\S]*background-color: #181818;/);
+  assert.match(stylesSource, /\.ui-markdown-code-block \{[\s\S]*background-color: var\(--md-code-bg\);/);
+  assert.match(stylesSource, /\.ui-markdown-code-header \{[\s\S]*border-bottom: 1px solid var\(--md-border\);[\s\S]*background-color: var\(--md-code-header-bg\);[\s\S]*color: var\(--md-code-label\);/);
+  assert.match(stylesSource, /\.ui-markdown-terminal \{[\s\S]*--md-canvas-subtle: var\(--term-panel-card-inner, #181818\);/);
+  assert.match(stylesSource, /\.ui-markdown-terminal \{[\s\S]*--md-text: var\(--term-panel-fg, #ececec\);/);
 });

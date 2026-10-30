@@ -688,6 +688,42 @@
   box-shadow: none;
 }
 
+/* Functional accents belong to the right rail, not panel contents or left docking. */
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar:not([data-dock-side="left"]) :is(.ui-action-new, .ui-action-new-anonymous-pi) {
+  --terminal-action-accent: #9ECE6A;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar:not([data-dock-side="left"]) :is(.ui-action-template, .ui-action-replay, .ui-action-git, .ui-action-project-ideas) {
+  --terminal-action-accent: #BB9AF7;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar:not([data-dock-side="left"]) :is(.ui-action-files, .ui-action-session-history) {
+  --terminal-action-accent: #E0AF68;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar:not([data-dock-side="left"]) :is(.ui-action-command-history, .ui-action-stats, .ui-action-providers) {
+  --terminal-action-accent: #7DCFFF;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar:not([data-dock-side="left"]) :is(.ui-action-btw, .ui-action-background-tasks) {
+  --terminal-action-accent: #FF9EAD;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar:not([data-dock-side="left"]) :is(.ui-action-fullscreen, .ui-action-system-resources, .ui-action-font-size) {
+  --terminal-action-accent: #7AA2F7;
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar:not([data-dock-side="left"]) :is(.ui-icon-action, .ui-toolbar-button):not(:disabled):not([data-disabled]):not([aria-disabled="true"]) {
+  --terminal-action-color: var(--terminal-action-accent, var(--storm-solid));
+  color: var(--terminal-action-accent, var(--storm-solid));
+}
+
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar:not([data-dock-side="left"]) :is(.ui-icon-action, .ui-toolbar-button):hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]):not([data-active="true"]) {
+  --terminal-action-color: color-mix(in srgb, var(--terminal-action-accent, var(--storm-solid)) 78%, var(--storm-text));
+  color: var(--terminal-action-color);
+  background: var(--storm-hover);
+}
+
 /* Right rail blends into the terminal; keep docking geometry and focus rules. */
 [data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-terminal-action-sidebar:not([data-dock-side="left"]),
 [data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar:not([data-dock-side="left"]) {
@@ -696,10 +732,10 @@
   box-shadow: inset 1px 0 0 color-mix(in srgb, var(--storm-border) 45%, transparent);
 }
 
-[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-pane-chrome .ui-terminal-action-sidebar:not([data-dock-side="left"]) :is(.ui-icon-action, .ui-toolbar-button)[data-active="true"]:not(:disabled):not([data-disabled]):not([aria-disabled="true"]) {
-  --terminal-action-color: var(--storm-solid);
-  background: transparent;
-  color: var(--storm-solid);
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-action-sidebar:not([data-dock-side="left"]) :is(.ui-icon-action, .ui-toolbar-button)[data-active="true"]:not(:disabled):not([data-disabled]):not([aria-disabled="true"]) {
+  --terminal-action-color: var(--terminal-action-accent, var(--storm-solid));
+  background: color-mix(in srgb, var(--terminal-action-accent, var(--storm-solid)) 10%, var(--storm-surface));
+  color: var(--terminal-action-accent, var(--storm-solid));
   border-color: transparent;
-  box-shadow: inset 2px 0 0 var(--storm-solid);
+  box-shadow: inset 2px 0 0 var(--terminal-action-accent, var(--storm-solid));
 }

@@ -363,7 +363,7 @@
 .ui-file-editor-markdown-preview .ui-markdown-terminal .ui-markdown-table-wrap,
 .ui-file-editor-markdown-preview .ui-markdown-terminal .ui-markdown-code-block {
   border-color: var(--file-editor-border);
-  background-color: color-mix(in srgb, var(--terminal-theme-background, #0c0e10) 82%, var(--terminal-theme-foreground, #f8fafc) 7%);
+  background-color: var(--md-code-bg);
 }
 
 /* Unlabeled fenced Markdown is emitted as a direct code child by the shared renderer. */
@@ -389,15 +389,15 @@
 }
 
 .ui-file-editor-markdown-preview .ui-markdown-terminal .ui-markdown-table {
-  background-color: color-mix(in srgb, var(--terminal-theme-background, #0c0e10) 90%, var(--terminal-theme-foreground, #f8fafc) 5%);
+  background-color: var(--md-table-bg);
 }
 
 .ui-file-editor-markdown-preview .ui-markdown-terminal .ui-markdown-table th {
-  background-color: color-mix(in srgb, var(--terminal-theme-background, #0c0e10) 76%, var(--terminal-theme-accent, #60a5fa) 18%);
+  background-color: var(--md-table-header-bg);
 }
 
 .ui-file-editor-markdown-preview .ui-markdown-terminal .ui-markdown-table tbody tr:nth-child(even) {
-  background-color: color-mix(in srgb, var(--terminal-theme-background, #0c0e10) 86%, var(--terminal-theme-foreground, #f8fafc) 7%);
+  background-color: var(--md-table-stripe-bg);
 }
 
 .ui-file-editor-markdown-preview .ui-markdown-terminal .ui-markdown-table tbody tr:hover {
@@ -431,4 +431,20 @@
 
 .ui-statusline-powerline-select-input {
   font-family: "Symbols Nerd Font Mono", var(--font-ui-mono) !important;
+}
+
+/* Shared Markdown chrome uses the file palette, not the terminal fallback. */
+.ui-file-editor-markdown-preview .ui-markdown-terminal .ui-markdown-code-header {
+  background-color: var(--md-code-header-bg);
+  color: var(--md-code-label);
+}
+
+.ui-file-editor-markdown-preview .ui-markdown-terminal .ui-markdown-quote {
+  border-left-color: var(--md-border);
+  background: var(--md-quote-bg);
+  color: var(--md-muted);
+}
+
+.ui-file-editor-markdown-preview .ui-markdown-terminal .ui-markdown-h {
+  color: var(--md-heading);
 }

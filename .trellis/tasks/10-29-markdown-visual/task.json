@@ -1,0 +1,29 @@
+{
+  "id": "markdown-visual",
+  "name": "markdown-visual",
+  "title": "Markdown 阅读视觉优化",
+  "description": "GitHub式正文与VitePress式代码块，表格引用主题一致；保留解析和现有交互，无新依赖。",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "Rafael",
+  "assignee": "Rafael",
+  "createdAt": "2026-10-29",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "status": "completed",
+    "description": "共享Markdown正文/代码/表格引用视觉完成，20定向+10真实React生产CSS浏览器组合/tsc/架构通过；5旧terminal测试失败记录，真实WebView未手验。"
+  }
+}

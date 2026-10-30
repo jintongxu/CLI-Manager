@@ -82,6 +82,14 @@ export interface MarkdownContentProps {
 
 type MarkdownCodeTheme = typeof oneDark;
 
+// One Light's green/orange are too faint on light reading surfaces at our small
+// code size. Keep its grammar/style mapping, darkening only these token colors.
+const readableLight: MarkdownCodeTheme = {
+  ...oneLight,
+  string: { ...oneLight.string, color: "#246b32" },
+  number: { ...oneLight.number, color: "#925000" },
+};
+
 function escapeRegExp(input: string): string {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -273,9 +281,10 @@ function MarkdownCodeBlock({
         <SyntaxHighlighter
           language={language}
           style={codeTheme}
-          customStyle={{ margin: 0, padding: "0.75rem", background: "transparent", fontSize: "0.75rem", lineHeight: 1.55 }}
+          className="ui-markdown-code-highlight"
+          customStyle={{ margin: 0, padding: 0, background: "transparent" }}
           codeTagProps={{ className: "ui-markdown-code-tag" }}
-          wrapLongLines
+          wrapLongLines={false}
         >
           {code}
         </SyntaxHighlighter>
@@ -403,12 +412,12 @@ const makeComponents = (
   tr({ children }) {
     return <tr className="ui-markdown-tr">{children}</tr>;
   },
-  th({ children, align }) {
-    const textAlign = getTableTextAlign(align);
+  th({ children, align, style }) {
+    const textAlign = getTableTextAlign(align ?? style?.textAlign);
     return <th style={textAlign ? { textAlign } : undefined}>{renderText(children, query)}</th>;
   },
-  td({ children, align }) {
-    const textAlign = getTableTextAlign(align);
+  td({ children, align, style }) {
+    const textAlign = getTableTextAlign(align ?? style?.textAlign);
     return <td style={textAlign ? { textAlign } : undefined}>{renderText(children, query)}</td>;
   },
   input({ type, checked }) {
@@ -524,11 +533,12 @@ export const MarkdownContent = memo(function MarkdownContent({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const resolvedTheme = useSettingsStore((s) => s.resolvedTheme);
   const { t } = useI18n();
+  const readingTheme = variant === "terminal" ? terminalCodeTheme ?? "dark" : resolvedTheme;
   const codeTheme = useMemo<MarkdownCodeTheme>(() => {
     if (variant === "terminal") {
-      return terminalCodeTheme === "light" ? oneLight : oneDark;
+      return terminalCodeTheme === "light" ? readableLight : oneDark;
     }
-    return resolvedTheme === "dark" ? oneDark : oneLight;
+    return resolvedTheme === "dark" ? oneDark : readableLight;
   }, [resolvedTheme, terminalCodeTheme, variant]);
 
   const activateAnchor = (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -567,6 +577,7 @@ export const MarkdownContent = memo(function MarkdownContent({
         compact && "ui-markdown-compact",
         className
       )}
+      data-code-theme={readingTheme}
       onClick={activateAnchor}
       onContextMenu={(event) => {
         if (!event.ctrlKey) return;

@@ -1,0 +1,29 @@
+{
+  "id": "markdown-highlight-contrast",
+  "name": "markdown-highlight-contrast",
+  "title": "修复 Markdown 高亮与视觉辨识度",
+  "description": "复现dev/build JS/Python单色问题，验证token实际配色与正文代码对比，保留已有渲染交互。",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "Rafael",
+  "assignee": "Rafael",
+  "createdAt": "2026-10-29",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "status": "blocked",
+    "description": "已修阅读层级及浅色token对比，22定向和dev/build20格通过；真实用户窗口单色未复现，需WebView现场验证，暂不宣称高亮根因已解决。"
+  }
+}
