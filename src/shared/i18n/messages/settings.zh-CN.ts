@@ -137,6 +137,15 @@ export const zh = {
   "settings.tabs.chatModels.title": "对话模型供应商",
   "settings.tabs.chatModels.description":
     "独立对话供应商与 Native Providers 完全分离。",
+  "settings.tabs.translator.label": "翻译设置",
+  "settings.tabs.translator.title": "翻译设置",
+  "settings.tabs.translator.description": "管理输入翻译、选中文本翻译和截图翻译所使用的对话模型与系统全局快捷键。",
+  "settings.translator.prompt.title": "翻译提示词模板",
+  "settings.translator.prompt.description": "调用对话模型翻译时发送的系统提示词。必须包含 {text} 占位符，支持 {lang} 目标语言。",
+  "settings.translator.prompt.placeholder": "留空使用默认的专业翻译提示词...",
+  "settings.translator.prompt.reset": "恢复默认",
+  "settings.translator.prompt.isDefault": "当前使用默认提示词",
+  "settings.translator.prompt.isCustom": "已启用自定义提示词",
   "settings.chatModels.blockedTitle": "配置功能尚未开放",
   "settings.chatModels.blockedDescription":
     "在由 Rust 原生服务安全保存凭据并完成请求路由前，这里不会暴露配置表单，也不会显示无法路由的模型。",

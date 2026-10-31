@@ -1,0 +1,11 @@
+# Approved capture lifecycle design (Todo 21)
+
+Root cause: native show preceded frontend payload consumption/decoding; prewarmed mount consumed a take-once slot before publication. Fix the producer/consumer boundary rather than adding screenshot fallback.
+
+Native owns monotonic session ID and Preparing -> Selecting -> Translating -> terminal phases, retained frame, five-second preparation deadline. All native mutations serialize with session state; stale workers, acknowledgements, cancels and results are no-ops/errors. Subscribe before non-destructive read; publication emits a wakeup, not ownership. Frontend acknowledges only after image decode and committed interactive overlay paint. Only this acknowledgement may show capture window. Confirm transitions/hides before model invocation; failure cancels, never delivers error as translated text. Native Windows Escape polling does not register/unregister user shortcuts. Repeated screenshot hotkey cancels active session. Focus loss, close, destroy, timeout and native API failures release the overlay. Hidden prewarm remains supported.
+
+Discovery fallback: .gitnexus/run.cjs absent. Read fix-triage, architecture, hook and backend comment contracts; bounded symbol search traced capture.rs -> window.rs -> shortcuts.rs -> lib.rs and CaptureWindowApp -> ScreenshotOverlay. TranslatorWindowApp receives result event only; command model routing, selection, settings and capabilities are unchanged. Existing default capabilities cover events; no added permission required. Graph completeness remains unresolved (no GitNexus index), not low risk.
+
+Scenarios: cold/prewarm/reopen use subscribe/read; duplicate hotkey cancels; late capture/read/decode/result fenced; lost events/frontend hang bounded by native deadline; decode/IPC/capture failure cancels; Escape independent of JS on Windows; focus loss/close/destroy cancel; confirm hides before translation; multi-monitor physical bounds/negative coordinates retained. Main focus/minimized/tray are not activation prerequisites. Other platforms capture unsupported. Actual desktop/DPI/compositor testing deferred explicitly: no GUI/dev server/fullscreen launch authorized.
+
+Existing dirty translator work is the supplied implementation baseline; preserve unrelated edits and make surgical lib registration changes only.

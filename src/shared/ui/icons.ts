@@ -39,6 +39,7 @@ export {
   Image,
   Info,
   KeyRound,
+  Languages,
   Layers,
   Link2,
   LoaderCircle,

@@ -4,7 +4,9 @@
   "description": "Capability for the main window",
   "windows": [
     "main",
-    "desktop-pet"
+    "desktop-pet",
+    "translator",
+    "translator-capture"
   ],
   "permissions": [
     "core:default",

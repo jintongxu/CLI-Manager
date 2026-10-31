@@ -12,17 +12,47 @@ window.addEventListener("contextmenu", (e) => {
 
 async function bootstrap() {
   const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
-  if (getCurrentWindow().label === "btw-thread") {
+  const label = getCurrentWindow().label;
+  if (label === "translator" || label === "translator-capture" || label === "desktop-pet") {
+    document.documentElement.dataset.window = label;
+    document.documentElement.style.setProperty("background", "transparent", "important");
+    document.documentElement.style.setProperty("background-color", "transparent", "important");
+    document.body.style.setProperty("background", "transparent", "important");
+    document.body.style.setProperty("background-color", "transparent", "important");
+    const r = document.getElementById("root");
+    if (r) {
+      r.style.setProperty("background", "transparent", "important");
+      r.style.setProperty("background-color", "transparent", "important");
+    }
+  }
+  if (label === "btw-thread") {
     const { default: BtwWindowApp } = await import("./features/terminal/api/BtwWindowApp");
     root.render(<React.StrictMode><BtwWindowApp /></React.StrictMode>);
     return;
   }
-  const isDesktopPetWindow = getCurrentWindow().label === "desktop-pet";
-  if (isDesktopPetWindow) {
+  if (label === "desktop-pet") {
     const { default: DesktopPetApp } = await import("./features/desktop-pet/api/DesktopPetApp");
     root.render(
       <React.StrictMode>
         <DesktopPetApp />
+      </React.StrictMode>
+    );
+    return;
+  }
+  if (label === "translator") {
+    const { TranslatorWindowApp } = await import("./features/translator/api/TranslatorWindowApp");
+    root.render(
+      <React.StrictMode>
+        <TranslatorWindowApp />
+      </React.StrictMode>
+    );
+    return;
+  }
+  if (label === "translator-capture") {
+    const { CaptureWindowApp } = await import("./features/translator/api/CaptureWindowApp");
+    root.render(
+      <React.StrictMode>
+        <CaptureWindowApp />
       </React.StrictMode>
     );
     return;

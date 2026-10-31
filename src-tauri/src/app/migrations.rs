@@ -1417,5 +1417,11 @@ pub(crate) fn migrations() -> Vec<Migration> {
             ),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 57,
+            description: "create_local_translator_history",
+            sql: crate::translator::history::SCHEMA,
+            kind: MigrationKind::Up,
+        },
     ]
 }

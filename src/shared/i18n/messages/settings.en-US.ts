@@ -146,6 +146,17 @@ export const en: Record<keyof typeof zh, string> = {
   "settings.tabs.chatModels.title": "Chat model providers",
   "settings.tabs.chatModels.description":
     "Independent chat providers are separate from Native Providers.",
+  "settings.tabs.translator.label": "Translation",
+  "settings.tabs.translator.title": "Translation Settings",
+  "settings.tabs.translator.description":
+    "Configure the chat model and system-wide global shortcuts for input, selected-text, and screenshot translation.",
+  "settings.translator.prompt.title": "Translation Prompt Template",
+  "settings.translator.prompt.description":
+    "System prompt sent to the chat model during translation. Must include {text}, supports {lang}.",
+  "settings.translator.prompt.placeholder": "Leave empty to use the built-in professional translation prompt...",
+  "settings.translator.prompt.reset": "Reset to Default",
+  "settings.translator.prompt.isDefault": "Using default prompt",
+  "settings.translator.prompt.isCustom": "Custom prompt active",
   "settings.chatModels.blockedTitle": "Configuration is not available yet",
   "settings.chatModels.blockedDescription":
     "Provider credentials must be stored and routed by the native Rust service before this page can safely expose configuration. No unroutable models are shown.",

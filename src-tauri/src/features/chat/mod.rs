@@ -1,6 +1,6 @@
 pub(crate) mod commands;
 pub(crate) mod provider_catalog;
-mod repository;
+pub(crate) mod repository;
 pub(crate) mod runtime;
 mod stream;
 #[cfg(test)]

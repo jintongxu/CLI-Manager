@@ -3,6 +3,8 @@
 mod app;
 #[path = "features/chat/mod.rs"]
 pub(crate) mod chat;
+#[path = "features/translator/mod.rs"]
+pub(crate) mod translator;
 pub(crate) use app::migrations::{
     migrations, MIGRATION_ADD_CLI_ARGS_DESCRIPTION, MIGRATION_ADD_CLI_ARGS_SQL,
     MIGRATION_ADD_CLI_ARGS_VERSION, MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_DESCRIPTION,
@@ -384,6 +386,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             if commands::cc_connect::handle_single_instance_args(app, &args) {
                 return;
@@ -418,6 +421,10 @@ pub fn run() {
         .manage(commands::btw_window::BtwWindowState::default())
         .setup(move |app| {
             commands::btw_window::setup(app.handle());
+            // 全局热键在 Rust 侧注册，应用在后台时同样生效。
+            translator::shortcuts::register_default_hotkeys(app.handle());
+            // 预热翻译浮窗与框选窗口，消除首次唤出时的 WebView2 冷启动卡顿。
+            translator::window::prewarm_translator_windows(app.handle());
             if let Err(err) = crash_reporter::start_runtime() {
                 log::warn!("failed to start CLI-Manager crash runtime marker: {err}");
             }
@@ -604,6 +611,26 @@ pub fn run() {
             chat::commands::chat_generate,
             chat::commands::chat_cancel,
             chat::commands::chat_flush_drafts,
+            translator::commands::translator_list_models,
+            translator::commands::translator_resolve_target_lang,
+            translator::requests::translator_translate_text,
+            translator::requests::translator_invalidate,
+            translator::requests::translator_retry_image,
+            translator::lifecycle::translator_capture_failed,
+            translator::requests::translator_translate_image,
+            translator::capture::translator_capture_screen,
+            translator::lifecycle::translator_take_capture,
+            translator::lifecycle::translator_capture_begin,
+            translator::lifecycle::translator_capture_end,
+            translator::lifecycle::translator_capture_ready,
+            translator::lifecycle::translator_capture_confirm,
+            translator::window::translator_show,
+            translator::window::translator_hide,
+            translator::window::translator_resize,
+            translator::window::translator_take_opening,
+            translator::lifecycle::translator_update_thumbnail,
+            translator::window::translator_open_settings,
+            translator::shortcuts::translator_set_hotkeys,
             commands::agent_capabilities::agent_capabilities_inspect,
             commands::agent_capabilities::agent_capabilities_probe,
             commands::extensions::extensions_mcp_capabilities,

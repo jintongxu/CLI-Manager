@@ -21,6 +21,7 @@ import { resolveProjectPath } from "../../projects/api/groupPath";
 import { dispatchCurrentWorkAction } from "../../terminal/api/currentWorkEvents";
 import { useI18n } from "../../../shared/i18n/index";
 import { resolveAgentRuntimeKind } from "../../agents/api/agentCapabilities";
+import { invoke } from "@tauri-apps/api/core";
 
 export const useCommandPaletteStore = create<{
   isOpen: boolean;
@@ -140,6 +141,13 @@ export function CommandPalette() {
         void useHistoryStore.getState().openHistory();
         useHistoryStore.getState().triggerGlobalSearchFocus();
       },
+    });
+    result.push({
+      id: "action:open-translator",
+      label: t("translator.command.open"),
+      description: t("translator.command.openDesc"),
+      category: "操作",
+      action: () => void invoke("translator_show").catch(() => {}),
     });
 
     if (viewMode !== "compact" && activeSessionId) {

@@ -30,6 +30,8 @@ import { zh as syncZh } from "./messages/sync.zh-CN";
 import { en as syncEn } from "./messages/sync.en-US";
 import { zh as terminalZh } from "./messages/terminal.zh-CN";
 import { en as terminalEn } from "./messages/terminal.en-US";
+import { zh as translatorZh } from "./messages/translator.zh-CN";
+import { en as translatorEn } from "./messages/translator.en-US";
 
 export const zh = {
   ...chatZh,
@@ -48,6 +50,7 @@ export const zh = {
   ...sshZh,
   ...syncZh,
   ...terminalZh,
+  ...translatorZh,
 } as const;
 
 export const en: Record<keyof typeof zh, string> = {
@@ -67,4 +70,5 @@ export const en: Record<keyof typeof zh, string> = {
   ...sshEn,
   ...syncEn,
   ...terminalEn,
+  ...translatorEn,
 };

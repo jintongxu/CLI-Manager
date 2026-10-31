@@ -18,6 +18,7 @@ import {
   Terminal,
   Webhook,
   PanelsTopLeft,
+  Languages,
   type LucideIcon,
 } from "lucide-react";
 import "@mantine/core/styles.css";
@@ -38,6 +39,7 @@ import { StatuslineSettingsPage } from "../components/pages/StatuslineSettingsPa
 import { CommandSuggestionSettingsPage } from "../components/pages/CommandSuggestionSettingsPage";
 import { NativeProviderSettingsPage } from "../components/pages/NativeProviderSettingsPage";
 import { ChatModelSettingsPage } from "../components/pages/ChatModelSettingsPage";
+import { TranslatorSettingsPage } from "../components/pages/TranslatorSettingsPage";
 import { ModelPricingSettingsPage } from "../components/pages/ModelPricingSettingsPage";
 import { AboutSettingsPage } from "../components/pages/AboutSettingsPage";
 import { DesktopPetSettingsPage } from "../components/pages/DesktopPetSettingsPage";
@@ -60,6 +62,7 @@ export type SettingsTab =
   | "templates"
   | "native-providers"
   | "chat-models"
+  | "translator"
   | "model-pricing"
   | "cc-connect"
   | "ssh-hosts"
@@ -87,6 +90,7 @@ const SETTINGS_TAB_ORDER: SettingsTab[] = [
   "extensions",
   "model-pricing",
   "chat-models",
+  "translator",
   "cc-connect",
   "ssh-hosts",
   "sync",
@@ -164,6 +168,12 @@ const SETTINGS_TAB_CONFIG: Record<SettingsTab, SettingsTabConfig> = {
     title: "settings.tabs.chatModels.title",
     description: "settings.tabs.chatModels.description",
     icon: Sparkles,
+  },
+  translator: {
+    label: "settings.tabs.translator.label",
+    title: "settings.tabs.translator.title",
+    description: "settings.tabs.translator.description",
+    icon: Languages,
   },
   "model-pricing": {
     label: "settings.tabs.modelPricing.label",
@@ -335,6 +345,7 @@ export function SettingsModal({ open, onClose, onAfterClose, initialTab, onActiv
     if (activeTab === "templates") return <TemplateSettingsPage searchValue={searchValue} />;
     if (activeTab === "native-providers") return <NativeProviderSettingsPage searchValue={searchValue} />;
     if (activeTab === "chat-models") return <ChatModelSettingsPage />;
+    if (activeTab === "translator") return <TranslatorSettingsPage onNavigateTab={handleTabChange} />;
     if (activeTab === "model-pricing") return <ModelPricingSettingsPage searchValue={searchValue} />;
     if (activeTab === "cc-connect") return <CcConnectSettingsPage />;
     if (activeTab === "ssh-hosts") return <SshHostsSettingsPage searchValue={searchValue} onTerminalOpened={onClose} />;
