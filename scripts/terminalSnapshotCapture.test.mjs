@@ -98,7 +98,7 @@ test('session save retains whole objects; shell restore geometry only accompanie
   assert.match(sessionStore,/s\.set\("sessions", persistable\)/);
 });
 
-writeFileSync(join(dir,'manager.mjs'),`export const checkpoints=[];export let committed=7;export const setCommitted=n=>{committed=n;};export const terminalProcessManager={getCommittedSequence:()=>committed,async checkpoint(id,cols,rows,text,sequence){checkpoints.push({id,cols,rows,text,sequence});}};`);
+writeFileSync(join(dir,'manager.mjs'),`export const checkpoints=[];export let committed=7;export let hang=false;export const setCommitted=n=>{committed=n;};export const setHang=v=>{hang=v;};export const terminalProcessManager={getCommittedSequence:()=>committed,async checkpoint(id,cols,rows,text,sequence){checkpoints.push({id,cols,rows,text,sequence});if(hang)await new Promise(()=>{});}};`);
 await build({entryPoints:['src/shared/lib/terminalHistoricalParser.ts'],bundle:true,platform:'node',format:'esm',outfile:join(dir,'origin.mjs')});
 const origin=await import(pathToFileURL(join(dir,'origin.mjs')));
 await build({entryPoints:['src/features/terminal/lib/terminalSnapshotLifecycle.ts'],bundle:true,platform:'node',format:'esm',outfile:join(dir,'lifecycle.mjs'),plugins:[{name:'lifecycle-seams',setup(b){
@@ -292,4 +292,18 @@ test('direct capture rejects an unsafe committed VT baseline',async()=>{
  const a=terminal(10,8),owner=origin.installTerminalHistoricalParser(a.t);
  try {await write(a.t,'A\x1b[31');assert.throws(()=>capture.captureTerminalSnapshot(a.t,a.addon,true,1),/VT ground/);}
  finally{owner.dispose();a.t.dispose();}
+});
+
+test('exit flush writes the restore snapshot without waiting for a missing daemon checkpoint ack',async()=>{
+  const a=terminal(80,24);
+  const lifecycle=createTerminalSnapshotLifecycle('identity',a.t,a.addon);
+  try {
+    await write(a.t,'EXIT-SNAPSHOT');
+    manager.setHang(true);
+    const started=Date.now();
+    await persistence.flushTerminalSnapshotsNow();
+    assert.ok(Date.now()-started<2000,'forced flush must not block on the checkpoint ack timeout');
+    assert.ok(state.updates.at(-1).text.includes('EXIT-SNAPSHOT'));
+    assert.equal(manager.checkpoints.at(-1).id,'identity');
+  } finally {manager.setHang(false);lifecycle.dispose();a.t.dispose();}
 });

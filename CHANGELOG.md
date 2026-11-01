@@ -52,6 +52,10 @@
 
 - Added a separate **Chat model providers** settings surface. It is intentionally read-only until the native Rust provider database gains dedicated independent-chat storage and routing; no unroutable provider/model options are exposed.
 
+### TEMP — 退出保存耗时修复 / Faster exit save
+
+- 修复关闭应用时「正在保存恢复数据」耗时过长：退出强制落盘不再逐个等待终端检查点回执（缺失回执会按 15 秒请求超时并串行累加），改为发出后立即写入本地恢复快照；周期节流路径仍保留回执背压。/ Exit no longer blocks on per-session terminal checkpoint acknowledgements (each missing ack cost the 15s request timeout and serialised across sessions); the restore snapshot is written immediately while the throttled path keeps its backpressure.
+
 ### TEMP — 对话空间操作优化 / Chat space controls
 
 - 新对话未设置推理强度时默认「中」，明确选择「不指定」仍按会话保存；标题栏「项目 / 对话」改为轻量下划线导航，增加标题与切换器间距。/ New chats default to medium reasoning, explicit unspecified remains stored; the title-bar space switcher uses a lighter underline treatment.

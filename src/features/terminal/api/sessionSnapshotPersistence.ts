@@ -118,11 +118,19 @@ async function flushSnapshots(force: boolean): Promise<void> {
       if (sources.get(sessionId) !== source) continue;
       const capture = typeof serialized === "string" ? undefined : serialized;
       if (source.checkpoint) {
-        try {
-          await source.checkpoint(capture ? capture.checkpointText : serialized as string, capture);
-        } catch (err) {
-          source.dirty = true;
-          logError("Failed to upload terminal checkpoint", { sessionId, err });
+        const checkpoint = source.checkpoint(capture ? capture.checkpointText : serialized as string, capture);
+        if (force) {
+          // 退出不允许等待 daemon 回执：恢复权威副本是下面的本地快照，而等待缺失的
+          // checkpoint_accepted 每次要耗满 REQUEST_TIMEOUT_MS(15s) 并按会话串行累加，
+          // 直接决定了“正在保存恢复数据”的时长。帧已经同步发出，回执只是尽力确认。
+          void checkpoint.catch((err) => logError("Failed to upload terminal checkpoint", { sessionId, err }));
+        } else {
+          try {
+            await checkpoint;
+          } catch (err) {
+            source.dirty = true;
+            logError("Failed to upload terminal checkpoint", { sessionId, err });
+          }
         }
       }
       if (sources.get(sessionId) !== source) continue;
