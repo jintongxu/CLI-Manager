@@ -1552,6 +1552,9 @@ function App() {
       listen("app-exit-requested", async () => {
         await requestExitGuardedByRunningTasks("native");
       }),
+      listen("translator:open-settings", () => {
+        handleOpenSettings("translator");
+      }),
     ];
 
     return () => {

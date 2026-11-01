@@ -1,3 +1,4 @@
+import { DEFAULT_TRANSLATOR_GLOBAL_SHORTCUTS, migrateTranslatorGlobalShortcuts, syncTranslatorGlobalShortcutsToNative, type TranslatorGlobalShortcuts } from "./translatorSettings";
 import { createSettingsPersistence, type SettingsPersistence } from "./settingsPersistence";
 import { createWorktreeRootSaver, loadedWorktreeRoot } from "./worktreeRootPersistence";
 import { normalizeExitWithRunningTasksBehavior } from "./exitPolicy";
@@ -128,6 +129,7 @@ type LastSettingsTab =
   | "templates"
   | "native-providers"
   | "chat-models"
+  | "translator"
   | "model-pricing"
   | "cc-connect"
   | "ssh-hosts"
@@ -415,6 +417,8 @@ export interface Settings {
   uiFontSize: number;
   uiTextColor: string;
   lastSettingsTab: LastSettingsTab;
+  translatorModelKey: string;
+  translatorPrompt: string;
   statuslineEditorSource: StatuslineEditorSource;
   defaultShell: string;
   sidebarWidth: number;
@@ -439,6 +443,7 @@ export interface Settings {
   /** 退出检测是否把「已完成/失败」的 Claude/Codex 会话也算作可转入后台的任务（默认仅检测运行中）。 */
   backgroundIncludeFinishedTasks: boolean;
   keyboardShortcuts: KeyboardShortcutMap;
+  translatorGlobalShortcuts: TranslatorGlobalShortcuts;
   terminalNewlineShortcut: TerminalNewlineShortcut;
   osc52ClipboardEnabled: boolean;
   osc52ClipboardQueryEnabled: boolean;
@@ -584,6 +589,8 @@ const DEFAULTS: Settings = {
   uiFontSize: UI_FONT_SIZE_DEFAULT,
   uiTextColor: "",
   lastSettingsTab: "general",
+  translatorModelKey: "",
+  translatorPrompt: "",
   statuslineEditorSource: "claude",
   defaultShell: "powershell.exe",
   sidebarWidth: 248,
@@ -613,6 +620,7 @@ const DEFAULTS: Settings = {
   exitWithRunningTasksBehavior: "ask",
   backgroundIncludeFinishedTasks: false,
   keyboardShortcuts: DEFAULT_KEYBOARD_SHORTCUTS,
+  translatorGlobalShortcuts: { ...DEFAULT_TRANSLATOR_GLOBAL_SHORTCUTS },
   terminalNewlineShortcut: "Shift+Enter",
   osc52ClipboardEnabled: true,
   osc52ClipboardQueryEnabled: false,
@@ -795,6 +803,7 @@ const LAST_SETTINGS_TABS: readonly LastSettingsTab[] = [
   "templates",
   "native-providers",
   "chat-models",
+  "translator",
   "model-pricing",
   "cc-connect",
   "ssh-hosts",
@@ -1523,6 +1532,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         : DEFAULTS.terminalScrollbackCustomEnabled;
 
     entries.keyboardShortcuts = migrateKeyboardShortcuts(entries.keyboardShortcuts);
+    entries.translatorGlobalShortcuts = migrateTranslatorGlobalShortcuts(entries.translatorGlobalShortcuts);
 
     entries.collapsedGroupIds = Array.isArray(entries.collapsedGroupIds)
       ? entries.collapsedGroupIds.filter((id): id is string => typeof id === "string")
@@ -1937,6 +1947,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     set({ [key]: normalized } as Partial<SettingsStore>);
     if (key === "debugMode") {
       void applyDebugMode(value as boolean);
+    }
+    if (key === "translatorGlobalShortcuts") {
+      syncTranslatorGlobalShortcutsToNative(value as TranslatorGlobalShortcuts);
     }
   },
 

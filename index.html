@@ -10,7 +10,30 @@
       #root {
         background: #1a1b26;
       }
+      :root[data-window="translator"],
+      :root[data-window="translator"] body,
+      :root[data-window="translator"] #root,
+      :root[data-window="translator-capture"],
+      :root[data-window="translator-capture"] body,
+      :root[data-window="translator-capture"] #root,
+      :root[data-window="desktop-pet"],
+      :root[data-window="desktop-pet"] body,
+      :root[data-window="desktop-pet"] #root {
+        background-color: transparent !important;
+        background: transparent !important;
+      }
     </style>
+    <script>
+      (function() {
+        try {
+          var h = window.location.hash;
+          if (h === '#translator' || h === '#translator-capture' || h === '#desktop-pet') {
+            document.documentElement.dataset.window = h.substring(1);
+            document.documentElement.style.background = 'transparent';
+          }
+        } catch (_) {}
+      })();
+    </script>
     <title>CLI-Manager</title>
   </head>
 

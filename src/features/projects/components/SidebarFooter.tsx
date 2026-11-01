@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
-import { Settings } from "../../../shared/ui/icons";
+import { Languages, Settings } from "../../../shared/ui/icons";
 import { SyncStatusIndicator } from "./SyncStatusIndicator";
 import type { SettingsTab } from "../../settings/api/SettingsModal";
 import { getErrorMessage, getKimiHookErrorMessage, getPiHookErrorMessage } from "../../settings/api/hookErrors";
@@ -231,6 +231,19 @@ function HookStatusLight({ onOpenSettings }: { onOpenSettings: (tab?: SettingsTa
 
 export function SidebarFooter({ collapsed, onOpenSettings }: SidebarFooterProps) {
   const { t } = useI18n();
+  const translatorTitle = `${t("translator.title")} (${t("translator.shortcut.hint")})`;
+
+  const translatorButton = (
+    <button
+      type="button"
+      onClick={() => void invoke("translator_show").catch(() => {})}
+      className="ui-focus-ring ui-icon-action ui-sidebar-action-translator shrink-0"
+      title={translatorTitle}
+      aria-label={translatorTitle}
+    >
+      <Languages size={14} strokeWidth={1.5} />
+    </button>
+  );
 
   const settingsButton = (
     <button
@@ -249,6 +262,7 @@ export function SidebarFooter({ collapsed, onOpenSettings }: SidebarFooterProps)
         <div className="flex flex-col items-center gap-1.5">
           <SyncStatusIndicator collapsed onOpenSettings={onOpenSettings} />
           <HookStatusLight onOpenSettings={onOpenSettings} />
+          {translatorButton}
           {settingsButton}
         </div>
       </div>
@@ -262,6 +276,7 @@ export function SidebarFooter({ collapsed, onOpenSettings }: SidebarFooterProps)
           <SyncStatusIndicator onOpenSettings={onOpenSettings} />
         </div>
         <HookStatusLight onOpenSettings={onOpenSettings} />
+        {translatorButton}
         {settingsButton}
       </div>
     </div>
