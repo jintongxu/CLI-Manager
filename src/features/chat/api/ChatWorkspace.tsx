@@ -8,10 +8,15 @@ import {
   Check,
   ChevronDown,
   FileText,
+  List,
   MessageSquare,
   Paperclip,
+  Pin,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   RefreshCw,
+  Search,
   Sparkles,
   Square,
   X,
@@ -21,6 +26,9 @@ import { useI18n, type TranslationKey } from "../../../shared/i18n/index";
 import { chatController } from "./lifecycle";
 import type { ChatController } from "../lib/chatController";
 import { activateChatLink, chatTime, copyChatText, isFollowing, shouldSubmit } from "../lib/interactions";
+import { applyPinnedOrder, applyStoredOrder, moveIndexWithinOrder, moveWithinOrder, persistOrder, persistPinnedIds, readPinnedIds, readStoredOrder } from "../lib/conversationOrder";
+import { REASONING_LEVELS, persistReasoning, readReasoning } from "../lib/reasoning";
+import type { ReasoningEffort } from "../lib/types";
 
 interface CatalogModel {
   modelId: string;
@@ -67,6 +75,11 @@ export function ChatWorkspace({
   const [modelInput, setModelInput] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
   const [following, setFollowing] = useState(true);
+  const [historyVisible, setHistoryVisible] = useState(true);
+  const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
+  const [outlineOpen, setOutlineOpen] = useState(false);
+  const [outlineHovered, setOutlineHovered] = useState(false);
+  const outlineDismissed = useRef(false);
   const [catalogProviders, setCatalogProviders] = useState<CatalogProvider[]>([]);
 
   // Kivio custom dropdown & context menu states
@@ -78,13 +91,21 @@ export function ChatWorkspace({
     convId: string;
   }>({ visible: false, x: 0, y: 0, convId: "" });
 
-  // Drag and drop sorting state
-  const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [dragOverId, setDragOverId] = useState<string | null>(null);
-  const [orderOverride, setOrderOverride] = useState<string[] | null>(null);
+  // Drag and drop sorting state (live displacement preview)
+  const [drag, setDrag] = useState<{ id: string; from: number; to: number; offset: number; height: number } | null>(null);
+  const [orderOverride, setOrderOverride] = useState<string[] | null>(() => {
+    const stored = readStoredOrder();
+    return stored.length ? stored : null;
+  });
+  const [pinnedIds, setPinnedIds] = useState<string[]>(readPinnedIds);
 
   // File & image attachment states
   const [attachments, setAttachments] = useState<AttachedFile[]>([]);
+  const [preview, setPreview] = useState<{ src: string; name: string } | null>(null);
+  const [reasoning, setReasoning] = useState<ReasoningEffort>("medium");
+  const [reasoningMenuOpen, setReasoningMenuOpen] = useState(false);
+  const reasoningMenuRef = useRef<HTMLDivElement>(null);
+  const reasoningButtonRef = useRef<HTMLButtonElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const composing = useRef(false);
@@ -92,7 +113,20 @@ export function ChatWorkspace({
   const follow = useRef(true);
   const modelMenuRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    if (!preview) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPreview(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [preview]);
+
   const selected = state.selected;
+  useEffect(() => {
+    setReasoning(selected ? readReasoning(selected) : "medium");
+    setReasoningMenuOpen(false);
+  }, [selected]);
   const detail = selected ? state.details[selected] : undefined;
   const c = detail?.conversation;
   const running = !!selected && state.running.includes(selected);
@@ -119,6 +153,9 @@ export function ChatWorkspace({
     const handleOutsideClick = (e: MouseEvent) => {
       if (modelMenuRef.current && !modelMenuRef.current.contains(e.target as Node)) {
         setModelMenuOpen(false);
+      }
+      if (reasoningMenuRef.current && !reasoningMenuRef.current.contains(e.target as Node)) {
+        setReasoningMenuOpen(false);
       }
       setContextMenu((curr) => (curr.visible ? { ...curr, visible: false } : curr));
     };
@@ -177,27 +214,43 @@ export function ChatWorkspace({
   }, [c?.id, c?.model, chatModelOptions, controller]);
 
   // Reorder conversations if user has dragged
-  const sortedConversations = useMemo(() => {
-    if (!orderOverride) return state.conversations;
-    const map = new Map(state.conversations.map((item) => [item.id, item]));
-    const result: typeof state.conversations = [];
-    for (const id of orderOverride) {
-      const item = map.get(id);
-      if (item) {
-        result.push(item);
-        map.delete(id);
-      }
-    }
-    // Append any newly arrived conversations
-    for (const remaining of map.values()) {
-      result.unshift(remaining);
-    }
-    return result;
-  }, [state.conversations, orderOverride]);
+  const sortedConversations = useMemo(
+    () => applyPinnedOrder(applyStoredOrder(state.conversations, orderOverride), pinnedIds),
+    [state.conversations, orderOverride, pinnedIds]
+  );
 
   const answers = detail?.messages.filter((m) => m.role === "assistant") ?? [];
   const last = answers[answers.length - 1];
   const retryable = !!last && ["failed", "stopped", "interrupted"].includes(last.status);
+  const questions = detail?.messages.filter((message) => message.role === "user") ?? [];
+
+  const updateActiveQuestion = () => {
+    const container = scroll.current;
+    if (!container) return;
+    const top = container.getBoundingClientRect().top + 40;
+    let current: string | null = null;
+    for (const node of container.querySelectorAll<HTMLElement>("[data-chat-question-id]")) {
+      if (!current || node.getBoundingClientRect().top <= top) current = node.dataset.chatQuestionId ?? null;
+      else break;
+    }
+    setActiveQuestionId(current);
+  };
+
+  const jumpToQuestion = (id: string) => {
+    const container = scroll.current;
+    if (!container) return;
+    const node = Array.from(container.querySelectorAll<HTMLElement>("[data-chat-question-id]"))
+      .find((item) => item.dataset.chatQuestionId === id);
+    if (!node) return;
+    follow.current = false;
+    setFollowing(false);
+    container.scrollTop += node.getBoundingClientRect().top - container.getBoundingClientRect().top - 12;
+    setActiveQuestionId(id);
+    outlineDismissed.current = true;
+    setOutlineOpen(false);
+    setOutlineHovered(false);
+    node.focus({ preventScroll: true });
+  };
 
   const errorLabel = (code: string | null) => {
     const key = `chat.error.${code}` as TranslationKey;
@@ -217,6 +270,10 @@ export function ChatWorkspace({
     setModelInput(c?.model ?? "");
     setDialog(null);
     setCopied(null);
+    setActiveQuestionId(null);
+    setOutlineOpen(false);
+    setOutlineHovered(false);
+    outlineDismissed.current = false;
     follow.current = true;
     setFollowing(true);
   }, [selected, c?.model]);
@@ -278,36 +335,141 @@ export function ChatWorkspace({
     }
   };
 
-  // Drag-and-drop sort handlers
-  const handleDragStart = (e: React.DragEvent, id: string) => {
-    setDraggedId(id);
-    e.dataTransfer.setData("text/plain", id);
-    e.dataTransfer.effectAllowed = "move";
+  // Reordering: shared by the pointer drag (real interaction) and the native
+  // drag props kept for deterministic tests. Native HTML5 drag on <button> rows
+  // does not start reliably, so pointer movement is the primary path.
+  const listRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ id: string; startY: number; active: boolean } | null>(null);
+  const suppressClickRef = useRef(false);
+
+  const togglePin = (id: string) => {
+    const next = pinnedIds.includes(id) ? pinnedIds.filter((item) => item !== id) : [...pinnedIds, id];
+    setPinnedIds(next);
+    persistPinnedIds(next);
+    setContextMenu((current) => ({ ...current, visible: false }));
   };
 
-  const handleDragOver = (e: React.DragEvent, id: string) => {
+  const commitOrder = (next: string[] | null) => {
+    if (!next) return;
+    setOrderOverride(next);
+    persistOrder(next);
+  };
+
+  const applyReorder = (sourceId: string, targetId: string) => {
+    if (pinnedIds.includes(sourceId) !== pinnedIds.includes(targetId)) return;
+    commitOrder(
+      moveWithinOrder(
+        sortedConversations.map((item) => item.id),
+        sourceId,
+        targetId
+      )
+    );
+  };
+
+  /** `from`/`to` are indices in the current visual order. */
+  const applyIndexReorder = (sourceId: string, from: number, to: number) => {
+    const order = sortedConversations.map((item) => item.id);
+    if (pinnedIds.includes(sourceId) !== pinnedIds.includes(order[to] ?? "")) return;
+    if (order[from] !== sourceId) return applyReorder(sourceId, order[to] ?? "");
+    commitOrder(moveIndexWithinOrder(order, from, to));
+  };
+  const applyReorderRef = useRef(applyReorder);
+  applyReorderRef.current = applyReorder;
+  const applyIndexReorderRef = useRef(applyIndexReorder);
+  applyIndexReorderRef.current = applyIndexReorder;
+  const pinnedIdsRef = useRef(pinnedIds);
+  pinnedIdsRef.current = pinnedIds;
+  const dragPreviewRef = useRef(drag);
+  dragPreviewRef.current = drag;
+
+  // Live displacement: rows between the source and the projected slot slide aside
+  // while the dragged row follows the pointer, so the drop result is previewed.
+  useEffect(() => {
+    const rows = (): HTMLElement[] =>
+      Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-chat-item]") ?? []);
+
+    const project = (id: string, clientY: number) => {
+      const nodes = rows();
+      const from = nodes.findIndex((node) => node.dataset.chatItem === id);
+      if (from < 0) return null;
+      const height = nodes[from].getBoundingClientRect().height + 4;
+      // Insertion slot in the list without the dragged row: the count of rows
+      // whose midpoint sits above the pointer.
+      let to = 0;
+      for (let i = 0; i < nodes.length; i++) {
+        if (i === from) continue;
+        const rect = nodes[i].getBoundingClientRect();
+        if (clientY > rect.top + rect.height / 2) to++;
+      }
+      return { from, to, height };
+    };
+
+    const onMove = (event: PointerEvent) => {
+      const pending = dragRef.current;
+      if (!pending) return;
+      if (!pending.active) {
+        if (Math.abs(event.clientY - pending.startY) < 5) return;
+        pending.active = true;
+      }
+      const projected = project(pending.id, event.clientY);
+      if (!projected) return;
+      const ids = rows().map((node) => node.dataset.chatItem);
+      const pinned = pinnedIdsRef.current;
+      if (pinned.includes(pending.id) !== pinned.includes(ids[projected.to] ?? "")) return;
+      setDrag({ id: pending.id, ...projected, offset: event.clientY - pending.startY });
+    };
+
+    const onUp = () => {
+      const pending = dragRef.current;
+      const preview = dragPreviewRef.current;
+      dragRef.current = null;
+      dragPreviewRef.current = null;
+      setDrag(null);
+      if (!pending?.active) return;
+      // The row was being reordered, not clicked.
+      suppressClickRef.current = true;
+      if (preview && preview.from !== preview.to) applyIndexReorderRef.current(preview.id, preview.from, preview.to);
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, []);
+
+  const handleItemPointerDown = (event: React.PointerEvent, id: string) => {
+    if (event.button !== 0) return;
+    dragRef.current = { id, startY: event.clientY, active: false };
+  };
+
+  // Native drag props retained for deterministic tests.
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    e.dataTransfer?.setData("text/plain", id);
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    if (draggedId !== id) {
-      setDragOverId(id);
-    }
   };
 
   const handleDrop = (e: React.DragEvent, targetId: string) => {
     e.preventDefault();
-    setDragOverId(null);
-    const sourceId = draggedId || e.dataTransfer.getData("text/plain");
+    setDrag(null);
+    const sourceId = e.dataTransfer?.getData("text/plain");
     if (!sourceId || sourceId === targetId) return;
+    applyReorder(sourceId, targetId);
+  };
 
-    const currentOrder = sortedConversations.map((item) => item.id);
-    const fromIndex = currentOrder.indexOf(sourceId);
-    const toIndex = currentOrder.indexOf(targetId);
-    if (fromIndex < 0 || toIndex < 0) return;
-
-    const newOrder = [...currentOrder];
-    const [moved] = newOrder.splice(fromIndex, 1);
-    newOrder.splice(toIndex, 0, moved);
-    setOrderOverride(newOrder);
-    setDraggedId(null);
+  /** Displacement of a row while a drag is in flight. */
+  const rowShift = (index: number) => {
+    if (!drag || index === drag.from) return 0;
+    if (drag.from < drag.to && index > drag.from && index <= drag.to) return -drag.height;
+    if (drag.from > drag.to && index >= drag.to && index < drag.from) return drag.height;
+    return 0;
   };
 
   // Right-click context menu handler on conversation item
@@ -418,7 +580,7 @@ export function ChatWorkspace({
     act(async () => {
       controller.setDraft(c.id, finalPrompt);
       setAttachments([]);
-      await controller.generate(c.id);
+      await controller.generate(c.id, false, reasoning);
     });
   };
 
@@ -454,39 +616,63 @@ export function ChatWorkspace({
       </button>
 
       {/* History Sidebar */}
-      <aside id="chat-history" className="chat-history" aria-label={t("chat.title")}>
-        <button
-          className="chat-new-btn"
-          onClick={() => act(() => controller.create())}
-          disabled={!state.ready || state.suspended}
-        >
-          <Plus size={16} />
-          <span>{t("chat.new")}</span>
-        </button>
+      <aside id="chat-history" className={`chat-history ${historyVisible ? "chat-history-open" : "chat-history-collapsed"}`} aria-label={t("chat.title")} aria-hidden={!historyVisible} inert={!historyVisible}>
+        <div className="chat-history-head">
+          <button
+            className="chat-new-btn"
+            onClick={() => act(() => controller.create())}
+            disabled={!state.ready || state.suspended}
+          >
+            <Plus size={15} strokeWidth={1.8} />
+            <span>{t("chat.new")}</span>
+          </button>
+          <label className="chat-history-search-field">
+            <Search size={13} strokeWidth={1.7} aria-hidden="true" />
+            <input
+              type="search"
+              className="chat-history-search"
+              aria-label={t("chat.search")}
+              placeholder={t("chat.search")}
+              value={state.search}
+              onChange={(event) => act(() => controller.loadHistory(event.target.value))}
+            />
+          </label>
+        </div>
 
-        <input
-          type="search"
-          className="chat-history-search"
-          aria-label={t("chat.search")}
-          placeholder={t("chat.search")}
-          value={state.search}
-          onChange={(event) => act(() => controller.loadHistory(event.target.value))}
-        />
-
-        <div className="chat-history-list">
-          {sortedConversations.map((item) => (
+        <div className="chat-history-list" ref={listRef}>
+          {sortedConversations.map((item, index) => (
             <button
               key={item.id}
-              className={`chat-history-item ${dragOverId === item.id ? "chat-drag-over" : ""}`}
+              data-chat-item={item.id}
+              className={`chat-history-item ${drag?.id === item.id ? "chat-dragging" : ""}`}
+              style={
+                drag
+                  ? {
+                      transform: `translateY(${drag.id === item.id ? drag.offset : rowShift(index)}px)`,
+                      transition: drag.id === item.id ? "none" : "transform 0.16s ease",
+                    }
+                  : undefined
+              }
               aria-current={item.id === selected ? "page" : undefined}
-              draggable
+              onPointerDown={(e) => handleItemPointerDown(e, item.id)}
+              draggable={false}
               onDragStart={(e) => handleDragStart(e, item.id)}
-              onDragOver={(e) => handleDragOver(e, item.id)}
+              onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, item.id)}
-              onClick={() => act(() => controller.select(item.id))}
+              onDragEnd={() => setDrag(null)}
+              onClick={() => {
+                if (suppressClickRef.current) {
+                  suppressClickRef.current = false;
+                  return;
+                }
+                act(() => controller.select(item.id));
+              }}
               onContextMenu={(e) => handleContextMenu(e, item.id)}
             >
-              <span>{item.title || t("chat.untitled")}</span>
+              <span className="chat-history-item-title">
+                {pinnedIds.includes(item.id) && <Pin size={12} className="chat-pinned-icon" aria-label={t("chat.pinned")} />}
+                <span>{item.title || t("chat.untitled")}</span>
+              </span>
               <time dateTime={new Date(item.updatedAt).toISOString()}>
                 {chatTime(item.updatedAt, language)}
               </time>
@@ -508,6 +694,13 @@ export function ChatWorkspace({
           style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
           onClick={(e) => e.stopPropagation()}
         >
+          <button
+            className="chat-context-menu-item"
+            onClick={() => togglePin(contextMenu.convId)}
+          >
+            <Pin size={14} aria-hidden="true" />
+            {t(pinnedIds.includes(contextMenu.convId) ? "chat.unpin" : "chat.pin")}
+          </button>
           <button
             className="chat-context-menu-item"
             onClick={() => {
@@ -545,6 +738,17 @@ export function ChatWorkspace({
 
       {/* Main Chat Column */}
       <div className="chat-main">
+        <button
+          type="button"
+          className={`chat-history-control ${historyVisible ? "" : "chat-history-control-collapsed"}`}
+          aria-label={t(historyVisible ? "chat.hideHistory" : "chat.showHistory")}
+          title={t(historyVisible ? "chat.hideHistory" : "chat.showHistory")}
+          aria-controls="chat-history"
+          aria-expanded={historyVisible}
+          onClick={() => setHistoryVisible((visible) => !visible)}
+        >
+          {historyVisible ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+        </button>
         {state.error && (
           <div role="alert" className="chat-alert">
             {errorLabel(state.error)}
@@ -724,13 +928,15 @@ export function ChatWorkspace({
             {foreign && <p role="status">{t("chat.readonly")}</p>}
             {state.suspended && <p role="status">{t("chat.suspended")}</p>}
 
-            {/* Message Stream */}
+            {/* Message Stream and current-conversation question outline */}
+            <div className="chat-reading-layout">
             <div
               className="chat-messages"
               ref={scroll}
               onScroll={(event) => {
                 follow.current = isFollowing(event.currentTarget);
                 setFollowing(follow.current);
+                updateActiveQuestion();
               }}
             >
               {!detail.messages.length && (
@@ -747,10 +953,14 @@ export function ChatWorkspace({
                 </div>
               )}
 
-              {detail.messages.map((message) => (
+              {detail.messages.map((message) => {
+                const isLast = detail.messages[detail.messages.length - 1]?.id === message.id;
+                return (
                 <article
                   key={message.id}
                   className={`chat-message chat-message-${message.role}`}
+                  data-chat-question-id={message.role === "user" ? message.id : undefined}
+                  tabIndex={message.role === "user" ? -1 : undefined}
                 >
                   <header>
                     <strong>
@@ -759,16 +969,6 @@ export function ChatWorkspace({
                     <time dateTime={new Date(message.createdAt).toISOString()}>
                       {chatTime(message.createdAt, language)}
                     </time>
-                    <button
-                      onClick={() =>
-                        act(async () => {
-                          await copyChatText(message.content, writeText);
-                          setCopied(message.id);
-                        })
-                      }
-                    >
-                      {t(copied === message.id ? "chat.copied" : "chat.copy")}
-                    </button>
                   </header>
 
                   {message.role === "assistant" ? (
@@ -781,19 +981,106 @@ export function ChatWorkspace({
                       }
                     />
                   ) : (
-                    <p className="chat-user-text">{message.content}</p>
+                    <div className="chat-user-bubble">
+                      <p className="chat-user-text">{message.content}</p>
+                    </div>
                   )}
 
-                  {message.role === "assistant" && (
-                    <footer>
-                      {t(`chat.${message.status}` as TranslationKey)}
-                      {message.errorCode && (
-                        <span role="alert">{errorLabel(message.errorCode)}</span>
-                      )}
-                    </footer>
-                  )}
+                  <div className="chat-message-actions">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        act(async () => {
+                          await copyChatText(message.content, writeText);
+                          setCopied(message.id);
+                        })
+                      }
+                    >
+                      {t(copied === message.id ? "chat.copied" : "chat.copy")}
+                    </button>
+                    {message.role === "assistant" && isLast && retryable && !running && (
+                      <button
+                        type="button"
+                        disabled={frozen || busy || !c.model?.trim() || !!state.unsaved[c.id]}
+                        onClick={() => act(() => controller.generate(c.id, true, reasoning))}
+                      >
+                        {t("chat.retry")}
+                      </button>
+                    )}
+                  </div>
+
+                  {message.role === "assistant" &&
+                    (message.status !== "completed" || message.errorCode) && (
+                      <footer>
+                        {message.status !== "completed" &&
+                          t(`chat.${message.status}` as TranslationKey)}
+                        {message.errorCode && (
+                          <span role="alert">{errorLabel(message.errorCode)}</span>
+                        )}
+                      </footer>
+                    )}
                 </article>
-              ))}
+                );
+              })}
+            </div>
+            {questions.length > 0 && (
+              <div
+                className={`chat-outline-rail ${outlineOpen || outlineHovered ? "chat-outline-rail-open" : ""}`}
+                onMouseEnter={() => {
+                  if (!outlineDismissed.current) setOutlineHovered(true);
+                }}
+                onMouseLeave={() => {
+                  outlineDismissed.current = false;
+                  setOutlineHovered(false);
+                }}
+                onFocus={() => {
+                  if (!outlineDismissed.current) setOutlineHovered(true);
+                }}
+                onBlur={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget)) {
+                    outlineDismissed.current = false;
+                    setOutlineHovered(false);
+                  }
+                }}
+              >
+                <button
+                  type="button"
+                  className="chat-outline-toggle"
+                  aria-label={t("chat.questionOutline")}
+                  title={t("chat.questionOutline")}
+                  aria-expanded={outlineOpen || outlineHovered}
+                  aria-controls="chat-question-outline"
+                  onClick={() => setOutlineOpen((open) => !open)}
+                >
+                  <List size={15} aria-hidden="true" />
+                </button>
+                <nav
+                  id="chat-question-outline"
+                  className="chat-question-outline"
+                  aria-label={t("chat.questionOutline")}
+                >
+                  <div className="chat-outline-heading">{t("chat.questionOutline")}</div>
+                  <ol>
+                    {questions.map((message, index) => {
+                      const label = message.content.split(/\r?\n/).find((line) => line.trim())?.trim() || t("chat.untitledQuestion");
+                      return (
+                        <li key={message.id}>
+                          <button
+                            type="button"
+                            title={message.content}
+                            aria-current={activeQuestionId === message.id ? "location" : undefined}
+                            onClick={() => jumpToQuestion(message.id)}
+                          >
+                            <span className="chat-outline-number">{index + 1}</span>
+                            <span className="chat-outline-label">{label}</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </nav>
+              </div>
+            )}
             </div>
 
             {!following && (
@@ -834,7 +1121,15 @@ export function ChatWorkspace({
                       <div key={att.id}>
                         {att.type === "image" && att.dataUrl ? (
                           <div className="chat-attachment-image-preview">
-                            <img src={att.dataUrl} alt={att.name} />
+                            <button
+                              type="button"
+                              className="chat-attachment-thumb"
+                              title={t("chat.imagePreview")}
+                              aria-label={t("chat.imagePreview")}
+                              onClick={() => setPreview({ src: att.dataUrl!, name: att.name })}
+                            >
+                              <img src={att.dataUrl} alt={att.name} />
+                            </button>
                             <button
                               type="button"
                               className="chat-attachment-remove"
@@ -924,6 +1219,69 @@ export function ChatWorkspace({
                       <span>{c.model || t("chat.noModelsConfigured")}</span>
                     </span>
 
+                    <div className="chat-reasoning-field" ref={reasoningMenuRef}>
+                      <button
+                        ref={reasoningButtonRef}
+                        type="button"
+                        className="chat-reasoning-trigger"
+                        aria-label={`${t("chat.reasoning")}: ${t(`chat.reasoning.${reasoning}` as TranslationKey)}`}
+                        aria-haspopup="menu"
+                        aria-expanded={reasoningMenuOpen}
+                        disabled={frozen}
+                        onClick={() => setReasoningMenuOpen((open) => !open)}
+                        onKeyDown={(event) => {
+                          if (event.key === "ArrowDown" && !reasoningMenuOpen) {
+                            event.preventDefault();
+                            setReasoningMenuOpen(true);
+                          }
+                        }}
+                      >
+                        <Sparkles size={13} aria-hidden="true" />
+                        <span className="chat-reasoning-label">{t("chat.reasoning")}</span>
+                        <span className="chat-reasoning-value">{t(`chat.reasoning.${reasoning}` as TranslationKey)}</span>
+                        <ChevronDown size={12} aria-hidden="true" />
+                      </button>
+                      {reasoningMenuOpen && (
+                        <div
+                          className="chat-reasoning-menu"
+                          role="menu"
+                          aria-label={t("chat.reasoning")}
+                          onKeyDown={(event) => {
+                            if (event.key === "Escape") {
+                              event.preventDefault();
+                              setReasoningMenuOpen(false);
+                              reasoningButtonRef.current?.focus();
+                            }
+                            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                              event.preventDefault();
+                              const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button"));
+                              const index = items.indexOf(document.activeElement as HTMLButtonElement);
+                              items[(index + (event.key === "ArrowDown" ? 1 : items.length - 1)) % items.length]?.focus();
+                            }
+                          }}
+                        >
+                          {REASONING_LEVELS.map((level) => (
+                            <button
+                              key={level}
+                              type="button"
+                              role="menuitemradio"
+                              aria-checked={reasoning === level}
+                              className="chat-reasoning-option"
+                              onClick={() => {
+                                setReasoning(level);
+                                if (selected) persistReasoning(selected, level);
+                                setReasoningMenuOpen(false);
+                                reasoningButtonRef.current?.focus();
+                              }}
+                            >
+                              <span>{t(`chat.reasoning.${level}` as TranslationKey)}</span>
+                              {reasoning === level && <Check size={14} aria-hidden="true" />}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
                     {/* Silent typing: draftPending / saving are hidden per user request */}
                     {state.draftStatus[c.id] === "failed" && (
                       <span role="alert">{t("chat.unsaved")}</span>
@@ -948,7 +1306,7 @@ export function ChatWorkspace({
                             type="button"
                             className="chat-icon-btn"
                             disabled={frozen || busy || !c.model?.trim() || !!state.unsaved[c.id]}
-                            onClick={() => act(() => controller.generate(c.id, true))}
+                            onClick={() => act(() => controller.generate(c.id, true, reasoning))}
                             title={t("chat.retry")}
                           >
                             <RefreshCw size={14} />
@@ -973,6 +1331,31 @@ export function ChatWorkspace({
                 </div>
               </div>
             </form>
+
+            {preview && (
+              <div
+                className="chat-image-lightbox"
+                role="dialog"
+                aria-modal="true"
+                aria-label={t("chat.imagePreview")}
+                onClick={() => setPreview(null)}
+              >
+                <img
+                  src={preview.src}
+                  alt={preview.name}
+                  onClick={(event) => event.stopPropagation()}
+                />
+                <button
+                  type="button"
+                  className="chat-image-lightbox-close"
+                  aria-label={t("chat.closePreview")}
+                  title={t("chat.closePreview")}
+                  onClick={() => setPreview(null)}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            )}
 
             {/* Rename / Delete Dialog */}
             {dialog && (

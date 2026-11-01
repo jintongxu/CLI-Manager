@@ -146,7 +146,14 @@ impl Runtime {
         let receipt = answer.clone();
         tokio::spawn(async move {
             self.drive(
-                repo, answer, history, resolved, client, i.model, cancel, channel,
+                repo,
+                answer,
+                history,
+                resolved,
+                client,
+                stream::Request { model: i.model, reasoning: i.reasoning },
+                cancel,
+                channel,
             )
             .await;
             self.release(&i.request_id).await;
@@ -160,7 +167,7 @@ impl Runtime {
         history: Vec<Message>,
         resolved: chat_runtime::Runtime,
         client: reqwest::Client,
-        model: String,
+        request: stream::Request,
         mut cancel: watch::Receiver<bool>,
         channel: Channel<Event>,
     ) {
@@ -168,7 +175,7 @@ impl Runtime {
         let network = tokio::spawn(stream::run(
             client,
             resolved,
-            model,
+            request,
             history,
             cancel.clone(),
             tx,
@@ -339,6 +346,7 @@ mod tests {
             model: "mock".into(),
             text: Some("test".into()),
             retry: false,
+            reasoning: None,
         }
     }
     #[tokio::test]
@@ -414,7 +422,7 @@ mod tests {
                     model: None,
                 },
                 reqwest::Client::new(),
-                "mock".into(),
+                stream::Request { model: "mock".into(), reasoning: None },
                 cancel,
                 Channel::new(|_| Ok(())),
             )
@@ -470,7 +478,7 @@ mod tests {
                 h,
                 runtime,
                 reqwest::Client::builder().no_proxy().build().unwrap(),
-                "mock".into(),
+                stream::Request { model: "mock".into(), reasoning: None },
                 cancel,
                 channel,
             )
@@ -528,7 +536,7 @@ mod tests {
             h,
             runtime,
             reqwest::Client::new(),
-            "mock".into(),
+            stream::Request { model: "mock".into(), reasoning: None },
             cancel,
             Channel::new(|_| Ok(())),
         )

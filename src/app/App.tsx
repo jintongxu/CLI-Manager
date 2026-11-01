@@ -8,7 +8,6 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Sidebar } from "../features/projects/index";
 import { TerminalTabs } from "../features/terminal/index";
 import { AppWorkspace } from "./components/AppWorkspace";
-import { PrimarySpaceNav } from "./components/PrimarySpaceNav";
 import { usePrimarySpaceStore, showProjectSpace } from "../features/workspace/api/primarySpaceState";
 import { WorkspaceLayoutShell } from "../features/workspace/api/WorkspaceLayoutShell";
 import { ProjectFileRefreshController } from "../features/files/api/ProjectFileRefreshController";
@@ -1752,8 +1751,9 @@ function App() {
         {t("app.skipToMain")}
       </a>
       <WorkspaceLayoutShell>
-        {(!workspaceVisible || !terminalFullscreen || viewMode === "compact") && <WindowTitleBar />}
-        <PrimarySpaceNav space={space} onChange={setSpace} onOpenSettings={() => handleOpenSettings()} />
+        {(!workspaceVisible || !terminalFullscreen || viewMode === "compact") && (
+          <WindowTitleBar space={space} onChangeSpace={setSpace} onOpenSettings={() => handleOpenSettings()} />
+        )}
         <AppWorkspace space={space}>
           <div className="ui-workspace-main-layout flex min-h-0 h-full flex-1" data-project-sidebar-side={projectSidebarSide}>
             {(!terminalFullscreen || viewMode === "compact") && (

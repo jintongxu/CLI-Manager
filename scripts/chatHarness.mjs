@@ -15,6 +15,7 @@ export function load(path, mocks = {}, globals = {}) {
 const types = load('src/features/chat/lib/types.ts');
 export const { ChatController } = load('src/features/chat/lib/chatController.ts', { './types': types });
 export const interactions = load('src/features/chat/lib/interactions.ts');
+export const conversationOrder = load('src/features/chat/lib/conversationOrder.ts');
 export const tick = async () => { for (let n = 0; n < 80; n++) await Promise.resolve(); };
 export const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
 export function fixture(count = 2) {
@@ -98,13 +99,24 @@ export function hookHarness(controller) {
   const slots = [], effects = []; let index = 0;
   const react = {
     useSyncExternalStore: (_subscribe, get) => get(),
-    useState(initial) { const key = index++; if (!(key in slots)) slots[key] = initial; return [slots[key], value => { slots[key] = value; }]; },
+    useState(initial) {
+      const key = index++;
+      if (!(key in slots)) slots[key] = typeof initial === 'function' ? initial() : initial;
+      return [slots[key], value => { slots[key] = typeof value === 'function' ? value(slots[key]) : value; }];
+    },
     useRef(initial) { const key = index++; return slots[key] ?? (slots[key] = { current: initial }); },
     useMemo(fn) { return fn(); },
     useEffect(fn, deps) {
       const key = index++, old = slots[key];
       if (!old || deps.some((d, n) => d !== old.deps[n])) effects.push(() => { old?.cleanup?.(); slots[key] = { deps, cleanup: fn() }; });
     },
+  };
+  const store = new Map();
+  const localStorageShim = {
+    getItem: key => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => { store.set(key, String(value)); },
+    removeItem: key => { store.delete(key); },
+    clear: () => store.clear(),
   };
   const en = load('src/shared/i18n/messages/chat.en-US.ts').en;
   const mocks = {
@@ -115,9 +127,22 @@ export function hookHarness(controller) {
     '../../../shared/ui/MarkdownContent': { MarkdownContent: function Markdown() {} },
     '../../../shared/i18n/index': { useI18n: () => ({ t: key => key.startsWith('chat.error.') ? en[key] ?? key : key, language: 'en-US' }) },
     './lifecycle': { chatController: controller }, '../lib/interactions': interactions,
+    '../lib/conversationOrder': load('src/features/chat/lib/conversationOrder.ts', {}, { localStorage: localStorageShim }),
+    '../lib/reasoning': load('src/features/chat/lib/reasoning.ts', {}, { localStorage: localStorageShim }),
   };
-  const { ChatWorkspace } = load('src/features/chat/api/ChatWorkspace.tsx', mocks, { window: { addEventListener() {}, removeEventListener() {} } });
-  const harness = { opened: [], copies: [], copyFails: false,
+  // Minimal FileReader so attachment/paste paths can be driven without a DOM.
+  class FileReaderStub {
+    result = '';
+    onload = null;
+    readAsDataURL() { this.result = 'data:image/png;base64,AAAA'; setTimeout(() => this.onload?.(), 0); }
+    readAsText() { this.result = 'file body'; setTimeout(() => this.onload?.(), 0); }
+  }
+  const { ChatWorkspace } = load('src/features/chat/api/ChatWorkspace.tsx', mocks, {
+    window: { addEventListener() {}, removeEventListener() {} },
+    localStorage: localStorageShim,
+    FileReader: FileReaderStub,
+  });
+  const harness = { opened: [], copies: [], copyFails: false, storage: store,
     render(visible = true) { index = 0; const tree = ChatWorkspace({ workspaceVisible: visible, controller }); while (effects.length) effects.shift()(); return tree; },
     cleanup() { for (const slot of slots) slot?.cleanup?.(); },
   };

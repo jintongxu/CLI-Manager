@@ -2,6 +2,32 @@
 
 - Added a separate **Chat model providers** settings surface. It is intentionally read-only until the native Rust provider database gains dedicated independent-chat storage and routing; no unroutable provider/model options are exposed.
 
+### TEMP — 对话空间操作优化 / Chat space controls
+
+- 新对话未设置推理强度时默认「中」，明确选择「不指定」仍按会话保存；标题栏「项目 / 对话」改为轻量下划线导航，增加标题与切换器间距。/ New chats default to medium reasoning, explicit unspecified remains stored; the title-bar space switcher uses a lighter underline treatment.
+- 会话右键可置顶/取消置顶，置顶项优先排列并展示 Pin 图标，同组拖动顺序保留；对话历史栏可收起/恢复，收起后消息区扩展且入口始终可见。/ Conversations can be pinned/unpinned from their context menu, show a pin marker and stay first while retaining in-group order; the history rail can be hidden and restored without unmounting the chat.
+
+### TEMP — 推理强度菜单视觉优化 / Reasoning menu polish
+
+- 将输入区「推理强度」从系统原生下拉改为与应用模型菜单一致的浮层按钮：弹层向上展开、选中项高亮、主题色勾选、点击外部/Esc 关闭，并保留按会话记忆与键盘操作。/ Replaced the OS-painted reasoning select with a themed popover above the composer, preserving per-conversation selection and keyboard access.
+
+### TEMP — 当前对话问题大纲 / Current-chat question outline
+
+- 当前独立对话的用户提问按顺序列在问题大纲；借鉴 Kivio 消息导航的边缘细轨，大纲默认隐藏，只留右缘 30px 触发区，鼠标移入或键盘聚焦时在左侧浮出列表，离开收起，按钮可固定展开，不挤占正文。点击定位对应消息，手动滚动同步高亮，切换会话清空旧项；选中问题后立即收起大纲并把焦点移到对应消息，鼠标移出再进入才重新展开，避免遮挡阅读；长问题截断但保留完整提示。/ The current chat's user prompts live in a compact edge-triggered outline inspired by Kivio's message navigator: hidden by default, revealed by hover or focus without taking reading width, and auto-dismissed on selection with focus moved to the question.
+
+### TEMP — 对话拖动让位、图片预览与推理强度 / Live sort, image preview, reasoning
+
+- 会话列表拖动改为「实时让位」：拖动行跟随指针抬升，其余行按落点实时上移/下移，松手即落定并持久化，不再是单一的落点线提示。/ Conversations now reorder with live displacement: the dragged row follows the pointer while other rows slide aside, then the order commits and persists on release.
+- 输入框粘贴或上传的图片缩略图可点击打开大图预览，支持点击背景与 Esc 关闭，带中英文无障碍标注。/ Pasted or uploaded image thumbnails open a full-size preview; backdrop click and Esc close it, with bilingual accessible labels.
+- 新增「推理强度」选择（默认/低/中/高），按会话记忆；后端按协议映射为 `reasoning_effort`、Anthropic `thinking` 预算或 Responses `reasoning.effort`，默认不改变请求体。/ Added a per-conversation reasoning selector mapped per protocol, leaving the request body untouched by default.
+- 消息区按成熟客户端（Kivio MessageBubble、Open WebUI UserMessage/ResponseMessage、LibreChat MessageRender）的对齐规则重做：用户消息右对齐、最大宽度 85%、20px 圆角、15px/1.6 正文、无描边；助手消息为整宽无容器阅读列（15px/1.68）；角色与时间降为 11px 弱化元信息；复制/重试移出头部改为内容下方悬停显示的轻量动作行；代码块去掉整条灰底标题栏，改为 11px 弱化标签 + 悬停显示复制；新消息 180ms 淡入位移，并遵循 prefers-reduced-motion。/ Reworked the message stream against established clients (Kivio MessageBubble, Open WebUI, LibreChat): right-aligned 85%-max user bubbles at 20px radius, borderless full-width assistant reading column, 11px muted metadata, hover-revealed action row under the content, quiet code-block header, and a reduced-motion-aware entrance animation.
+
+### TEMP — 对话侧栏与空间切换 / Chat rail and space switcher
+
+- 「项目 / 对话」空间切换从独立全宽导航条移入窗口标题栏左侧，改为紧凑分段控件；导航条移除后释放一行高度，macOS 下单独保留该切换条。/ The project/chat switcher moved from a full-width nav row into the left of the window title bar as a compact segmented control, freeing one row; macOS keeps a dedicated strip for it.
+- 对话左侧会话栏顶部改为轻量行内「新建对话 + 搜索」，去掉两个厚重描边控件；会话条目使用选中左侧强调线与悬停底色。/ The chat rail head is now a lightweight inline new-chat and search pair instead of two heavy bordered controls, and conversation rows use a selected accent line with hover surface.
+- 会话列表支持拖动排序，顺序写入本地存储并在重载后保持；拖动项半透明、目标位置显示顶部强调线。/ Conversations can be drag-reordered; the order persists in local storage across reloads, with a translucent dragged row and an accent drop line.
+
 ### TEMP — Independent chat polish
 
 - Chat layout keeps a desktop history rail (220–300px) and centered ~850px reading/composer column; narrow windows use an accessible history drawer rather than a third rail.

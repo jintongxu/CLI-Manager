@@ -2,6 +2,8 @@ export const en = {
 
   "chat.title": "Chats",
   "chat.history": "History",
+  "chat.hideHistory": "Hide chat sidebar",
+  "chat.showHistory": "Show chat sidebar",
   "chat.draftPending": "Draft ready",
 
   "chat.new": "New chat",
@@ -16,8 +18,20 @@ export const en = {
   "chat.noModelsConfigured": "No chat models configured",
   "chat.goToSettings": "Configure models in Settings -> Chat Models",
   "chat.selectModel": "Select Model",
+  "chat.questionOutline": "Question outline",
+  "chat.untitledQuestion": "(Empty question)",
+  "chat.reasoning": "Reasoning",
+  "chat.reasoning.off": "Unspecified",
+  "chat.reasoning.low": "Low",
+  "chat.reasoning.medium": "Medium",
+  "chat.reasoning.high": "High",
+  "chat.imagePreview": "Click to preview image",
+  "chat.closePreview": "Close preview",
 
   "chat.untitled": "New chat",
+  "chat.pin": "Pin chat",
+  "chat.unpin": "Unpin chat",
+  "chat.pinned": "Pinned",
 
   "chat.provider": "Provider",
 

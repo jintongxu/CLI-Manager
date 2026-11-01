@@ -209,18 +209,50 @@ impl Decoder {
         }
     }
 }
-pub fn body(protocol: Protocol, model: &str, history: &[Message]) -> Value {
+/// Per-request knobs that do not belong in the stored conversation.
+pub struct Request {
+    pub model: String,
+    pub reasoning: Option<String>,
+}
+/// Anthropic budgets thinking tokens instead of naming an effort level.
+fn thinking_budget(level: &str) -> Option<u32> {
+    match level {
+        "low" => Some(1024),
+        "medium" => Some(2048),
+        "high" => Some(4096),
+        _ => None,
+    }
+}
+pub fn body(protocol: Protocol, model: &str, history: &[Message], reasoning: Option<&str>) -> Value {
     let messages: Vec<Value> = history
         .iter()
         .map(|m| json!({"role":m.role,"content":m.content}))
         .collect();
-    match protocol {
+    let effort = reasoning.filter(|level| matches!(*level, "low" | "medium" | "high"));
+    let mut payload = match protocol {
         Protocol::Messages => {
             json!({"model":model,"messages":messages,"stream":true,"max_tokens":8192})
         }
         Protocol::Chat => json!({"model":model,"messages":messages,"stream":true}),
         Protocol::Responses => json!({"model":model,"input":messages,"stream":true,"store":false}),
+    };
+    match (protocol, effort) {
+        (_, None) => {}
+        (Protocol::Chat, Some(level)) => {
+            payload["reasoning_effort"] = json!(level);
+        }
+        (Protocol::Responses, Some(level)) => {
+            payload["reasoning"] = json!({"effort": level});
+        }
+        (Protocol::Messages, Some(level)) => {
+            if let Some(budget) = thinking_budget(level) {
+                // Thinking requires headroom above the stored budget.
+                payload["max_tokens"] = json!(8192 + budget);
+                payload["thinking"] = json!({"type": "enabled", "budget_tokens": budget});
+            }
+        }
     }
+    payload
 }
 async fn cancelled(cancel: &mut watch::Receiver<bool>) {
     if *cancel.borrow() {
@@ -235,7 +267,7 @@ async fn cancelled(cancel: &mut watch::Receiver<bool>) {
 pub async fn run(
     client: reqwest::Client,
     runtime: Runtime,
-    model: String,
+    request: Request,
     history: Vec<Message>,
     mut cancel: watch::Receiver<bool>,
     tx: mpsc::Sender<Result<Part>>,
@@ -244,7 +276,12 @@ pub async fn run(
         let mut request =
             client
                 .post(&runtime.endpoint)
-                .json(&body(runtime.protocol, &model, &history));
+                .json(&body(
+                    runtime.protocol,
+                    &request.model,
+                    &history,
+                    request.reasoning.as_deref(),
+                ));
         request = match runtime.protocol {
             Protocol::Messages => request
                 .header("x-api-key", &runtime.key)

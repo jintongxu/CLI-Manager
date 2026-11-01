@@ -28,6 +28,7 @@ pub(super) fn generation(c: &Conversation) -> GenerateInput {
         model: "test".into(),
         text: Some("你好\nsecond line".into()),
         retry: false,
+        reasoning: None,
     }
 }
 fn update(c: &Conversation, draft: &str) -> UpdateInput {
@@ -321,7 +322,15 @@ async fn chat_three_protocols_mock_http_chunked_safety_and_status() {
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .unwrap();
-        super::stream::run(client, runtime, "mock-model".into(), vec![], rx, tx).await;
+        super::stream::run(
+            client,
+            runtime,
+            super::stream::Request { model: "mock-model".into(), reasoning: None },
+            vec![],
+            rx,
+            tx,
+        )
+        .await;
         let mut text = String::new();
         let mut done = 0;
         while let Some(event) = events.recv().await {
@@ -357,7 +366,15 @@ async fn chat_three_protocols_mock_http_chunked_safety_and_status() {
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .unwrap();
-        super::stream::run(client, runtime, "mock-model".into(), vec![], rx, tx).await;
+        super::stream::run(
+            client,
+            runtime,
+            super::stream::Request { model: "mock-model".into(), reasoning: None },
+            vec![],
+            rx,
+            tx,
+        )
+        .await;
         assert_eq!(events.recv().await.unwrap().unwrap_err(), expected);
         server.await.unwrap();
     }
@@ -378,7 +395,7 @@ async fn chat_mock_http_cancel_connect_wait_and_before_start() {
         let job = tokio::spawn(super::stream::run(
             reqwest::Client::builder().no_proxy().build().unwrap(),
             runtime,
-            "mock".into(),
+            super::stream::Request { model: "mock".into(), reasoning: None },
             vec![],
             rx,
             tx,
@@ -602,7 +619,7 @@ async fn chat_mock_http_cancel_stalled_body_read() {
     let task = tokio::spawn(super::stream::run(
         reqwest::Client::builder().no_proxy().build().unwrap(),
         runtime,
-        "mock".into(),
+        super::stream::Request { model: "mock".into(), reasoning: None },
         vec![],
         rx,
         tx,
@@ -708,4 +725,31 @@ async fn chat_early_restart_refresh_and_exact_expiry_boundary() {
     repo.update(update(&d.conversation, "editable after refresh"))
         .await
         .unwrap();
+}
+
+#[test]
+fn chat_reasoning_effort_maps_per_protocol_and_defaults_to_absent() {
+    use crate::provider::chat_runtime::Protocol;
+    use super::stream::body;
+    let history: Vec<Message> = vec![];
+    // No reasoning keeps every protocol payload unchanged.
+    for protocol in [Protocol::Chat, Protocol::Messages, Protocol::Responses] {
+        let plain = body(protocol, "m", &history, None);
+        assert!(plain.get("reasoning_effort").is_none());
+        assert!(plain.get("reasoning").is_none());
+        assert!(plain.get("thinking").is_none());
+        assert_eq!(plain["stream"], true);
+    }
+    let chat = body(Protocol::Chat, "m", &history, Some("high"));
+    assert_eq!(chat["reasoning_effort"], "high");
+    let responses = body(Protocol::Responses, "m", &history, Some("medium"));
+    assert_eq!(responses["reasoning"]["effort"], "medium");
+    let messages = body(Protocol::Messages, "m", &history, Some("low"));
+    assert_eq!(messages["thinking"]["type"], "enabled");
+    assert_eq!(messages["thinking"]["budget_tokens"], 1024);
+    // Anthropic rejects max_tokens <= budget, so the ceiling must grow with it.
+    assert_eq!(messages["max_tokens"], 8192 + 1024);
+    // Unknown levels are ignored instead of emitting an invalid field.
+    let off = body(Protocol::Chat, "m", &history, Some("off"));
+    assert!(off.get("reasoning_effort").is_none());
 }

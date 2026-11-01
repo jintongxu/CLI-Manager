@@ -1343,3 +1343,30 @@
 .ui-list-row:hover {
   background-color: var(--interactive-hover-bg);
 }
+
+/* Primary spaces share the titlebar baseline without a nested segmented box. */
+.space-switcher { height: 26px; }
+.space-switcher-item {
+  position: relative;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+.space-switcher-item:hover:not([aria-current="page"]) { color: var(--text-primary); }
+.space-switcher-item[aria-current="page"] {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.space-switcher-item[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--primary);
+}
