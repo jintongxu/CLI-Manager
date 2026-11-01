@@ -22,6 +22,8 @@
 @import "./components/tokyo-night-storm-sidebar.css";
 
 @import "../features/chat/components/chatWorkspace.css";
+@import "../features/chat/components/chatPanel.css";
+@import "../features/chat/components/chatPanelMarkdown.css";
 @import "../features/translator/components/translator.css";
 
 @import "./components/chat-model-settings.css";

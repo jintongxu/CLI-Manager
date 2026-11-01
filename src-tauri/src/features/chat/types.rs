@@ -101,6 +101,10 @@ pub struct GenerateInput {
     pub text: Option<String>,
     #[serde(default)]
     pub retry: bool,
+    #[serde(default)]
+    pub reasoning: Option<String>,
+    #[serde(default)]
+    pub images: Option<Vec<String>>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

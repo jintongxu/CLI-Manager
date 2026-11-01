@@ -146,7 +146,7 @@ impl Runtime {
         let receipt = answer.clone();
         tokio::spawn(async move {
             self.drive(
-                repo, answer, history, resolved, client, i.model, cancel, channel,
+                repo, answer, history, resolved, client, i.model, i.reasoning, i.images, cancel, channel,
             )
             .await;
             self.release(&i.request_id).await;
@@ -161,6 +161,8 @@ impl Runtime {
         resolved: chat_runtime::Runtime,
         client: reqwest::Client,
         model: String,
+        reasoning: Option<String>,
+        images: Option<Vec<String>>,
         mut cancel: watch::Receiver<bool>,
         channel: Channel<Event>,
     ) {
@@ -170,6 +172,8 @@ impl Runtime {
             resolved,
             model,
             history,
+            reasoning,
+            images,
             cancel.clone(),
             tx,
         ));
@@ -339,6 +343,8 @@ mod tests {
             model: "mock".into(),
             text: Some("test".into()),
             retry: false,
+            reasoning: None,
+            images: None,
         }
     }
     #[tokio::test]
@@ -415,6 +421,8 @@ mod tests {
                 },
                 reqwest::Client::new(),
                 "mock".into(),
+                None,
+                None,
                 cancel,
                 Channel::new(|_| Ok(())),
             )
@@ -471,6 +479,8 @@ mod tests {
                 runtime,
                 reqwest::Client::builder().no_proxy().build().unwrap(),
                 "mock".into(),
+                None,
+                None,
                 cancel,
                 channel,
             )
@@ -529,6 +539,8 @@ mod tests {
             runtime,
             reqwest::Client::new(),
             "mock".into(),
+            None,
+            None,
             cancel,
             Channel::new(|_| Ok(())),
         )

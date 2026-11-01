@@ -527,6 +527,7 @@ export const zh = {
   "settings.general.toolbar.gitChanges": "Git 工作区",
   "settings.general.toolbar.systemResources": "系统资源监控",
   "settings.general.toolbar.providers": "供应商",
+  "settings.general.toolbar.chat": "AI 对话",
   "settings.general.toolbar.hide": "隐藏{item}",
   "settings.general.toolbar.show": "显示{item}",
   "settings.general.sidebarToolbar": "侧边栏工具栏",

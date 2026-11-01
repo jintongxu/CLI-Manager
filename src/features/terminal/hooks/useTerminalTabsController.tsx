@@ -22,7 +22,10 @@ import { logError } from "../../../shared/platform/logger";
 import { DND_ACTIVATION_CONSTRAINT, parseCurrentWorkDragId, parseTerminalTabDragId, parseProjectDragId, parseWorkspanDragId, CURRENT_WORK_DROP_TARGET_ID, resolveWorkspanDragHoverTarget, WORKSPAN_DRAG_AUTO_ACTIVATE_MS } from "../../workspace/api/dragInteraction";
 import { collectPaneLeaves, type TerminalPaneSplitDirection } from "../api/terminalPaneTree";
 import { type BackgroundTaskMeta } from "../components/BackgroundTasksPanel";
-import { TERMINAL_SIDE_PANEL_TAB_ORDER, type TerminalSidePanelTab } from "../components/TerminalSidePanel";
+import { type TerminalSidePanelTab } from "../components/TerminalSidePanel";
+import { selectVisibleSidePanelTabs } from "../lib/sidePanelTabs";
+import { useChatPanelStore, toggleChatPanel } from "../store/chatPanelStore";
+import { subscribeChatPanelToggle } from "../api/chatPanelCommands";
 import { openWindowsTerminal } from "../api/externalTerminal";
 import { createAnonymousPiSessionHandler, shouldAddSessionToCurrentWork } from "../api/anonymousPiSession";
 import { resolveProjectPath } from "../../projects/api/groupPath";
@@ -531,16 +534,11 @@ export function useTerminalTabsController({
     [terminalActionSidebarStyle, terminalWellStyle]
   );
   const visibleSidePanelTabs = useMemo(
-    () => TERMINAL_SIDE_PANEL_TAB_ORDER.filter((tab) => {
-      if (tab === "git") return terminalToolbarVisibility.gitChanges && panelGitSupported;
-      if (tab === "stats") return terminalToolbarVisibility.stats && panelCapabilities.statistics;
-      if (tab === "replay") return terminalToolbarVisibility.replay && panelCapabilities.history;
-      if (tab === "files") return terminalToolbarVisibility.files && panelCapabilities.files;
-      if (tab === "btw") return true;
-      return terminalToolbarVisibility[tab];
-    }),
-    [panelCapabilities.files, panelCapabilities.history, panelCapabilities.statistics, panelGitSupported, terminalToolbarVisibility]
+    () => selectVisibleSidePanelTabs({ terminalToolbarVisibility, panelGitSupported, panelCapabilities }),
+    [panelCapabilities, panelGitSupported, terminalToolbarVisibility]
   );
+  const chatPanelMode = useChatPanelStore((s) => s.mode);
+  const chatPanelFloatOpen = useChatPanelStore((s) => s.floatOpen);
   const historyActive = historyOpen && activeWorkspaceTab === "history";
   const fullWorkspaceActive = historyActive;
   const statsPanelActive = sidePanelMerged ? sidePanelOpen && sidePanelTab === "stats" : statsOpen;
@@ -566,6 +564,16 @@ export function useTerminalTabsController({
   }, [closeHistory, gitWorkspaceOpen, sidePanelMerged, sidePanelTab]);
 
   useEffect(() => () => gitWorkspaceResizeCleanupRef.current?.(), []);
+
+  const handleToggleChatPanel = useCallback(() => {
+    toggleChatPanel({
+      merged: sidePanelMerged,
+      chatTabActive: sidePanelOpen && sidePanelTab === "chat",
+      openChatTab: () => { setSidePanelTab("chat"); setSidePanelOpen(true); },
+      closePanel: () => setSidePanelOpen(false),
+    });
+  }, [sidePanelMerged, sidePanelOpen, sidePanelTab]);
+  useEffect(() => subscribeChatPanelToggle(handleToggleChatPanel), [handleToggleChatPanel]);
 
   const beginGitWorkspaceResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -1694,6 +1702,10 @@ export function useTerminalTabsController({
     statsPanelActive,
     providersPanelActive,
     btwPanelActive: sidePanelMerged ? sidePanelOpen && sidePanelTab === "btw" : btwPanelOpen,
+    chatPanelActive: chatPanelMode === "dock"
+      ? (sidePanelMerged ? sidePanelOpen && sidePanelTab === "chat" : false)
+      : chatPanelFloatOpen,
+    handleToggleChatPanel,
     handleToggleBtwPanel: () => {
       const opening = sidePanelMerged ? !(sidePanelOpen && sidePanelTab === "btw") : !btwPanelOpen;
       if (sidePanelMerged) {
@@ -1883,7 +1895,9 @@ export function useTerminalTabsController({
     terminalSidePanelSide,
     sidePanelMerged,
     sidePanelOpen,
+    setSidePanelOpen,
     sidePanelTab,
+    setSidePanelTab,
     visibleSidePanelTabs,
     panelSessionId,
     sidePanelProjectPath,

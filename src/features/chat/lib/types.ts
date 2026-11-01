@@ -27,6 +27,8 @@ export interface UpdateInput {
 export interface GenerateInput {
   conversationId: string; revision: number; requestId: string; appType: string;
   providerId: string; model: string; text: string | null; retry: boolean;
+  reasoning?: string | null;
+  images?: string[] | null;
 }
 export interface ChatTransport {
   initialize(): Promise<{ conversations: Conversation[]; unsaved: ChatEvent[] }>;

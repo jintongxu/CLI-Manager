@@ -209,17 +209,91 @@ impl Decoder {
         }
     }
 }
-pub fn body(protocol: Protocol, model: &str, history: &[Message]) -> Value {
-    let messages: Vec<Value> = history
+/// Reasoning effort is only meaningful for OpenAI-style protocols; Messages ignores it.
+pub fn normalize_effort(effort: Option<&str>) -> Result<Option<&str>> {
+    match effort.map(str::trim).filter(|value| !value.is_empty()) {
+        None => Ok(None),
+        Some(value) if ["minimal", "low", "medium", "high"].contains(&value) => Ok(Some(value)),
+        Some(_) => Err("chat_invalid_input".into()),
+    }
+}
+
+pub const MAX_IMAGES: usize = 4;
+
+/// Clipboard images arrive as data URIs; only these encodings are forwarded.
+pub fn normalize_images(images: Option<&[String]>) -> Result<Vec<String>> {
+    let Some(list) = images else { return Ok(Vec::new()); };
+    if list.len() > MAX_IMAGES {
+        return Err("chat_invalid_input".into());
+    }
+    for uri in list {
+        if !["data:image/png;base64,", "data:image/jpeg;base64,", "data:image/webp;base64,"]
+            .iter()
+            .any(|prefix| uri.starts_with(prefix))
+        {
+            return Err("chat_invalid_input".into());
+        }
+    }
+    Ok(list.to_vec())
+}
+
+fn anthropic_image(uri: &str) -> Value {
+    let (media_type, data) = if let Some(rest) = uri.strip_prefix("data:image/jpeg;base64,") {
+        ("image/jpeg", rest)
+    } else if let Some(rest) = uri.strip_prefix("data:image/webp;base64,") {
+        ("image/webp", rest)
+    } else {
+        ("image/png", uri.strip_prefix("data:image/png;base64,").unwrap_or(uri))
+    };
+    json!({"type":"image","source":{"type":"base64","media_type":media_type,"data":data}})
+}
+
+/// Only the newest user turn carries images; history stays plain strings.
+fn messages_with_images(protocol: Protocol, history: &[Message], images: &[String]) -> Vec<Value> {
+    let last_user = history.iter().rposition(|m| m.role == "user");
+    history
         .iter()
-        .map(|m| json!({"role":m.role,"content":m.content}))
-        .collect();
+        .enumerate()
+        .map(|(index, m)| {
+            if Some(index) != last_user || images.is_empty() {
+                return json!({"role":m.role,"content":m.content});
+            }
+            let mut parts: Vec<Value> = vec![match protocol {
+                Protocol::Responses => json!({"type":"input_text","text":m.content}),
+                _ => json!({"type":"text","text":m.content}),
+            }];
+            for uri in images {
+                parts.push(match protocol {
+                    Protocol::Messages => anthropic_image(uri),
+                    Protocol::Responses => json!({"type":"input_image","image_url":uri}),
+                    Protocol::Chat => json!({"type":"image_url","image_url":{"url":uri}}),
+                });
+            }
+            json!({"role":m.role,"content":parts})
+        })
+        .collect()
+}
+
+pub fn body(
+    protocol: Protocol,
+    model: &str,
+    history: &[Message],
+    effort: Option<&str>,
+    images: &[String],
+) -> Value {
+    let messages: Vec<Value> = messages_with_images(protocol, history, images);
     match protocol {
         Protocol::Messages => {
             json!({"model":model,"messages":messages,"stream":true,"max_tokens":8192})
         }
-        Protocol::Chat => json!({"model":model,"messages":messages,"stream":true}),
-        Protocol::Responses => json!({"model":model,"input":messages,"stream":true,"store":false}),
+        Protocol::Chat => match effort {
+            Some(value) => json!({"model":model,"messages":messages,"stream":true,"reasoning_effort":value}),
+            None => json!({"model":model,"messages":messages,"stream":true}),
+        },
+        Protocol::Responses => match effort {
+            Some(value) => json!({"model":model,"input":messages,"stream":true,"store":false,"reasoning":{"effort":value}}),
+            None => json!({"model":model,"input":messages,"stream":true,"store":false}),
+        },
     }
 }
 async fn cancelled(cancel: &mut watch::Receiver<bool>) {
@@ -237,14 +311,18 @@ pub async fn run(
     runtime: Runtime,
     model: String,
     history: Vec<Message>,
+    reasoning: Option<String>,
+    images: Option<Vec<String>>,
     mut cancel: watch::Receiver<bool>,
     tx: mpsc::Sender<Result<Part>>,
 ) {
     let job = async {
+        let effort = normalize_effort(reasoning.as_deref())?;
+        let attachments = normalize_images(images.as_deref())?;
         let mut request =
             client
                 .post(&runtime.endpoint)
-                .json(&body(runtime.protocol, &model, &history));
+                .json(&body(runtime.protocol, &model, &history, effort, &attachments));
         request = match runtime.protocol {
             Protocol::Messages => request
                 .header("x-api-key", &runtime.key)

@@ -28,6 +28,8 @@ pub(super) fn generation(c: &Conversation) -> GenerateInput {
         model: "test".into(),
         text: Some("你好\nsecond line".into()),
         retry: false,
+        reasoning: None,
+        images: None,
     }
 }
 fn update(c: &Conversation, draft: &str) -> UpdateInput {
@@ -321,7 +323,7 @@ async fn chat_three_protocols_mock_http_chunked_safety_and_status() {
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .unwrap();
-        super::stream::run(client, runtime, "mock-model".into(), vec![], rx, tx).await;
+        super::stream::run(client, runtime, "mock-model".into(), vec![], None, None, rx, tx).await;
         let mut text = String::new();
         let mut done = 0;
         while let Some(event) = events.recv().await {
@@ -357,7 +359,7 @@ async fn chat_three_protocols_mock_http_chunked_safety_and_status() {
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .unwrap();
-        super::stream::run(client, runtime, "mock-model".into(), vec![], rx, tx).await;
+        super::stream::run(client, runtime, "mock-model".into(), vec![], None, None, rx, tx).await;
         assert_eq!(events.recv().await.unwrap().unwrap_err(), expected);
         server.await.unwrap();
     }
@@ -380,6 +382,8 @@ async fn chat_mock_http_cancel_connect_wait_and_before_start() {
             runtime,
             "mock".into(),
             vec![],
+            None,
+            None,
             rx,
             tx,
         ));
@@ -604,6 +608,8 @@ async fn chat_mock_http_cancel_stalled_body_read() {
         runtime,
         "mock".into(),
         vec![],
+        None,
+        None,
         rx,
         tx,
     ));
@@ -708,4 +714,125 @@ async fn chat_early_restart_refresh_and_exact_expiry_boundary() {
     repo.update(update(&d.conversation, "editable after refresh"))
         .await
         .unwrap();
+}
+
+#[test]
+fn chat_stream_body_and_reasoning_effort() {
+    use super::stream::{body, normalize_effort};
+    use crate::provider::chat_runtime::Protocol;
+
+    assert_eq!(normalize_effort(None).unwrap(), None);
+    assert_eq!(normalize_effort(Some("")).unwrap(), None);
+    assert_eq!(normalize_effort(Some("  low  ")).unwrap(), Some("low"));
+    assert_eq!(normalize_effort(Some("medium")).unwrap(), Some("medium"));
+    assert_eq!(normalize_effort(Some("high")).unwrap(), Some("high"));
+    assert_eq!(normalize_effort(Some("minimal")).unwrap(), Some("minimal"));
+    assert_eq!(normalize_effort(Some("unknown")).unwrap_err(), "chat_invalid_input");
+
+    let chat_none = body(Protocol::Chat, "gpt-4o", &[], None, &[]);
+    assert_eq!(chat_none["reasoning_effort"], serde_json::Value::Null);
+
+    let chat_high = body(Protocol::Chat, "o3-mini", &[], Some("high"), &[]);
+    assert_eq!(chat_high["reasoning_effort"], "high");
+
+    let resp_med = body(Protocol::Responses, "gpt-5", &[], Some("medium"), &[]);
+    assert_eq!(resp_med["reasoning"]["effort"], "medium");
+
+    let messages = body(Protocol::Messages, "claude-3-5", &[], Some("high"), &[]);
+    assert_eq!(messages["reasoning_effort"], serde_json::Value::Null);
+    assert_eq!(messages["max_tokens"], 8192);
+}
+
+#[test]
+fn chat_stream_body_attaches_images_only_to_last_user_turn() {
+    use super::stream::{body, normalize_images};
+    use super::types::Message;
+    use crate::provider::chat_runtime::Protocol;
+
+    let png = "data:image/png;base64,AAAA";
+    let jpeg = "data:image/jpeg;base64,BBBB";
+    let history = vec![
+        Message {
+            id: "1".into(),
+            conversation_id: "c".into(),
+            ordinal: 0,
+            role: "user".into(),
+            content: "first".into(),
+            reply_to: None,
+            request_id: "r1".into(),
+            status: "completed".into(),
+            error_code: None,
+            finish_reason: None,
+            app_type: "chat".into(),
+            provider_id: "p".into(),
+            model: "m".into(),
+            created_at: 0,
+            updated_at: 0,
+        },
+        Message {
+            id: "2".into(),
+            conversation_id: "c".into(),
+            ordinal: 1,
+            role: "assistant".into(),
+            content: "reply".into(),
+            reply_to: None,
+            request_id: "r2".into(),
+            status: "completed".into(),
+            error_code: None,
+            finish_reason: None,
+            app_type: "chat".into(),
+            provider_id: "p".into(),
+            model: "m".into(),
+            created_at: 0,
+            updated_at: 0,
+        },
+        Message {
+            id: "3".into(),
+            conversation_id: "c".into(),
+            ordinal: 2,
+            role: "user".into(),
+            content: "look".into(),
+            reply_to: None,
+            request_id: "r3".into(),
+            status: "pending".into(),
+            error_code: None,
+            finish_reason: None,
+            app_type: "chat".into(),
+            provider_id: "p".into(),
+            model: "m".into(),
+            created_at: 0,
+            updated_at: 0,
+        },
+    ];
+    let images = vec![png.to_string(), jpeg.to_string()];
+
+    // Chat: image_url objects; history untouched.
+    let chat = body(Protocol::Chat, "m", &history, None, &images);
+    assert_eq!(chat["messages"][0]["content"], "first");
+    assert_eq!(chat["messages"][1]["content"], "reply");
+    assert_eq!(chat["messages"][2]["content"][0]["type"], "text");
+    assert_eq!(chat["messages"][2]["content"][1]["type"], "image_url");
+    assert_eq!(chat["messages"][2]["content"][1]["image_url"]["url"], png);
+
+    // Responses: input_text / input_image.
+    let responses = body(Protocol::Responses, "m", &history, None, &images);
+    assert_eq!(responses["input"][2]["content"][0]["type"], "input_text");
+    assert_eq!(responses["input"][2]["content"][1]["type"], "input_image");
+
+    // Anthropic: base64 source with real media_type, prefix stripped.
+    let anthropic = body(Protocol::Messages, "m", &history, None, &images);
+    assert_eq!(anthropic["messages"][2]["content"][1]["type"], "image");
+    assert_eq!(anthropic["messages"][2]["content"][1]["source"]["media_type"], "image/png");
+    assert_eq!(anthropic["messages"][2]["content"][1]["source"]["data"], "AAAA");
+    assert_eq!(anthropic["messages"][2]["content"][2]["source"]["media_type"], "image/jpeg");
+
+    // Validation.
+    assert!(normalize_images(None).unwrap().is_empty());
+    assert_eq!(normalize_images(Some(&images)).unwrap().len(), 2);
+    assert_eq!(
+        normalize_images(Some(&["data:image/svg+xml;base64,AA".to_string()])).unwrap_err(),
+        "chat_invalid_input"
+    );
+    let too_many = vec![png.to_string(); super::stream::MAX_IMAGES + 1];
+    assert_eq!(normalize_images(Some(&too_many)).unwrap_err(), "chat_invalid_input");
 }

@@ -591,6 +591,7 @@ export const en: Record<keyof typeof zh, string> = {
   "settings.general.toolbar.gitChanges": "Git Workspace",
   "settings.general.toolbar.systemResources": "System Resource Monitor",
   "settings.general.toolbar.providers": "Providers",
+  "settings.general.toolbar.chat": "AI chat",
   "settings.general.toolbar.hide": "Hide {item}",
   "settings.general.toolbar.show": "Show {item}",
   "settings.general.sidebarToolbar": "Sidebar Toolbar",

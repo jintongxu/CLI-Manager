@@ -304,6 +304,7 @@ export interface TerminalToolbarVisibilitySettings {
   systemResources: boolean;
   providers: boolean;
   btw: boolean;
+  chat: boolean;
   backgroundTasks: boolean;
   showText: boolean;
 }
@@ -636,6 +637,7 @@ const DEFAULTS: Settings = {
     systemResources: false,
     providers: true,
     btw: true,
+    chat: true,
     backgroundTasks: true,
     showText: false,
   },
@@ -643,7 +645,7 @@ const DEFAULTS: Settings = {
     stats: true,
     gitChanges: true,
   },
-  terminalToolbarOrder: ["new", "templates", "fullscreen", "sessionHistory", "replay", "files", "gitChanges", "stats", "providers", "btw", "systemResources", "backgroundTasks"],
+  terminalToolbarOrder: ["new", "templates", "fullscreen", "sessionHistory", "replay", "files", "gitChanges", "stats", "providers", "btw", "chat", "systemResources", "backgroundTasks"],
   terminalSidePanelMerged: true,
   terminalSidePanelSingleOpen: true,
   terminalSidePanelSkin: "terminal",
@@ -989,6 +991,7 @@ export function migrateTerminalToolbarVisibility(value: unknown): TerminalToolba
     systemResources: typeof raw.systemResources === "boolean" ? raw.systemResources : defaults.systemResources,
     providers: typeof raw.providers === "boolean" ? raw.providers : defaults.providers,
     btw: typeof raw.btw === "boolean" ? raw.btw : defaults.btw,
+    chat: typeof raw.chat === "boolean" ? raw.chat : defaults.chat,
     backgroundTasks: typeof raw.backgroundTasks === "boolean" ? raw.backgroundTasks : defaults.backgroundTasks,
     showText: typeof raw.showText === "boolean" ? raw.showText : defaults.showText,
   };

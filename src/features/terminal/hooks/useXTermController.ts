@@ -37,6 +37,7 @@ import { useTerminalOsc } from "./useTerminalOsc";
 import { useTerminalDisplay } from "./useTerminalDisplay";
 import { useTerminalInput, type TerminalSuggestionGhostState } from "./useTerminalInput";
 import { registerDesktopViewport } from "../../../shared/lib/terminalSizeOwnership";
+import { recordWorkspaceSelection } from "../../../shared/lib/workspaceSelection";
 import { resolveClaudeImeCompositionAnchor } from "../lib/terminalImeAnchor";
 import { copyTextToClipboard, readTextFromClipboard } from "../../../shared/platform/systemClipboard";
 import { formatOsc52Reply } from "../lib/terminalOscParse";
@@ -1350,13 +1351,13 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     const nativeSelectionListener = () => {
       const selection = typeof window !== "undefined" ? window.getSelection() : null;
       const text = selection && !selection.isCollapsed ? selection.toString().trim() : "";
-      if (text) lastNativeSelectionRef.current = text;
+      if (text) { lastNativeSelectionRef.current = text; recordWorkspaceSelection(sessionId, text); }
     };
     document.addEventListener("selectionchange", nativeSelectionListener);
     inputDisposables.push({ dispose: () => document.removeEventListener("selectionchange", nativeSelectionListener) });
     const captureTerminalSelection = () => {
       const selection = terminal.getSelection().trim();
-      if (selection) lastTerminalSelectionRef.current = selection;
+      if (selection) { lastTerminalSelectionRef.current = selection; recordWorkspaceSelection(sessionId, selection); }
     };
     const selectionListener = terminal.onSelectionChange(captureTerminalSelection);
     inputDisposables.push({ dispose: () => selectionListener.dispose() });
