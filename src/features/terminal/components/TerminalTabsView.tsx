@@ -1,5 +1,5 @@
 import type { useTerminalTabsController } from "../hooks/useTerminalTabsController";
-import { Suspense } from "react";
+import { Suspense, useRef } from "react";
 import { toast } from "sonner";
 import { DndContext } from "@dnd-kit/core";
 import { TERMINAL_PANEL_WIDTH_DEFAULTS } from "../../../shared/preferences/settingsStore";
@@ -26,6 +26,10 @@ import { TerminalNavigationAdapter } from "./TerminalNavigationAdapter";
 import { SortableWorkspanTab } from "./SortableTerminalTabs";
 import { TerminalTabDragOverlay } from "./TerminalTabDragOverlay";
 import { BtwSideQuestionPanel } from "./BtwSideQuestionPanel";
+import { ChatPanel } from "../../chat/api/ChatPanel";
+import { useChatPanelStore } from "../store/chatPanelStore";
+import { useChatPanelDrag } from "../hooks/useChatPanelDrag";
+import { usePrimarySpaceStore } from "../../workspace/api/primarySpaceState";
 import { BtwTerminalDrawer } from "./BtwTerminalDrawer";
 import { CurrentWorkPaneTarget } from "./CurrentWorkPaneTarget";
 import { SplitProjectPicker, TerminalCloseConfirmBubble } from "./TerminalTabDialogs";
@@ -99,6 +103,8 @@ export function TerminalTabsView({
   closeBtwDrawer,
   openBtwReader,
   btwSideQuestion,
+  setSidePanelOpen,
+  setSidePanelTab,
   renderToolbarActions,
   sensors,
   handleDragStart,
@@ -164,6 +170,39 @@ export function TerminalTabsView({
   leaveCurrentWork,
   toggleCurrentWork,
 }: ReturnType<typeof useTerminalTabsController>) {
+  const chatPanelMode = useChatPanelStore((s) => s.mode);
+  const chatPanelFloatOpen = useChatPanelStore((s) => s.floatOpen);
+  const chatPanelAttached = useChatPanelStore((s) => s.attachedSelection);
+  const chatReasoningEffort = useChatPanelStore((s) => s.reasoningEffort);
+  const terminalWellRef = useRef<HTMLDivElement | null>(null);
+  const chatDrag = useChatPanelDrag(terminalWellRef, chatPanelMode === "float" && chatPanelFloatOpen);
+  const renderChatPanel = (mode: "dock" | "float") => <ChatPanel
+    mode={mode}
+    attachedSelection={chatPanelAttached}
+    reasoningEffort={chatReasoningEffort}
+    onReasoningEffortChange={useChatPanelStore.getState().setReasoningEffort}
+    dragging={mode === "float" ? chatDrag.dragging : undefined}
+    dragHandleProps={mode === "float" ? {
+      onPointerDown: chatDrag.handlePointerDown,
+      onPointerMove: chatDrag.handlePointerMove,
+      onPointerUp: chatDrag.finish,
+      onPointerCancel: chatDrag.finish,
+      onKeyDown: chatDrag.handleKeyDown,
+    } : undefined}
+    onAttachSelectionChange={useChatPanelStore.getState().setAttachedSelection}
+    onModeChange={(next) => {
+      if (next === "dock" && !sidePanelMerged) return;
+      useChatPanelStore.getState().setMode(next);
+      useChatPanelStore.getState().setFloatOpen(next === "float");
+      if (next === "float") setSidePanelOpen(false);
+      else { setSidePanelTab("chat"); setSidePanelOpen(true); }
+    }}
+    onExpand={() => usePrimarySpaceStore.getState().setSpace("chat")}
+    onClose={() => {
+      if (chatPanelMode === "float") useChatPanelStore.getState().setFloatOpen(false);
+      else setSidePanelOpen(false);
+    }}
+  />;
   const currentWorkHasSplit = currentWorkPaneTree?.type === "split";
   const currentWorkIdSet = new Set(currentWorkSessionIds);
   const availableSessionCount = visibleSessions.filter((session) => !session.tabHidden && !currentWorkIdSet.has(session.id)).length;
@@ -476,6 +515,7 @@ export function TerminalTabsView({
         )}
         <div
           className="ui-terminal-well absolute inset-0 min-h-0 flex"
+          ref={terminalWellRef}
           data-terminal-mode="independent"
           data-terminal-theme-tone={terminalThemeTone}
           data-terminal-side-panel-visible={terminalSidePanelVisible ? "true" : "false"}
@@ -502,6 +542,7 @@ export function TerminalTabsView({
                   btwPanelContent={
                     <BtwSideQuestionPanel controller={btwSideQuestion} onOpenReader={openBtwReader} />
                   }
+                  chatPanelContent={renderChatPanel("dock")}
                   onTabChange={handleSidePanelTabChange}
                   onOpenProviderSettings={onOpenProviderSettings}
                 />
@@ -744,6 +785,20 @@ export function TerminalTabsView({
           ) : null}
           </div>
           </TerminalWorkspaceFrame>
+          {chatPanelMode === "float" && chatPanelFloatOpen ? (
+            <div
+              className="absolute z-30"
+              data-chat-panel-float="true"
+              style={{
+                left: chatDrag.geometry.x,
+                top: chatDrag.geometry.y,
+                width: chatDrag.geometry.width,
+                height: chatDrag.geometry.height,
+              }}
+            >
+              {renderChatPanel("float")}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

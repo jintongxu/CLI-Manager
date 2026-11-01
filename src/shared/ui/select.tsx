@@ -140,7 +140,9 @@ export function Select({
             contentClassName
           )}
           style={{
-            width: "var(--radix-select-trigger-width)",
+            minWidth: "var(--radix-select-trigger-width)",
+            width: "max-content",
+            maxWidth: "min(360px, 90vw)",
             maxHeight: 280,
           }}
         >
@@ -166,7 +168,7 @@ export function Select({
                 )}
               >
                 <SelectPrimitive.ItemText asChild>
-                  <span className="flex-1 truncate">{opt.label || opt.value}</span>
+                  <span className="flex-1 truncate whitespace-nowrap">{opt.label || opt.value}</span>
                 </SelectPrimitive.ItemText>
                 <SelectPrimitive.ItemIndicator className="shrink-0">
                   <Check size={12} />

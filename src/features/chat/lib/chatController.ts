@@ -181,7 +181,7 @@ export class ChatController {
       });
     } finally { this.deleting.delete(id); }
   }
-  async generate(id: string, retry = false, reasoning: ReasoningEffort = "off") {
+  async generate(id: string, retry = false, reasoning: ReasoningEffort = "off", images?: readonly string[]) {
     this.editable(id);
     if (this.runs.has(id)) throw "chat_busy";
     if (this.state.unsaved[id] || this.state.dirty.includes(id) && this.state.error) throw "chat_storage";
@@ -196,9 +196,11 @@ export class ChatController {
         const c = this.state.details[id].conversation;
         const text = retry ? null : this.state.drafts[id] ?? c.draft;
         if (!retry && !text?.trim()) throw "chat_invalid_input";
+        const reasoningValue = reasoning === "off" ? null : reasoning;
         const receipt = await this.api.generate({ conversationId: id, revision: c.revision,
           requestId: run.requestId, appType: c.appType, providerId: c.providerId, model: c.model, text, retry,
-          reasoning: reasoning === "off" ? null : reasoning },
+          reasoning: reasoningValue,
+          images: images?.length ? [...images] : undefined },
         event => this.event(event, run));
         accepted = true;
         if (this.deleted.has(id)) return;

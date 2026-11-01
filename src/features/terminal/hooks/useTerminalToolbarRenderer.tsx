@@ -11,7 +11,7 @@ import { SshSidebarPanel } from "../../remote";
 import { BackgroundTasksPanel, type BackgroundTaskMeta } from "../components/BackgroundTasksPanel";
 import {
   Activity, ArrowLeftRight, Plus, ListClockIcon, Maximize2, Minimize2, BarChart3, GitBranch, Folder,
-  Cpu, Globe, MessageSquare,
+  Cpu, Globe, MessageSquare, Sparkles,
 } from "../../../shared/ui/icons";
 import type { Project } from "../../../shared/types/index";
 import { SortableToolbarButton, CpuCatIndicator } from "../components/TerminalToolbarControls";
@@ -30,6 +30,8 @@ interface TerminalToolbarContext {
   providersPanelActive: boolean;
   systemResourcesPanelActive: boolean;
   btwPanelActive: boolean;
+  chatPanelActive: boolean;
+  handleToggleChatPanel: () => void;
   handleToggleBtwPanel: () => void;
   handleNewTab: () => void;
   handleNewAnonymousPi: () => void;
@@ -78,6 +80,8 @@ export function useTerminalToolbarRenderer({
   providersPanelActive,
   systemResourcesPanelActive,
   btwPanelActive,
+  chatPanelActive,
+  handleToggleChatPanel,
   handleToggleBtwPanel,
   handleNewTab,
   handleNewAnonymousPi,
@@ -135,6 +139,7 @@ export function useTerminalToolbarRenderer({
         ? t("terminal.toolbar.closeSystemResourcesPanel")
         : t("terminal.toolbar.openSystemResourcesPanel"),
       backgroundTasks: t("terminal.backgroundTasks.title"),
+      chat: t("terminal.toolbar.chatTooltip"),
       ssh: sshPanelOpen ? t("sidebar.ssh.close") : t("sidebar.ssh.title"),
     };
     const buttonMap: Record<string, ReactNode> = {
@@ -270,6 +275,19 @@ export function useTerminalToolbarRenderer({
           aria-pressed={btwPanelActive}
         >
           <MessageSquare size={13} strokeWidth={1.8} />
+        </button>
+      ),
+      chat: (
+        <button
+          type="button"
+          onClick={handleToggleChatPanel}
+          className="ui-focus-ring ui-icon-action ui-action-chat"
+          data-active={chatPanelActive ? "true" : "false"}
+          aria-label={t("terminal.panel.chat")}
+          title={t("terminal.toolbar.chatTooltip")}
+          aria-pressed={chatPanelActive}
+        >
+          <Sparkles size={13} strokeWidth={1.8} />
         </button>
       ),
       systemResources: (

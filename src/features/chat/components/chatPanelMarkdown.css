@@ -1,0 +1,108 @@
+/* ── markdown inside the panel ───────────────────────────────────────────
+   The shared reading surface paints an opaque --md-reading-bg (bg-primary),
+   which reads as a black block inside a bubble. Keep it transparent here and
+   let the bubble own the background. */
+.chat-panel .ui-markdown {
+  background-color: transparent;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.chat-panel .ui-markdown-p {
+  margin: 0 0 0.55em;
+}
+
+.chat-panel .ui-markdown-p:last-child,
+.chat-panel .ui-markdown-code-block:last-child,
+.chat-panel .ui-markdown-quote:last-child,
+.chat-panel .ui-markdown-table-wrap:last-child,
+.chat-panel .ui-markdown ul:last-child,
+.chat-panel .ui-markdown ol:last-child {
+  margin-bottom: 0;
+}
+
+.chat-panel .ui-markdown-h {
+  margin: 0.75em 0 0.35em;
+  font-size: 1em;
+  line-height: 1.45;
+}
+
+.chat-panel .ui-markdown-h1,
+.chat-panel .ui-markdown-h2 {
+  font-size: 1.05em;
+}
+
+.chat-panel .ui-markdown ul,
+.chat-panel .ui-markdown ol {
+  margin: 0 0 0.55em;
+  padding-left: 1.15rem;
+}
+
+.chat-panel .ui-markdown li {
+  margin: 0.16rem 0;
+  padding-left: 0.1rem;
+}
+
+.chat-panel .ui-markdown-inline-code {
+  padding: 0.06rem 0.3rem;
+  border: 1px solid color-mix(in srgb, var(--primary, #6ea8ff) 20%, transparent);
+  border-radius: 4px;
+  background-color: color-mix(in srgb, var(--primary, #6ea8ff) 12%, transparent);
+  color: inherit;
+  font-size: 0.9em;
+}
+
+.chat-panel .ui-markdown-code-block {
+  margin: 0.4em 0 0.6em;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  border-radius: 8px;
+  background-color: var(--surface-container-high, rgba(127, 127, 127, 0.08));
+}
+
+.chat-panel .ui-markdown-code-header {
+  padding: 0.3rem 0.65rem;
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  background-color: var(--surface-container-highest, rgba(127, 127, 127, 0.12));
+  color: var(--on-surface-variant, inherit);
+  font-size: 0.66rem;
+}
+
+.chat-panel .ui-markdown-code-block pre {
+  padding: 0.55rem 0.7rem !important;
+  font-size: 0.86em !important;
+  line-height: 1.55 !important;
+}
+
+.chat-panel .ui-markdown-quote {
+  margin: 0 0 0.6em;
+  padding: 0.4rem 0.65rem;
+  border-left: 2px solid color-mix(in srgb, var(--primary, #6ea8ff) 55%, transparent);
+  border-radius: 0 6px 6px 0;
+  background: rgba(127, 127, 127, 0.07);
+  color: inherit;
+}
+
+.chat-panel .ui-markdown-table-wrap {
+  margin: 0 0 0.6em;
+  border-color: rgba(127, 127, 127, 0.22);
+  border-radius: 8px;
+}
+
+.chat-panel .ui-markdown-table th,
+.chat-panel .ui-markdown-table td {
+  padding: 4px 8px;
+  border-color: rgba(127, 127, 127, 0.18);
+}
+
+.chat-panel .ui-markdown-link {
+  text-decoration: none;
+}
+
+.chat-panel .ui-markdown-link:hover {
+  text-decoration: underline;
+}
+
+.chat-panel .ui-markdown-hr {
+  height: 1px;
+  margin: 0.7rem 0;
+}

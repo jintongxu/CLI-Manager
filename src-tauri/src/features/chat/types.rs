@@ -104,6 +104,8 @@ pub struct GenerateInput {
     /// Optional reasoning effort: "low" | "medium" | "high". Absent/"off" keeps the request unchanged.
     #[serde(default)]
     pub reasoning: Option<String>,
+    #[serde(default)]
+    pub images: Option<Vec<String>>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

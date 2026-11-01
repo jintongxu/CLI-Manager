@@ -29,6 +29,7 @@ pub(super) fn generation(c: &Conversation) -> GenerateInput {
         text: Some("你好\nsecond line".into()),
         retry: false,
         reasoning: None,
+        images: None,
     }
 }
 fn update(c: &Conversation, draft: &str) -> UpdateInput {
@@ -325,7 +326,7 @@ async fn chat_three_protocols_mock_http_chunked_safety_and_status() {
         super::stream::run(
             client,
             runtime,
-            super::stream::Request { model: "mock-model".into(), reasoning: None },
+            super::stream::Request { model: "mock-model".into(), reasoning: None, images: None },
             vec![],
             rx,
             tx,
@@ -369,7 +370,7 @@ async fn chat_three_protocols_mock_http_chunked_safety_and_status() {
         super::stream::run(
             client,
             runtime,
-            super::stream::Request { model: "mock-model".into(), reasoning: None },
+            super::stream::Request { model: "mock-model".into(), reasoning: None, images: None },
             vec![],
             rx,
             tx,
@@ -395,7 +396,7 @@ async fn chat_mock_http_cancel_connect_wait_and_before_start() {
         let job = tokio::spawn(super::stream::run(
             reqwest::Client::builder().no_proxy().build().unwrap(),
             runtime,
-            super::stream::Request { model: "mock".into(), reasoning: None },
+            super::stream::Request { model: "mock".into(), reasoning: None, images: None },
             vec![],
             rx,
             tx,
@@ -619,7 +620,7 @@ async fn chat_mock_http_cancel_stalled_body_read() {
     let task = tokio::spawn(super::stream::run(
         reqwest::Client::builder().no_proxy().build().unwrap(),
         runtime,
-        super::stream::Request { model: "mock".into(), reasoning: None },
+        super::stream::Request { model: "mock".into(), reasoning: None, images: None },
         vec![],
         rx,
         tx,
@@ -734,22 +735,110 @@ fn chat_reasoning_effort_maps_per_protocol_and_defaults_to_absent() {
     let history: Vec<Message> = vec![];
     // No reasoning keeps every protocol payload unchanged.
     for protocol in [Protocol::Chat, Protocol::Messages, Protocol::Responses] {
-        let plain = body(protocol, "m", &history, None);
+        let plain = body(protocol, "m", &history, None, &[]);
         assert!(plain.get("reasoning_effort").is_none());
         assert!(plain.get("reasoning").is_none());
         assert!(plain.get("thinking").is_none());
         assert_eq!(plain["stream"], true);
     }
-    let chat = body(Protocol::Chat, "m", &history, Some("high"));
+    let chat = body(Protocol::Chat, "m", &history, Some("high"), &[]);
     assert_eq!(chat["reasoning_effort"], "high");
-    let responses = body(Protocol::Responses, "m", &history, Some("medium"));
+    let responses = body(Protocol::Responses, "m", &history, Some("medium"), &[]);
     assert_eq!(responses["reasoning"]["effort"], "medium");
-    let messages = body(Protocol::Messages, "m", &history, Some("low"));
+    let messages = body(Protocol::Messages, "m", &history, Some("low"), &[]);
     assert_eq!(messages["thinking"]["type"], "enabled");
     assert_eq!(messages["thinking"]["budget_tokens"], 1024);
-    // Anthropic rejects max_tokens <= budget, so the ceiling must grow with it.
     assert_eq!(messages["max_tokens"], 8192 + 1024);
-    // Unknown levels are ignored instead of emitting an invalid field.
-    let off = body(Protocol::Chat, "m", &history, Some("off"));
+    let off = body(Protocol::Chat, "m", &history, Some("off"), &[]);
     assert!(off.get("reasoning_effort").is_none());
+}
+
+#[test]
+fn chat_stream_body_attaches_images_only_to_last_user_turn() {
+    use super::stream::{body, normalize_images};
+    use super::types::Message;
+    use crate::provider::chat_runtime::Protocol;
+
+    let png = "data:image/png;base64,AAAA";
+    let jpeg = "data:image/jpeg;base64,BBBB";
+    let history = vec![
+        Message {
+            id: "1".into(),
+            conversation_id: "c".into(),
+            ordinal: 0,
+            role: "user".into(),
+            content: "first".into(),
+            reply_to: None,
+            request_id: "r1".into(),
+            status: "completed".into(),
+            error_code: None,
+            finish_reason: None,
+            app_type: "chat".into(),
+            provider_id: "p".into(),
+            model: "m".into(),
+            created_at: 0,
+            updated_at: 0,
+        },
+        Message {
+            id: "2".into(),
+            conversation_id: "c".into(),
+            ordinal: 1,
+            role: "assistant".into(),
+            content: "reply".into(),
+            reply_to: None,
+            request_id: "r2".into(),
+            status: "completed".into(),
+            error_code: None,
+            finish_reason: None,
+            app_type: "chat".into(),
+            provider_id: "p".into(),
+            model: "m".into(),
+            created_at: 0,
+            updated_at: 0,
+        },
+        Message {
+            id: "3".into(),
+            conversation_id: "c".into(),
+            ordinal: 2,
+            role: "user".into(),
+            content: "look".into(),
+            reply_to: None,
+            request_id: "r3".into(),
+            status: "pending".into(),
+            error_code: None,
+            finish_reason: None,
+            app_type: "chat".into(),
+            provider_id: "p".into(),
+            model: "m".into(),
+            created_at: 0,
+            updated_at: 0,
+        },
+    ];
+    let images = vec![png.to_string(), jpeg.to_string()];
+
+    let chat = body(Protocol::Chat, "m", &history, None, &images);
+    assert_eq!(chat["messages"][0]["content"], "first");
+    assert_eq!(chat["messages"][1]["content"], "reply");
+    assert_eq!(chat["messages"][2]["content"][0]["type"], "text");
+    assert_eq!(chat["messages"][2]["content"][1]["type"], "image_url");
+    assert_eq!(chat["messages"][2]["content"][1]["image_url"]["url"], png);
+
+    let responses = body(Protocol::Responses, "m", &history, None, &images);
+    assert_eq!(responses["input"][2]["content"][0]["type"], "input_text");
+    assert_eq!(responses["input"][2]["content"][1]["type"], "input_image");
+
+    let anthropic = body(Protocol::Messages, "m", &history, None, &images);
+    assert_eq!(anthropic["messages"][2]["content"][1]["type"], "image");
+    assert_eq!(anthropic["messages"][2]["content"][1]["source"]["media_type"], "image/png");
+    assert_eq!(anthropic["messages"][2]["content"][1]["source"]["data"], "AAAA");
+    assert_eq!(anthropic["messages"][2]["content"][2]["source"]["media_type"], "image/jpeg");
+
+    assert!(normalize_images(None).unwrap().is_empty());
+    assert_eq!(normalize_images(Some(&images)).unwrap().len(), 2);
+    assert_eq!(
+        normalize_images(Some(&["data:image/svg+xml;base64,AA".to_string()])).unwrap_err(),
+        "chat_invalid_input"
+    );
+    let too_many = vec![png.to_string(); super::stream::MAX_IMAGES + 1];
+    assert_eq!(normalize_images(Some(&too_many)).unwrap_err(), "chat_invalid_input");
 }

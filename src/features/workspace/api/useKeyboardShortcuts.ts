@@ -11,6 +11,7 @@ import { copyAiText } from "../../files/api/aiClipboard";
 import { formatAiPathBlock } from "../../files/api/aiPathFormatter";
 import { TERMINAL_TAB_CLOSE_REQUEST_EVENT, type TerminalTabCloseRequestDetail } from "../../terminal/api/terminalCloseConfirm";
 import { dispatchCurrentWorkAction } from "../../terminal/api/currentWorkEvents";
+import { dispatchChatPanelToggle } from "../../terminal/api/chatPanelCommands";
 
 /** Convert a KeyboardEvent to a combo string like "Ctrl+Shift+T" */
 export function eventToCombo(e: KeyboardEvent): string {
@@ -94,6 +95,12 @@ export function useKeyboardShortcuts(options: KeyboardShortcutOptions = {}) {
       if (combo === "Ctrl+Shift+ArrowLeft") {
         e.preventDefault();
         dispatchCurrentWorkAction("previous");
+        return;
+      }
+
+      if (combo === "Alt+C") {
+        e.preventDefault();
+        dispatchChatPanelToggle();
         return;
       }
 

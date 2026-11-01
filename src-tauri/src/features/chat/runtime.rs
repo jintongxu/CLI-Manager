@@ -151,7 +151,7 @@ impl Runtime {
                 history,
                 resolved,
                 client,
-                stream::Request { model: i.model, reasoning: i.reasoning },
+                stream::Request { model: i.model, reasoning: i.reasoning, images: i.images },
                 cancel,
                 channel,
             )
@@ -347,6 +347,7 @@ mod tests {
             text: Some("test".into()),
             retry: false,
             reasoning: None,
+            images: None,
         }
     }
     #[tokio::test]
@@ -422,7 +423,7 @@ mod tests {
                     model: None,
                 },
                 reqwest::Client::new(),
-                stream::Request { model: "mock".into(), reasoning: None },
+                stream::Request { model: "mock".into(), reasoning: None, images: None },
                 cancel,
                 Channel::new(|_| Ok(())),
             )
@@ -478,7 +479,7 @@ mod tests {
                 h,
                 runtime,
                 reqwest::Client::builder().no_proxy().build().unwrap(),
-                stream::Request { model: "mock".into(), reasoning: None },
+                stream::Request { model: "mock".into(), reasoning: None, images: None },
                 cancel,
                 channel,
             )
@@ -536,7 +537,7 @@ mod tests {
             h,
             runtime,
             reqwest::Client::new(),
-            stream::Request { model: "mock".into(), reasoning: None },
+            stream::Request { model: "mock".into(), reasoning: None, images: None },
             cancel,
             Channel::new(|_| Ok(())),
         )

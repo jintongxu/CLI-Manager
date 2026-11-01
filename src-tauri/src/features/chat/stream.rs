@@ -213,7 +213,9 @@ impl Decoder {
 pub struct Request {
     pub model: String,
     pub reasoning: Option<String>,
+    pub images: Option<Vec<String>>,
 }
+
 /// Anthropic budgets thinking tokens instead of naming an effort level.
 fn thinking_budget(level: &str) -> Option<u32> {
     match level {
@@ -223,12 +225,74 @@ fn thinking_budget(level: &str) -> Option<u32> {
         _ => None,
     }
 }
-pub fn body(protocol: Protocol, model: &str, history: &[Message], reasoning: Option<&str>) -> Value {
-    let messages: Vec<Value> = history
+
+pub const MAX_IMAGES: usize = 4;
+
+/// Clipboard images arrive as data URIs; only these encodings are forwarded.
+pub fn normalize_images(images: Option<&[String]>) -> Result<Vec<String>> {
+    let Some(list) = images else { return Ok(Vec::new()); };
+    if list.len() > MAX_IMAGES {
+        return Err("chat_invalid_input".into());
+    }
+    for uri in list {
+        if !["data:image/png;base64,", "data:image/jpeg;base64,", "data:image/webp;base64,"]
+            .iter()
+            .any(|prefix| uri.starts_with(prefix))
+        {
+            return Err("chat_invalid_input".into());
+        }
+    }
+    Ok(list.to_vec())
+}
+
+fn anthropic_image(uri: &str) -> Value {
+    let (media_type, data) = if let Some(rest) = uri.strip_prefix("data:image/jpeg;base64,") {
+        ("image/jpeg", rest)
+    } else if let Some(rest) = uri.strip_prefix("data:image/webp;base64,") {
+        ("image/webp", rest)
+    } else {
+        ("image/png", uri.strip_prefix("data:image/png;base64,").unwrap_or(uri))
+    };
+    json!({"type":"image","source":{"type":"base64","media_type":media_type,"data":data}})
+}
+
+/// Only the newest user turn carries images; history stays plain strings.
+fn messages_with_images(protocol: Protocol, history: &[Message], images: &[String]) -> Vec<Value> {
+    let last_user = history.iter().rposition(|m| m.role == "user");
+    history
         .iter()
-        .map(|m| json!({"role":m.role,"content":m.content}))
-        .collect();
-    let effort = reasoning.filter(|level| matches!(*level, "low" | "medium" | "high"));
+        .enumerate()
+        .map(|(index, m)| {
+            if Some(index) != last_user || images.is_empty() {
+                return json!({"role":m.role,"content":m.content});
+            }
+            let mut parts: Vec<Value> = vec![match protocol {
+                Protocol::Responses => json!({"type":"input_text","text":m.content}),
+                _ => json!({"type":"text","text":m.content}),
+            }];
+            for uri in images {
+                parts.push(match protocol {
+                    Protocol::Messages => anthropic_image(uri),
+                    Protocol::Responses => json!({"type":"input_image","image_url":uri}),
+                    Protocol::Chat => json!({"type":"image_url","image_url":{"url":uri}}),
+                });
+            }
+            json!({"role":m.role,"content":parts})
+        })
+        .collect()
+}
+
+pub fn body(
+    protocol: Protocol,
+    model: &str,
+    history: &[Message],
+    reasoning: Option<&str>,
+    images: &[String],
+) -> Value {
+    let messages: Vec<Value> = messages_with_images(protocol, history, images);
+    let effort = reasoning
+        .map(str::trim)
+        .filter(|level| matches!(*level, "minimal" | "low" | "medium" | "high"));
     let mut payload = match protocol {
         Protocol::Messages => {
             json!({"model":model,"messages":messages,"stream":true,"max_tokens":8192})
@@ -254,6 +318,7 @@ pub fn body(protocol: Protocol, model: &str, history: &[Message], reasoning: Opt
     }
     payload
 }
+
 async fn cancelled(cancel: &mut watch::Receiver<bool>) {
     if *cancel.borrow() {
         return;
@@ -273,7 +338,8 @@ pub async fn run(
     tx: mpsc::Sender<Result<Part>>,
 ) {
     let job = async {
-        let mut request =
+        let attachments = normalize_images(request.images.as_deref())?;
+        let mut http_req =
             client
                 .post(&runtime.endpoint)
                 .json(&body(
@@ -281,14 +347,15 @@ pub async fn run(
                     &request.model,
                     &history,
                     request.reasoning.as_deref(),
+                    &attachments,
                 ));
-        request = match runtime.protocol {
-            Protocol::Messages => request
+        http_req = match runtime.protocol {
+            Protocol::Messages => http_req
                 .header("x-api-key", &runtime.key)
                 .header("anthropic-version", "2023-06-01"),
-            _ => request.bearer_auth(&runtime.key),
+            _ => http_req.bearer_auth(&runtime.key),
         };
-        let response = tokio::time::timeout(Duration::from_secs(15), request.send())
+        let response = tokio::time::timeout(Duration::from_secs(15), http_req.send())
             .await
             .map_err(|_| "chat_timeout".to_string())?
             .map_err(|e| {

@@ -1,5 +1,5 @@
 import { Suspense, lazy, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Activity, ArrowLeftRight, BarChart3, Cpu, Folder, GitBranch, MessageSquare } from "../../../shared/ui/icons";
+import { Activity, ArrowLeftRight, BarChart3, Cpu, Folder, GitBranch, MessageSquare, Sparkles } from "../../../shared/ui/icons";
 import { TERM_PANEL, panelColorTint } from "../../stats/api/termStatsUi";
 import { ResizableTerminalPanelFrame } from "./ResizableTerminalPanelFrame";
 import { SystemResourcesPanel } from "./SystemResourcesPanel";
@@ -21,7 +21,7 @@ const SessionReplayPanel = lazy(() =>
   import("./SessionReplayPanel").then((module) => ({ default: module.SessionReplayPanel }))
 );
 
-export type TerminalSidePanelTab = "stats" | "replay" | "git" | "files" | "providers" | "systemResources" | "btw";
+export type TerminalSidePanelTab = "stats" | "replay" | "git" | "files" | "providers" | "systemResources" | "btw" | "chat";
 
 export const TERMINAL_SIDE_PANEL_TAB_ORDER: readonly TerminalSidePanelTab[] = [
   "stats",
@@ -31,6 +31,7 @@ export const TERMINAL_SIDE_PANEL_TAB_ORDER: readonly TerminalSidePanelTab[] = [
   "files",
   "providers",
   "btw",
+  "chat",
 ];
 
 interface TerminalSidePanelProps {
@@ -47,6 +48,7 @@ interface TerminalSidePanelProps {
   providerDefaultAppType?: NativeProviderAppType;
   filesPanelContent?: ReactNode;
   btwPanelContent?: ReactNode;
+  chatPanelContent?: ReactNode;
   onTabChange: (tab: TerminalSidePanelTab) => void;
   onOpenProviderSettings?: () => void;
 }
@@ -65,6 +67,7 @@ export function TerminalSidePanel({
   providerDefaultAppType = "claude",
   filesPanelContent = null,
   btwPanelContent = null,
+  chatPanelContent = null,
   onTabChange,
   onOpenProviderSettings,
 }: TerminalSidePanelProps) {
@@ -78,6 +81,7 @@ export function TerminalSidePanel({
   const filesEnabled = visibleTabs.includes("files");
   const providersEnabled = visibleTabs.includes("providers");
   const btwEnabled = visibleTabs.includes("btw");
+  const chatEnabled = visibleTabs.includes("chat");
   const allTabs = [
     { key: "stats" as const, label: t("terminal.panel.sideStats"), color: TERM_PANEL.cyan, icon: <BarChart3 size={12} strokeWidth={1.8} /> },
     ...(systemResourcesEnabled
@@ -88,6 +92,7 @@ export function TerminalSidePanel({
     { key: "files" as const, label: t("terminal.panel.files"), color: TERM_PANEL.blue, icon: <Folder size={12} strokeWidth={1.8} />, disabled: filesTabDisabled },
     { key: "providers" as const, label: t("terminal.panel.providers"), color: TERM_PANEL.green, icon: <ArrowLeftRight size={12} strokeWidth={1.8} /> },
     { key: "btw" as const, label: t("terminal.panel.btw"), color: TERM_PANEL.magenta, icon: <MessageSquare size={12} strokeWidth={1.8} /> },
+    { key: "chat" as const, label: t("terminal.panel.chat"), color: TERM_PANEL.cyan, icon: <Sparkles size={12} strokeWidth={1.8} /> },
   ];
   const tabs = allTabs.filter((tab) => visibleTabs.includes(tab.key));
   const tabLayoutKey = tabs.map((tab) => `${tab.key}:${tab.label}`).join("|");
@@ -208,6 +213,7 @@ export function TerminalSidePanel({
           <ProviderQuickSwitchPanel open={open} defaultAppType={providerDefaultAppType} onOpenSettings={onOpenProviderSettings} />
         )}
         {btwEnabled && activeTab === "btw" ? btwPanelContent : null}
+        {chatEnabled && activeTab === "chat" ? chatPanelContent : null}
       </div>
     </ResizableTerminalPanelFrame>
   );
