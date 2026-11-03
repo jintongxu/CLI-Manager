@@ -17,6 +17,26 @@ test("real tab row renders the passed collection without quick-list or more-coun
   assert.doesNotMatch(source, /onAdd\(entry\.id\)/);
 });
 
+test("real terminal tabs form a continuous strip without gaps or outer rounding", () => {
+  const list = css.match(/\.ui-terminal-tab-row-list \{([^}]*)\}/)?.[1] ?? "";
+  const item = css.match(/\.ui-terminal-tab-row-item \{([^}]*)\}/)?.[1] ?? "";
+  assert.match(list, /gap: 0;/);
+  assert.match(item, /border-radius: 0;/);
+  assert.match(item, /border: 0;/);
+  assert.match(item, /background: transparent;/);
+  const active = css.match(/\.ui-terminal-tab-row-item\[data-active="true"\] \{([^}]*)\}/)?.[1] ?? "";
+  assert.doesNotMatch(active, /(?:height|padding|font-size|transform):/);
+  for (const theme of ["sea-salt", "tokyo-night-storm"]) {
+    const themeCss = readFileSync(new URL(`../src/styles/components/${theme}.css`, import.meta.url), "utf8");
+    const activeTheme = themeCss.match(/\.ui-terminal-tab-row-item\[data-active="true"\]:hover \{([^}]*)\}/)?.[1] ?? "";
+    assert.match(activeTheme, /35%/);
+    assert.match(activeTheme, /inset 0 1px/);
+  }
+  assert.match(css, /\.ui-terminal-tab-row-item\[data-active="true"\] \{[^}]*border-radius: 5px 5px 0 0;[^}]*box-shadow: inset 0 1px/);
+  assert.match(css, /\.ui-terminal-tab-row-item::after \{[^}]*pointer-events: none/);
+  assert.match(css, /\.ui-terminal-tab-row-item:focus-within \.ui-terminal-tab-row-close/);
+});
+
 test("tab row reuses project color, context information and shared smooth scrolling", () => {
   assert.match(source, /buildTerminalTabContext/);
   assert.match(source, /projectColor/);
@@ -85,6 +105,15 @@ test("drag overlay uses a compact title-only preview for new terminal tabs", () 
   assert.match(overlay, /type:.*terminal-tab/);
   assert.match(overlay, /const compact = dragData\?\.type === "terminal-tab"/);
   assert.match(overlay, /ui-terminal-simple-drag-overlay/);
+  assert.match(overlay, /width: active\?\.rect\.current\.initial\?\.width/);
+  assert.match(overlay, /height: active\?\.rect\.current\.initial\?\.height/);
+  assert.match(overlay, /adjustScale=\{false\}/);
+  assert.match(source, /scaleX: 1, scaleY: 1/);
+  assert.match(source, /CSS\.Transform\.toString\(horizontalTransform\)/);
+  const previewCss = css.match(/\.ui-terminal-simple-drag-overlay \{([^}]*)\}/)?.[1] ?? "";
+  assert.match(previewCss, /box-sizing: border-box/);
+  assert.match(previewCss, /height: 28px/);
+  assert.match(previewCss, /pointer-events: none/);
   assert.match(overlay, /const preview = overlay && compact \?/);
   assert.match(overlay, /style=\{compact \? undefined : style\}/);
   assert.match(source, /data-drag-hidden=\{isDragging \? "true" : "false"\}/);
@@ -96,12 +125,14 @@ test("tab-row CSS provides enlarged hit areas while preserving active, focus and
   }
   const tabItem = css.match(/\.ui-terminal-tab-row-item \{([^}]*)\}/)?.[1] ?? "";
   assert.match(tabItem, /min-width: 112px/);
-  assert.match(tabItem, /height: 36px/);
-  assert.match(tabItem, /padding: 0 10px/);
+  assert.match(tabItem, /height: 28px/);
+  assert.match(tabItem, /padding: 0 8px/);
+  assert.match(css, /\.ui-terminal-navigation-row--tabs \{ height: 28px; \}/);
+  assert.match(css, /\.ui-terminal-navigation-row--tabs > button \{ height: 26px; min-height: 0;/);
   const tabMain = css.match(/\.ui-terminal-tab-row-main \{([^}]*)\}/)?.[1] ?? "";
   assert.match(tabMain, /flex: 1 1 auto/);
-  assert.match(tabMain, /min-height: 32px/);
-  assert.match(css, /ui-terminal-tab-row-list[^}]*gap: 6px/);
+  assert.match(tabMain, /min-height: 26px/);
+  assert.match(css, /ui-terminal-tab-row-list[^}]*gap: 0;/);
   assert.match(css, /var\(--tab-accent/);
   assert.match(css, /data-sortable/);
   assert.match(css, /:focus-visible/);

@@ -39,7 +39,7 @@ export function SidebarTerminalList({ projectId, worktreeId, depth = 0, compact 
     <SortableContext items={sessions.map((session) => session.id)} strategy={verticalListSortingStrategy}>
     <div role="group" aria-label={t("sidebar.terminals.list")} data-sidebar-terminals
       className="sidebar-terminal-list" data-density={compact ? "compact" : "comfortable"}
-      style={{ marginInlineStart: 4 + depth * (compact ? 14 : 16) + (compact ? 18 : 20) }}
+      style={{ marginInlineStart: 4 + depth * (compact ? 10 : 12) }}
       onFocus={(event) => event.stopPropagation()}
       onKeyDown={(event) => {
         event.stopPropagation();

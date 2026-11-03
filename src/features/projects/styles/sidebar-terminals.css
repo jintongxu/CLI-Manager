@@ -2,18 +2,7 @@
 .sidebar-terminal-list {
   min-width: 0;
   margin-block: 3px 8px;
-  padding: 3px 4px 6px 8px;
-}
-
-.sidebar-terminal-list::before {
-  content: "";
-  display: block;
-  width: 2px;
-  height: 8px;
-  margin-inline-start: 5px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--primary) 45%, var(--border));
-  opacity: 0.55;
+  padding: 3px 4px 6px 4px;
 }
 
 .sidebar-terminal-row {
@@ -23,48 +12,34 @@
   gap: 8px;
   width: 100%;
   min-width: 0;
-  min-height: 34px;
-  margin-block: 2px;
-  padding: 5px 8px;
+  min-height: 32px;
+  margin-block: 1px;
+  padding: 4px 8px;
   border: 1px solid transparent;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--surface-container-low) 42%, transparent);
+  border-radius: 8px;
+  background: transparent;
   color: var(--on-surface-variant);
   font-size: 12px;
   line-height: 17px;
   text-align: start;
   cursor: pointer;
-  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
-}
-
-.sidebar-terminal-row::before {
-  content: "";
-  position: absolute;
-  inset-inline-start: -5px;
-  top: 50%;
-  width: 4px;
-  height: 1px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--border) 65%, transparent);
-  pointer-events: none;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
 }
 
 .sidebar-terminal-row:hover {
-  background: color-mix(in srgb, var(--on-surface) 8%, var(--surface-container-low));
-  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--on-surface) 7%, transparent);
   color: var(--on-surface);
-  transform: translateX(1px);
 }
 
 .sidebar-terminal-row[data-selected="true"] {
-  background: linear-gradient(100deg, color-mix(in srgb, var(--primary) 18%, var(--surface-container-lowest)), color-mix(in srgb, var(--primary) 7%, var(--surface-container-lowest)));
-  border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
-  box-shadow: inset 3px 0 0 var(--primary), 0 4px 12px color-mix(in srgb, var(--primary) 10%, transparent);
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  border-color: transparent;
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--primary) 65%, transparent);
   color: var(--on-surface);
 }
 
 .sidebar-terminal-row[data-selected="true"]:hover {
-  background: linear-gradient(100deg, color-mix(in srgb, var(--primary) 22%, var(--surface-container-lowest)), color-mix(in srgb, var(--primary) 9%, var(--surface-container-lowest)));
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
 /* Inset focus stays visible even when a narrow/flyout scroll container clips edges. */
@@ -85,12 +60,14 @@
 .sidebar-terminal-heading {
   display: flex;
   flex: 1 1 0;
-  flex-direction: column;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
 }
 
 .sidebar-terminal-title-line {
   display: flex;
+  flex: 1 1 0;
   align-items: center;
   gap: 5px;
   min-width: 0;
@@ -115,8 +92,10 @@
 /* Compact fixed indicators stay on the existing title-aligned second tier. */
 .sidebar-terminal-metadata {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 5px;
+  margin-left: auto;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
@@ -198,21 +177,20 @@
 }
 
 .ui-worktree-row:hover {
-  border-color: color-mix(in srgb, var(--border) 68%, transparent);
-  background: color-mix(in srgb, var(--surface-container-high) 52%, transparent);
+  border-color: transparent;
+  background: color-mix(in srgb, var(--on-surface) 7%, transparent);
   color: var(--on-surface);
-  transform: translateX(1px);
 }
 
 .ui-worktree-row[data-selected="true"] {
-  border-color: color-mix(in srgb, var(--primary) 48%, var(--border));
-  background: linear-gradient(100deg, color-mix(in srgb, var(--primary) 17%, var(--surface-container-lowest)), color-mix(in srgb, var(--primary) 6%, var(--surface-container-lowest)));
-  box-shadow: inset 3px 0 0 var(--primary), 0 4px 12px color-mix(in srgb, var(--primary) 9%, transparent);
+  border-color: transparent;
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--primary) 65%, transparent);
   color: var(--on-surface);
 }
 
 .ui-worktree-row[data-selected="true"]:hover {
-  background: linear-gradient(100deg, color-mix(in srgb, var(--primary) 22%, var(--surface-container-lowest)), color-mix(in srgb, var(--primary) 9%, var(--surface-container-lowest)));
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
 .ui-worktree-row .ui-worktree-tree-icon {

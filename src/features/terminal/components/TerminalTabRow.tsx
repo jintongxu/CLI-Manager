@@ -48,8 +48,9 @@ function TabItem({
     transition: DND_SORTABLE_TRANSITION,
   });
   const context = formatTerminalTabContext(entry.session, entry.project ?? undefined, entry.worktree, contextLabels);
+  const horizontalTransform = transform ? { ...transform, y: 0, scaleX: 1, scaleY: 1 } : transform;
   const style = {
-    ...(sortable && !isDragging ? { transform: CSS.Transform.toString(transform), transition } : {}),
+    ...(sortable && !isDragging ? { transform: CSS.Transform.toString(horizontalTransform), transition } : {}),
     "--tab-accent": projectColorOf(entry, contextLabels),
   } as React.CSSProperties;
   return (

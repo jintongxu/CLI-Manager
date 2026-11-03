@@ -387,14 +387,6 @@ function TreeNodeItemImpl({
           {...listeners}
         >
           <span className={`ui-tree-leading-icon${inheritsParentPath ? " ui-tree-leading-icon-inherited" : ""}`}>
-            {hasWorktrees && (
-              <ChevronRight
-                size={11}
-                strokeWidth={2}
-                className="shrink-0 text-text-muted transition-transform duration-150"
-                style={{ transform: worktreesOpen ? "rotate(90deg)" : "rotate(0)" }}
-              />
-            )}
             {inheritsParentPath && (
               <span className="ui-tree-inherit-marker" role="img" aria-label={t("sidebar.tree.inheritsParent")} title={t("sidebar.tree.inheritsParent")}>
                 <Link2 size={11} strokeWidth={2} aria-hidden="true" />
