@@ -1,3 +1,4 @@
+import { QuickChatHotkeySettings } from "./QuickChatHotkeySettings";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge, Box, Button, Card, Group, Kbd, Stack, Text } from "@mantine/core";
 import {
@@ -135,6 +136,7 @@ export function ShortcutSettingsPage({ searchValue }: ShortcutSettingsPageProps)
 
   return (
     <Stack gap="md">
+      <QuickChatHotkeySettings />
       <section className="ui-surface-card rounded-2xl border border-border p-4">
         <Stack gap="sm">
           <Box>

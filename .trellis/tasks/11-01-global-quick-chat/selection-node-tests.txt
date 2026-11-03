@@ -1,0 +1,166 @@
+TAP version 13
+# Subtest: StrictMode subscriptions/start replay are idempotent; switching and hidden subscriptions never cancel
+ok 1 - StrictMode subscriptions/start replay are idempotent; switching and hidden subscriptions never cancel
+  ---
+  duration_ms: 3.6007
+  type: 'test'
+  ...
+# Subtest: channel rejects old sequence, request, message and late terminal/retry events; retry keeps user slot
+ok 2 - channel rejects old sequence, request, message and late terminal/retry events; retry keeps user slot
+  ---
+  duration_ms: 1.2588
+  type: 'test'
+  ...
+# Subtest: rapid selects ignore late detail, stale lists cannot resurrect explicitly deleted chats
+ok 3 - rapid selects ignore late detail, stale lists cannot resurrect explicitly deleted chats
+  ---
+  duration_ms: 0.9024
+  type: 'test'
+  ...
+# Subtest: stop-before-generate receipt sends immediate tombstone; delete fences late channel
+ok 4 - stop-before-generate receipt sends immediate tombstone; delete fences late channel
+  ---
+  duration_ms: 1.8855
+  type: 'test'
+  ...
+# Subtest: early event before invoke receipt retains cumulative final answer
+ok 5 - early event before invoke receipt retains cumulative final answer
+  ---
+  duration_ms: 0.7852
+  type: 'test'
+  ...
+# Subtest: initialize restoration never generates automatically
+ok 6 - initialize restoration never generates automatically
+  ---
+  duration_ms: 0.4453
+  type: 'test'
+  ...
+# Subtest: retry stopped answer preserves independently saved next-question composer
+ok 7 - retry stopped answer preserves independently saved next-question composer
+  ---
+  duration_ms: 1.1581
+  type: 'test'
+  ...
+# Subtest: selection preserves report-and-swallow callers while strict callers observe errors and stale tokens
+ok 8 - selection preserves report-and-swallow callers while strict callers observe errors and stale tokens
+  ---
+  duration_ms: 1.1809
+  type: 'test'
+  ...
+# Subtest: selected snapshot excludes other message histories, drafts and provider options
+ok 9 - selected snapshot excludes other message histories, drafts and provider options
+  ---
+  duration_ms: 2.2466
+  type: 'test'
+  ...
+# Subtest: command ledger deduplicates pending, completed and failed IDs without replaying requests
+ok 10 - command ledger deduplicates pending, completed and failed IDs without replaying requests
+  ---
+  duration_ms: 0.2476
+  type: 'test'
+  ...
+# Subtest: remote rejects old snapshots and waits for authoritative draft ack before generation
+ok 11 - remote rejects old snapshots and waits for authoritative draft ack before generation
+  ---
+  duration_ms: 19.3218
+  type: 'test'
+  ...
+# Subtest: remote presentation cannot load real controller/catalog; Rust sender identity fences both channels
+ok 12 - remote presentation cannot load real controller/catalog; Rust sender identity fences both channels
+  ---
+  duration_ms: 1.5603
+  type: 'test'
+  ...
+# Subtest: shortcut preferences default/migrate without changing disabled or cleared settings
+ok 13 - shortcut preferences default/migrate without changing disabled or cleared settings
+  ---
+  duration_ms: 5.5381
+  type: 'test'
+  ...
+# Subtest: main owner executes remote intents once and publishes only projected catalog/selected state
+ok 14 - main owner executes remote intents once and publishes only projected catalog/selected state
+  ---
+  duration_ms: 18.7837
+  type: 'test'
+  ...
+# Subtest: draft burst coalesces and navigation waits for the latest acknowledged edit
+ok 15 - draft burst coalesces and navigation waits for the latest acknowledged edit
+  ---
+  duration_ms: 20.2684
+  type: 'test'
+  ...
+# Subtest: quick presentation synchronizes theme store and submit lock covers pre-ack interval
+ok 16 - quick presentation synchronizes theme store and submit lock covers pre-ack interval
+  ---
+  duration_ms: 0.4294
+  type: 'test'
+  ...
+# Subtest: owner reload rejects pending generation and never retries it into the new epoch
+ok 17 - owner reload rejects pending generation and never retries it into the new epoch
+  ---
+  duration_ms: 10.2168
+  type: 'test'
+  ...
+# Subtest: independent creation/detail loads never borrow global selection or its race token
+ok 18 - independent creation/detail loads never borrow global selection or its race token
+  ---
+  duration_ms: 0.763
+  type: 'test'
+  ...
+# Subtest: quick reasoning starts medium and retains explicit off in generated intent
+ok 19 - quick reasoning starts medium and retains explicit off in generated intent
+  ---
+  duration_ms: 8.5024
+  type: 'test'
+  ...
+# Subtest: quick selection cannot be overwritten by an older load racing explicit new
+ok 20 - quick selection cannot be overwritten by an older load racing explicit new
+  ---
+  duration_ms: 15.848
+  type: 'test'
+  ...
+# Subtest: quick non-selecting create/load preserve main filtered page and pagination
+ok 21 - quick non-selecting create/load preserve main filtered page and pagination
+  ---
+  duration_ms: 0.8251
+  type: 'test'
+  ...
+# Subtest: quick hello after DB failure never loads catalog, creates conversation or publishes ready
+ok 22 - quick hello after DB failure never loads catalog, creates conversation or publishes ready
+  ---
+  duration_ms: 8.2674
+  type: 'test'
+  ...
+# Subtest: unready panel never diagnoses an unloaded catalog as missing models
+ok 23 - unready panel never diagnoses an unloaded catalog as missing models
+  ---
+  duration_ms: 56.1294
+  type: 'test'
+  ...
+# Subtest: shared sidebar/quick reasoning opts out of input chrome and chevron, retaining accessible Select
+ok 24 - shared sidebar/quick reasoning opts out of input chrome and chevron, retaining accessible Select
+  ---
+  duration_ms: 13.2416
+  type: 'test'
+  ...
+# Subtest: quick Expand waits for same-ID continuation before native reveal/hide and surfaces failures
+ok 25 - quick Expand waits for same-ID continuation before native reveal/hide and surfaces failures
+  ---
+  duration_ms: 0.6126
+  type: 'test'
+  ...
+# Subtest: real owner continuation rejects failed or superseded selection even with cached same-ID detail
+ok 26 - real owner continuation rejects failed or superseded selection even with cached same-ID detail
+  ---
+  duration_ms: 28.0269
+  type: 'test'
+  ...
+1..26
+# tests 26
+# suites 0
+# pass 26
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 738.074

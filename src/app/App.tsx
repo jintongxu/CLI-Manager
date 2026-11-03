@@ -7,6 +7,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Sidebar } from "../features/projects/index";
 import { TerminalTabs } from "../features/terminal/index";
+import { startQuickChatOwner } from "../features/chat/api/quickChatOwner";
 import { AppWorkspace } from "./components/AppWorkspace";
 import { usePrimarySpaceStore, showProjectSpace } from "../features/workspace/api/primarySpaceState";
 import { WorkspaceLayoutShell } from "../features/workspace/api/WorkspaceLayoutShell";
@@ -640,6 +641,10 @@ function runDeferredStartupTasks(openSettings?: (tab?: SettingsTab) => void): vo
 }
 
 function App() {
+  useEffect(() => {
+    void startQuickChatOwner(source => usePrimarySpaceStore.getState().setSpace("chat", source))
+      .catch(error => console.warn("Quick chat bridge unavailable", error));
+  }, []);
   const { language, t } = useI18n();
   const space = usePrimarySpaceStore((s) => s.space);
   const setSpace = usePrimarySpaceStore((s) => s.setSpace);

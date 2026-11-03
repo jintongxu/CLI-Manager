@@ -1,5 +1,7 @@
 export type MessageStatus = "pending" | "completed" | "stopped" | "failed" | "interrupted";
+export type ConversationOrigin = "workspace" | "sidebar" | "quick-chat";
 export interface Conversation {
+  origin: ConversationOrigin;
   id: string; title: string; draft: string; appType: string; providerId: string; model: string;
   createdAt: number; updatedAt: number; revision: number; requestId: string | null; leaseUntil: number | null;
 }
@@ -35,7 +37,7 @@ export interface ChatTransport {
   initialize(): Promise<{ conversations: Conversation[]; unsaved: ChatEvent[] }>;
   list(search: string, offset: number): Promise<Conversation[]>;
   get(conversationId: string): Promise<Detail>;
-  create(): Promise<Detail>;
+  create(origin?: ConversationOrigin): Promise<Detail>;
   update(input: UpdateInput): Promise<Detail>;
   delete(conversationId: string, revision: number): Promise<void>;
   providers(): Promise<ProviderOption[]>;

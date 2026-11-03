@@ -14,6 +14,7 @@ pub(super) async fn database() -> (tempfile::TempDir, Repository) {
         .foreign_keys(true);
     let mut c = SqliteConnection::connect_with(&options).await.unwrap();
     sqlx::raw_sql(super::SCHEMA).execute(&mut c).await.unwrap();
+    sqlx::raw_sql(super::ORIGIN_MIGRATION).execute(&mut c).await.unwrap();
     c.close().await.unwrap();
     let repo = Repository::open(&path).await.unwrap();
     (dir, repo)
@@ -47,7 +48,7 @@ fn update(c: &Conversation, draft: &str) -> UpdateInput {
 async fn chat_real_sqlite_reopen_rollback_revision_lease_retry_delete() {
     let (dir, repo) = database().await;
     let c = repo
-        .create(CreateInput { title: None })
+        .create(CreateInput { title: None, origin: ConversationOrigin::Workspace })
         .await
         .unwrap()
         .conversation;
@@ -108,6 +109,7 @@ async fn chat_real_sqlite_reopen_rollback_revision_lease_retry_delete() {
     // A failing item rolls back every earlier draft in the batch.
     let other = repo
         .create(CreateInput {
+            origin: ConversationOrigin::Workspace,
             title: Some("literal %_ '".into()),
         })
         .await
@@ -157,6 +159,7 @@ async fn chat_pagination_capacity_context_rollback() {
     let (_dir, repo) = database().await;
     for n in 0..55 {
         repo.create(CreateInput {
+            origin: ConversationOrigin::Workspace,
             title: Some(format!("chat {n}")),
         })
         .await
@@ -232,7 +235,7 @@ fn chat_three_protocols_every_byte_utf8_crlf_multiline_and_eof() {
         assert_eq!(done, 1);
         assert!(Decoder::new(p).eof().is_err());
     }
-    for (p,raw) in [(Protocol::Chat,"data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[]}}]}\n\n"),
+    for (p,raw) in [(Protocol::Chat,"data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{}]}}]}\n\n"),
  (Protocol::Messages,"data: {\"type\":\"content_block_start\",\"content_block\":{\"type\":\"tool_use\"}}\n\n"),
  (Protocol::Responses,"data: {\"type\":\"response.output_item.added\",\"item\":{\"type\":\"function_call\"}}\n\n")] {
   assert_eq!(Decoder::new(p).feed(raw.as_bytes()).unwrap_err(),"chat_protocol");
@@ -418,7 +421,7 @@ async fn chat_mock_http_cancel_connect_wait_and_before_start() {
 async fn chat_transaction_failure_rolls_back_messages_and_lease() {
     let (_dir, repo) = database().await;
     let c = repo
-        .create(CreateInput { title: None })
+        .create(CreateInput { title: None, origin: ConversationOrigin::Workspace })
         .await
         .unwrap()
         .conversation;
@@ -456,7 +459,7 @@ async fn chat_context_message_count_and_byte_limits_rollback() {
     let (_dir, repo) = database().await;
     for (count, bytes) in [(200, 1), (2, 512 * 1024)] {
         let c = repo
-            .create(CreateInput { title: None })
+            .create(CreateInput { title: None, origin: ConversationOrigin::Workspace })
             .await
             .unwrap()
             .conversation;
@@ -488,7 +491,7 @@ fn chat_ipc_unknown_fields_rejected() {
 async fn chat_explicit_snapshot_retry_expired_lease_cannot_overwrite_recovery() {
     let (_dir, repo) = database().await;
     let c = repo
-        .create(CreateInput { title: None })
+        .create(CreateInput { title: None, origin: ConversationOrigin::QuickChat })
         .await
         .unwrap()
         .conversation;
@@ -526,6 +529,7 @@ async fn chat_explicit_snapshot_retry_expired_lease_cannot_overwrite_recovery() 
         .unwrap();
     assert_eq!(rows.len(), 2);
     let archived = rows.iter().find(|r| r.id != c.id).unwrap();
+    assert_eq!(archived.origin, ConversationOrigin::QuickChat);
     assert_eq!(
         repo.get(&archived.id).await.unwrap().messages[1].content,
         "retained old text"
@@ -577,6 +581,7 @@ async fn chat_additive_migration_preserves_existing_tables_and_rolls_back_failur
         .execute(&mut *tx)
         .await
         .unwrap();
+    sqlx::raw_sql(super::ORIGIN_MIGRATION).execute(&mut *tx).await.unwrap();
     tx.commit().await.unwrap();
     let marker: String = sqlx::query_scalar("SELECT value FROM legacy_marker")
         .fetch_one(&mut connection)
@@ -640,7 +645,7 @@ async fn chat_mock_http_cancel_stalled_body_read() {
 async fn chat_retry_preserves_independent_saved_draft() {
     let (_dir, repo) = database().await;
     let c = repo
-        .create(CreateInput { title: None })
+        .create(CreateInput { title: None, origin: ConversationOrigin::Workspace })
         .await
         .unwrap()
         .conversation;
@@ -668,7 +673,7 @@ async fn chat_retry_preserves_independent_saved_draft() {
 async fn chat_early_restart_refresh_and_exact_expiry_boundary() {
     let (dir, repo) = database().await;
     let c = repo
-        .create(CreateInput { title: None })
+        .create(CreateInput { title: None, origin: ConversationOrigin::Workspace })
         .await
         .unwrap()
         .conversation;
@@ -841,4 +846,41 @@ fn chat_stream_body_attaches_images_only_to_last_user_turn() {
     );
     let too_many = vec![png.to_string(); super::stream::MAX_IMAGES + 1];
     assert_eq!(normalize_images(Some(&too_many)).unwrap_err(), "chat_invalid_input");
+}
+
+#[tokio::test]
+async fn chat_origin_migration_new_upgrade_reopen_and_contract() {
+    // Same source used by plugin migration 58; historical v55 is applied first.
+    for legacy in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("origin.db");
+        std::fs::File::create(&path).unwrap();
+        let options = sqlx::sqlite::SqliteConnectOptions::new().filename(&path);
+        let mut connection = SqliteConnection::connect_with(&options).await.unwrap();
+        sqlx::raw_sql(super::SCHEMA).execute(&mut connection).await.unwrap();
+        let old_id = uuid::Uuid::new_v4().to_string();
+        if legacy {
+            sqlx::query("INSERT INTO chat_conversations(id,title,created_at,updated_at) VALUES(?,'old',1,1)")
+                .bind(&old_id).execute(&mut connection).await.unwrap();
+        }
+        sqlx::raw_sql(super::ORIGIN_MIGRATION).execute(&mut connection).await.unwrap();
+        connection.close().await.unwrap();
+        let repo = Repository::open(&path).await.unwrap();
+        if legacy {
+            assert_eq!(repo.get(&old_id).await.unwrap().conversation.origin, ConversationOrigin::Workspace);
+        }
+        let default: CreateInput = serde_json::from_value(serde_json::json!({"title":null})).unwrap();
+        assert_eq!(default.origin, ConversationOrigin::Workspace);
+        assert!(serde_json::from_value::<CreateInput>(serde_json::json!({"origin":"invalid"})).is_err());
+        let c = repo.create(CreateInput { title: None, origin: ConversationOrigin::QuickChat }).await.unwrap().conversation;
+        let mut raw = serde_json::json!({"conversationId":c.id,"revision":c.revision,"origin":"workspace"});
+        assert!(serde_json::from_value::<UpdateInput>(raw.take()).is_err());
+        let sidebar = repo.create(CreateInput { title: None, origin: ConversationOrigin::Sidebar }).await.unwrap().conversation;
+        repo.pool.close().await;
+        let repo = Repository::open(&path).await.unwrap();
+        assert_eq!(repo.get(&c.id).await.unwrap().conversation.origin, ConversationOrigin::QuickChat);
+        assert_eq!(repo.get(&sidebar.id).await.unwrap().conversation.origin, ConversationOrigin::Sidebar);
+        assert!(sqlx::query("INSERT INTO chat_conversations(id,title,origin,created_at,updated_at) VALUES(?,'','invalid',0,0)")
+            .bind(uuid::Uuid::new_v4().to_string()).execute(&repo.pool).await.is_err());
+    }
 }

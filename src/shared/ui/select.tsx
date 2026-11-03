@@ -55,6 +55,9 @@ function collectOptions(children: ReactNode, acc: ParsedOption[]): void {
 }
 
 interface SelectProps {
+  /** Opt out of input chrome for compact toolbar controls only. */
+  unstyled?: boolean;
+  showChevron?: boolean;
   className?: string;
   contentClassName?: string;
   value?: string | number;
@@ -71,6 +74,8 @@ interface SelectProps {
 }
 
 export function Select({
+  unstyled = false,
+  showChevron = true,
   className,
   contentClassName,
   value,
@@ -113,7 +118,8 @@ export function Select({
         id={id}
         aria-label={ariaLabel}
         className={cn(
-          "ui-input ui-focus-ring flex h-8 w-full items-center justify-between gap-2 px-3 py-1.5 text-xs outline-none",
+          !unstyled && "ui-input",
+          "ui-focus-ring flex h-8 w-full items-center justify-between gap-2 px-3 py-1.5 text-xs outline-none",
           "disabled:cursor-not-allowed disabled:opacity-50",
           "data-[placeholder]:[&_[data-slot=value]]:text-on-surface-variant",
           className
@@ -122,12 +128,12 @@ export function Select({
         <span data-slot="value" className="flex-1 truncate text-left">
           <SelectPrimitive.Value placeholder={placeholder ?? emptyOptionLabel ?? "请选择"} />
         </span>
-        <SelectPrimitive.Icon asChild>
+        {showChevron && <SelectPrimitive.Icon asChild>
           <ChevronDown
             size={10}
             className="shrink-0 opacity-60 transition-transform data-[state=open]:rotate-180"
           />
-        </SelectPrimitive.Icon>
+        </SelectPrimitive.Icon>}
       </SelectPrimitive.Trigger>
 
       <SelectPrimitive.Portal>

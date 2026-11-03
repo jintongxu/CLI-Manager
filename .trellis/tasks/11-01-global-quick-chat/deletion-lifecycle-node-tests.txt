@@ -1,0 +1,388 @@
+TAP version 13
+# Subtest: StrictMode subscriptions/start replay are idempotent; switching and hidden subscriptions never cancel
+ok 1 - StrictMode subscriptions/start replay are idempotent; switching and hidden subscriptions never cancel
+  ---
+  duration_ms: 7.6762
+  type: 'test'
+  ...
+# Subtest: channel rejects old sequence, request, message and late terminal/retry events; retry keeps user slot
+ok 2 - channel rejects old sequence, request, message and late terminal/retry events; retry keeps user slot
+  ---
+  duration_ms: 3.5726
+  type: 'test'
+  ...
+# Subtest: rapid selects ignore late detail, stale lists cannot resurrect explicitly deleted chats
+ok 3 - rapid selects ignore late detail, stale lists cannot resurrect explicitly deleted chats
+  ---
+  duration_ms: 1.3557
+  type: 'test'
+  ...
+# Subtest: stop-before-generate receipt sends immediate tombstone; delete fences late channel
+ok 4 - stop-before-generate receipt sends immediate tombstone; delete fences late channel
+  ---
+  duration_ms: 3.0109
+  type: 'test'
+  ...
+# Subtest: early event before invoke receipt retains cumulative final answer
+ok 5 - early event before invoke receipt retains cumulative final answer
+  ---
+  duration_ms: 1.2584
+  type: 'test'
+  ...
+# Subtest: initialize restoration never generates automatically
+ok 6 - initialize restoration never generates automatically
+  ---
+  duration_ms: 1.3307
+  type: 'test'
+  ...
+# Subtest: retry stopped answer preserves independently saved next-question composer
+ok 7 - retry stopped answer preserves independently saved next-question composer
+  ---
+  duration_ms: 3.2295
+  type: 'test'
+  ...
+# Subtest: selection preserves report-and-swallow callers while strict callers observe errors and stale tokens
+ok 8 - selection preserves report-and-swallow callers while strict callers observe errors and stale tokens
+  ---
+  duration_ms: 3.9642
+  type: 'test'
+  ...
+# Subtest: actual useAppExit awaits prepared native partial before suspend, draft flush and backup
+ok 9 - actual useAppExit awaits prepared native partial before suspend, draft flush and backup
+  ---
+  duration_ms: 48.4027
+  type: 'test'
+  ...
+# Subtest: chat storage failure blocks metadata/cleanup/commit, abort restores editor, explicit retry saves
+ok 10 - chat storage failure blocks metadata/cleanup/commit, abort restores editor, explicit retry saves
+  ---
+  duration_ms: 31.5312
+  type: 'test'
+  ...
+# Subtest: pause failure aborts; failed native abort retains editor barrier until explicit successful resume
+ok 11 - pause failure aborts; failed native abort retains editor barrier until explicit successful resume
+  ---
+  duration_ms: 69.8142
+  type: 'test'
+  ...
+# Subtest: tray hide is not exit authority: mounted chat remains running/editable
+ok 12 - tray hide is not exit authority: mounted chat remains running/editable
+  ---
+  duration_ms: 275.6204
+  type: 'test'
+  ...
+# Subtest: selection bounds, cancel without mutation, immutable capture, duplicate confirm, partial outcomes and scope races
+ok 13 - selection bounds, cancel without mutation, immutable capture, duplicate confirm, partial outcomes and scope races
+  ---
+  duration_ms: 4.5075
+  type: 'test'
+  ...
+# Subtest: render wiring: loaded source+search only, native checkbox, no row navigation/drag, cancel and unselect
+ok 14 - render wiring: loaded source+search only, native checkbox, no row navigation/drag, cancel and unselect
+  ---
+  duration_ms: 315.6343
+  type: 'test'
+  ...
+# Subtest: wiring freezes confirmation, locks search/tabs, no extra targets; retains localized partial failure
+ok 15 - wiring freezes confirmation, locks search/tabs, no extra targets; retains localized partial failure
+  ---
+  duration_ms: 83.9027
+  type: 'test'
+  ...
+# Subtest: source/search resets including externally controlled scope cannot delete old invisible selection
+ok 16 - source/search resets including externally controlled scope cannot delete old invisible selection
+  ---
+  duration_ms: 79.523
+  type: 'test'
+  ...
+# Subtest: bulk uses actual remove stop/revision cleanup; late terminal never resurrects, unknown missing fails
+ok 17 - bulk uses actual remove stop/revision cleanup; late terminal never resurrects, unknown missing fails
+  ---
+  duration_ms: 2.0303
+  type: 'test'
+  ...
+# Subtest: stopped terminal refresh racing remove neither reports missing after success nor swallows cancellation failure
+ok 18 - stopped terminal refresh racing remove neither reports missing after success nor swallows cancellation failure
+  ---
+  duration_ms: 1.4024
+  type: 'test'
+  ...
+# Subtest: bulk deleting current quick chat recovers one independent replacement without expanding captured targets
+ok 19 - bulk deleting current quick chat recovers one independent replacement without expanding captured targets
+  ---
+  duration_ms: 14.8794
+  type: 'test'
+  ...
+# Subtest: dialog accessibility wiring and bilingual counters/warnings cover empty selection and frozen target count
+ok 20 - dialog accessibility wiring and bilingual counters/warnings cover empty selection and frozen target count
+  ---
+  duration_ms: 60.3203
+  type: 'test'
+  ...
+# Subtest: partial revision failure retries only failed ID using fresh revision, without replaying successful deletes
+ok 21 - partial revision failure retries only failed ID using fresh revision, without replaying successful deletes
+  ---
+  duration_ms: 0.9178
+  type: 'test'
+  ...
+# Subtest: terminal during pending DELETE: completed saved=true, delete fails
+ok 22 - terminal during pending DELETE: completed saved=true, delete fails
+  ---
+  duration_ms: 1.1823
+  type: 'test'
+  ...
+# Subtest: terminal during pending DELETE: completed saved=true, delete succeeds
+ok 23 - terminal during pending DELETE: completed saved=true, delete succeeds
+  ---
+  duration_ms: 1.1329
+  type: 'test'
+  ...
+# Subtest: terminal during pending DELETE: stopped saved=true, delete fails
+ok 24 - terminal during pending DELETE: stopped saved=true, delete fails
+  ---
+  duration_ms: 1.0019
+  type: 'test'
+  ...
+# Subtest: terminal during pending DELETE: stopped saved=true, delete succeeds
+ok 25 - terminal during pending DELETE: stopped saved=true, delete succeeds
+  ---
+  duration_ms: 1.2636
+  type: 'test'
+  ...
+# Subtest: terminal during pending DELETE: stopped saved=false, delete fails
+ok 26 - terminal during pending DELETE: stopped saved=false, delete fails
+  ---
+  duration_ms: 0.7475
+  type: 'test'
+  ...
+# Subtest: terminal during pending DELETE: stopped saved=false, delete succeeds
+ok 27 - terminal during pending DELETE: stopped saved=false, delete succeeds
+  ---
+  duration_ms: 0.8478
+  type: 'test'
+  ...
+# Subtest: space toggles preserve both owner element paths/types/keys and keep hidden tree inert
+ok 28 - space toggles preserve both owner element paths/types/keys and keep hidden tree inert
+  ---
+  duration_ms: 1.9499
+  type: 'test'
+  ...
+# Subtest: primary navigation has explicit accessible selection and independent global settings
+ok 29 - primary navigation has explicit accessible selection and independent global settings
+  ---
+  duration_ms: 16.4565
+  type: 'test'
+  ...
+# Subtest: ordinary and Current Work portal terminal/file/transcript bodies are inactive and hidden in chat
+ok 30 - ordinary and Current Work portal terminal/file/transcript bodies are inactive and hidden in chat
+  ---
+  duration_ms: 102.2908
+  type: 'test'
+  ...
+# Subtest: chat blocks terminal keyboard/current-work/sidebar/fullscreen/history and mouse switches but permits palette
+ok 31 - chat blocks terminal keyboard/current-work/sidebar/fullscreen/history and mouse switches but permits palette
+  ---
+  duration_ms: 41.5114
+  type: 'test'
+  ...
+# Subtest: explicit resource/current-work navigation returns projects, passive store changes do not
+ok 32 - explicit resource/current-work navigation returns projects, passive store changes do not
+  ---
+  duration_ms: 19.385
+  type: 'test'
+  ...
+# Subtest: notification target activation routes only after validating target; arrival registration has no route
+ok 33 - notification target activation routes only after validating target; arrival registration has no route
+  ---
+  duration_ms: 12.9616
+  type: 'test'
+  ...
+# Subtest: palette explicit terminal actions route synchronously, theme stays in chat
+ok 34 - palette explicit terminal actions route synchronously, theme stays in chat
+  ---
+  duration_ms: 12.0933
+  type: 'test'
+  ...
+# Subtest: App composition keeps TerminalTabs at the same sibling identity across compact/fullscreen/sidebar/space modes
+ok 35 - App composition keeps TerminalTabs at the same sibling identity across compact/fullscreen/sidebar/space modes
+  ---
+  duration_ms: 12.6709
+  type: 'test'
+  ...
+# Subtest: visibility invalidates memoized panes and Current Work targets retain registration while inert
+ok 36 - visibility invalidates memoized panes and Current Work targets retain registration while inert
+  ---
+  duration_ms: 79.4875
+  type: 'test'
+  ...
+# Subtest: explicit navigation source resets normally and never follows controller selection
+ok 37 - explicit navigation source resets normally and never follows controller selection
+  ---
+  duration_ms: 7.5896
+  type: 'test'
+  ...
+# Subtest: 250ms debounce coalesces drafts; explicit flush and rehydrate retain exact text
+ok 38 - 250ms debounce coalesces drafts; explicit flush and rehydrate retain exact text
+  ---
+  duration_ms: 289.2927
+  type: 'test'
+  ...
+# Subtest: in-flight draft save cannot overwrite newer editing; serialized CAS and final flush win
+ok 39 - in-flight draft save cannot overwrite newer editing; serialized CAS and final flush win
+  ---
+  duration_ms: 0.7354
+  type: 'test'
+  ...
+# Subtest: storage failure stays dirty; explicit retry saves without any model request
+ok 40 - storage failure stays dirty; explicit retry saves without any model request
+  ---
+  duration_ms: 0.8436
+  type: 'test'
+  ...
+# Subtest: CAS conflict refreshes base without replacing draft, retries only on explicit action
+ok 41 - CAS conflict refreshes base without replacing draft, retries only on explicit action
+  ---
+  duration_ms: 0.3813
+  type: 'test'
+  ...
+# Subtest: unsaved terminal snapshot blocks exit/send; empty backend flush acknowledgement refreshes it
+ok 42 - unsaved terminal snapshot blocks exit/send; empty backend flush acknowledgement refreshes it
+  ---
+  duration_ms: 1.5973
+  type: 'test'
+  ...
+# Subtest: suspend freezes edits/new requests; flush persists drafts; resume never retransmits
+ok 43 - suspend freezes edits/new requests; flush persists drafts; resume never retransmits
+  ---
+  duration_ms: 0.625
+  type: 'test'
+  ...
+# Subtest: selected snapshot excludes other message histories, drafts and provider options
+ok 44 - selected snapshot excludes other message histories, drafts and provider options
+  ---
+  duration_ms: 4.8198
+  type: 'test'
+  ...
+# Subtest: command ledger deduplicates pending, completed and failed IDs without replaying requests
+ok 45 - command ledger deduplicates pending, completed and failed IDs without replaying requests
+  ---
+  duration_ms: 0.5447
+  type: 'test'
+  ...
+# Subtest: remote rejects old snapshots and waits for authoritative draft ack before generation
+ok 46 - remote rejects old snapshots and waits for authoritative draft ack before generation
+  ---
+  duration_ms: 39.2388
+  type: 'test'
+  ...
+# Subtest: remote presentation cannot load real controller/catalog; Rust sender identity fences both channels
+ok 47 - remote presentation cannot load real controller/catalog; Rust sender identity fences both channels
+  ---
+  duration_ms: 2.1999
+  type: 'test'
+  ...
+# Subtest: shortcut preferences default/migrate without changing disabled or cleared settings
+ok 48 - shortcut preferences default/migrate without changing disabled or cleared settings
+  ---
+  duration_ms: 13.6039
+  type: 'test'
+  ...
+# Subtest: main owner executes remote intents once and publishes only projected catalog/selected state
+ok 49 - main owner executes remote intents once and publishes only projected catalog/selected state
+  ---
+  duration_ms: 30.0989
+  type: 'test'
+  ...
+# Subtest: draft burst coalesces and navigation waits for the latest acknowledged edit
+ok 50 - draft burst coalesces and navigation waits for the latest acknowledged edit
+  ---
+  duration_ms: 24.7983
+  type: 'test'
+  ...
+# Subtest: quick presentation synchronizes theme store and submit lock covers pre-ack interval
+ok 51 - quick presentation synchronizes theme store and submit lock covers pre-ack interval
+  ---
+  duration_ms: 0.9015
+  type: 'test'
+  ...
+# Subtest: owner reload rejects pending generation and never retries it into the new epoch
+ok 52 - owner reload rejects pending generation and never retries it into the new epoch
+  ---
+  duration_ms: 16.5882
+  type: 'test'
+  ...
+# Subtest: independent creation/detail loads never borrow global selection or its race token
+ok 53 - independent creation/detail loads never borrow global selection or its race token
+  ---
+  duration_ms: 1.078
+  type: 'test'
+  ...
+# Subtest: quick reasoning starts medium and retains explicit off in generated intent
+ok 54 - quick reasoning starts medium and retains explicit off in generated intent
+  ---
+  duration_ms: 11.1729
+  type: 'test'
+  ...
+# Subtest: quick selection cannot be overwritten by an older load racing explicit new
+ok 55 - quick selection cannot be overwritten by an older load racing explicit new
+  ---
+  duration_ms: 16.7785
+  type: 'test'
+  ...
+# Subtest: quick non-selecting create/load preserve main filtered page and pagination
+ok 56 - quick non-selecting create/load preserve main filtered page and pagination
+  ---
+  duration_ms: 0.9055
+  type: 'test'
+  ...
+# Subtest: quick hello after DB failure never loads catalog, creates conversation or publishes ready
+ok 57 - quick hello after DB failure never loads catalog, creates conversation or publishes ready
+  ---
+  duration_ms: 8.4667
+  type: 'test'
+  ...
+# Subtest: unready panel never diagnoses an unloaded catalog as missing models
+ok 58 - unready panel never diagnoses an unloaded catalog as missing models
+  ---
+  duration_ms: 61.1977
+  type: 'test'
+  ...
+# Subtest: shared sidebar/quick reasoning opts out of input chrome and chevron, retaining accessible Select
+ok 59 - shared sidebar/quick reasoning opts out of input chrome and chevron, retaining accessible Select
+  ---
+  duration_ms: 11.4308
+  type: 'test'
+  ...
+# Subtest: quick Expand waits for same-ID continuation before native reveal/hide and surfaces failures
+ok 60 - quick Expand waits for same-ID continuation before native reveal/hide and surfaces failures
+  ---
+  duration_ms: 0.4113
+  type: 'test'
+  ...
+# Subtest: real owner continuation rejects failed or superseded selection even with cached same-ID detail
+ok 61 - real owner continuation rejects failed or superseded selection even with cached same-ID detail
+  ---
+  duration_ms: 29.1635
+  type: 'test'
+  ...
+# Subtest: queued deletion recovery yields to later explicit selection; replacement deleted=false
+ok 62 - queued deletion recovery yields to later explicit selection; replacement deleted=false
+  ---
+  duration_ms: 7.2789
+  type: 'test'
+  ...
+# Subtest: queued deletion recovery yields to later explicit selection; replacement deleted=true
+ok 63 - queued deletion recovery yields to later explicit selection; replacement deleted=true
+  ---
+  duration_ms: 8.4316
+  type: 'test'
+  ...
+1..63
+# tests 63
+# suites 0
+# pass 63
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1180.2929

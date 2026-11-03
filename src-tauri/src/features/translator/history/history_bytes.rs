@@ -1,0 +1,23 @@
+// Historical LF SQL bytes, pinned independently of checkout line endings.
+pub const SCHEMA: &str = concat!(
+    "-- Additive migration 57. Local-only text retention; plugin owns migration execution.\n",
+    "CREATE TABLE translator_history_settings (\n",
+    "    singleton INTEGER PRIMARY KEY CHECK(singleton = 1),\n",
+    "    recording INTEGER NOT NULL DEFAULT 0 CHECK(recording IN (0, 1))\n",
+    ");\n",
+    "INSERT INTO translator_history_settings(singleton, recording) VALUES(1, 0);\n",
+    "CREATE TABLE translator_history (\n",
+    "    id TEXT PRIMARY KEY,\n",
+    "    success_attempt_id TEXT NOT NULL UNIQUE,\n",
+    "    original TEXT,\n",
+    "    translated TEXT NOT NULL CHECK(length(trim(translated)) > 0),\n",
+    "    source TEXT NOT NULL CHECK(source IN ('text', 'screenshot')),\n",
+    "    target_lang TEXT NOT NULL,\n",
+    "    provider_id TEXT NOT NULL,\n",
+    "    model_id TEXT NOT NULL,\n",
+    "    created_at INTEGER NOT NULL\n",
+    ");\n",
+    "CREATE INDEX idx_translator_history_newest ON translator_history(created_at DESC, id DESC);\n",
+    "-- Tombstones survive deletion/clear: an accepted success cannot be reinserted on retry/reopen.\n",
+    "CREATE TABLE translator_history_receipts(success_attempt_id TEXT PRIMARY KEY);\n",
+);

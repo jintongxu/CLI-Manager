@@ -1,2 +1,3 @@
 //! Immutable migration 57 compatibility only; no runtime history API or writer.
-pub const SCHEMA: &str = include_str!("history.sql");
+mod history_bytes;
+pub use history_bytes::SCHEMA;

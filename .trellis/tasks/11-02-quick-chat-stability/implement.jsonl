@@ -1,0 +1,27 @@
+{"file":".trellis/spec/frontend/ai-architecture-contracts.md","reason":"模块边界、文件行数与验证门"}
+{"file":".trellis/spec/guides/fix-triage-guide.md","reason":"根因判定与场景枚举"}
+{"file":".trellis/spec/backend/app-startup-contracts.md","reason":"退出/启动契约与迁移不可变约束"}
+{"file":"src/features/chat/lib/boundedSet.ts","reason":"有界LRU/FIFO集合结构，为deleted/deleting提供上界"}
+{"file":"src/features/chat/lib/panelController.ts","reason":"CommandLedger 512有界窗口与单调seq水位去重"}
+{"file":"src/features/chat/lib/quickChatRemote.ts","reason":"单调seq发送、错误码保留与在途错误防掩盖"}
+{"file":"src/features/chat/lib/chatController.ts","reason":"有界deleted/deleting、250ms搜索防抖与searching状态"}
+{"file":"src/features/chat/lib/chatErrors.ts","reason":"错误按6类原因与5类动作分级映射，快照错误裁决"}
+{"file":"src/features/chat/api/quickChatOwner.ts","reason":"退出时取消publish定时器并退订、拒绝快聊新命令"}
+{"file":"src/features/chat/api/ChatWorkspace.tsx","reason":"搜索防抖、searching状态、数量反馈、清空按钮与分级动作"}
+{"file":"src/features/chat/api/lifecycle.ts","reason":"suspendChatEditing退出协同触发stopQuickChatOwner"}
+{"file":"src/features/chat/components/ChatPanelSurface.tsx","reason":"移除无选中隐式create、错误升级为可操作banner"}
+{"file":"src/features/chat/components/chatPanel.css","reason":"错误banner与可操作按钮样式"}
+{"file":"src/features/chat/components/chatWorkspace.css","reason":"搜索清空按钮与结果反馈样式"}
+{"file":"src/shared/i18n/messages/chat.zh-CN.ts","reason":"错误分类、动作文案与快聊专用错误中文翻译"}
+{"file":"src/shared/i18n/messages/chat.en-US.ts","reason":"错误分类、动作文案与快聊专用错误英文翻译"}
+{"file":"src-tauri/src/features/quick_chat/mod.rs","reason":"Envelope seq可选字段、退出清理通道与快捷键"}
+{"file":"src-tauri/src/features/chat/runtime.rs","reason":"unsaved上限64、seen清理、shutdown清空状态"}
+{"file":"src-tauri/src/features/chat/commands.rs","reason":"退出清理时调用runtime.shutdown"}
+{"file":"src-tauri/src/lib.rs","reason":"RunEvent::Exit调用quick_chat::cleanup与chat::commands::cleanup"}
+{"file":"scripts/chatErrors.test.mjs","reason":"错误码到分类动作映射及快照清错时机测试"}
+{"file":"scripts/chatSearch.test.mjs","reason":"搜索防抖、进行中状态、清空与多选重置测试"}
+{"file":"scripts/chatExit.test.mjs","reason":"退出挂起拒绝快聊命令与清理测试"}
+{"file":"scripts/quickChat.test.mjs","reason":"内存上界、水位拒绝与无隐式建会话测试"}
+{"file":"scripts/chatHarness.mjs","reason":"测试加载器支持相对TS模块就近解析"}
+{"file":"CHANGELOG.md","reason":"TEMP版本变更记录"}
+{"file":"docs/功能清单.md","reason":"TEMP版本功能清单补充"}

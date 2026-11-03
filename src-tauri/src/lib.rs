@@ -3,6 +3,8 @@
 mod app;
 #[path = "features/chat/mod.rs"]
 pub(crate) mod chat;
+#[path = "features/quick_chat/mod.rs"]
+pub(crate) mod quick_chat;
 #[path = "features/translator/mod.rs"]
 pub(crate) mod translator;
 pub(crate) use app::migrations::{
@@ -611,6 +613,12 @@ pub fn run() {
             chat::commands::chat_generate,
             chat::commands::chat_cancel,
             chat::commands::chat_flush_drafts,
+            quick_chat::quick_chat_configure,
+            quick_chat::quick_chat_connect_main,
+            quick_chat::quick_chat_connect,
+            quick_chat::quick_chat_command,
+            quick_chat::quick_chat_publish,
+            quick_chat::quick_chat_window,
             translator::commands::translator_list_models,
             translator::commands::translator_resolve_target_lang,
             translator::requests::translator_translate_text,
@@ -1164,6 +1172,8 @@ pub fn run() {
             // Critical cleanup belongs to the acknowledged transaction, never the GUI Exit callback.
             if matches!(&event, tauri::RunEvent::Exit) {
                 crash_reporter::mark_graceful_exit();
+                quick_chat::cleanup(app);
+                tauri::async_runtime::block_on(chat::commands::cleanup());
             }
 
             #[cfg(target_os = "macos")]

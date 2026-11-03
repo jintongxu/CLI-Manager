@@ -1,0 +1,472 @@
+TAP version 13
+# Subtest: pasted image becomes a clickable thumbnail with an Esc-dismissable lightbox
+ok 1 - pasted image becomes a clickable thumbnail with an Esc-dismissable lightbox
+  ---
+  duration_ms: 655.3583
+  type: 'test'
+  ...
+# Subtest: composer reasoning menu opens above input and persists the selected level
+ok 2 - composer reasoning menu opens above input and persists the selected level
+  ---
+  duration_ms: 272.8896
+  type: 'test'
+  ...
+# Subtest: StrictMode subscriptions/start replay are idempotent; switching and hidden subscriptions never cancel
+ok 3 - StrictMode subscriptions/start replay are idempotent; switching and hidden subscriptions never cancel
+  ---
+  duration_ms: 13.1052
+  type: 'test'
+  ...
+# Subtest: channel rejects old sequence, request, message and late terminal/retry events; retry keeps user slot
+ok 4 - channel rejects old sequence, request, message and late terminal/retry events; retry keeps user slot
+  ---
+  duration_ms: 3.0581
+  type: 'test'
+  ...
+# Subtest: rapid selects ignore late detail, stale lists cannot resurrect explicitly deleted chats
+ok 5 - rapid selects ignore late detail, stale lists cannot resurrect explicitly deleted chats
+  ---
+  duration_ms: 3.8631
+  type: 'test'
+  ...
+# Subtest: stop-before-generate receipt sends immediate tombstone; delete fences late channel
+ok 6 - stop-before-generate receipt sends immediate tombstone; delete fences late channel
+  ---
+  duration_ms: 14.9648
+  type: 'test'
+  ...
+# Subtest: early event before invoke receipt retains cumulative final answer
+ok 7 - early event before invoke receipt retains cumulative final answer
+  ---
+  duration_ms: 3.093
+  type: 'test'
+  ...
+# Subtest: initialize restoration never generates automatically
+ok 8 - initialize restoration never generates automatically
+  ---
+  duration_ms: 0.8802
+  type: 'test'
+  ...
+# Subtest: retry stopped answer preserves independently saved next-question composer
+ok 9 - retry stopped answer preserves independently saved next-question composer
+  ---
+  duration_ms: 8.0748
+  type: 'test'
+  ...
+# Subtest: actual useAppExit awaits prepared native partial before suspend, draft flush and backup
+ok 10 - actual useAppExit awaits prepared native partial before suspend, draft flush and backup
+  ---
+  duration_ms: 124.7985
+  type: 'test'
+  ...
+# Subtest: chat storage failure blocks metadata/cleanup/commit, abort restores editor, explicit retry saves
+ok 11 - chat storage failure blocks metadata/cleanup/commit, abort restores editor, explicit retry saves
+  ---
+  duration_ms: 153.899
+  type: 'test'
+  ...
+# Subtest: pause failure aborts; failed native abort retains editor barrier until explicit successful resume
+ok 12 - pause failure aborts; failed native abort retains editor barrier until explicit successful resume
+  ---
+  duration_ms: 143.2358
+  type: 'test'
+  ...
+# Subtest: tray hide is not exit authority: mounted chat remains running/editable
+ok 13 - tray hide is not exit authority: mounted chat remains running/editable
+  ---
+  duration_ms: 585.0043
+  type: 'test'
+  ...
+# Subtest: initial load selects first backend provider and shows its fields in right pane
+ok 14 - initial load selects first backend provider and shows its fields in right pane
+  ---
+  duration_ms: 446.6756
+  type: 'test'
+  ...
+# Subtest: clicking add provider switches right pane to new-provider view without modal
+ok 15 - clicking add provider switches right pane to new-provider view without modal
+  ---
+  duration_ms: 129.5641
+  type: 'test'
+  ...
+# Subtest: new provider auto-derives id for non-ascii names, allowing save button to be clickable
+ok 16 - new provider auto-derives id for non-ascii names, allowing save button to be clickable
+  ---
+  duration_ms: 116.344
+  type: 'test'
+  ...
+# Subtest: test connection button is clickable on valid endpoint even when provider is new
+ok 17 - test connection button is clickable on valid endpoint even when provider is new
+  ---
+  duration_ms: 89.8442
+  type: 'test'
+  ...
+# Subtest: typing in apiKey extracts event value synchronously, avoiding null currentTarget crash
+ok 18 - typing in apiKey extracts event value synchronously, avoiding null currentTarget crash
+  ---
+  duration_ms: 88.9623
+  type: 'test'
+  ...
+# Subtest: manage models on new unsaved provider persists provider first, preventing foreign key storage errors
+ok 19 - manage models on new unsaved provider persists provider first, preventing foreign key storage errors
+  ---
+  duration_ms: 66.8484
+  type: 'test'
+  ...
+# Subtest: space toggles preserve both owner element paths/types/keys and keep hidden tree inert
+ok 20 - space toggles preserve both owner element paths/types/keys and keep hidden tree inert
+  ---
+  duration_ms: 6.0073
+  type: 'test'
+  ...
+# Subtest: primary navigation has explicit accessible selection and independent global settings
+ok 21 - primary navigation has explicit accessible selection and independent global settings
+  ---
+  duration_ms: 38.6377
+  type: 'test'
+  ...
+# Subtest: ordinary and Current Work portal terminal/file/transcript bodies are inactive and hidden in chat
+ok 22 - ordinary and Current Work portal terminal/file/transcript bodies are inactive and hidden in chat
+  ---
+  duration_ms: 229.2257
+  type: 'test'
+  ...
+# Subtest: chat blocks terminal keyboard/current-work/sidebar/fullscreen/history and mouse switches but permits palette
+ok 23 - chat blocks terminal keyboard/current-work/sidebar/fullscreen/history and mouse switches but permits palette
+  ---
+  duration_ms: 167.8592
+  type: 'test'
+  ...
+# Subtest: explicit resource/current-work navigation returns projects, passive store changes do not
+ok 24 - explicit resource/current-work navigation returns projects, passive store changes do not
+  ---
+  duration_ms: 54.5893
+  type: 'test'
+  ...
+# Subtest: notification target activation routes only after validating target; arrival registration has no route
+ok 25 - notification target activation routes only after validating target; arrival registration has no route
+  ---
+  duration_ms: 20.2663
+  type: 'test'
+  ...
+# Subtest: palette explicit terminal actions route synchronously, theme stays in chat
+ok 26 - palette explicit terminal actions route synchronously, theme stays in chat
+  ---
+  duration_ms: 22.4878
+  type: 'test'
+  ...
+# Subtest: App composition keeps TerminalTabs at the same sibling identity across compact/fullscreen/sidebar/space modes
+ok 27 - App composition keeps TerminalTabs at the same sibling identity across compact/fullscreen/sidebar/space modes
+  ---
+  duration_ms: 33.8418
+  type: 'test'
+  ...
+# Subtest: visibility invalidates memoized panes and Current Work targets retain registration while inert
+ok 28 - visibility invalidates memoized panes and Current Work targets retain registration while inert
+  ---
+  duration_ms: 167.2157
+  type: 'test'
+  ...
+# Subtest: moveWithinOrder moves a chat to the target slot and rejects no-ops
+ok 29 - moveWithinOrder moves a chat to the target slot and rejects no-ops
+  ---
+  duration_ms: 4.8459
+  type: 'test'
+  ...
+# Subtest: applyStoredOrder respects saved order and keeps new chats reachable
+ok 30 - applyStoredOrder respects saved order and keeps new chats reachable
+  ---
+  duration_ms: 1.4981
+  type: 'test'
+  ...
+# Subtest: pinned conversations stay first while preserving manual order within each group
+ok 31 - pinned conversations stay first while preserving manual order within each group
+  ---
+  duration_ms: 22.4194
+  type: 'test'
+  ...
+# Subtest: moveIndexWithinOrder previews the live drag slot deterministically
+ok 32 - moveIndexWithinOrder previews the live drag slot deterministically
+  ---
+  duration_ms: 23.3266
+  type: 'test'
+  ...
+# Subtest: left history renders three origin groups and refuses cross-group drag without changing provenance
+ok 33 - left history renders three origin groups and refuses cross-group drag without changing provenance
+  ---
+  duration_ms: 715.4608
+  type: 'test'
+  ...
+# Subtest: entire pinned historical SQL equals Git HEAD, not just a normalized prefix
+ok 34 - entire pinned historical SQL equals Git HEAD, not just a normalized prefix
+  ---
+  duration_ms: 193.0898
+  type: 'test'
+  ...
+# Subtest: question outline follows only the current chat and handles multiline prompts
+ok 35 - question outline follows only the current chat and handles multiline prompts
+  ---
+  duration_ms: 672.3786
+  type: 'test'
+  ...
+# Subtest: outline is a compact edge rail that reveals on hover or keyboard focus
+ok 36 - outline is a compact edge rail that reveals on hover or keyboard focus
+  ---
+  duration_ms: 266.862
+  type: 'test'
+  ...
+# Subtest: outline click locates the matching question inside the message scroller and tracks manual scroll
+ok 37 - outline click locates the matching question inside the message scroller and tracks manual scroll
+  ---
+  duration_ms: 150.7885
+  type: 'test'
+  ...
+# Subtest: history UI loads literal search and explicit 50-row next page; obsolete searches are ignored
+ok 38 - history UI loads literal search and explicit 50-row next page; obsolete searches are ignored
+  ---
+  duration_ms: 784.7604
+  type: 'test'
+  ...
+# Subtest: provider/model controls persist actual selected identity and disabled reasons; foreign lease is read-only
+ok 39 - provider/model controls persist actual selected identity and disabled reasons; foreign lease is read-only
+  ---
+  duration_ms: 206.1312
+  type: 'test'
+  ...
+# Subtest: 250ms debounce coalesces drafts; explicit flush and rehydrate retain exact text
+ok 40 - 250ms debounce coalesces drafts; explicit flush and rehydrate retain exact text
+  ---
+  duration_ms: 293.0491
+  type: 'test'
+  ...
+# Subtest: in-flight draft save cannot overwrite newer editing; serialized CAS and final flush win
+ok 41 - in-flight draft save cannot overwrite newer editing; serialized CAS and final flush win
+  ---
+  duration_ms: 3.2546
+  type: 'test'
+  ...
+# Subtest: storage failure stays dirty; explicit retry saves without any model request
+ok 42 - storage failure stays dirty; explicit retry saves without any model request
+  ---
+  duration_ms: 3.5834
+  type: 'test'
+  ...
+# Subtest: CAS conflict refreshes base without replacing draft, retries only on explicit action
+ok 43 - CAS conflict refreshes base without replacing draft, retries only on explicit action
+  ---
+  duration_ms: 2.1269
+  type: 'test'
+  ...
+# Subtest: unsaved terminal snapshot blocks exit/send; empty backend flush acknowledgement refreshes it
+ok 44 - unsaved terminal snapshot blocks exit/send; empty backend flush acknowledgement refreshes it
+  ---
+  duration_ms: 8.7723
+  type: 'test'
+  ...
+# Subtest: suspend freezes edits/new requests; flush persists drafts; resume never retransmits
+ok 45 - suspend freezes edits/new requests; flush persists drafts; resume never retransmits
+  ---
+  duration_ms: 3.4247
+  type: 'test'
+  ...
+# Subtest: draft status is scoped per conversation and typing starts as debouncing
+ok 46 - draft status is scoped per conversation and typing starts as debouncing
+  ---
+  duration_ms: 6.1592
+  type: 'test'
+  ...
+# Subtest: Pi discovery is safe empty contract without documented config
+ok 47 - Pi discovery is safe empty contract without documented config
+  ---
+  duration_ms: 17.1176
+  type: 'test'
+  ...
+# Subtest: layout contract has a drawer toggle and no third rail
+ok 48 - layout contract has a drawer toggle and no third rail
+  ---
+  duration_ms: 4.6966
+  type: 'test'
+  ...
+# Subtest: conversation list supports drag reorder and persists the new order
+ok 49 - conversation list supports drag reorder and persists the new order
+  ---
+  duration_ms: 696.9015
+  type: 'test'
+  ...
+# Subtest: history sidebar can collapse and reopen without unmounting the conversation
+ok 50 - history sidebar can collapse and reopen without unmounting the conversation
+  ---
+  duration_ms: 171.5083
+  type: 'test'
+  ...
+# Subtest: pin and unpin via context menu persists and visibly marks pinned chats
+ok 51 - pin and unpin via context menu persists and visibly marks pinned chats
+  ---
+  duration_ms: 67.265
+  type: 'test'
+  ...
+# Subtest: reasoning effort defaults to medium while explicit off is retained per conversation
+ok 52 - reasoning effort defaults to medium while explicit off is retained per conversation
+  ---
+  duration_ms: 21.2264
+  type: 'test'
+  ...
+# Subtest: generate forwards the selected reasoning level and omits it when off
+ok 53 - generate forwards the selected reasoning level and omits it when off
+  ---
+  duration_ms: 11.9969
+  type: 'test'
+  ...
+# Subtest: executable Tauri adapter uses exact command envelopes and registers channel before invoke
+ok 54 - executable Tauri adapter uses exact command envelopes and registers channel before invoke
+  ---
+  duration_ms: 27.6492
+  type: 'test'
+  ...
+# Subtest: database first-load failure stays rejected in-process and never consumes plugin migrations twice
+ok 55 - database first-load failure stays rejected in-process and never consumes plugin migrations twice
+  ---
+  duration_ms: 57.1961
+  type: 'test'
+  ...
+# Subtest: database failure prevents adapter initialization IPC
+ok 56 - database failure prevents adapter initialization IPC
+  ---
+  duration_ms: 18.3335
+  type: 'test'
+  ...
+# Subtest: actual workspace handlers: drafts, IME Enter/Shift+Enter and explicit send; hidden render preserves controller
+ok 57 - actual workspace handlers: drafts, IME Enter/Shift+Enter and explicit send; hidden render preserves controller
+  ---
+  duration_ms: 644.6494
+  type: 'test'
+  ...
+# Subtest: delete requires rendered confirmation; cancel is nondestructive; rename and history paging use backend
+ok 58 - delete requires rendered confirmation; cancel is nondestructive; rename and history paging use backend
+  ---
+  duration_ms: 372.6398
+  type: 'test'
+  ...
+# Subtest: copy failures and only explicit HTTP(S) activation produce localized errors without navigation
+ok 59 - copy failures and only explicit HTTP(S) activation produce localized errors without navigation
+  ---
+  duration_ms: 91.6269
+  type: 'test'
+  ...
+# Subtest: scroll interaction pauses following and bottom button resumes; 24h and bilingual dictionary parity
+ok 60 - scroll interaction pauses following and bottom button resumes; 24h and bilingual dictionary parity
+  ---
+  duration_ms: 56.0405
+  type: 'test'
+  ...
+# Subtest: UTF8 catalogs supply readable destructive, saving and primary controls in both languages
+ok 61 - UTF8 catalogs supply readable destructive, saving and primary controls in both languages
+  ---
+  duration_ms: 6.753
+  type: 'test'
+  ...
+# Subtest: selected snapshot excludes other message histories, drafts and provider options
+ok 62 - selected snapshot excludes other message histories, drafts and provider options
+  ---
+  duration_ms: 8.4496
+  type: 'test'
+  ...
+# Subtest: command ledger deduplicates pending, completed and failed IDs without replaying requests
+ok 63 - command ledger deduplicates pending, completed and failed IDs without replaying requests
+  ---
+  duration_ms: 0.8944
+  type: 'test'
+  ...
+# Subtest: remote rejects old snapshots and waits for authoritative draft ack before generation
+ok 64 - remote rejects old snapshots and waits for authoritative draft ack before generation
+  ---
+  duration_ms: 79.7449
+  type: 'test'
+  ...
+# Subtest: remote presentation cannot load real controller/catalog; Rust sender identity fences both channels
+ok 65 - remote presentation cannot load real controller/catalog; Rust sender identity fences both channels
+  ---
+  duration_ms: 4.0617
+  type: 'test'
+  ...
+# Subtest: shortcut preferences default/migrate without changing disabled or cleared settings
+ok 66 - shortcut preferences default/migrate without changing disabled or cleared settings
+  ---
+  duration_ms: 61.7284
+  type: 'test'
+  ...
+# Subtest: main owner executes remote intents once and publishes only projected catalog/selected state
+ok 67 - main owner executes remote intents once and publishes only projected catalog/selected state
+  ---
+  duration_ms: 73.5424
+  type: 'test'
+  ...
+# Subtest: draft burst coalesces and navigation waits for the latest acknowledged edit
+ok 68 - draft burst coalesces and navigation waits for the latest acknowledged edit
+  ---
+  duration_ms: 77.3001
+  type: 'test'
+  ...
+# Subtest: quick presentation synchronizes theme store and submit lock covers pre-ack interval
+ok 69 - quick presentation synchronizes theme store and submit lock covers pre-ack interval
+  ---
+  duration_ms: 1.9435
+  type: 'test'
+  ...
+# Subtest: owner reload rejects pending generation and never retries it into the new epoch
+ok 70 - owner reload rejects pending generation and never retries it into the new epoch
+  ---
+  duration_ms: 36.9276
+  type: 'test'
+  ...
+# Subtest: independent creation/detail loads never borrow global selection or its race token
+ok 71 - independent creation/detail loads never borrow global selection or its race token
+  ---
+  duration_ms: 2.0276
+  type: 'test'
+  ...
+# Subtest: quick reasoning starts medium and retains explicit off in generated intent
+ok 72 - quick reasoning starts medium and retains explicit off in generated intent
+  ---
+  duration_ms: 35.9347
+  type: 'test'
+  ...
+# Subtest: quick selection cannot be overwritten by an older load racing explicit new
+ok 73 - quick selection cannot be overwritten by an older load racing explicit new
+  ---
+  duration_ms: 57.9407
+  type: 'test'
+  ...
+# Subtest: quick non-selecting create/load preserve main filtered page and pagination
+ok 74 - quick non-selecting create/load preserve main filtered page and pagination
+  ---
+  duration_ms: 3.3734
+  type: 'test'
+  ...
+# Subtest: quick hello after DB failure never loads catalog, creates conversation or publishes ready
+ok 75 - quick hello after DB failure never loads catalog, creates conversation or publishes ready
+  ---
+  duration_ms: 36.7012
+  type: 'test'
+  ...
+# Subtest: unready panel never diagnoses an unloaded catalog as missing models
+ok 76 - unready panel never diagnoses an unloaded catalog as missing models
+  ---
+  duration_ms: 211.86
+  type: 'test'
+  ...
+# Subtest: shared sidebar/quick reasoning opts out of input chrome and chevron, retaining accessible Select
+ok 77 - shared sidebar/quick reasoning opts out of input chrome and chevron, retaining accessible Select
+  ---
+  duration_ms: 43.8544
+  type: 'test'
+  ...
+1..77
+# tests 77
+# suites 0
+# pass 77
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2843.9066

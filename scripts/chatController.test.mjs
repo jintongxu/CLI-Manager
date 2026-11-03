@@ -46,10 +46,27 @@ test('stop-before-generate receipt sends immediate tombstone; delete fences late
   f.controller.setDraft('c1', 'hi'); const generating = f.controller.generate('c1'); await tick();
   await f.controller.stop('c1'); assert.deepEqual(f.calls.find(c => c[0] === 'cancel').slice(1), ['c1', 'r1']);
   receipt.resolve(); await generating;
-  const removing = f.controller.remove('c1'); await removing;
   f.emit('r1', { sequence: 20, status: 'completed', saved: true }); await tick();
+  const removing = f.controller.remove('c1'); await removing;
   assert.equal(f.controller.getSnapshot().details.c1, undefined);
   assert.equal(f.calls.filter(c => c[0] === 'delete').length, 1);
+});
+test('running delete waits for terminal refresh after immediate cancellation acknowledgement', async () => {
+  const f = fixture(); await f.controller.start(); const receipt = deferred(), originalGenerate = f.api.generate;
+  f.api.generate = async (input, cb) => { const message = await originalGenerate(input, cb); await receipt.promise; return message; };
+  f.controller.setDraft('c1', 'hello'); const generating = f.controller.generate('c1'); await tick();
+  receipt.resolve(); await generating;
+  const terminalGet = deferred(), originalGet = f.api.get;
+  f.api.get = async id => id === 'c1' && f.calls.filter(call => call[0] === 'get' && call[1] === 'c1').length >= 2
+    ? terminalGet.promise : originalGet(id);
+  const removing = f.controller.remove('c1'); await tick();
+  assert.equal(f.calls.filter(call => call[0] === 'cancel').length, 1);
+  assert.equal(f.calls.filter(call => call[0] === 'delete').length, 0);
+  f.emit('r1', { sequence: 2, status: 'stopped', saved: true }); await tick();
+  assert.equal(f.calls.filter(call => call[0] === 'delete').length, 0);
+  terminalGet.resolve(structuredClone(f.rows.get('c1'))); await removing;
+  assert.equal(f.calls.filter(call => call[0] === 'delete').length, 1);
+  assert.equal(f.controller.getSnapshot().details.c1, undefined);
 });
 test('early event before invoke receipt retains cumulative final answer', async () => {
   const f = fixture(); await f.controller.start(); const original = f.api.generate;
@@ -78,4 +95,25 @@ test('retry stopped answer preserves independently saved next-question composer'
   assert.equal(f.rows.get('c1').conversation.draft, 'next unrelated question');
   assert.equal(f.rows.get('c1').messages.length, 2);
   assert.equal(f.calls.filter(c => c[0] === 'generate').at(-1)[1].text, null);
+});
+
+test('selection preserves report-and-swallow callers while strict callers observe errors and stale tokens', async () => {
+  const f = fixture(); await f.controller.start();
+  const get = f.api.get;
+  f.api.get = async () => { throw 'chat_storage'; };
+  assert.equal(await f.controller.select('c2'), undefined);
+  assert.equal(f.controller.getSnapshot().error, 'chat_storage');
+  f.controller.clearError();
+  await assert.rejects(f.controller.select('c2', { strict: true }), error => error === 'chat_storage');
+  assert.equal(f.controller.getSnapshot().error, 'chat_storage');
+  f.controller.clearError();
+  const late = deferred();
+  f.api.get = () => late.promise;
+  const selecting = f.controller.select('c2', { strict: true });
+  const rejected = assert.rejects(selecting, error => error === 'chat_conflict');
+  f.api.get = get;
+  await f.controller.select('c1'); late.resolve(structuredClone(f.rows.get('c2'))); await rejected;
+  assert.equal(f.controller.getSnapshot().selected, 'c1');
+  assert.equal(f.controller.getSnapshot().error, null);
+  assert.equal(await f.controller.select('c2', { strict: true }), undefined);
 });

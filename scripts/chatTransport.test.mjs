@@ -23,3 +23,26 @@ test('executable Tauri adapter uses exact command envelopes and registers channe
   assert.equal(JSON.stringify(calls[9][1]), '{"input":{"drafts":[]}}');
   assert.equal(Object.keys(calls[7][1]).sort().join(','), 'input,onEvent');
 });
+
+test('database first-load failure stays rejected in-process and never consumes plugin migrations twice', async () => {
+  let repairs = 0, loads = 0;
+  const failure = Error('migration 55 checksum mismatch');
+  const { getDb } = load('src/shared/platform/db.ts', {
+    '@tauri-apps/api/core': { invoke: async () => { repairs++; } },
+    '@tauri-apps/plugin-sql': { default: { load: async () => { loads++; if (loads === 1) throw failure; return {}; } } },
+    './appPaths': { getCliManagerDataPaths: async () => ({ dbUrl: 'sqlite:synthetic' }) },
+    './logger': { logWarn: () => {} },
+  });
+  await assert.rejects(getDb(), e => e === failure);
+  await assert.rejects(getDb(), e => e === failure);
+  assert.equal(loads, 1); assert.equal(repairs, 1);
+});
+test('database failure prevents adapter initialization IPC', async () => {
+  let calls = 0;
+  const { chatTransport } = load('src/features/chat/lib/transport.ts', {
+    '../../../shared/platform/db': { getDb: async () => { throw Error('migration failed'); } },
+    '@tauri-apps/api/core': { Channel: class {}, invoke: async () => { calls++; } },
+  });
+  await assert.rejects(chatTransport.initialize(), /migration failed/);
+  assert.equal(calls, 0);
+});

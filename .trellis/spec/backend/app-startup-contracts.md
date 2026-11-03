@@ -334,7 +334,7 @@ await getCurrentWindow().destroy();
 
 - `getDb()` must call `db_repair_known_migration_drift` before the first `Database.load(...)`.
 - The repair command must only use `app_paths::db_path()`; do not accept an arbitrary frontend path.
-- Checksum-drift row rewriting is limited to the explicitly recognized feature lineages (`13..=15` plus the existing SSH 20/21 compatibility). A separately documented large-data deferral may only insert the exact released migration row after verifying its prerequisite schema; it must not rewrite an applied checksum.
+- Checksum-drift row rewriting is limited to the explicitly recognized feature lineages (`13..=15` plus the existing SSH 20/21 compatibility and the exact historical SQL-byte exception below). A separately documented large-data deferral may only insert the exact released migration row after verifying its prerequisite schema; it must not rewrite an applied checksum.
 - Repair rewrites only `_sqlx_migrations` rows for known complete schema states; it must not delete user data tables or rerun unsafe `ALTER TABLE` statements.
 - Current migration SQL strings shared with repair code must live in one source of truth, not duplicated with separate literals.
 
@@ -409,3 +409,7 @@ Migration {
 - Verify exact migration checksum registration and idempotent no-op states.
 - Cover more than one batch, interruption-safe predicates, ambiguous mappings, existing-value protection and dependent-row propagation.
 - Run the focused Rust migration tests, `cargo check`, frontend type-check and an installed upgrade smoke test with a large copied database when available.
+
+### Exact historical embedded-SQL newline exception (approved Todo12)
+
+Migration 55 (`create_independent_chat`) and 57 (`create_local_translator_history`) now embed the original HEAD LF SQL as escaped bytes. Only the exact SHA-384 of its CRLF expansion is an eligible alternate; arbitrary whitespace/SQL edits are not supported. The app-path-only repair verifies description, success and complete sqlite_master table/index SQL against a synthetic canonical schema (55 may include exact additive 58 origin). It snapshots with VACUUM INTO, revalidates under BEGIN IMMEDIATE, and changes only the guarded checksum; failures roll back, retaining backup. Unknown variants fail before writes. Canonical LF markers are no-ops and normal SQLx validation remains required. Migration 58 alone adds origin. getDb retains failed initialization for the process lifetime because the SQL plugin consumes registered migrations on failure. Chat schema readiness checks all consumed fields, and decoders return errors, never infer missing origin or panic.

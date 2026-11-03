@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import vm from 'node:vm';
 import ts from 'typescript';
@@ -8,12 +9,23 @@ export function load(path, mocks = {}, globals = {}) {
   const code = ts.transpileModule(readFileSync(path, 'utf8'), { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX,
   } }).outputText;
+  const dir = dirname(path);
+  const resolveLocal = (name) => {
+    if (!name.startsWith('.')) return null;
+    for (const ext of ['', '.ts', '.tsx', '.js', '.mjs']) {
+      const target = resolve(dir, name + ext).replace(/\\/g, '/');
+      if (existsSync(target)) {
+        return load(target, mocks, globals);
+      }
+    }
+    return null;
+  };
   vm.runInNewContext(code, { exports, console, URL, Intl, Date, setTimeout, clearTimeout, ...globals,
-    require: name => name in mocks ? mocks[name] : require(name) });
+    require: name => name in mocks ? mocks[name] : (resolveLocal(name) ?? require(name)) });
   return exports;
 }
 const types = load('src/features/chat/lib/types.ts');
-export const { ChatController } = load('src/features/chat/lib/chatController.ts', { './types': types });
+export const { ChatController } = load('src/features/chat/lib/chatController.ts', { './types': types, './boundedSet': load('src/features/chat/lib/boundedSet.ts') });
 export const interactions = load('src/features/chat/lib/interactions.ts');
 export const conversationOrder = load('src/features/chat/lib/conversationOrder.ts');
 export const tick = async () => { for (let n = 0; n < 80; n++) await Promise.resolve(); };
@@ -22,9 +34,9 @@ export function fixture(count = 2) {
   const rows = new Map(), channels = new Map(), calls = [];
   let serial = 0, failUpdate = false, failFlush = false;
   const provider = { appType: 'claude', providerId: 'p', name: 'Mock', defaultModel: 'm', protocol: 'messages', available: true, reason: null };
-  function add() {
+  function add(origin = "workspace") {
     const id = `c${++serial}`;
-    const c = { id, title: '', draft: '', appType: 'claude', providerId: 'p', model: 'm',
+    const c = { id, origin, title: '', draft: '', appType: 'claude', providerId: 'p', model: 'm',
       createdAt: 1, updatedAt: 1, revision: 0, requestId: null, leaseUntil: null };
     rows.set(id, { conversation: c, messages: [] }); return structuredClone(rows.get(id));
   }
@@ -34,7 +46,7 @@ export function fixture(count = 2) {
     providers: async () => [provider],
     list: async (search, offset) => { calls.push(['list', search, offset]); return [...rows.values()].map(d => structuredClone(d.conversation)).filter(c => c.title.includes(search)).slice(offset, offset + 50); },
     get: async id => { calls.push(['get', id]); if (!rows.has(id)) throw 'chat_not_found'; return structuredClone(rows.get(id)); },
-    create: async () => { calls.push(['create']); return add(); },
+    create: async (origin = 'workspace') => { calls.push(['create', origin]); return add(origin); },
     update: async input => {
       calls.push(['update', structuredClone(input)]);
       if (failUpdate) throw 'chat_storage';
@@ -126,10 +138,18 @@ export function hookHarness(controller) {
     '@tauri-apps/plugin-clipboard-manager': { writeText: async text => { if (harness.copyFails) throw Error(); harness.copies.push(text); } },
     '../../../shared/ui/MarkdownContent': { MarkdownContent: function Markdown() {} },
     '../../../shared/i18n/index': { useI18n: () => ({ t: key => key.startsWith('chat.error.') ? en[key] ?? key : key, language: 'en-US' }) },
+    './historySource': load('src/features/chat/api/historySource.ts'),
     './lifecycle': { chatController: controller }, '../lib/interactions': interactions,
     '../lib/conversationOrder': load('src/features/chat/lib/conversationOrder.ts', {}, { localStorage: localStorageShim }),
     '../lib/reasoning': load('src/features/chat/lib/reasoning.ts', {}, { localStorage: localStorageShim }),
   };
+  mocks['../lib/historySelection'] = load('src/features/chat/lib/historySelection.ts');
+  mocks['../components/HistorySelectionControls'] = load('src/features/chat/components/HistorySelectionControls.tsx', {
+    react,
+    '../../../shared/i18n/index': mocks['../../../shared/i18n/index'],
+    '../lib/types': types,
+    '../../../shared/ui/dialog': Object.fromEntries(['Dialog', 'DialogContent', 'DialogDescription', 'DialogTitle'].map(name => [name, name])),
+  });
   // Minimal FileReader so attachment/paste paths can be driven without a DOM.
   class FileReaderStub {
     result = '';
@@ -143,7 +163,12 @@ export function hookHarness(controller) {
     FileReader: FileReaderStub,
   });
   const harness = { opened: [], copies: [], copyFails: false, storage: store,
-    render(visible = true) { index = 0; const tree = ChatWorkspace({ workspaceVisible: visible, controller }); while (effects.length) effects.shift()(); return tree; },
+    render(visible = true, props = {}) { index = 0; const tree = ChatWorkspace({ workspaceVisible: visible, controller, ...props }); while (effects.length) effects.shift()(); return tree; },
+    renderSelection(tree) {
+      index = 1000;
+      const node = elements(tree).find(node => typeof node.type === 'function' && node.type.name === 'HistorySelectionControls');
+      return node.type(node.props);
+    },
     cleanup() { for (const slot of slots) slot?.cleanup?.(); },
   };
   return harness;

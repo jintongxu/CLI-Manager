@@ -1,0 +1,175 @@
+    Blocking waiting for file lock on build directory
+   Compiling cli-manager v1.4.10 (D:\ai\cli-manager-worktrees\task-1101-1903-57e90cda9091\src-tauri)
+warning: unused imports: `MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_DESCRIPTION`, `MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_SQL`, `MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_VERSION`, `MIGRATION_ADD_WORKTREE_SHORT_LABELS_DESCRIPTION`, `MIGRATION_ADD_WORKTREE_SHORT_LABELS_SQL`, and `MIGRATION_ADD_WORKTREE_SHORT_LABELS_VERSION`
+  --> src\commands\..\features\app-data\repair\mod.rs:4:5
+   |
+ 4 |     MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_DESCRIPTION, MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_SQL,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 5 |     MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_VERSION, MIGRATION_ADD_GROUP_BOUND_PATH_DESCRIPTION,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+14 |     MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_VERSION, MIGRATION_ADD_WORKTREE_SHORT_LABELS_DESCRIPTION,
+   |                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+15 |     MIGRATION_ADD_WORKTREE_SHORT_LABELS_SQL, MIGRATION_ADD_WORKTREE_SHORT_LABELS_VERSION,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: use of deprecated method `std::sync::atomic::Atomic::<usize>::fetch_update`: renamed to `try_update` for consistency
+   --> src\infrastructure\daemon\ssh_agent_bridge.rs:196:18
+    |
+196 |                 .fetch_update(Ordering::AcqRel, Ordering::Acquire, |pending| {
+    |                  ^^^^^^^^^^^^
+    |
+    = note: `#[warn(deprecated)]` on by default
+help: replace the use of the deprecated method
+    |
+196 -                 .fetch_update(Ordering::AcqRel, Ordering::Acquire, |pending| {
+196 +                 .try_update(Ordering::AcqRel, Ordering::Acquire, |pending| {
+    |
+
+warning: unused variable: `roots`
+   --> src\commands\..\features\projects\finish_cleanup_plan.rs:132:9
+    |
+132 |     let roots: Vec<String> = classification
+    |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_roots`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+  --> src\infrastructure\daemon\server\owner_exit.rs:94:13
+   |
+94 |         let mut state = self.host.ownership.lock().unwrap();
+   |             ----^^^^^
+   |             |
+   |             help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `provider_name` is never read
+  --> src\features\translator\commands.rs:28:9
+   |
+26 | pub(super) struct ProviderSecretAndConfig {
+   |                   ----------------------- field in this struct
+27 |     pub provider_id: String,
+28 |     pub provider_name: String,
+   |         ^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `EVENT_OPEN` is never used
+  --> src\features\translator\shortcuts.rs:13:11
+   |
+13 | pub const EVENT_OPEN: &str = "translator:open";
+   |           ^^^^^^^^^^
+
+warning: constant `EVENT_OPEN_WITH_TEXT` is never used
+  --> src\features\translator\shortcuts.rs:15:11
+   |
+15 | pub const EVENT_OPEN_WITH_TEXT: &str = "translator:open-with-text";
+   |           ^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `EVENT_SCREENSHOT` is never used
+  --> src\features\translator\shortcuts.rs:17:11
+   |
+17 | pub const EVENT_SCREENSHOT: &str = "translator:screenshot";
+   |           ^^^^^^^^^^^^^^^^
+
+warning: function `focus_main_window` is never used
+   --> src\features\translator\shortcuts.rs:121:4
+    |
+121 | fn focus_main_window(app: &AppHandle) {
+    |    ^^^^^^^^^^^^^^^^^
+
+warning: function `spawn_hook_listener` is never used
+   --> src\features\hooks\claude.rs:604:8
+    |
+604 | pub fn spawn_hook_listener(listener: TcpListener, token: String, sink: HookPayloadSink) {
+    |        ^^^^^^^^^^^^^^^^^^^
+
+warning: method `shutdown` is never used
+    --> src\commands\..\features\remote\cc_connect\mod.rs:1356:12
+     |
+ 400 | impl CcConnectManager {
+     | --------------------- method in this implementation
+...
+1356 |     pub fn shutdown(&self) {
+     |            ^^^^^^^^
+
+warning: fields `git_scope` and `candidate_identities` are never read
+  --> src\commands\..\features\projects\finish_cleanup_plan.rs:37:5
+   |
+31 | struct Authorization {
+   |        ------------- fields in this struct
+...
+37 |     git_scope: String,
+   |     ^^^^^^^^^
+38 |     ordinary: Option<receipt::Ownership>,
+39 |     candidate_identities: Vec<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `Authorization` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: function `shutdown` is never used
+   --> src\commands\..\features\terminal\side_question.rs:425:8
+    |
+425 | pub fn shutdown() {
+    |        ^^^^^^^^
+
+warning: struct `SshDirectoryEntry` is never constructed
+  --> src\commands\..\features\remote\ssh\mod.rs:78:12
+   |
+78 | pub struct SshDirectoryEntry {
+   |            ^^^^^^^^^^^^^^^^^
+
+warning: function `validate_remote_relative_file_path` is never used
+   --> src\commands\..\features\remote\ssh\mod.rs:168:4
+    |
+168 | fn validate_remote_relative_file_path(path: &str) -> Result<&str, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `direct_file_mime` is never used
+   --> src\commands\..\features\remote\ssh\mod.rs:181:4
+    |
+181 | fn direct_file_mime(path: &str) -> Option<&'static str> {
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `shutdown_until` is never used
+    --> src\commands\web_device.rs:1803:8
+     |
+1803 | pub fn shutdown_until(app: &AppHandle, deadline: Instant) -> Result<String, String> {
+     |        ^^^^^^^^^^^^^^
+
+warning: function `shutdown` is never used
+    --> src\commands\web_device.rs:1808:8
+     |
+1808 | pub fn shutdown(app: &AppHandle) {
+     |        ^^^^^^^^
+
+warning: function `shutdown` is never used
+   --> src\commands\web_server.rs:636:8
+    |
+636 | pub fn shutdown(manager: &WebServerManager) {
+    |        ^^^^^^^^
+
+warning: method `shutdown` is never used
+   --> src\features\files\live_server\mod.rs:116:12
+    |
+ 59 | impl LiveServerManager {
+    | ---------------------- method in this implementation
+...
+116 |     pub fn shutdown(&self) {
+    |            ^^^^^^^^
+
+warning: `cli-manager` (lib test) generated 20 warnings (run `cargo fix --lib -p cli-manager --tests` to apply 4 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 35.58s
+     Running unittests src\lib.rs (src-tauri\target\debug\deps\cli_manager_lib-a13e074d425f729b.exe)
+
+running 4 tests
+test quick_chat::placement::tests::quick_chat_geometry_destination_dpi_offset_and_missing_monitor ... ok
+test quick_chat::placement::tests::quick_chat_geometry_negative_origin_edges_work_area_and_oversize ... ok
+test quick_chat::tests::continuation_hides_only_after_successful_main_reveal ... ok
+test quick_chat::tests::narrow_commands_reject_unknown_operations_and_reasoning ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 1767 filtered out; finished in 0.00s
+

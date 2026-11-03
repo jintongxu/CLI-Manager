@@ -36,6 +36,7 @@ use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
 
+mod chat_sql_bytes;
 mod migration_compat;
 use migration_compat::{ensure_command_template_type, reconcile_worktree_short_labels_migration};
 
@@ -196,7 +197,12 @@ pub async fn db_repair_known_migration_drift(
     }
 
     let mut conn = open_cli_manager_db(&db_path).await?;
+    let sql_bytes_repaired = chat_sql_bytes::reconcile(&mut conn, &db_path).await?;
     let mut result = repair_known_migration_drift(&mut conn).await?;
+    if sql_bytes_repaired {
+        result.repaired = true;
+        result.status = append_repair_status(&result.status, "reconciled_historical_sql_bytes");
+    }
     if reconcile_worktree_short_labels_migration(&mut conn).await? {
         result.repaired = true;
         result.status =

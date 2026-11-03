@@ -74,8 +74,8 @@
   background: var(--surface-container-high);
 }
 .chat-history-search-field:focus-within {
-  background: var(--surface-container-lowest);
-  border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
+  background: var(--surface-container-high);
+  border-color: color-mix(in srgb, var(--primary) 28%, var(--border));
   color: var(--text-secondary);
 }
 
@@ -90,8 +90,41 @@
   font-size: 12px;
   outline: none;
 }
+.chat-history-search-field .chat-history-search:focus-visible {
+  box-shadow: none;
+}
+
+@media (forced-colors: active) {
+  .chat-history-search-field:focus-within { border-color: Highlight; }
+}
+
 .chat-history-search::-webkit-search-cancel-button {
   filter: invert(0.6);
+}
+
+.chat-history-search-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+}
+.chat-history-search-clear:hover {
+  color: var(--text-primary);
+  background: var(--surface-container-highest, rgba(127, 127, 127, 0.16));
+}
+
+.chat-history-search-feedback {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .chat-history-list {
@@ -1026,4 +1059,66 @@
   border-radius: 6px;
   font-size: 13px;
   cursor: pointer;
+}
+
+/* One left history rail, with immutable provenance groups (not separate columns). */
+.chat-history-list > section {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 4px;
+}
+.chat-history-group-label {
+  margin: 8px 9px 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Explicit history source tabs. */
+.chat-history-tabs { display: flex; gap: 2px; }
+.chat-history-tabs [role="tab"] {
+  flex: 1; min-width: 0; padding: 6px 3px; border: 0; border-radius: 6px;
+  color: var(--text-secondary); background: transparent; cursor: pointer; font-size: 12px;
+}
+.chat-history-tabs [aria-selected="true"] { color: var(--text-primary); background: var(--surface-container-high); }
+.chat-history-tabs [role="tab"]:focus-visible { outline: 2px solid var(--text-secondary); outline-offset: 1px; }
+.chat-history-empty { padding: 10px 6px; color: var(--text-muted); font-size: 12px; }
+
+/* Selection reuses the New row; only actual batch results add content. */
+.chat-history-actions { display: flex; align-items: center; min-height: 32px; gap: 4px; }
+.chat-history-actions > .chat-new-btn { flex: 1; min-width: 0; }
+.chat-history-selection { display: flex; flex-wrap: nowrap; align-items: center; gap: 2px; margin-inline-start: auto; min-width: 0; }
+.chat-history-selection button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; flex: 0 0 28px; padding: 0;
+  border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); cursor: pointer;
+}
+.chat-history-selection button:hover:not(:disabled) { background: var(--surface-container-high); color: var(--text-primary); }
+.chat-history-selection .chat-history-selection-delete:hover:not(:disabled) { color: var(--danger, #e05b65); }
+.chat-history-selection button:focus-visible,
+.chat-history-selectable input:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.chat-history-selection button:disabled { opacity: .4; cursor: default; }
+.chat-history-selection-count { min-width: 20px; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.chat-history-selection-result { font-size: 12px; overflow-wrap: anywhere; }
+.chat-history-selectable { cursor: pointer; touch-action: auto; padding-inline-start: 30px; }
+.chat-history-selectable[data-selected="true"] { background: color-mix(in srgb, var(--primary) 8%, transparent); }
+.chat-history-selectable input {
+  appearance: none; position: absolute; inset-inline-start: 8px; top: 10px;
+  width: 15px; height: 15px; margin: 0; border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 65%, transparent);
+  background: transparent; cursor: pointer; display: grid; place-content: center;
+}
+.chat-history-selectable input:checked { background: var(--primary); border-color: var(--primary); }
+.chat-history-selectable input::after {
+  content: ""; width: 4px; height: 7px; border: solid var(--on-primary, #fff);
+  border-width: 0 1.5px 1.5px 0; transform: translateY(-1px) rotate(45deg); visibility: hidden;
+}
+.chat-history-selectable input:checked::after { visibility: visible; }
+.chat-history-selectable input:disabled { opacity: .4; cursor: default; }
+.chat-history-selectable:has(input:disabled) { cursor: default; }
+@media (forced-colors: active) {
+  .chat-history-selectable input { border-color: ButtonText; }
+  .chat-history-selectable input:checked { background: Highlight; border-color: Highlight; }
+  .chat-history-selectable input::after { border-color: HighlightText; }
 }

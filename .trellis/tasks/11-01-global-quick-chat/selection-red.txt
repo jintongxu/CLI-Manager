@@ -1,0 +1,136 @@
+TAP version 13
+# Subtest: selected snapshot excludes other message histories, drafts and provider options
+ok 1 - selected snapshot excludes other message histories, drafts and provider options
+  ---
+  duration_ms: 2.2025
+  type: 'test'
+  ...
+# Subtest: command ledger deduplicates pending, completed and failed IDs without replaying requests
+ok 2 - command ledger deduplicates pending, completed and failed IDs without replaying requests
+  ---
+  duration_ms: 0.2817
+  type: 'test'
+  ...
+# Subtest: remote rejects old snapshots and waits for authoritative draft ack before generation
+ok 3 - remote rejects old snapshots and waits for authoritative draft ack before generation
+  ---
+  duration_ms: 18.836
+  type: 'test'
+  ...
+# Subtest: remote presentation cannot load real controller/catalog; Rust sender identity fences both channels
+ok 4 - remote presentation cannot load real controller/catalog; Rust sender identity fences both channels
+  ---
+  duration_ms: 1.2602
+  type: 'test'
+  ...
+# Subtest: shortcut preferences default/migrate without changing disabled or cleared settings
+ok 5 - shortcut preferences default/migrate without changing disabled or cleared settings
+  ---
+  duration_ms: 7.1637
+  type: 'test'
+  ...
+# Subtest: main owner executes remote intents once and publishes only projected catalog/selected state
+ok 6 - main owner executes remote intents once and publishes only projected catalog/selected state
+  ---
+  duration_ms: 18.5623
+  type: 'test'
+  ...
+# Subtest: draft burst coalesces and navigation waits for the latest acknowledged edit
+ok 7 - draft burst coalesces and navigation waits for the latest acknowledged edit
+  ---
+  duration_ms: 19.9428
+  type: 'test'
+  ...
+# Subtest: quick presentation synchronizes theme store and submit lock covers pre-ack interval
+ok 8 - quick presentation synchronizes theme store and submit lock covers pre-ack interval
+  ---
+  duration_ms: 0.4144
+  type: 'test'
+  ...
+# Subtest: owner reload rejects pending generation and never retries it into the new epoch
+ok 9 - owner reload rejects pending generation and never retries it into the new epoch
+  ---
+  duration_ms: 8.9611
+  type: 'test'
+  ...
+# Subtest: independent creation/detail loads never borrow global selection or its race token
+ok 10 - independent creation/detail loads never borrow global selection or its race token
+  ---
+  duration_ms: 0.6095
+  type: 'test'
+  ...
+# Subtest: quick reasoning starts medium and retains explicit off in generated intent
+ok 11 - quick reasoning starts medium and retains explicit off in generated intent
+  ---
+  duration_ms: 8.2515
+  type: 'test'
+  ...
+# Subtest: quick selection cannot be overwritten by an older load racing explicit new
+ok 12 - quick selection cannot be overwritten by an older load racing explicit new
+  ---
+  duration_ms: 15.3575
+  type: 'test'
+  ...
+# Subtest: quick non-selecting create/load preserve main filtered page and pagination
+ok 13 - quick non-selecting create/load preserve main filtered page and pagination
+  ---
+  duration_ms: 1.0904
+  type: 'test'
+  ...
+# Subtest: quick hello after DB failure never loads catalog, creates conversation or publishes ready
+ok 14 - quick hello after DB failure never loads catalog, creates conversation or publishes ready
+  ---
+  duration_ms: 10.1601
+  type: 'test'
+  ...
+# Subtest: unready panel never diagnoses an unloaded catalog as missing models
+ok 15 - unready panel never diagnoses an unloaded catalog as missing models
+  ---
+  duration_ms: 57.0061
+  type: 'test'
+  ...
+# Subtest: shared sidebar/quick reasoning opts out of input chrome and chevron, retaining accessible Select
+ok 16 - shared sidebar/quick reasoning opts out of input chrome and chevron, retaining accessible Select
+  ---
+  duration_ms: 11.0785
+  type: 'test'
+  ...
+# Subtest: quick Expand waits for same-ID continuation before native reveal/hide and surfaces failures
+ok 17 - quick Expand waits for same-ID continuation before native reveal/hide and surfaces failures
+  ---
+  duration_ms: 0.4827
+  type: 'test'
+  ...
+# Subtest: real owner continuation rejects failed or superseded selection even with cached same-ID detail
+not ok 18 - real owner continuation rejects failed or superseded selection even with cached same-ID detail
+  ---
+  duration_ms: 10.0171
+  type: 'test'
+  location: 'D:\\ai\\cli-manager-worktrees\\task-1101-1903-57e90cda9091\\scripts\\quickChat.test.mjs:334:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    failure
+    + actual - expected
+    
+    + null
+    - 'chat_quick_command_failed'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'chat_quick_command_failed'
+  actual: ~
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///D:/ai/cli-manager-worktrees/task-1101-1903-57e90cda9091/scripts/quickChat.test.mjs:366:12)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+1..18
+# tests 18
+# suites 0
+# pass 17
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 706.0321

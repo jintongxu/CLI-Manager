@@ -18,6 +18,33 @@ struct Active {
 struct Unsaved {
     message: Message,
     event: Event,
+    at: Instant,
+}
+/// Persistence backlog is bounded: retry first, then keep the newest entries.
+const UNSAVED_LIMIT: usize = 64;
+fn evict_oldest<K, V>(
+    map: &mut HashMap<K, V>,
+    limit: usize,
+    at: impl Fn(&V) -> Instant,
+) -> usize
+where
+    K: Clone + std::hash::Hash + Eq,
+{
+    let mut dropped = 0;
+    while map.len() > limit {
+        let oldest = map
+            .iter()
+            .min_by_key(|(_, v)| at(v))
+            .map(|(k, _)| k.clone());
+        match oldest {
+            Some(key) => {
+                map.remove(&key);
+                dropped += 1;
+            }
+            None => break,
+        }
+    }
+    dropped
 }
 struct State {
     fenced: bool,
@@ -248,13 +275,30 @@ impl Runtime {
                 event.saved = false;
                 event.error_code = Some(error.clone());
                 if error == "chat_storage" {
-                    self.state.lock().await.unsaved.insert(
-                        message.request_id.clone(),
-                        Unsaved {
-                            message,
-                            event: event.clone(),
-                        },
-                    );
+                    let over = {
+                        let mut s = self.state.lock().await;
+                        s.unsaved.insert(
+                            message.request_id.clone(),
+                            Unsaved {
+                                message: message.clone(),
+                                event: event.clone(),
+                                at: Instant::now(),
+                            },
+                        );
+                        s.unsaved.len() > UNSAVED_LIMIT
+                    };
+                    if over {
+                        // Retry before discarding anything; only an unpersistable backlog is trimmed.
+                        if let Err(retry) = self.retry_unsaved(repo.clone()).await {
+                            let dropped = {
+                                let mut s = self.state.lock().await;
+                                evict_oldest(&mut s.unsaved, UNSAVED_LIMIT, |u| u.at)
+                            };
+                            log::warn!(
+                                "chat unsaved backlog exceeded {UNSAVED_LIMIT} (dropped {dropped} oldest after retry failed: {retry})"
+                            );
+                        }
+                    }
                 }
             }
         }
@@ -303,6 +347,13 @@ impl Runtime {
     pub async fn resume(&self) {
         self.state.lock().await.fenced = false;
     }
+    pub async fn shutdown(&self) {
+        let mut s = self.state.lock().await;
+        s.fenced = true;
+        s.active.clear();
+        s.seen.clear();
+        s.unsaved.clear();
+    }
     pub async fn unsaved(&self) -> Vec<Event> {
         self.state
             .lock()
@@ -324,6 +375,20 @@ impl Runtime {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn unsaved_backlog_evicts_oldest_entries_only() {
+        let mut map: HashMap<String, Instant> = HashMap::new();
+        let base = Instant::now();
+        for n in 0..70u64 {
+            map.insert(format!("id-{n}"), base + Duration::from_millis(n));
+        }
+        assert_eq!(evict_oldest(&mut map, 64, |t| *t), 6);
+        assert_eq!(map.len(), 64);
+        assert!(!map.contains_key("id-0"));
+        assert!(map.contains_key("id-69"));
+        // Under the limit nothing is dropped.
+        assert_eq!(evict_oldest(&mut map, 64, |t| *t), 0);
+    }
     fn instance() -> Arc<Runtime> {
         Arc::new(Runtime {
             owner: "test-owner".into(),
@@ -386,7 +451,7 @@ mod tests {
         use super::super::tests::{database, generation};
         let (_dir, repo) = database().await;
         let conversation = repo
-            .create(CreateInput { title: None })
+            .create(CreateInput { title: None, origin: ConversationOrigin::Workspace })
             .await
             .unwrap()
             .conversation;
@@ -447,7 +512,7 @@ mod tests {
         for fail_save in [false, true] {
             let (_dir, repo) = database().await;
             let c = repo
-                .create(CreateInput { title: None })
+                .create(CreateInput { title: None, origin: ConversationOrigin::Workspace })
                 .await
                 .unwrap()
                 .conversation;
@@ -516,7 +581,7 @@ mod tests {
         }
         let (_dir, repo) = database().await;
         let c = repo
-            .create(CreateInput { title: None })
+            .create(CreateInput { title: None, origin: ConversationOrigin::Workspace })
             .await
             .unwrap()
             .conversation;
@@ -547,5 +612,12 @@ mod tests {
         let d = repo.get(&c.id).await.unwrap();
         assert_eq!(d.messages[1].status, "stopped");
         assert!(d.conversation.request_id.is_none());
+
+        // Test shutdown clears all state
+        r.shutdown().await;
+        assert!(r.state.lock().await.fenced);
+        assert!(r.state.lock().await.seen.is_empty());
+        assert!(r.state.lock().await.unsaved.is_empty());
+        assert!(r.state.lock().await.active.is_empty());
     }
 }

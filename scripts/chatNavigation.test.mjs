@@ -23,7 +23,10 @@ function load(path, mocks = {}, globals = {}) {
 function nodes(tree) {
   return !tree || typeof tree !== 'object' ? [] : [tree, ...[tree.props?.children].flat(Infinity).flatMap(nodes)];
 }
-const workspace = load('src/app/components/AppWorkspace.tsx');
+const primaryStore = Object.assign(selector => selector({ chatHistorySource: 'workspace' }), { getState: () => ({ setChatHistorySource() {} }) });
+const workspace = load('src/app/components/AppWorkspace.tsx', {
+  '../../features/workspace/api/primarySpaceState': { usePrimarySpaceStore: primaryStore },
+});
 
 test('space toggles preserve both owner element paths/types/keys and keep hidden tree inert', () => {
   function TerminalOwner() {}
@@ -236,4 +239,25 @@ test('visibility invalidates memoized panes and Current Work targets retain regi
   assert.equal(all.find(n => 'enabled' in n.props).props.enabled, false);
   const target = {}; all.find(n => n.props.ref).props.ref(target);
   assert.deepEqual(registered, [['p', target]]);
+});
+
+test('explicit navigation source resets normally and never follows controller selection', () => {
+  let state;
+  const { usePrimarySpaceStore } = load('src/features/workspace/api/primarySpaceState.ts', {
+    zustand: { create: init => {
+      state = init(patch => Object.assign(state, patch));
+      return { getState: () => state };
+    } },
+  });
+  assert.equal(state.chatHistorySource, 'workspace');
+  state.setSpace('chat', 'sidebar'); assert.equal(state.chatHistorySource, 'sidebar');
+  state.setChatHistorySource('workspace'); assert.equal(state.chatHistorySource, 'workspace');
+  state.setSpace('chat', 'quick-chat'); assert.equal(state.chatHistorySource, 'quick-chat');
+  state.setChatHistorySource('sidebar'); assert.equal(state.chatHistorySource, 'sidebar');
+  state.setSpace('projects'); state.setSpace('chat'); assert.equal(state.chatHistorySource, 'workspace');
+  assert.equal(usePrimarySpaceStore.getState().space, 'chat');
+  const terminal = readFileSync('src/features/terminal/components/TerminalTabsView.tsx', 'utf8');
+  assert.match(terminal, /onExpand=.*setSpace\("chat", "sidebar"\)/);
+  const app = readFileSync('src/app/App.tsx', 'utf8');
+  assert.match(app, /startQuickChatOwner\(source => .*setSpace\("chat", source\)/);
 });

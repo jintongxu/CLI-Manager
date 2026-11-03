@@ -10,7 +10,7 @@ export const chatTransport: ChatTransport = {
   },
   list: (search, offset) => invoke("chat_list", { input: { search, offset } }),
   get: conversationId => invoke("chat_get", { input: { conversationId } }),
-  create: () => invoke("chat_create", { input: { title: null } }),
+  create: (origin = "workspace") => invoke("chat_create", { input: { title: null, origin } }),
   update: input => invoke("chat_update", { input }),
   delete: (conversationId, revision) => invoke("chat_delete", { input: { conversationId, revision } }),
   providers: () => invoke("chat_provider_options"),

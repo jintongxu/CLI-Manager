@@ -25,6 +25,11 @@ async function bootstrap() {
       r.style.setProperty("background-color", "transparent", "important");
     }
   }
+  if (label === "quick-chat") {
+    const { default: QuickChatWindowApp } = await import("./features/chat/api/QuickChatWindowApp");
+    root.render(<React.StrictMode><QuickChatWindowApp /></React.StrictMode>);
+    return;
+  }
   if (label === "btw-thread") {
     const { default: BtwWindowApp } = await import("./features/terminal/api/BtwWindowApp");
     root.render(<React.StrictMode><BtwWindowApp /></React.StrictMode>);

@@ -1,29 +1,34 @@
 import { errorCode } from "./types";
-import type { ChatEvent, ChatTransport, Conversation, Detail, DraftStatus, Message, ProviderOption, ReasoningEffort, UpdateInput } from "./types";
+import { BoundedSet } from "./boundedSet";
+import type { ChatEvent, ChatTransport, Conversation, ConversationOrigin, Detail, DraftStatus, Message, ProviderOption, ReasoningEffort, UpdateInput } from "./types";
 
-interface Run { requestId: string; messageId?: string; sequence: number; terminal: boolean; stopped: boolean }
+interface Run { requestId: string; messageId?: string; sequence: number; terminal: boolean; stopped: boolean; completion: Promise<void>; settle: () => void }
 export interface ChatSnapshot {
   ready: boolean; selected: string | null; conversations: Conversation[]; details: Record<string, Detail>;
   providers: ProviderOption[]; drafts: Record<string, string>; dirty: string[]; draftStatus: Record<string, DraftStatus>; unsaved: Record<string, ChatEvent>;
   busy: string[]; running: string[]; error: string | null; suspended: boolean; search: string; hasMore: boolean;
+  searching: boolean;
 }
 
 /** Window-lifetime owner. React subscriptions (including StrictMode replay) never own requests. */
 export class ChatController {
   private state: ChatSnapshot = {
     ready: false, selected: null, conversations: [], details: {}, providers: [], drafts: {}, dirty: [], draftStatus: {},
-    unsaved: {}, busy: [], running: [], error: null, suspended: false, search: "", hasMore: false,
+    unsaved: {}, busy: [], running: [], error: null, suspended: false, search: "", hasMore: false, searching: false,
   };
   private listeners = new Set<() => void>();
   private starting?: Promise<void>;
   private queues = new Map<string, Promise<unknown>>();
   private runs = new Map<string, Run>();
-  private deleted = new Set<string>();
-  private deleting = new Set<string>();
+  private deleted = new BoundedSet(512);
+  private deleting = new BoundedSet(512);
+  private removing = new Set<string>();
+  private deferredTerminals = new Map<string, { event: ChatEvent; run: Run }>();
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
   private query = 0;
   private offset = 0;
   private selection = 0;
+  private searchTimer?: ReturnType<typeof setTimeout>;
   constructor(private api: ChatTransport, private uuid: () => string = () => crypto.randomUUID()) {}
   getSnapshot = () => this.state;
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
@@ -48,7 +53,7 @@ export class ChatController {
     }).catch(() => {});
     return next;
   }
-  private accept(detail: Detail) {
+  private accept(detail: Detail, includeInHistory = true) {
     const c = detail.conversation;
     if (this.deleted.has(c.id)) return;
     const old = this.state.details[c.id];
@@ -63,7 +68,8 @@ export class ChatController {
     this.patch({
       details: { ...this.state.details, [c.id]: { conversation: c, messages } },
       conversations: this.state.conversations.some(item => item.id === c.id)
-        ? this.state.conversations.map(item => item.id === c.id ? c : item) : [c, ...this.state.conversations],
+        ? this.state.conversations.map(item => item.id === c.id ? c : item)
+        : includeInHistory ? [c, ...this.state.conversations] : this.state.conversations,
       drafts: this.state.dirty.includes(c.id) ? this.state.drafts : { ...this.state.drafts, [c.id]: c.draft },
     });
   }
@@ -82,19 +88,39 @@ export class ChatController {
     return this.starting;
   }
   async loadHistory(search = this.state.search, more = false) {
+    clearTimeout(this.searchTimer);
     const token = ++this.query;
     const offset = more ? this.offset : 0;
-    this.patch({ search });
+    this.patch({ search, searching: true });
     try {
       const rows = await this.api.list(search, offset);
       if (token !== this.query) return;
       this.offset = offset + rows.length;
       const list = more ? [...this.state.conversations, ...rows] : rows;
       this.patch({ conversations: [...new Map(list.filter(c => !this.deleted.has(c.id)).map(c => [c.id, c])).values()],
-        hasMore: rows.length === 50 });
-    } catch (error) { if (token === this.query) this.report(error); }
+        hasMore: rows.length === 50, searching: false });
+    } catch (error) {
+      if (token === this.query) {
+        this.report(error);
+        this.patch({ searching: false });
+      }
+    }
   }
-  async select(id: string) {
+  searchHistory(query: string, delayMs = 250): Promise<void> {
+    clearTimeout(this.searchTimer);
+    this.patch({ search: query, searching: true });
+    return new Promise((resolve) => {
+      this.searchTimer = setTimeout(() => {
+        resolve(this.loadHistory(query, false));
+      }, delayMs);
+    });
+  }
+  clearSearch(): Promise<void> {
+    clearTimeout(this.searchTimer);
+    return this.loadHistory("", false);
+  }
+  /** Default callers report and swallow errors; continuation requires confirmed selection. */
+  async select(id: string, options: { strict?: boolean } = {}) {
     const token = ++this.selection;
     const previous = this.state.selected;
     this.patch({ selected: id });
@@ -106,14 +132,30 @@ export class ChatController {
         const event = this.state.unsaved[id];
         if (event) this.applySnapshot(event);
       }
-    } catch (error) { if (token === this.selection) this.report(error); }
+    } catch (error) {
+      if (token === this.selection) this.report(error);
+      if (options.strict) throw error;
+    }
+    if (options.strict && (token !== this.selection || this.deleted.has(id) || this.state.selected !== id)) throw "chat_conflict";
+  }
+  async loadDetail(id: string) {
+    this.editable(id);
+    const detail = await this.api.get(id);
+    this.editable(id);
+    this.accept(detail, false);
+    const event = this.state.unsaved[id];
+    if (event) this.applySnapshot(event);
+    return detail;
+  }
+  async createUnselected(origin: ConversationOrigin = "workspace") {
+    if (this.state.suspended) throw "chat_shutting_down";
+    const detail = await this.api.create(origin);
+    this.accept(detail, false);
+    return detail.conversation.id;
   }
   async refreshProviders() { this.patch({ providers: await this.api.providers() }); }
-  async create() {
-    if (this.state.suspended) throw "chat_shutting_down";
-    const detail = await this.api.create();
-    this.accept(detail);
-    await this.select(detail.conversation.id);
+  async create(origin: ConversationOrigin = "workspace") {
+    await this.select(await this.createUnselected(origin));
   }
   setDraft(id: string, draft: string) {
     this.editable(id);
@@ -163,11 +205,16 @@ export class ChatController {
   }
   async remove(id: string) {
     this.editable(id);
-    this.deleting.add(id);
+    if (this.removing.has(id)) throw "chat_not_found";
+    this.removing.add(id);
     clearTimeout(this.timers.get(id)); this.timers.delete(id);
     try {
-      // Cancellation is independent of the mutation queue: stop-before-start installs backend tombstone.
+      // Cancellation acknowledgement only signals the runtime. Wait for the terminal
+      // event and its queued revision refresh before establishing the delete boundary.
+      const run = this.runs.get(id);
       await this.stop(id);
+      if (run) await run.completion;
+      this.deleting.add(id);
       await this.enqueue(id, async () => {
         const latest = await this.api.get(id);
         await this.api.delete(id, latest.conversation.revision);
@@ -175,17 +222,28 @@ export class ChatController {
         const details = { ...this.state.details }; delete details[id];
         const drafts = { ...this.state.drafts }; delete drafts[id];
         const unsaved = { ...this.state.unsaved }; delete unsaved[id];
-        this.patch({ conversations: this.state.conversations.filter(c => c.id !== id), details, drafts, unsaved,
+        const draftStatus = { ...this.state.draftStatus }; delete draftStatus[id];
+        this.patch({ conversations: this.state.conversations.filter(c => c.id !== id), details, drafts, draftStatus, unsaved,
           dirty: this.state.dirty.filter(key => key !== id), running: [...this.runs.keys()],
           selected: this.state.selected === id ? null : this.state.selected });
       });
-    } finally { this.deleting.delete(id); }
+    } finally {
+      this.removing.delete(id);
+      this.deleting.delete(id);
+      const terminal = this.deferredTerminals.get(id);
+      this.deferredTerminals.delete(id);
+      // A failed delete still owns its final answer and persistence outcome. Successful
+      // deletion discards the deferred event; the deleted fence rejects later delivery.
+      if (terminal && !this.deleted.has(id)) this.event(terminal.event, terminal.run);
+    }
   }
   async generate(id: string, retry = false, reasoning: ReasoningEffort = "off", images?: readonly string[]) {
     this.editable(id);
     if (this.runs.has(id)) throw "chat_busy";
     if (this.state.unsaved[id] || this.state.dirty.includes(id) && this.state.error) throw "chat_storage";
-    const run: Run = { requestId: this.uuid(), sequence: -1, terminal: false, stopped: false };
+    let settle!: () => void;
+    const completion = new Promise<void>(resolve => { settle = resolve; });
+    const run: Run = { requestId: this.uuid(), sequence: -1, terminal: false, stopped: false, completion, settle };
     this.runs.set(id, run); this.patch({ running: [...this.runs.keys()], error: null });
     let accepted = false;
     try {
@@ -216,6 +274,7 @@ export class ChatController {
       });
     } catch (error) {
       if (!accepted && this.runs.get(id) === run) this.runs.delete(id);
+      if (!accepted) run.settle();
       this.patch({ running: [...this.runs.keys()] });
       throw error;
     }
@@ -239,9 +298,14 @@ export class ChatController {
   }
   private event(event: ChatEvent, run: Run) {
     const id = event.conversationId;
-    if (this.deleted.has(id) || this.deleting.has(id) || this.runs.get(id) !== run || run.terminal
+    if (this.deleted.has(id) || this.runs.get(id) !== run || run.terminal
       || event.requestId !== run.requestId || event.sequence <= run.sequence
       || (run.messageId && run.messageId !== event.messageId)) return;
+    if (this.deleting.has(id)) {
+      // Keep the first valid terminal immutable, just as normal event admission does.
+      if (event.status !== "pending" && !this.deferredTerminals.has(id)) this.deferredTerminals.set(id, { event, run });
+      return;
+    }
     run.messageId = event.messageId; run.sequence = event.sequence;
     this.applySnapshot(event);
     if (event.status !== "pending") {
@@ -251,10 +315,15 @@ export class ChatController {
       this.patch({ unsaved });
       // Queue after generate receipt and any draft CAS writes, refresh terminal revision once.
       void this.enqueue(id, async () => {
-        try { this.accept(await this.api.get(id)); }
-        finally {
+        try {
+          if (!this.deleted.has(id) && !this.deleting.has(id)) this.accept(await this.api.get(id));
+        } catch (error) {
+          // Only an acknowledged local deletion can make this late refresh obsolete.
+          if (error !== "chat_not_found" || !this.deleted.has(id)) throw error;
+        } finally {
           if (this.runs.get(id) === run) this.runs.delete(id);
           this.patch({ running: [...this.runs.keys()] });
+          run.settle();
         }
       }).catch(error => this.report(error));
     }

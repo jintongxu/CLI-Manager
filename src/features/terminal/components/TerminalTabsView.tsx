@@ -197,7 +197,7 @@ export function TerminalTabsView({
       if (next === "float") setSidePanelOpen(false);
       else { setSidePanelTab("chat"); setSidePanelOpen(true); }
     }}
-    onExpand={() => usePrimarySpaceStore.getState().setSpace("chat")}
+    onExpand={() => usePrimarySpaceStore.getState().setSpace("chat", "sidebar")}
     onClose={() => {
       if (chatPanelMode === "float") useChatPanelStore.getState().setFloatOpen(false);
       else setSidePanelOpen(false);

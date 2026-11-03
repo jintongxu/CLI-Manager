@@ -193,3 +193,6 @@ pub(crate) async fn drain() -> Result<()> {
 pub(crate) async fn resume() {
     runtime::shared().resume().await;
 }
+pub(crate) async fn cleanup() {
+    runtime::shared().shutdown().await;
+}

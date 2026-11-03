@@ -28,7 +28,11 @@ import type { ChatController } from "../lib/chatController";
 import { activateChatLink, chatTime, copyChatText, isFollowing, shouldSubmit } from "../lib/interactions";
 import { applyPinnedOrder, applyStoredOrder, moveIndexWithinOrder, moveWithinOrder, persistOrder, persistPinnedIds, readPinnedIds, readStoredOrder } from "../lib/conversationOrder";
 import { REASONING_LEVELS, persistReasoning, readReasoning } from "../lib/reasoning";
+import { CHAT_HISTORY_SOURCES, type ChatHistorySource } from "./historySource";
+import { HistorySelection } from "../lib/historySelection";
+import { HistorySelectionControls } from "../components/HistorySelectionControls";
 import type { ReasoningEffort } from "../lib/types";
+import { diagnoseChatError } from "../lib/chatErrors";
 
 interface CatalogModel {
   modelId: string;
@@ -57,9 +61,13 @@ interface AttachedFile {
 export function ChatWorkspace({
   workspaceVisible,
   controller = chatController,
+  historySource,
+  onHistorySourceChange,
 }: {
   workspaceVisible: boolean;
   controller?: ChatController;
+  historySource?: ChatHistorySource;
+  onHistorySourceChange?: (source: ChatHistorySource) => void;
 }) {
   const state = useSyncExternalStore(
     controller.subscribe,
@@ -67,6 +75,24 @@ export function ChatWorkspace({
     controller.getSnapshot
   );
   const { t, language } = useI18n();
+
+  const [localSource, setLocalSource] = useState<ChatHistorySource>("workspace");
+  const activeSource = historySource ?? localSource;
+  const [historySelection] = useState(() => new HistorySelection());
+  const selectionState = useSyncExternalStore(historySelection.subscribe, historySelection.getSnapshot, historySelection.getSnapshot);
+  const selectionScope = JSON.stringify([activeSource, state.search]);
+  const selectingHistory = selectionState.enabled && selectionState.scope === selectionScope;
+  const historyLocked = selectionState.busy || !!selectionState.confirmation;
+  useEffect(() => { historySelection.resetScope(selectionScope); }, [historySelection, selectionScope]);
+  const changeSource = (source: ChatHistorySource) => {
+    if (historyLocked) return;
+    historySelection.resetScope(JSON.stringify([source, state.search]));
+    setLocalSource(source);
+    onHistorySourceChange?.(source);
+    setDrag(null);
+    dragRef.current = null;
+    setContextMenu(current => ({ ...current, visible: false }));
+  };
 
   // Dialog & state management
   const [dialog, setDialog] = useState<"rename" | "delete" | null>(null);
@@ -123,6 +149,49 @@ export function ChatWorkspace({
   }, [preview]);
 
   const selected = state.selected;
+  const previousSelection = useRef<{ id: string | null; origin: ChatHistorySource } | null>(null);
+  const restoringSelection = useRef(false);
+  useEffect(() => {
+    const previous = previousSelection.current;
+    const deletedSelected = previous?.id && selected === null
+      && !state.conversations.some(conversation => conversation.id === previous.id);
+    // Keep the deleted selection as the recovery anchor while bulk deletion is
+    // locked; otherwise the null selection render consumes the evidence.
+    if (deletedSelected && historyLocked) return;
+    if (!deletedSelected || historyLocked || restoringSelection.current || !state.ready || state.suspended) {      previousSelection.current = {
+        id: selected,
+        origin: selected
+          ? (state.conversations.find(conversation => conversation.id === selected)?.origin ?? previous?.origin ?? activeSource)
+          : previous?.origin ?? activeSource,
+      };
+      return;
+    }
+    restoringSelection.current = true;
+    const source = previous!.origin;
+    // Quick Chat owns its selected conversation independently of the main
+    // selection. Its replacement is created unselected and may appear in
+    // details before it is added to the history list. Prefer that live detail
+    // over any stale/list candidate so deletion recovery cannot create a twin.
+    const quickDetail = source === "quick-chat"
+      ? Object.values(state.details)
+        .filter(detail => detail.conversation.origin === "quick-chat")
+        .sort((a, b) => b.conversation.updatedAt - a.conversation.updatedAt)[0]
+      : undefined;
+    const next = quickDetail?.conversation
+      ?? [...state.conversations].reverse().find(conversation => (conversation.origin ?? "workspace") === source);
+    // Quick Chat's owner is already responsible for recovering its selection.
+    // Wait for its detail notification rather than independently creating a
+    // main-list conversation during that asynchronous recovery window.
+    if (source === "quick-chat" && !quickDetail) return;
+    void (async () => {
+      try {
+        if (next) await controller.select(next.id);
+        else await controller.create(source);
+      } finally {
+        restoringSelection.current = false;
+      }
+    })();
+  }, [selected, state.conversations, state.details, state.ready, state.suspended, historyLocked, activeSource, controller]);
   useEffect(() => {
     setReasoning(selected ? readReasoning(selected) : "medium");
     setReasoningMenuOpen(false);
@@ -215,8 +284,10 @@ export function ChatWorkspace({
 
   // Reorder conversations if user has dragged
   const sortedConversations = useMemo(
-    () => applyPinnedOrder(applyStoredOrder(state.conversations, orderOverride), pinnedIds),
-    [state.conversations, orderOverride, pinnedIds]
+    () => applyPinnedOrder(applyStoredOrder(
+      state.conversations.filter(c => (c.origin ?? "workspace") === activeSource
+        && (!state.search || c.title.toLocaleLowerCase().includes(state.search.toLocaleLowerCase()))), orderOverride), pinnedIds),
+    [state.conversations, state.search, activeSource, orderOverride, pinnedIds]
   );
 
   const answers = detail?.messages.filter((m) => m.role === "assistant") ?? [];
@@ -351,11 +422,14 @@ export function ChatWorkspace({
 
   const commitOrder = (next: string[] | null) => {
     if (!next) return;
-    setOrderOverride(next);
-    persistOrder(next);
+    // Retain stored order for sources not currently rendered.
+    const merged = [...(orderOverride ?? []).filter(id => !next.includes(id)), ...next];
+    setOrderOverride(merged);
+    persistOrder(merged);
   };
 
   const applyReorder = (sourceId: string, targetId: string) => {
+    if (!sortedConversations.some(c => c.id === sourceId) || !sortedConversations.some(c => c.id === targetId)) return;
     if (pinnedIds.includes(sourceId) !== pinnedIds.includes(targetId)) return;
     commitOrder(
       moveWithinOrder(
@@ -370,6 +444,7 @@ export function ChatWorkspace({
   const applyIndexReorder = (sourceId: string, from: number, to: number) => {
     const order = sortedConversations.map((item) => item.id);
     if (pinnedIds.includes(sourceId) !== pinnedIds.includes(order[to] ?? "")) return;
+    if (sortedConversations[from]?.origin !== sortedConversations[to]?.origin) return;
     if (order[from] !== sourceId) return applyReorder(sourceId, order[to] ?? "");
     commitOrder(moveIndexWithinOrder(order, from, to));
   };
@@ -392,6 +467,7 @@ export function ChatWorkspace({
       const nodes = rows();
       const from = nodes.findIndex((node) => node.dataset.chatItem === id);
       if (from < 0) return null;
+      const sourceOrigin = nodes[from].dataset.chatOrigin;
       const height = nodes[from].getBoundingClientRect().height + 4;
       // Insertion slot in the list without the dragged row: the count of rows
       // whose midpoint sits above the pointer.
@@ -401,6 +477,7 @@ export function ChatWorkspace({
         const rect = nodes[i].getBoundingClientRect();
         if (clientY > rect.top + rect.height / 2) to++;
       }
+      if (nodes[to]?.dataset.chatOrigin !== sourceOrigin) return null;
       return { from, to, height };
     };
 
@@ -442,12 +519,23 @@ export function ChatWorkspace({
   }, []);
 
   const handleItemPointerDown = (event: React.PointerEvent, id: string) => {
-    if (event.button !== 0) return;
+    if (selectingHistory || historyLocked || event.button !== 0) return;
     dragRef.current = { id, startY: event.clientY, active: false };
   };
 
+  useEffect(() => {
+    if (!selectingHistory) return;
+    dragRef.current = null;
+    dragPreviewRef.current = null;
+    suppressClickRef.current = false;
+    setDrag(null);
+    setContextMenu(current => ({ ...current, visible: false }));
+    setDialog(null);
+  }, [selectingHistory]);
+
   // Native drag props retained for deterministic tests.
   const handleDragStart = (e: React.DragEvent, id: string) => {
+    if (selectingHistory || historyLocked) { e.preventDefault(); return; }
     e.dataTransfer?.setData("text/plain", id);
     if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
   };
@@ -459,6 +547,7 @@ export function ChatWorkspace({
   const handleDrop = (e: React.DragEvent, targetId: string) => {
     e.preventDefault();
     setDrag(null);
+    if (selectingHistory || historyLocked) return;
     const sourceId = e.dataTransfer?.getData("text/plain");
     if (!sourceId || sourceId === targetId) return;
     applyReorder(sourceId, targetId);
@@ -476,6 +565,7 @@ export function ChatWorkspace({
   const handleContextMenu = (e: React.MouseEvent, convId: string) => {
     e.preventDefault();
     e.stopPropagation();
+    if (selectingHistory || historyLocked) return;
     setContextMenu({
       visible: true,
       x: e.clientX,
@@ -618,14 +708,23 @@ export function ChatWorkspace({
       {/* History Sidebar */}
       <aside id="chat-history" className={`chat-history ${historyVisible ? "chat-history-open" : "chat-history-collapsed"}`} aria-label={t("chat.title")} aria-hidden={!historyVisible} inert={!historyVisible}>
         <div className="chat-history-head">
-          <button
-            className="chat-new-btn"
-            onClick={() => act(() => controller.create())}
+          <HistorySelectionControls selection={historySelection} snapshot={selectionState}
+            scope={selectionScope} visibleIds={sortedConversations.map(item => item.id)}
             disabled={!state.ready || state.suspended}
-          >
-            <Plus size={15} strokeWidth={1.8} />
-            <span>{t("chat.new")}</span>
-          </button>
+            remove={id => controller.remove(id)}
+            idleAction={
+              <button
+                className="chat-new-btn"
+                onClick={() => act(async () => {
+                  await controller.create("workspace");
+                  changeSource("workspace");
+                })}
+                disabled={!state.ready || state.suspended || historyLocked}
+              >
+                <Plus size={15} strokeWidth={1.8} />
+                <span>{t("chat.new")}</span>
+              </button>
+            } />
           <label className="chat-history-search-field">
             <Search size={13} strokeWidth={1.7} aria-hidden="true" />
             <input
@@ -634,16 +733,91 @@ export function ChatWorkspace({
               aria-label={t("chat.search")}
               placeholder={t("chat.search")}
               value={state.search}
-              onChange={(event) => act(() => controller.loadHistory(event.target.value))}
+              disabled={historyLocked}
+              onChange={(event) => {
+                if (historyLocked) return;
+                const next = event.target.value;
+                historySelection.resetScope(JSON.stringify([activeSource, next]));
+                void controller.searchHistory(next);
+              }}
             />
+            {state.search && (
+              <button
+                type="button"
+                className="chat-history-search-clear"
+                aria-label={t("chat.clearSearch")}
+                title={t("chat.clearSearch")}
+                disabled={historyLocked}
+                onClick={() => {
+                  if (historyLocked) return;
+                  historySelection.resetScope(JSON.stringify([activeSource, ""]));
+                  void controller.clearSearch();
+                }}
+              >
+                <X size={12} aria-hidden="true" />
+              </button>
+            )}
           </label>
         </div>
 
+        {state.search && (
+          <div className="chat-history-search-feedback" role="status">
+            <span>
+              {state.searching
+                ? t("chat.searching")
+                : t(state.hasMore ? "chat.searchMatchesMore" : "chat.searchMatches", {
+                    count: sortedConversations.length,
+                  })}
+            </span>
+          </div>
+        )}
+
+        <div className="chat-history-tabs" role="tablist" aria-label={t("chat.historySources")}>
+          {CHAT_HISTORY_SOURCES.map((source, index) => <button
+            key={source} type="button" role="tab" id={`chat-source-${source}`}
+            aria-selected={activeSource === source} aria-controls="chat-source-history"
+            tabIndex={activeSource === source ? 0 : -1}
+            disabled={historyLocked}
+            onClick={() => changeSource(source)}
+            onKeyDown={event => {
+              let next: number;
+              if (event.key === "ArrowRight") next = (index + 1) % CHAT_HISTORY_SOURCES.length;
+              else if (event.key === "ArrowLeft") next = (index + CHAT_HISTORY_SOURCES.length - 1) % CHAT_HISTORY_SOURCES.length;
+              else if (event.key === "Home") next = 0;
+              else if (event.key === "End") next = CHAT_HISTORY_SOURCES.length - 1;
+              else return;
+              event.preventDefault();
+              if (historyLocked) return;
+              changeSource(CHAT_HISTORY_SOURCES[next]);
+              event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role=tab]")[next]?.focus();
+            }}
+          >{t(`chat.origin.${source}`)}</button>)}
+        </div>
         <div className="chat-history-list" ref={listRef}>
-          {sortedConversations.map((item, index) => (
+          <section id="chat-source-history" role="tabpanel" aria-labelledby={`chat-source-${activeSource}`} tabIndex={0}>
+          {!sortedConversations.length && (
+            <p className="chat-history-empty" role="status">
+              {state.search
+                ? (state.searching ? t("chat.searching") : t("chat.searchNoMatchesInLoaded"))
+                : t(`chat.historyEmpty.${activeSource}`)}
+            </p>
+          )}
+          {sortedConversations.map((item, index) => selectingHistory ? (
+            <label key={item.id} className="chat-history-item chat-history-selectable" data-chat-selection={item.id}
+              data-selected={selectionState.ids.includes(item.id)}>
+              <input type="checkbox" checked={selectionState.ids.includes(item.id)}
+                disabled={historyLocked || state.suspended}
+                aria-label={`${t("chat.selectChat")}: ${item.title || t("chat.untitled")}`}
+                onChange={() => historySelection.toggle(selectionScope, item.id, sortedConversations.map(row => row.id))} />
+              <span className="chat-history-item-title">{item.title || t("chat.untitled")}</span>
+              <time dateTime={new Date(item.updatedAt).toISOString()}>{chatTime(item.updatedAt, language)}</time>
+              {state.running.includes(item.id) && <small>{t("chat.pending")}</small>}
+            </label>
+          ) : (
             <button
               key={item.id}
               data-chat-item={item.id}
+              data-chat-origin={item.origin ?? "workspace"}
               className={`chat-history-item ${drag?.id === item.id ? "chat-dragging" : ""}`}
               style={
                 drag
@@ -665,7 +839,7 @@ export function ChatWorkspace({
                   suppressClickRef.current = false;
                   return;
                 }
-                act(() => controller.select(item.id));
+                if (!historyLocked && !selectingHistory) act(() => controller.select(item.id));
               }}
               onContextMenu={(e) => handleContextMenu(e, item.id)}
             >
@@ -679,8 +853,9 @@ export function ChatWorkspace({
               {state.running.includes(item.id) && <small>{t("chat.pending")}</small>}
             </button>
           ))}
+          </section>
           {state.hasMore && (
-            <button onClick={() => act(() => controller.loadHistory(state.search, true))}>
+            <button disabled={historyLocked} onClick={() => act(() => controller.loadHistory(state.search, true))}>
               {t("chat.more")}
             </button>
           )}
@@ -749,20 +924,35 @@ export function ChatWorkspace({
         >
           {historyVisible ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
         </button>
-        {state.error && (
-          <div role="alert" className="chat-alert">
-            {errorLabel(state.error)}
-            <button
-              onClick={() =>
-                act(() =>
-                  state.ready ? controller.retryPersistence() : controller.start()
-                )
-              }
-            >
-              {t("chat.retrySave")}
-            </button>
-          </div>
-        )}
+        {state.error && (() => {
+          const diagnosis = diagnoseChatError(state.error);
+          const handleAction = () => {
+            switch (diagnosis.action) {
+              case "reconnect":
+                act(() => controller.start());
+                break;
+              case "create":
+                act(() => controller.create());
+                break;
+              case "retry_save":
+                act(() => (state.ready ? controller.retryPersistence() : controller.start()));
+                break;
+              case "switch_model":
+                break;
+              case "wait":
+                controller.clearError();
+                break;
+            }
+          };
+          return (
+            <div role="alert" className="chat-alert">
+              {errorLabel(state.error)}
+              <button onClick={handleAction}>
+                {t(diagnosis.actionKey as TranslationKey)}
+              </button>
+            </div>
+          );
+        })()}
 
         {!state.ready ? (
           <p role="status" className="chat-empty">
@@ -778,6 +968,7 @@ export function ChatWorkspace({
                 <div
                   className="chat-conversation-title-wrap"
                   onClick={() => {
+                    if (historyLocked || selectingHistory) return;
                     setTargetConvId(c.id);
                     setTitle(c.title);
                     setDialog("rename");
@@ -1358,7 +1549,7 @@ export function ChatWorkspace({
             )}
 
             {/* Rename / Delete Dialog */}
-            {dialog && (
+            {dialog && !selectingHistory && !historyLocked && (
               <div className="chat-dialog-backdrop">
                 <section
                   role="dialog"

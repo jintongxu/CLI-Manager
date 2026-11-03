@@ -1,0 +1,5 @@
+warning: in the working copy of '.workflow/spec-analytics.jsonl', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.workflow/specs/.hit-log.jsonl', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/chatTransport.test.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src-tauri/src/features/chat/repository.rs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src-tauri/src/features/chat/stream.rs', LF will be replaced by CRLF the next time Git touches it

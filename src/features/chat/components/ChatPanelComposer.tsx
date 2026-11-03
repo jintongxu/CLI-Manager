@@ -3,7 +3,7 @@ import { ArrowUp, Paperclip, Square, X } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "../../../shared/i18n/index";
 import { clearWorkspaceSelection, readWorkspaceSelection } from "../../../shared/lib/workspaceSelection";
-import { chatController } from "../api/lifecycle";
+import type { ChatPanelController } from "../lib/panelController";
 import { buildSendText, canSubmit } from "../lib/chatPanelActions";
 import { shouldSubmit } from "../lib/interactions";
 import { filterAcceptedImages, readClipboardImages, readImageFileAsDataUri } from "../lib/chatImageAttachments";
@@ -14,6 +14,7 @@ import { ChatPanelImagePreview, ChatPanelImageTray } from "./ChatPanelImageTray"
 const MAX_TEXTAREA_ROWS = 6;
 
 interface ChatPanelComposerProps {
+  controller: ChatPanelController;
   conversationId: string | null;
   draft: string;
   attachedSelection: string;
@@ -30,11 +31,13 @@ interface ChatPanelComposerProps {
 }
 
 export function ChatPanelComposer({
-  conversationId, draft, attachedSelection, busy, running, suspended,
+  controller, conversationId, draft, attachedSelection, busy, running, suspended,
   reasoningControl, reasoningEffort, images, onImagesChange, onAttachSelection, onDetachSelection, report,
 }: ChatPanelComposerProps) {
   const { t } = useI18n();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const submitting = useRef(false);
+  const [sending, setSending] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
 
   useLayoutEffect(() => {
@@ -46,20 +49,22 @@ export function ChatPanelComposer({
   }, [draft]);
 
   const submit = () => {
-    if (!conversationId) return;
+    if (!conversationId || submitting.current) return;
     const text = buildSendText(draft, attachedSelection);
     if (!text && !images.length) return;
+    submitting.current = true;
+    setSending(true);
     onDetachSelection();
     clearWorkspaceSelection();
     const attached = [...images];
     onImagesChange([]);
     void (async () => {
-      chatController.setDraft(conversationId, text || t("chat.panel.imageOnlyPrompt"));
-      await chatController.generate(conversationId, false, reasoningPayload(reasoningEffort) ?? "off", attached);
+      controller.setDraft(conversationId, text || t("chat.panel.imageOnlyPrompt"));
+      await controller.generate(conversationId, false, reasoningPayload(reasoningEffort) ?? "off", attached);
     })().catch((error) => {
       onImagesChange(attached);
       report(error);
-    });
+    }).finally(() => { submitting.current = false; setSending(false); });
   };
 
   const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -84,7 +89,7 @@ export function ChatPanelComposer({
     }
   };
 
-  const submitDisabled = running
+  const submitDisabled = running || sending || busy || suspended
     || !conversationId
     || (!images.length && !canSubmit(buildSendText(draft, attachedSelection), busy, suspended));
 
@@ -109,7 +114,7 @@ export function ChatPanelComposer({
         aria-label={t("chat.draft")}
         onChange={(event) => {
           if (!conversationId) return;
-          chatController.setDraft(conversationId, event.currentTarget.value);
+          controller.setDraft(conversationId, event.currentTarget.value);
         }}
         onPaste={handlePaste}
         onKeyDown={(event) => {
@@ -139,7 +144,7 @@ export function ChatPanelComposer({
             title={t("chat.panel.stop")}
             onClick={() => {
               if (!conversationId) return;
-              void chatController.stop(conversationId).catch(report);
+              void controller.stop(conversationId).catch(report);
             }}
           >
             <Square size={10} />

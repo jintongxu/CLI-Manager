@@ -30,13 +30,11 @@ async function loadDb(): Promise<Database> {
 export async function getDb(): Promise<Database> {
   if (!db) {
     if (!dbLoadPromise) {
+      // SQL plugin consumes registrations on failure. Cache rejection until process restart.
       dbLoadPromise = loadDb()
         .then((loaded) => {
           db = loaded;
           return loaded;
-        })
-        .finally(() => {
-          dbLoadPromise = null;
         });
     }
     db = await dbLoadPromise;

@@ -1423,5 +1423,11 @@ pub(crate) fn migrations() -> Vec<Migration> {
             sql: crate::translator::history::SCHEMA,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 58,
+            description: "add_chat_conversation_origin",
+            sql: crate::chat::ORIGIN_MIGRATION,
+            kind: MigrationKind::Up,
+        },
     ]
 }

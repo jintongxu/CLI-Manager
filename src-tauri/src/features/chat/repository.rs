@@ -28,48 +28,55 @@ pub async fn shared_pool() -> Result<SqlitePool> {
                 .await
                 .map_err(storage)?;
             // The SQL plugin owns migrations. Never create/upgrade the main DB behind its back.
-            sqlx::query("SELECT id,revision,lease_until FROM chat_conversations LIMIT 0")
-                .execute(&pool)
-                .await
-                .map_err(|_| "chat_not_initialized".to_string())?;
+            validate_schema(&pool).await?;
             Ok(pool)
         })
         .await
         .cloned()
 }
-fn conversation(r: sqlx::sqlite::SqliteRow) -> Conversation {
-    Conversation {
-        id: r.get("id"),
-        title: r.get("title"),
-        draft: r.get("draft"),
-        app_type: r.get("app_type"),
-        provider_id: r.get("provider_id"),
-        model: r.get("model"),
-        created_at: r.get("created_at"),
-        updated_at: r.get("updated_at"),
-        revision: r.get("revision"),
-        request_id: r.get("request_id"),
-        lease_until: r.get("lease_until"),
+async fn validate_schema(pool: &SqlitePool) -> Result<()> {
+    for query in [
+        "SELECT id,title,draft,origin,app_type,provider_id,model,created_at,updated_at,revision,request_id,owner,lease_until FROM chat_conversations LIMIT 0",
+        "SELECT id,conversation_id,ordinal,role,content,reply_to,request_id,status,error_code,finish_reason,app_type,provider_id,model,created_at,updated_at FROM chat_messages LIMIT 0",
+    ] {
+        sqlx::query(query).execute(pool).await.map_err(|_| "chat_not_initialized".to_string())?;
     }
+    Ok(())
 }
-fn message(r: sqlx::sqlite::SqliteRow) -> Message {
-    Message {
-        id: r.get("id"),
-        conversation_id: r.get("conversation_id"),
-        ordinal: r.get("ordinal"),
-        role: r.get("role"),
-        content: r.get("content"),
-        reply_to: r.get("reply_to"),
-        request_id: r.get("request_id"),
-        status: r.get("status"),
-        error_code: r.get("error_code"),
-        finish_reason: r.get("finish_reason"),
-        app_type: r.get("app_type"),
-        provider_id: r.get("provider_id"),
-        model: r.get("model"),
-        created_at: r.get("created_at"),
-        updated_at: r.get("updated_at"),
-    }
+fn conversation(r: sqlx::sqlite::SqliteRow) -> Result<Conversation> {
+    Ok(Conversation {
+        id: r.try_get("id").map_err(storage)?,
+        origin: match r.try_get::<String, _>("origin").map_err(storage)?.as_str() { "workspace" => ConversationOrigin::Workspace, "sidebar" => ConversationOrigin::Sidebar, "quick-chat" => ConversationOrigin::QuickChat, _ => return Err("chat_storage".into()) },
+        title: r.try_get("title").map_err(storage)?,
+        draft: r.try_get("draft").map_err(storage)?,
+        app_type: r.try_get("app_type").map_err(storage)?,
+        provider_id: r.try_get("provider_id").map_err(storage)?,
+        model: r.try_get("model").map_err(storage)?,
+        created_at: r.try_get("created_at").map_err(storage)?,
+        updated_at: r.try_get("updated_at").map_err(storage)?,
+        revision: r.try_get("revision").map_err(storage)?,
+        request_id: r.try_get("request_id").map_err(storage)?,
+        lease_until: r.try_get("lease_until").map_err(storage)?,
+    })
+}
+fn message(r: sqlx::sqlite::SqliteRow) -> Result<Message> {
+    Ok(Message {
+        id: r.try_get("id").map_err(storage)?,
+        conversation_id: r.try_get("conversation_id").map_err(storage)?,
+        ordinal: r.try_get("ordinal").map_err(storage)?,
+        role: r.try_get("role").map_err(storage)?,
+        content: r.try_get("content").map_err(storage)?,
+        reply_to: r.try_get("reply_to").map_err(storage)?,
+        request_id: r.try_get("request_id").map_err(storage)?,
+        status: r.try_get("status").map_err(storage)?,
+        error_code: r.try_get("error_code").map_err(storage)?,
+        finish_reason: r.try_get("finish_reason").map_err(storage)?,
+        app_type: r.try_get("app_type").map_err(storage)?,
+        provider_id: r.try_get("provider_id").map_err(storage)?,
+        model: r.try_get("model").map_err(storage)?,
+        created_at: r.try_get("created_at").map_err(storage)?,
+        updated_at: r.try_get("updated_at").map_err(storage)?,
+    })
 }
 pub fn changed(rows: u64) -> Result<()> {
     if rows == 1 {
@@ -97,10 +104,7 @@ impl Repository {
             .await
             .map_err(storage)?;
         // The SQL plugin owns migrations. Never create/upgrade the main DB behind its back.
-        sqlx::query("SELECT id,revision,lease_until FROM chat_conversations LIMIT 0")
-            .execute(&pool)
-            .await
-            .map_err(|_| "chat_not_initialized".to_string())?;
+        validate_schema(&pool).await?;
         Ok(Self { pool })
     }
     pub async fn recover(&self) -> Result<()> {
@@ -121,7 +125,7 @@ impl Repository {
         self.recover().await?;
         // instr gives literal, parameterized matching: %, _ and quotes are not LIKE patterns.
         sqlx::query("SELECT * FROM chat_conversations WHERE instr(lower(title),lower(?))>0 ORDER BY updated_at DESC,id LIMIT 50 OFFSET ?")
-   .bind(input.search).bind(i64::from(input.offset)).fetch_all(&self.pool).await.map(|r|r.into_iter().map(conversation).collect()).map_err(storage)
+   .bind(input.search).bind(i64::from(input.offset)).fetch_all(&self.pool).await.map_err(storage)?.into_iter().map(conversation).collect()
     }
     pub async fn get(&self, id: &str) -> Result<Detail> {
         uuid(id)?;
@@ -141,10 +145,10 @@ impl Repository {
                 .map_err(storage)?
                 .into_iter()
                 .map(message)
-                .collect();
+                .collect::<Result<Vec<_>>>()?;
         tx.commit().await.map_err(storage)?;
         Ok(Detail {
-            conversation: conversation(c),
+            conversation: conversation(c)?,
             messages,
         })
     }
@@ -155,10 +159,11 @@ impl Repository {
         }
         let id = uuid::Uuid::new_v4().to_string();
         sqlx::query(
-            "INSERT INTO chat_conversations(id,title,created_at,updated_at) VALUES(?,?,?,?)",
+            "INSERT INTO chat_conversations(id,title,origin,created_at,updated_at) VALUES(?,?,?,?,?)",
         )
         .bind(&id)
         .bind(title)
+        .bind(input.origin.as_str())
         .bind(now())
         .bind(now())
         .execute(&self.pool)
@@ -201,15 +206,15 @@ impl Repository {
                 .await
                 .map_err(storage)?
                 .ok_or_else(|| "chat_not_found".to_string())?;
-        if row.get::<i64, _>("revision") != i.revision {
+        if row.try_get::<i64, _>("revision").map_err(storage)? != i.revision {
             return Err("chat_conflict".into());
         }
         let foreign = row
-            .get::<Option<String>, _>("owner")
+            .try_get::<Option<String>, _>("owner").map_err(storage)?
             .is_some_and(|o| o != super::runtime::shared().owner);
         if foreign
             && row
-                .get::<Option<i64>, _>("lease_until")
+                .try_get::<Option<i64>, _>("lease_until").map_err(storage)?
                 .is_some_and(|t| t > now())
         {
             return Err("chat_busy".into());
@@ -256,7 +261,7 @@ impl Repository {
                 .fetch_all(&mut *tx)
                 .await
                 .map_err(storage)?;
-        let mut history: Vec<Message> = rows.into_iter().map(message).collect();
+        let mut history: Vec<Message> = rows.into_iter().map(message).collect::<Result<_>>()?;
         let answer_id;
         if i.retry {
             let last = history.pop().ok_or_else(invalid)?;
@@ -346,7 +351,7 @@ impl Repository {
                 .fetch_one(&mut *tx)
                 .await
                 .map_err(storage)?,
-        );
+        )?;
         tx.commit().await.map_err(storage)?;
         Ok((answer, history))
     }
@@ -407,7 +412,7 @@ impl Repository {
         let id = uuid::Uuid::new_v4().to_string();
         let user_id = uuid::Uuid::new_v4().to_string();
         // Superseded retained text gets a separate, searchable conversation with its user turn.
-        sqlx::query("INSERT INTO chat_conversations(id,title,app_type,provider_id,model,created_at,updated_at) SELECT ?,title,?,?,?, ?,? FROM chat_conversations WHERE id=?")
+        sqlx::query("INSERT INTO chat_conversations(id,title,origin,app_type,provider_id,model,created_at,updated_at) SELECT ?,title,origin,?,?,?, ?,? FROM chat_conversations WHERE id=?")
             .bind(&id).bind(&m.app_type).bind(&m.provider_id).bind(&m.model).bind(now()).bind(now()).bind(&m.conversation_id)
             .execute(&mut *tx).await.map_err(storage)?;
         changed(sqlx::query("INSERT INTO chat_messages(id,conversation_id,ordinal,role,content,request_id,status,app_type,provider_id,model,created_at,updated_at) SELECT ?,?,0,'user',content,?,'completed',?,?,?, ?,? FROM chat_messages WHERE id=? AND conversation_id=?")
@@ -447,5 +452,31 @@ impl Repository {
     .bind(&m.conversation_id).bind(&m.request_id).bind(owner).execute(&mut *tx).await.map_err(storage)?.rows_affected())?;
         }
         tx.commit().await.map_err(storage)
+    }
+}
+
+#[cfg(test)]
+mod readiness_tests {
+    use super::*;
+    use sqlx::{Connection, Executor};
+    #[tokio::test]
+    async fn chat_readiness_rejects_empty_old_schema() {
+        let dir = tempfile::tempdir().unwrap(); let path = dir.path().join("old.db");
+        let mut c = sqlx::SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&path).create_if_missing(true)).await.unwrap();
+        c.execute(super::super::SCHEMA).await.unwrap();
+        assert!(matches!(Repository::open(&path).await, Err(e) if e == "chat_not_initialized"));
+        c.execute(super::super::ORIGIN_MIGRATION).await.unwrap();
+        assert!(Repository::open(&path).await.is_ok());
+        c.execute("ALTER TABLE chat_messages RENAME COLUMN finish_reason TO missing_finish").await.unwrap();
+        assert!(Repository::open(&path).await.is_err());
+    }
+    #[tokio::test]
+    async fn chat_readiness_decoders_return_errors_without_panics() {
+        let mut c = sqlx::SqliteConnection::connect("sqlite::memory:").await.unwrap();
+        assert!(conversation(sqlx::query("SELECT 1 AS id").fetch_one(&mut c).await.unwrap()).is_err());
+        for query in ["SELECT 'x' AS id, 'invalid' AS origin", "SELECT 'x' AS id, 42 AS origin", "SELECT 'x' AS id, NULL AS origin"] {
+            assert!(conversation(sqlx::query(query).fetch_one(&mut c).await.unwrap()).is_err());
+        }
+        assert!(message(sqlx::query("SELECT 1 AS id").fetch_one(&mut c).await.unwrap()).is_err());
     }
 }

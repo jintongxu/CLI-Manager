@@ -1,0 +1,243 @@
+    Blocking waiting for file lock on build directory
+   Compiling cli-manager v1.4.10 (D:\ai\cli-manager-worktrees\task-1101-1903-57e90cda9091\src-tauri)
+warning: unused imports: `MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_DESCRIPTION`, `MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_SQL`, `MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_VERSION`, `MIGRATION_ADD_WORKTREE_SHORT_LABELS_DESCRIPTION`, `MIGRATION_ADD_WORKTREE_SHORT_LABELS_SQL`, and `MIGRATION_ADD_WORKTREE_SHORT_LABELS_VERSION`
+  --> src\commands\..\features\app-data\repair\mod.rs:4:5
+   |
+ 4 |     MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_DESCRIPTION, MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_SQL,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 5 |     MIGRATION_ADD_COMMAND_TEMPLATE_TYPE_VERSION, MIGRATION_ADD_GROUP_BOUND_PATH_DESCRIPTION,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+14 |     MIGRATION_ADD_WORKTREE_ROOT_IDENTITY_VERSION, MIGRATION_ADD_WORKTREE_SHORT_LABELS_DESCRIPTION,
+   |                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+15 |     MIGRATION_ADD_WORKTREE_SHORT_LABELS_SQL, MIGRATION_ADD_WORKTREE_SHORT_LABELS_VERSION,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: use of deprecated method `std::sync::atomic::Atomic::<usize>::fetch_update`: renamed to `try_update` for consistency
+   --> src\infrastructure\daemon\ssh_agent_bridge.rs:196:18
+    |
+196 |                 .fetch_update(Ordering::AcqRel, Ordering::Acquire, |pending| {
+    |                  ^^^^^^^^^^^^
+    |
+    = note: `#[warn(deprecated)]` on by default
+help: replace the use of the deprecated method
+    |
+196 -                 .fetch_update(Ordering::AcqRel, Ordering::Acquire, |pending| {
+196 +                 .try_update(Ordering::AcqRel, Ordering::Acquire, |pending| {
+    |
+
+warning: unused variable: `roots`
+   --> src\commands\..\features\projects\finish_cleanup_plan.rs:132:9
+    |
+132 |     let roots: Vec<String> = classification
+    |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_roots`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+  --> src\infrastructure\daemon\server\owner_exit.rs:94:13
+   |
+94 |         let mut state = self.host.ownership.lock().unwrap();
+   |             ----^^^^^
+   |             |
+   |             help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: associated function `open` is never used
+  --> src\features\chat\repository.rs:95:18
+   |
+88 | impl Repository {
+   | --------------- associated function in this implementation
+...
+95 |     pub async fn open(path: &Path) -> Result<Self> {
+   |                  ^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `encode_png_base64` is never used
+   --> src\features\translator\capture.rs:214:8
+    |
+214 | pub fn encode_png_base64(width: u32, height: u32, rgba: &[u8]) -> Result<String, String> {
+    |        ^^^^^^^^^^^^^^^^^
+
+warning: field `provider_name` is never read
+  --> src\features\translator\commands.rs:28:9
+   |
+26 | pub(super) struct ProviderSecretAndConfig {
+   |                   ----------------------- field in this struct
+27 |     pub provider_id: String,
+28 |     pub provider_name: String,
+   |         ^^^^^^^^^^^^^
+
+warning: constant `EVENT_OPEN` is never used
+  --> src\features\translator\shortcuts.rs:13:11
+   |
+13 | pub const EVENT_OPEN: &str = "translator:open";
+   |           ^^^^^^^^^^
+
+warning: constant `EVENT_OPEN_WITH_TEXT` is never used
+  --> src\features\translator\shortcuts.rs:15:11
+   |
+15 | pub const EVENT_OPEN_WITH_TEXT: &str = "translator:open-with-text";
+   |           ^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `EVENT_SCREENSHOT` is never used
+  --> src\features\translator\shortcuts.rs:17:11
+   |
+17 | pub const EVENT_SCREENSHOT: &str = "translator:screenshot";
+   |           ^^^^^^^^^^^^^^^^
+
+warning: function `focus_main_window` is never used
+   --> src\features\translator\shortcuts.rs:121:4
+    |
+121 | fn focus_main_window(app: &AppHandle) {
+    |    ^^^^^^^^^^^^^^^^^
+
+warning: function `spawn_hook_listener` is never used
+   --> src\features\hooks\claude.rs:604:8
+    |
+604 | pub fn spawn_hook_listener(listener: TcpListener, token: String, sink: HookPayloadSink) {
+    |        ^^^^^^^^^^^^^^^^^^^
+
+warning: method `shutdown` is never used
+    --> src\commands\..\features\remote\cc_connect\mod.rs:1356:12
+     |
+ 400 | impl CcConnectManager {
+     | --------------------- method in this implementation
+...
+1356 |     pub fn shutdown(&self) {
+     |            ^^^^^^^^
+
+warning: function `verify_subset` is never used
+   --> src\commands\..\features\projects\finish_receipt.rs:209:15
+    |
+209 | pub(super) fn verify_subset(root: &Path, owned: &Ownership) -> Result<(), String> {
+    |               ^^^^^^^^^^^^^
+
+warning: function `verify_subset_excluding` is never used
+   --> src\commands\..\features\projects\finish_receipt.rs:213:15
+    |
+213 | pub(super) fn verify_subset_excluding(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `DirectoryEvidence` is never constructed
+   --> src\commands\..\features\projects\finish_artifact_manifest.rs:485:8
+    |
+485 | struct DirectoryEvidence(BTreeMap<String, String>);
+    |        ^^^^^^^^^^^^^^^^^
+
+warning: method `expected` is never used
+   --> src\commands\..\features\projects\finish_artifact_manifest.rs:487:8
+    |
+486 | impl DirectoryEvidence {
+    | ---------------------- method in this implementation
+487 |     fn expected(&mut self, rel: &str, dir: &Path, m: &Manifest) -> Result<String, String> {
+    |        ^^^^^^^^
+
+warning: function `safe_parents` is never used
+   --> src\commands\..\features\projects\finish_artifact_manifest.rs:505:4
+    |
+505 | fn safe_parents(
+    |    ^^^^^^^^^^^^
+
+warning: function `remove_dirs` is never used
+   --> src\commands\..\features\projects\finish_artifact_manifest.rs:524:4
+    |
+524 | fn remove_dirs(
+    |    ^^^^^^^^^^^
+
+warning: function `remove_guarded` is never used
+   --> src\commands\..\features\projects\finish_artifact_manifest.rs:563:15
+    |
+563 | pub(super) fn remove_guarded<F: FnMut() -> Result<(), String>>(
+    |               ^^^^^^^^^^^^^^
+
+warning: fields `git_scope`, `ordinary`, and `candidate_identities` are never read
+  --> src\commands\..\features\projects\finish_cleanup_plan.rs:37:5
+   |
+31 | struct Authorization {
+   |        ------------- fields in this struct
+...
+37 |     git_scope: String,
+   |     ^^^^^^^^^
+38 |     ordinary: Option<receipt::Ownership>,
+   |     ^^^^^^^^
+39 |     candidate_identities: Vec<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `Authorization` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: function `shutdown` is never used
+   --> src\commands\..\features\terminal\side_question.rs:425:8
+    |
+425 | pub fn shutdown() {
+    |        ^^^^^^^^
+
+warning: function `shutdown` is never used
+   --> src\commands\..\features\terminal\side_question_process.rs:105:15
+    |
+105 | pub(super) fn shutdown() {
+    |               ^^^^^^^^
+
+warning: struct `SshDirectoryEntry` is never constructed
+  --> src\commands\..\features\remote\ssh\mod.rs:78:12
+   |
+78 | pub struct SshDirectoryEntry {
+   |            ^^^^^^^^^^^^^^^^^
+
+warning: function `validate_remote_relative_file_path` is never used
+   --> src\commands\..\features\remote\ssh\mod.rs:168:4
+    |
+168 | fn validate_remote_relative_file_path(path: &str) -> Result<&str, String> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `direct_file_mime` is never used
+   --> src\commands\..\features\remote\ssh\mod.rs:181:4
+    |
+181 | fn direct_file_mime(path: &str) -> Option<&'static str> {
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `shutdown_until` is never used
+    --> src\commands\web_device.rs:1803:8
+     |
+1803 | pub fn shutdown_until(app: &AppHandle, deadline: Instant) -> Result<String, String> {
+     |        ^^^^^^^^^^^^^^
+
+warning: function `shutdown` is never used
+    --> src\commands\web_device.rs:1808:8
+     |
+1808 | pub fn shutdown(app: &AppHandle) {
+     |        ^^^^^^^^
+
+warning: function `shutdown` is never used
+   --> src\commands\web_server.rs:636:8
+    |
+636 | pub fn shutdown(manager: &WebServerManager) {
+    |        ^^^^^^^^
+
+warning: method `shutdown` is never used
+   --> src\features\files\live_server\mod.rs:116:12
+    |
+ 59 | impl LiveServerManager {
+    | ---------------------- method in this implementation
+...
+116 |     pub fn shutdown(&self) {
+    |            ^^^^^^^^
+
+warning: function `parse` is never used
+  --> src\features\providers\service\chat_runtime.rs:74:15
+   |
+74 | pub(crate) fn parse(app: &str, _id: &str, settings: &str, key: &str) -> Result<Runtime, String> {
+   |               ^^^^^
+
+warning: function `upgrade_control` is never used
+    --> src\web_daemon.rs:1126:15
+     |
+1126 | pub(crate) fn upgrade_control<T: for<'de> Deserialize<'de>>(request: Request) -> Result<T, String> {
+     |               ^^^^^^^^^^^^^^^
+
+warning: `cli-manager` (lib) generated 32 warnings (run `cargo fix --lib -p cli-manager` to apply 4 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 23.64s

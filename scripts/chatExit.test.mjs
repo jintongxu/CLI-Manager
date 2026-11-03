@@ -100,3 +100,54 @@ test('tray hide is not exit authority: mounted chat remains running/editable', a
   assert.deepEqual(Array.from(h.chat.controller.getSnapshot().running), ['c1']);
   assert.equal(h.chat.calls.some(c => c[0] === 'cancel'), false);
 });
+
+test('quick chat owner rejects new commands during suspended exit and cleanup releases subscriptions', async () => {
+  const f = fixture();
+  await f.controller.start();
+  let channel;
+  const publications = [];
+  class Channel { constructor() { channel = this; } }
+  const contract = load('src/features/chat/lib/panelController.ts');
+  const { startQuickChatOwner, stopQuickChatOwner } = load('src/features/chat/api/quickChatOwner.ts', {
+    '@tauri-apps/api/core': {
+      Channel,
+      invoke: async (name, args) => {
+        if (name === 'quick_chat_publish') publications.push(args);
+      },
+    },
+    './lifecycle': { chatController: f.controller },
+    '../lib/panelController': contract,
+    '../lib/chatProviderCatalog': { loadChatProviderCatalog: async () => [] },
+    '../../../shared/preferences/settingsStore': {
+      useSettingsStore: { getState: () => ({ language: 'en-US', resolvedTheme: 'dark' }), subscribe: () => () => {} },
+    },
+    '../../../shared/preferences/quickChatSettings': {
+      useQuickChatSettings: { getState: () => ({ load: async () => {} }) },
+    },
+  }, { crypto: { randomUUID: () => 'exit-epoch' } });
+
+  await startQuickChatOwner(() => {});
+  channel.onmessage({ id: 'hello', command: { op: 'hello' } });
+  await tick();
+  assert.ok(publications.some(p => p.kind === 'snapshot'));
+
+  // Now simulate exit: suspend chat editing
+  f.controller.suspend();
+  assert.equal(f.controller.getSnapshot().suspended, true);
+
+  const createsBefore = f.calls.filter(c => c[0] === 'create').length;
+  // Send a new command while suspended: must be rejected with chat_shutting_down
+  channel.onmessage({ id: 'cmd-during-exit', epoch: 'exit-epoch', command: { op: 'create' } });
+  await tick();
+
+  const ack = publications.find(p => p.kind === 'ack' && p.payload.id === 'cmd-during-exit');
+  assert.ok(ack, 'ack produced for command during exit');
+  assert.ok(ack.payload.error, 'command during exit rejected');
+  assert.equal(f.calls.filter(c => c[0] === 'create').length, createsBefore, 'new mutation was rejected');
+
+  // stopQuickChatOwner releases timer and publishes final suspended state
+  stopQuickChatOwner();
+  const lastSnapshot = publications.filter(p => p.kind === 'snapshot').at(-1);
+  assert.ok(lastSnapshot);
+  assert.equal(lastSnapshot.payload.state.suspended, true);
+});

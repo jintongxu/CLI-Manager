@@ -19,6 +19,7 @@ pub struct Decoder {
     protocol: Protocol,
     done: bool,
     finish: Option<String>,
+    rejection: Option<super::chat_delta::Rejection>,
 }
 impl Decoder {
     pub fn new(protocol: Protocol) -> Self {
@@ -29,17 +30,17 @@ impl Decoder {
             protocol,
             done: false,
             finish: None,
+            rejection: None,
         }
     }
     pub fn feed(&mut self, bytes: &[u8]) -> Result<Vec<Part>> {
         let mut out = Vec::new();
         for &b in bytes {
+            // The terminal frame is the stream boundary. Ignore ALL trailing bytes,
+            // including SSE keepalive comments, independent of network partitioning.
+            // run() stops reading at this same boundary; no trailing payload is used.
             if self.done {
-                if !b.is_ascii_whitespace() {
-                    return Err("chat_protocol".into());
-                } else {
-                    continue;
-                }
+                break;
             }
             if b != b'\n' {
                 self.buffer.push(b);
@@ -64,7 +65,20 @@ impl Decoder {
                 let data = self.data.join("\n");
                 self.data.clear();
                 self.size = 0;
-                if let Some(part) = self.parse(&data)? {
+                if let Some(part) = self.parse(&data).map_err(|error| {
+                    // Fixed vocabulary only: never log upstream strings, values or keys.
+                    log::warn!(
+                        "chat stream rejected protocol={:?} reason=event_payload diagnostic={:?}",
+                        self.protocol,
+                        self.rejection
+                            .unwrap_or_else(|| super::chat_delta::Rejection::new(
+                                super::chat_delta::Subreason::UnsupportedPayload,
+                                super::chat_delta::Field::Envelope,
+                                None
+                            ))
+                    );
+                    error
+                })? {
                     out.push(part)
                 }
             } else if let Some(data) = line.strip_prefix("data:") {
@@ -83,57 +97,42 @@ impl Decoder {
     fn parse(&mut self, data: &str) -> Result<Option<Part>> {
         if data == "[DONE]" {
             if self.protocol != Protocol::Chat || self.finish.is_none() {
+                self.rejection = Some(super::chat_delta::Rejection::new(
+                    super::chat_delta::Subreason::TerminalBeforeFinish,
+                    super::chat_delta::Field::Envelope,
+                    None,
+                ));
                 return Err("chat_protocol".into());
             }
             self.done = true;
             return Ok(Some(Part::Done(self.finish.clone().unwrap())));
         }
-        let v: Value = serde_json::from_str(data).map_err(|_| "chat_protocol".to_string())?;
+        let v: Value = serde_json::from_str(data).map_err(|_| {
+            self.rejection = Some(super::chat_delta::Rejection::new(
+                super::chat_delta::Subreason::InvalidJson,
+                super::chat_delta::Field::Envelope,
+                None,
+            ));
+            "chat_protocol".to_string()
+        })?;
         let bad = || "chat_protocol".to_string();
         match self.protocol {
-            Protocol::Chat => {
-                if v.get("error").is_some() {
-                    return Err(bad());
-                }
-                let choices = v["choices"].as_array().ok_or_else(bad)?;
-                if choices.is_empty() && v.get("usage").is_some() {
-                    return Ok(None);
-                }
-                if choices.len() != 1 || choices[0]["index"].as_u64() != Some(0) {
-                    return Err(bad());
-                }
-                let c = &choices[0];
-                let d = &c["delta"];
-                if d.get("tool_calls").is_some()
-                    || d.get("function_call").is_some()
-                    || d.get("refusal").is_some_and(|v| !v.is_null())
-                {
-                    return Err(bad());
-                }
-                if let Some(reason) = c["finish_reason"].as_str() {
-                    if !["stop", "length"].contains(&reason) {
-                        return Err(bad());
-                    }
-                    self.finish = Some(reason.into());
-                }
-                if !d
-                    .as_object()
-                    .is_some_and(|o| o.keys().all(|k| ["role", "content"].contains(&k.as_str())))
-                {
-                    return Err(bad());
-                }
-                if let Some(text) = d["content"].as_str() {
-                    return Ok(Some(Part::Text(text.into())));
-                }
-                if d.get("content").is_some_and(|c| !c.is_null()) {
-                    return Err(bad());
-                }
-                Ok(None)
-            }
+            Protocol::Chat => super::chat_delta::parse(&v, &mut self.finish).map_err(|rejection| {
+                self.rejection = Some(rejection);
+                "chat_protocol".to_string()
+            }),
             Protocol::Messages => match v["type"].as_str().ok_or_else(bad)? {
                 "content_block_start" => {
-                    if v["content_block"]["type"] != "text" {
-                        return Err(bad());
+                    let block = &v["content_block"];
+                    match block["type"].as_str() {
+                        Some("thinking")
+                            if block["thinking"].is_string() && block["signature"].is_string() =>
+                        {
+                            return Ok(None)
+                        }
+                        Some("redacted_thinking") if block["data"].is_string() => return Ok(None),
+                        Some("text") if block["text"].is_string() => {}
+                        _ => return Err(bad()),
                     }
                     Ok(v["content_block"]["text"]
                         .as_str()
@@ -141,8 +140,14 @@ impl Decoder {
                         .map(|s| Part::Text(s.into())))
                 }
                 "content_block_delta" => {
-                    if v["delta"]["type"] != "text_delta" {
-                        return Err(bad());
+                    let delta = &v["delta"];
+                    match delta["type"].as_str() {
+                        Some("thinking_delta") if delta["thinking"].is_string() => return Ok(None),
+                        Some("signature_delta") if delta["signature"].is_string() => {
+                            return Ok(None)
+                        }
+                        Some("text_delta") => {}
+                        _ => return Err(bad()),
                     }
                     Ok(Some(Part::Text(
                         v["delta"]["text"].as_str().ok_or_else(bad)?.into(),
@@ -172,24 +177,48 @@ impl Decoder {
                     if v["response"]["status"] != "completed" {
                         return Err(bad());
                     }
-                    if let Some(output) = v["response"]["output"].as_array() {
-                        for item in output {
-                            if item["type"] != "message" {
-                                return Err(bad());
-                            }
-                        }
+                    let output = v["response"]["output"].as_array().ok_or_else(bad)?;
+                    for item in output {
+                        validate_output_item(item)?;
                     }
                     self.done = true;
                     Ok(Some(Part::Done("completed".into())))
                 }
                 "response.output_item.added" | "response.output_item.done" => {
-                    if v["item"]["type"] != "message" {
+                    validate_output_item(&v["item"])?;
+                    Ok(None)
+                }
+                "response.content_part.added" | "response.content_part.done" => {
+                    if !matches!(
+                        v["part"]["type"].as_str(),
+                        Some("output_text" | "reasoning_text")
+                    ) || !v["part"]["text"].is_string()
+                    {
                         return Err(bad());
                     }
                     Ok(None)
                 }
-                "response.content_part.added" | "response.content_part.done" => {
-                    if v["part"]["type"] != "output_text" {
+                "response.output_text.annotation.added" => {
+                    if !v.get("annotation").is_some_and(valid_annotation) {
+                        return Err(bad());
+                    }
+                    Ok(None)
+                }
+                "response.reasoning_summary_part.added"
+                | "response.reasoning_summary_part.done" => {
+                    if v["part"]["type"] != "summary_text" || !v["part"]["text"].is_string() {
+                        return Err(bad());
+                    }
+                    Ok(None)
+                }
+                "response.reasoning_summary_text.delta" | "response.reasoning_text.delta" => {
+                    if !v["delta"].is_string() {
+                        return Err(bad());
+                    }
+                    Ok(None)
+                }
+                "response.reasoning_summary_text.done" | "response.reasoning_text.done" => {
+                    if !v["text"].is_string() {
                         return Err(bad());
                     }
                     Ok(None)
@@ -201,14 +230,92 @@ impl Decoder {
             },
         }
     }
+    #[cfg(test)]
+    pub(super) fn rejection(&self) -> Option<super::chat_delta::Rejection> {
+        self.rejection
+    }
     pub fn eof(&self) -> Result<()> {
         if self.done && self.buffer.is_empty() && self.data.is_empty() {
             Ok(())
         } else {
+            log::warn!(
+                "chat stream rejected protocol={:?} reason=incomplete_eof",
+                self.protocol
+            );
             Err("chat_protocol_eof".into())
         }
     }
 }
+/// Official OpenAI output union: only text messages and opaque reasoning are
+/// compatible with this text-only surface. Tools/refusals remain stable errors.
+fn validate_output_item(item: &Value) -> Result<()> {
+    let valid = match item["type"].as_str() {
+        Some("message") => item.get("content").is_none_or(|content| {
+            content.as_array().is_some_and(|parts| {
+                parts
+                    .iter()
+                    .all(|part| part["type"] == "output_text" && part["text"].is_string())
+            })
+        }),
+        Some("reasoning") => {
+            item["id"].is_string()
+                && item["summary"].as_array().is_some_and(|parts| {
+                    parts
+                        .iter()
+                        .all(|part| part["type"] == "summary_text" && part["text"].is_string())
+                })
+                && item.get("content").is_none_or(|content| {
+                    content.as_array().is_some_and(|parts| {
+                        parts.iter().all(|part| {
+                            part["type"] == "reasoning_text" && part["text"].is_string()
+                        })
+                    })
+                })
+                && item
+                    .get("encrypted_content")
+                    .is_none_or(|v| v.is_null() || v.is_string())
+                && item.get("status").is_none_or(|v| {
+                    matches!(v.as_str(), Some("in_progress" | "completed" | "incomplete"))
+                })
+        }
+        _ => false,
+    };
+    if valid {
+        Ok(())
+    } else {
+        Err("chat_protocol".into())
+    }
+}
+
+// SDK output-text citation metadata is discarded, never fetched or rendered.
+fn valid_annotation(value: &Value) -> bool {
+    if value.is_null() {
+        return true;
+    }
+    let strings = |keys: &[&str]| keys.iter().all(|key| value[*key].is_string());
+    let indices = |keys: &[&str]| keys.iter().all(|key| value[*key].as_u64().is_some());
+    match value["type"].as_str() {
+        Some("file_citation") => strings(&["file_id", "filename"]) && indices(&["index"]),
+        Some("file_path") => strings(&["file_id"]) && indices(&["index"]),
+        Some("url_citation") => {
+            strings(&["url", "title"]) && indices(&["start_index", "end_index"])
+        }
+        Some("container_file_citation") => {
+            strings(&["container_id", "file_id", "filename"])
+                && indices(&["start_index", "end_index"])
+        }
+        _ => false,
+    }
+}
+
+fn sse_mime(value: Option<&str>) -> bool {
+    value.is_some_and(|h| {
+        h.split(';')
+            .next()
+            .is_some_and(|mime| mime.trim().eq_ignore_ascii_case("text/event-stream"))
+    })
+}
+
 /// Per-request knobs that do not belong in the stored conversation.
 pub struct Request {
     pub model: String,
@@ -230,14 +337,20 @@ pub const MAX_IMAGES: usize = 4;
 
 /// Clipboard images arrive as data URIs; only these encodings are forwarded.
 pub fn normalize_images(images: Option<&[String]>) -> Result<Vec<String>> {
-    let Some(list) = images else { return Ok(Vec::new()); };
+    let Some(list) = images else {
+        return Ok(Vec::new());
+    };
     if list.len() > MAX_IMAGES {
         return Err("chat_invalid_input".into());
     }
     for uri in list {
-        if !["data:image/png;base64,", "data:image/jpeg;base64,", "data:image/webp;base64,"]
-            .iter()
-            .any(|prefix| uri.starts_with(prefix))
+        if ![
+            "data:image/png;base64,",
+            "data:image/jpeg;base64,",
+            "data:image/webp;base64,",
+        ]
+        .iter()
+        .any(|prefix| uri.starts_with(prefix))
         {
             return Err("chat_invalid_input".into());
         }
@@ -251,7 +364,10 @@ fn anthropic_image(uri: &str) -> Value {
     } else if let Some(rest) = uri.strip_prefix("data:image/webp;base64,") {
         ("image/webp", rest)
     } else {
-        ("image/png", uri.strip_prefix("data:image/png;base64,").unwrap_or(uri))
+        (
+            "image/png",
+            uri.strip_prefix("data:image/png;base64,").unwrap_or(uri),
+        )
     };
     json!({"type":"image","source":{"type":"base64","media_type":media_type,"data":data}})
 }
@@ -339,16 +455,13 @@ pub async fn run(
 ) {
     let job = async {
         let attachments = normalize_images(request.images.as_deref())?;
-        let mut http_req =
-            client
-                .post(&runtime.endpoint)
-                .json(&body(
-                    runtime.protocol,
-                    &request.model,
-                    &history,
-                    request.reasoning.as_deref(),
-                    &attachments,
-                ));
+        let mut http_req = client.post(&runtime.endpoint).json(&body(
+            runtime.protocol,
+            &request.model,
+            &history,
+            request.reasoning.as_deref(),
+            &attachments,
+        ));
         http_req = match runtime.protocol {
             Protocol::Messages => http_req
                 .header("x-api-key", &runtime.key)
@@ -375,12 +488,17 @@ pub async fn run(
             }
             .into());
         }
-        if !response
-            .headers()
-            .get("content-type")
-            .and_then(|h| h.to_str().ok())
-            .is_some_and(|h| h.starts_with("text/event-stream"))
-        {
+        if !sse_mime(
+            response
+                .headers()
+                .get("content-type")
+                .and_then(|h| h.to_str().ok()),
+        ) {
+            log::warn!(
+                "chat stream rejected protocol={:?} reason=content_type status={}",
+                runtime.protocol,
+                code
+            );
             return Err("chat_protocol".into());
         }
         let mut stream = response.bytes_stream();
@@ -420,5 +538,21 @@ pub async fn run(
     };
     if let Err(e) = result {
         let _ = tx.send(Err(e)).await;
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn chat_stream_mime_is_exact_case_insensitive_media_type() {
+    for mime in ["text/event-stream", "Text/Event-Stream; charset=utf-8"] {
+        assert!(sse_mime(Some(mime)));
+    }
+    for mime in [
+        None,
+        Some("application/json"),
+        Some("text/event-stream-malformed"),
+        Some(""),
+    ] {
+        assert!(!sse_mime(mime));
     }
 }

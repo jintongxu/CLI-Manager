@@ -1,0 +1,20 @@
+Read-only inspection. No user rows, messages or credentials queried.
+bootstrap: C:\Users\xujin\AppData\Local\com.cli-manager.app\data-root.json exists: False
+debug portable.flag: False
+distribution env: None
+resolved default DB: C:\Users\xujin\.cli-manager\cli-manager.db
+55-58 metadata: [(55, 'create_independent_chat', 1, '9A9AEA64F01F7354D095E08B0D09608AE2F2DBC7B996B8B4A5B03A25D6C1627A9A6A41D7713EB077BC04C77DD69AF2A6'), (56, 'create_independent_chat_provider_catalog', 1, 'E72B832B8E0511DA032F2E1E5445C98E2C9C0218126C856D619358A3DA26D45BA8CF85B01A6F72545636FC0630F7B984'), (57, 'create_local_translator_history', 1, '17B0E43AAFA2CD579FB07BDD73B16884FA95013AFAEED51E2A852EC64034A88E56304CDB6E76069EAD5AA8D19D7F08D6'), (58, 'add_chat_conversation_origin', 1, '03445E4CAE6CB513BA927F7338A07E63755218984CBF483739234E8656A1159A98458D03F56668727BF30B673AA3D96D')]
+chat_conversations schema: [(0, 'id', 'TEXT', 0, None, 1), (1, 'title', 'TEXT', 1, None, 0), (2, 'draft', 'TEXT', 1, "''", 0), (3, 'app_type', 'TEXT', 1, "''", 0), (4, 'provider_id', 'TEXT', 1, "''", 0), (5, 'model', 'TEXT', 1, "''", 0), (6, 'created_at', 'INTEGER', 1, None, 0), (7, 'updated_at', 'INTEGER', 1, None, 0), (8, 'revision', 'INTEGER', 1, '0', 0), (9, 'request_id', 'TEXT', 0, None, 0), (10, 'owner', 'TEXT', 0, None, 0), (11, 'lease_until', 'INTEGER', 0, None, 0), (12, 'origin', 'TEXT', 1, "'workspace'", 0)]
+chat_messages schema: [(0, 'id', 'TEXT', 0, None, 1), (1, 'conversation_id', 'TEXT', 1, None, 0), (2, 'ordinal', 'INTEGER', 1, None, 0), (3, 'role', 'TEXT', 1, None, 0), (4, 'content', 'TEXT', 1, None, 0), (5, 'reply_to', 'TEXT', 0, None, 0), (6, 'request_id', 'TEXT', 1, None, 0), (7, 'status', 'TEXT', 1, None, 0), (8, 'error_code', 'TEXT', 0, None, 0), (9, 'finish_reason', 'TEXT', 0, None, 0), (10, 'app_type', 'TEXT', 1, None, 0), (11, 'provider_id', 'TEXT', 1, None, 0), (12, 'model', 'TEXT', 1, None, 0), (13, 'created_at', 'INTEGER', 1, None, 0), (14, 'updated_at', 'INTEGER', 1, None, 0)]
+src-tauri/src/features/chat/schema.sql checkout 1434 0c1cf71d975a97125ce7e5b07936c174792a8243ec8ada3a8dbd368e68eed4865c421a24f28f7fcd45a53202cf8aa92c
+src-tauri/src/features/chat/schema.sql HEAD 1414 9a9aea64f01f7354d095e08b0d09608ae2f2dbc7b996b8b4a5b03a25d6c1627a9a6a41d7713eb077bc04c77dd69af2a6
+src-tauri/src/features/chat/schema.sql LF 1414 9a9aea64f01f7354d095e08b0d09608ae2f2dbc7b996b8b4a5b03a25d6c1627a9a6a41d7713eb077bc04c77dd69af2a6
+src-tauri/src/features/chat/schema.sql CRLF 1434 0c1cf71d975a97125ce7e5b07936c174792a8243ec8ada3a8dbd368e68eed4865c421a24f28f7fcd45a53202cf8aa92c
+src-tauri/src/features/translator/history.sql checkout 999 3e0df634b5420fb243e6230229a4fdb09d26787f0d6d599528e0ab8646dbcfd985cdc53555519f3655ab3e23d3900e12
+src-tauri/src/features/translator/history.sql HEAD 979 17b0e43aafa2cd579fb07bdd73b16884fa95013afaeed51e2a852ec64034a88e56304cdb6e76069ead5aa8d19d7f08d6
+src-tauri/src/features/translator/history.sql LF 979 17b0e43aafa2cd579fb07bdd73b16884fa95013afaeed51e2a852ec64034a88e56304cdb6e76069ead5aa8d19d7f08d6
+src-tauri/src/features/translator/history.sql CRLF 999 3e0df634b5420fb243e6230229a4fdb09d26787f0d6d599528e0ab8646dbcfd985cdc53555519f3655ab3e23d3900e12
+src-tauri/src/features/chat/origin.sql checkout 139 a35765a42217dc966221bfd0018f80b10f3ac302f76a1a077019b72487b28220755f9bf8d30d4c3e5a159112e4f54266
+src-tauri/src/features/chat/origin.sql HEAD 0 38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b
+src-tauri/src/features/chat/origin.sql LF 138 03445e4cae6cb513ba927f7338a07e63755218984cbf483739234e8656a1159a98458d03f56668727bf30b673aa3d96d
+src-tauri/src/features/chat/origin.sql CRLF 139 a35765a42217dc966221bfd0018f80b10f3ac302f76a1a077019b72487b28220755f9bf8d30d4c3e5a159112e4f54266

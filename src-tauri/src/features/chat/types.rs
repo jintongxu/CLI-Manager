@@ -17,6 +17,7 @@ pub fn now() -> i64 {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Conversation {
+    pub origin: ConversationOrigin,
     pub id: String,
     pub title: String,
     pub draft: String,
@@ -62,9 +63,24 @@ pub struct ListInput {
     #[serde(default)]
     pub offset: u32,
 }
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum ConversationOrigin {
+    #[default]
+    Workspace,
+    Sidebar,
+    QuickChat,
+}
+impl ConversationOrigin {
+    pub fn as_str(&self) -> &'static str {
+        match self { Self::Workspace => "workspace", Self::Sidebar => "sidebar", Self::QuickChat => "quick-chat" }
+    }
+}
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CreateInput {
+    #[serde(default)]
+    pub origin: ConversationOrigin,
     pub title: Option<String>,
 }
 #[derive(Deserialize)]

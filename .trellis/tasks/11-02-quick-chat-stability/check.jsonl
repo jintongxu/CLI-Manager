@@ -1,0 +1,13 @@
+{"file":".trellis/spec/frontend/ai-architecture-contracts.md","reason":"架构与验证要求"}
+{"file":".trellis/spec/guides/fix-triage-guide.md","reason":"跨窗口/退出场景完整性"}
+{"file":".trellis/spec/backend/app-startup-contracts.md","reason":"退出清理顺序契约"}
+{"file":"scripts/chatErrors.test.mjs","reason":"错误分类动作映射与快照时机验证"}
+{"file":"scripts/chatSearch.test.mjs","reason":"搜索防抖与语义诚实说明验证"}
+{"file":"scripts/chatExit.test.mjs","reason":"退出命令拒绝与资源释放验证"}
+{"file":"scripts/quickChat.test.mjs","reason":"长期容器有界与无隐式创建验证"}
+{"file":"scripts/chatController.test.mjs","reason":"控制器有界集合与状态变迁验证"}
+{"file":"scripts/chatMultiSelect.test.mjs","reason":"多选作用域与删除安全验证"}
+{"file":"scripts/chatOrigin.test.mjs","reason":"来源Tab与删除恢复隔离验证"}
+{"file":"src-tauri/src/features/quick_chat/mod.rs","reason":"Rust快捷键与通道清理单元测试"}
+{"file":"src-tauri/src/features/chat/runtime.rs","reason":"Rust运行时淘汰与shutdown清空测试"}
+{"file":".trellis/tasks/11-02-quick-chat-stability/verification.md","reason":"全任务自动化证据与人工验收说明"}

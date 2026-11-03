@@ -14,6 +14,10 @@ use pty_events::DaemonPtyEventSink;
 mod hook_status;
 #[cfg(test)]
 use hook_status::{map_hook_event_to_task_status, map_hook_event_to_task_status_for_payload};
+mod frame_io;
+use frame_io::{err_frame, read_line_bounded};
+mod hook_activation;
+use hook_activation::maybe_activate_app_for_hook;
 
 use super::discovery::{remove_daemon_info, write_daemon_info_exclusive, DaemonInfo};
 use super::protocol::{
@@ -35,10 +39,9 @@ use crate::third_party_notification::DispatcherHandle;
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::io::{BufRead, BufReader, Read};
+use std::io::BufReader;
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -1941,81 +1944,6 @@ impl DaemonServer {
                 DaemonFrame::Err { id, message }
             }
         }
-    }
-}
-
-// 构造带请求 ID 的 daemon 错误帧。
-fn err_frame(id: u64, message: &str) -> DaemonFrame {
-    DaemonFrame::Err {
-        id,
-        message: message.to_string(),
-    }
-}
-
-/// 读一行并施加单帧字节上限；连接关闭/超限/非 UTF-8/IO 错误返回 None（调用方断连）。
-// 在字节预算内读取完整换行的 UTF-8 控制帧，异常或未终结帧返回 None。
-fn read_line_bounded(reader: &mut BufReader<TcpStream>) -> Option<String> {
-    let mut buf = Vec::new();
-    let mut limited = reader.by_ref().take((MAX_FRAME_BYTES + 1) as u64);
-    match limited.read_until(b'\n', &mut buf) {
-        Ok(0) => None,
-        Ok(_) => {
-            if buf.last() != Some(&b'\n') {
-                // 无换行结尾：要么超限被截断，要么对端半行断连，一律断。
-                if buf.len() > MAX_FRAME_BYTES {
-                    log::warn!("daemon frame exceeds {MAX_FRAME_BYTES} bytes, dropping client");
-                }
-                return None;
-            }
-            buf.pop();
-            if buf.last() == Some(&b'\r') {
-                buf.pop();
-            }
-            match String::from_utf8(buf) {
-                Ok(line) => Some(line),
-                Err(_) => {
-                    log::warn!("daemon frame is not valid UTF-8, dropping client");
-                    None
-                }
-            }
-        }
-        Err(err) => {
-            log::warn!("daemon read failed: {err}");
-            None
-        }
-    }
-}
-
-// 仅对需要用户响应的 Hook 尝试启动同目录应用，并传入后台会话恢复参数。
-fn maybe_activate_app_for_hook(payload: &crate::claude_hook::ClaudeHookPayload) {
-    if !payload.requires_user_response() {
-        return;
-    }
-    let Ok(daemon_exe) = std::env::current_exe() else {
-        return;
-    };
-    let app_name = if cfg!(target_os = "windows") {
-        "cli-manager.exe"
-    } else {
-        "cli-manager"
-    };
-    let app_exe = daemon_exe.with_file_name(app_name);
-    if !app_exe.is_file() {
-        log::warn!(
-            "hook activation skipped: app executable not found at {}",
-            app_exe.display()
-        );
-        return;
-    }
-    let mut command = Command::new(app_exe);
-    command.args(["--restore-background-session", payload.tab_id()]);
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000);
-    }
-    if let Err(err) = command.spawn() {
-        log::warn!("hook activation failed: {err}");
     }
 }
 

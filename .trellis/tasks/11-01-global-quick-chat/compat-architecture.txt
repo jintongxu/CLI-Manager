@@ -1,0 +1,7 @@
+
+> cli-manager@1.4.10 check:architecture
+> node ./scripts/architecture.mjs --strict
+
+Architecture: 1626 source files; 2 above 2000 lines; 2 new violations (strict).
+src-tauri/src/commands/web_device.rs: 2024 lines (limit 2000)
+src-tauri/src/infrastructure/daemon/server.rs: 2028 lines (limit 2000)

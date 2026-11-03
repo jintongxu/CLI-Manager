@@ -1,0 +1,12 @@
+warning: in the working copy of '.workflow/spec-analytics.jsonl', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.workflow/specs/.hit-log.jsonl', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'CHANGELOG.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/功能清单.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/chatTransport.test.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src-tauri/src/features/chat/repository.rs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src-tauri/src/features/chat/stream.rs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/features/chat/api/ChatWorkspace.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/features/chat/components/chatWorkspace.css', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/features/chat/lib/chatController.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/shared/i18n/messages/chat.en-US.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/shared/i18n/messages/chat.zh-CN.ts', LF will be replaced by CRLF the next time Git touches it
