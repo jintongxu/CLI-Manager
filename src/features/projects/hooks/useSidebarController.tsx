@@ -580,14 +580,17 @@ export function useSidebarController({
     });
   }, []);
 
-  // 折叠状态持久化：跳过首次（初始值本就来自 settings），之后任何变化都写回。
+  // 折叠状态持久化：跳过首次（初始值本就来自 settings），之后防抖写回，避免点击高频卡顿。
   const collapsedHydratedRef = useRef(false);
   useEffect(() => {
     if (!collapsedHydratedRef.current) {
       collapsedHydratedRef.current = true;
       return;
     }
-    void updateSetting("collapsedGroupIds", Array.from(collapsedIds));
+    const timer = window.setTimeout(() => {
+      void updateSetting("collapsedGroupIds", Array.from(collapsedIds));
+    }, 250);
+    return () => window.clearTimeout(timer);
   }, [collapsedIds, updateSetting]);
 
   // 自愈清理：分组/项目被删除或同步覆盖后，移除已不存在节点的折叠记录。
@@ -980,11 +983,16 @@ export function useSidebarController({
     if (sessionId) {
       closeHistory();
       dispatchCurrentWorkTarget(sessionId);
-    } else {
-      const project = projectById.get(worktree.project_id);
-      if (project) void openWorktreeSession(project, worktree);
+      return;
     }
-  }, [activateFirstWorktreeSession, closeHistory, onTerminalScopeChange, openWorktreeSession, projectById, projectScopedTerminalViewEnabled, visibleWorktreeIds]);
+    const project = projectById.get(worktree.project_id);
+    if (!project) return;
+    // 没有现成终端时直接创建，避免单击 Worktree 行毫无反应；失败必须可见。
+    void openWorktreeSession(project, worktree).catch((err) => {
+      logError("Failed to open worktree session from sidebar row", { worktreeId: worktree.id, err });
+      toast.error(t("terminal.toast.createFailed"), { description: String(err) });
+    });
+  }, [activateFirstWorktreeSession, closeHistory, onTerminalScopeChange, openWorktreeSession, projectById, projectScopedTerminalViewEnabled, t, visibleWorktreeIds]);
 
   const handleToggleWorktreeSelection = useCallback((worktree: WorktreeRecord) => {
     setSelectedProjectIds((prev) => (prev.size === 0 ? prev : new Set()));
@@ -1014,10 +1022,15 @@ export function useSidebarController({
 
   const findWorktreeSession = useCallback((worktreeId: string) => sessions.find((session) => session.worktreeId === worktreeId && (session.kind ?? "pty") === "pty"), [sessions]);
   const handleOpenWorktree = useCallback((project: Project, worktree: WorktreeRecord) => {
-    void openWorktreeSession(project, worktree, undefined, undefined, getWorktreeSidebarLabel(worktree)).then((opened) => {
-      if (opened) void maybeInstallWorktreeDeps(project, worktree);
-    });
-  }, []);
+    void openWorktreeSession(project, worktree, undefined, undefined, getWorktreeSidebarLabel(worktree))
+      .then((opened) => {
+        if (opened) void maybeInstallWorktreeDeps(project, worktree);
+      })
+      .catch((err) => {
+        logError("Failed to open worktree session", { worktreeId: worktree.id, err });
+        toast.error(t("terminal.toast.createFailed"), { description: String(err) });
+      });
+  }, [t]);
   const handleProbeWorktree = useCallback((worktree: WorktreeRecord) => {
     const session = findWorktreeSession(worktree.id);
     if (!session) { toast.info(t("terminal.recovery.sessionMissing")); return; }

@@ -4,7 +4,10 @@ import { useI18n } from "../../../shared/i18n";
 import { Check, ChevronDown, Pencil, Plus, Star, X } from "../../../shared/ui/icons";
 import type { Project } from "../../../shared/types";
 import { useProjectIdeaStore, type ProjectIdea } from "../api/projectIdeaStore";
-import { formatProjectIdea, type ProjectIdeaCopyFormat } from "../lib/projectIdeaFormatter";
+import { projectIdeaPreview } from "../lib/projectIdeaPreview";
+import type { ProjectIdeaCopyFormat } from "../lib/projectIdeaFormatter";
+import { useIdeaCopy } from "../hooks/useIdeaCopy";
+import { useIdeaUndoDelete } from "../hooks/useIdeaUndoDelete";
 
 interface ProjectIdeasPanelProps {
   projects: Project[];
@@ -24,16 +27,12 @@ export function ProjectIdeasPanel({
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [projectId, setProjectId] = useState(activeProject?.id ?? projects[0]?.id ?? "");
-  const [title, setTitle] = useState("");
   const [draft, setDraft] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingTitle, setEditingTitle] = useState("");
   const [editingText, setEditingText] = useState("");
-  const [copyFormat, setCopyFormat] = useState<ProjectIdeaCopyFormat>("plain");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [undoDelete, setUndoDelete] = useState<{ id: string; projectId: string } | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const project = projects.find((item) => item.id === projectId) ?? activeProject ?? null;
@@ -48,6 +47,8 @@ export function ProjectIdeasPanel({
   const setIdeaPinned = useProjectIdeaStore((state) => state.setIdeaPinned);
   const setIdeaArchived = useProjectIdeaStore((state) => state.setIdeaArchived);
   const openWorkspace = useProjectIdeaStore((state) => state.openProjectIdeas);
+  const { copyFormat, setCopyFormat, copy } = useIdeaCopy({ project });
+  const { undoDelete, scheduleUndo, undo } = useIdeaUndoDelete(restoreIdea);
 
   useEffect(() => {
     if (activeProject && projects.some((item) => item.id === activeProject.id)) {
@@ -79,11 +80,10 @@ export function ProjectIdeasPanel({
   };
 
   const saveIdea = async () => {
-    if (!project || !title.trim() || !draft.trim() || busy) return;
+    if (!project || !draft.trim() || busy) return;
     setBusy(true);
     try {
-      await createIdea(project.id, draft.trim(), undefined, undefined, title.trim());
-      setTitle("");
+      await createIdea(project.id, draft.trim());
       setDraft("");
       showMessage(t("projectIdeas.toolbar.saved"));
     } catch {
@@ -94,25 +94,9 @@ export function ProjectIdeasPanel({
   };
 
   const copyIdea = async (idea: ProjectIdea) => {
-    try {
-      const text = formatProjectIdea(idea, copyFormat, project ?? undefined);
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        const textarea = document.createElement("textarea");
-        textarea.value = text;
-        textarea.style.position = "fixed";
-        textarea.style.opacity = "0";
-        document.body.appendChild(textarea);
-        textarea.select();
-        const copied = document.execCommand("copy");
-        textarea.remove();
-        if (!copied) throw new Error("clipboard_copy_failed");
-      }
-      showMessage(t("projectIdeas.toolbar.copied"));
-    } catch {
-      showError(t("projectIdeas.toolbar.copyFailed"));
-    }
+    const result = await copy(idea);
+    if (result.ok) showMessage(t("projectIdeas.toolbar.copied"));
+    else showError(t("projectIdeas.toolbar.copyFailed"));
   };
 
   const runAction = async (action: () => Promise<void>, success: string) => {
@@ -126,10 +110,10 @@ export function ProjectIdeasPanel({
   };
 
   const saveEdit = async (idea: ProjectIdea) => {
-    if (!editingTitle.trim() || !editingText.trim() || busy) return;
+    if (!editingText.trim() || busy) return;
     setBusy(true);
     try {
-      await updateIdea(idea.id, idea.project_id, editingTitle.trim(), editingText.trim());
+      await updateIdea(idea.id, idea.project_id, undefined, editingText.trim());
       setEditingId(null);
       showMessage(t("projectIdeas.toolbar.saved"));
     } catch {
@@ -142,21 +126,21 @@ export function ProjectIdeasPanel({
   const removeIdea = async (idea: ProjectIdea) => {
     try {
       await deleteIdea(idea);
-      setUndoDelete({ id: idea.id, projectId: idea.project_id });
+      scheduleUndo({ id: idea.id, projectId: idea.project_id });
       showMessage(t("projectIdeas.workspace.deleted"));
-      window.setTimeout(() => setUndoDelete((current) => current?.id === idea.id ? null : current), 6000);
     } catch {
       showError(t("projectIdeas.toolbar.actionFailed"));
     }
   };
 
-  const renderIdea = (idea: ProjectIdea) => editingId === idea.id ? (
+  const renderIdea = (idea: ProjectIdea) => {
+    const { excerpt } = projectIdeaPreview(idea);
+    return editingId === idea.id ? (
     <div key={idea.id} className="rounded border border-border p-2">
-      <input value={editingTitle} onChange={(event) => setEditingTitle(event.currentTarget.value)} aria-label={t("projectIdeas.workspace.titleAria")} className="mb-1 h-8 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs text-on-surface outline-none" />
       <textarea value={editingText} onChange={(event) => setEditingText(event.currentTarget.value)} rows={3} autoFocus className="max-h-32 w-full resize-y overflow-y-auto rounded border border-border bg-bg-primary px-2 py-1 text-xs text-on-surface outline-none" />
       <div className="mt-1 flex justify-end gap-1">
         <button type="button" className="icon-btn" onClick={() => setEditingId(null)} aria-label={t("projectIdeas.cancelEdit")}><X size={13} /></button>
-        <button type="button" className="icon-btn" onClick={() => void saveEdit(idea)} disabled={!editingTitle.trim() || !editingText.trim() || busy} aria-label={t("projectIdeas.saveEdit")}><Check size={13} /></button>
+        <button type="button" className="icon-btn" onClick={() => void saveEdit(idea)} disabled={!editingText.trim() || busy} aria-label={t("projectIdeas.saveEdit")}><Check size={13} /></button>
       </div>
     </div>
   ) : (
@@ -167,7 +151,7 @@ export function ProjectIdeasPanel({
             {idea.is_pinned && <Star size={11} className="shrink-0 fill-amber-400 text-amber-400" aria-label={t("projectIdeas.workspace.pinned")} />}
             <span className={idea.status === "done" ? "line-through opacity-60" : ""}>{idea.title}</span>
           </p>
-          <p className="mt-0.5 max-h-8 overflow-hidden break-words text-[11px] leading-4 text-text-muted" title={idea.content}>{idea.content}</p>
+          {excerpt && <p className="mt-0.5 max-h-8 overflow-hidden break-words text-[11px] leading-4 text-text-muted" title={idea.content}>{excerpt}</p>}
         </div>
         <div className="flex shrink-0 gap-0.5">
           <button type="button" className="icon-btn" onClick={() => void runAction(() => toggleIdea(idea), idea.status === "done" ? t("projectIdeas.toolbar.reopened") : t("projectIdeas.toolbar.completed"))} aria-label={idea.status === "done" ? t("projectIdeas.reopen") : t("projectIdeas.complete")}><Check size={12} /></button>
@@ -177,7 +161,7 @@ export function ProjectIdeasPanel({
               <button type="button" className="px-2 py-1 text-left text-[11px] hover:bg-[var(--interactive-hover-bg)]" onClick={() => void runAction(() => setIdeaPinned(idea.id, idea.project_id, !idea.is_pinned), idea.is_pinned ? t("projectIdeas.toolbar.unpinned") : t("projectIdeas.toolbar.pinned"))}>{idea.is_pinned ? t("projectIdeas.workspace.unpin") : t("projectIdeas.workspace.pin")}</button>
               <button type="button" className="px-2 py-1 text-left text-[11px] hover:bg-[var(--interactive-hover-bg)]" onClick={() => void runAction(() => setIdeaArchived(idea.id, idea.project_id, !idea.is_archived), idea.is_archived ? t("projectIdeas.toolbar.unarchived") : t("projectIdeas.toolbar.archived"))}>{idea.is_archived ? t("projectIdeas.workspace.unarchive") : t("projectIdeas.workspace.archive")}</button>
               <button type="button" className="px-2 py-1 text-left text-[11px] hover:bg-[var(--interactive-hover-bg)]" onClick={() => { setOpenMenuId(null); void copyIdea(idea); }}>{t("projectIdeas.toolbar.copyIdea")}</button>
-              <button type="button" className="px-2 py-1 text-left text-[11px] hover:bg-[var(--interactive-hover-bg)]" onClick={() => { setOpenMenuId(null); setEditingId(idea.id); setEditingTitle(idea.title); setEditingText(idea.content); }}>{t("projectIdeas.edit")}</button>
+              <button type="button" className="px-2 py-1 text-left text-[11px] hover:bg-[var(--interactive-hover-bg)]" onClick={() => { setOpenMenuId(null); setEditingId(idea.id); setEditingText(idea.content); }}>{t("projectIdeas.edit")}</button>
               <button type="button" className="px-2 py-1 text-left text-[11px] text-danger hover:bg-[var(--interactive-hover-bg)]" onClick={() => { setOpenMenuId(null); void removeIdea(idea); }}>{t("projectIdeas.delete")}</button>
             </div>
           </details>
@@ -185,6 +169,7 @@ export function ProjectIdeasPanel({
       </div>
     </div>
   );
+  };
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -206,36 +191,34 @@ export function ProjectIdeasPanel({
           </span>
         </label>
         <button type="button" className="mb-2 w-full rounded border border-border px-2 py-1.5 text-left text-xs hover:bg-[var(--interactive-hover-bg)]" onClick={() => { if (project) { openWorkspace(project.id); setOpen(false); } }}>{t("projectIdeas.workspace.openWorkspace")}</button>
-        <div className="mb-2 flex gap-2">
-          <div className="min-w-0 flex-1 space-y-1">
-            <input
-              value={title}
-              onChange={(event) => setTitle(event.currentTarget.value)}
-              placeholder={t("projectIdeas.workspace.titlePlaceholder")}
-              aria-label={t("projectIdeas.workspace.titleAria")}
-              className="h-8 w-full rounded-md border border-border bg-bg-primary px-2 py-1.5 text-xs text-on-surface outline-none"
-            />
-            <textarea
-              value={draft}
-              onChange={(event) => setDraft(event.currentTarget.value)}
-              rows={2}
-              placeholder={t("projectIdeas.toolbar.placeholder")}
-              aria-label={t("projectIdeas.toolbar.inputAria")}
-              className="w-full resize-y rounded-md border border-border bg-bg-primary px-2 py-1.5 text-xs text-on-surface outline-none"
-            />
-            <button
-              type="button"
-              className="icon-btn self-end"
-              onClick={() => void saveIdea()}
-              disabled={!project || !draft.trim() || busy}
-              title={t("projectIdeas.toolbar.add")}
-              aria-label={t("projectIdeas.toolbar.add")}
-            >
-              <Plus size={15} />
-            </button>
-          </div>
+        <div className="mb-2 flex items-end gap-1.5">
+          <textarea
+            value={draft}
+            onChange={(event) => setDraft(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" || event.shiftKey || event.altKey) return;
+              if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+              event.preventDefault();
+              if (draft.trim() && !busy) void saveIdea();
+            }}
+            rows={2}
+            placeholder={t("projectIdeas.placeholder")}
+            aria-label={t("projectIdeas.toolbar.inputAria")}
+            className="w-full resize-none rounded-md border border-border bg-bg-primary px-2 py-1.5 text-xs text-on-surface outline-none transition-colors focus:border-[var(--interactive-focus-ring)]"
+          />
+          <button
+            type="button"
+            className="icon-btn h-8 w-8 shrink-0 rounded-md border border-border"
+            onPointerDown={(event) => event.preventDefault()}
+            onClick={() => void saveIdea()}
+            disabled={!project || !draft.trim() || busy}
+            title={t("projectIdeas.saveHint")}
+            aria-label={t("projectIdeas.toolbar.add")}
+          >
+            <Plus size={15} />
+          </button>
         </div>
-        {undoDelete && <div className="mb-2 flex items-center justify-between rounded border border-border px-2 py-1 text-[11px]"><span>{t("projectIdeas.workspace.deleted")}</span><button type="button" className="underline" onClick={() => void restoreIdea(undoDelete.id, undoDelete.projectId).then(() => setUndoDelete(null))}>{t("projectIdeas.workspace.undo")}</button></div>}
+        {undoDelete && <div className="mb-2 flex items-center justify-between rounded border border-border px-2 py-1 text-[11px]"><span>{t("projectIdeas.workspace.deleted")}</span><button type="button" className="underline" onClick={() => void undo()}>{t("projectIdeas.workspace.undo")}</button></div>}
         {(message || error) && <p className={`mb-2 text-[11px] ${error ? "text-danger" : "text-success"}`}>{error ?? message}</p>}
         <label className="mb-2 flex items-center gap-2 text-[11px] text-text-muted">
           {t("projectIdeas.toolbar.copyFormat")}

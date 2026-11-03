@@ -33,6 +33,23 @@
   box-shadow: none;
 }
 
+/* 想法速记卡片由卡片自身承担聚焦高亮，内层 textarea 不再叠加二次描边。 */
+.ui-idea-composer {
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.ui-idea-composer:focus-within {
+  border-color: color-mix(in srgb, var(--primary, #6ea8ff) 55%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary, #6ea8ff) 12%, transparent);
+}
+
+.ui-idea-composer :where(input, select, textarea):focus-visible {
+  outline: none !important;
+  box-shadow: none;
+}
+
 .skip-link {
   position: fixed;
   top: 10px;
