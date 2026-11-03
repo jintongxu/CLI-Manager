@@ -203,6 +203,30 @@ export class ChatController {
       }
     });
   }
+  /** Quick Chat's main owner may initialize its new ID without changing main selection. */
+  bindQuickDefaultModel(id: string, values: { providerId: string; model: string }, isCurrent: () => boolean) {
+    return this.bindDefaultModelQueued(id, values, isCurrent, true);
+  }
+  /** Check again inside the per-conversation queue, after any pending explicit edit. */
+  bindDefaultModel(id: string, values: { providerId: string; model: string }, isCurrent: () => boolean = () => true) {
+    return this.bindDefaultModelQueued(id, values, isCurrent, false);
+  }
+  private bindDefaultModelQueued(id: string, values: { providerId: string; model: string }, isCurrent: () => boolean, quick: boolean) {
+    this.editable(id);
+    return this.enqueue(id, async () => {
+      await this.saveDraft(id);
+      const c = this.state.details[id]?.conversation;
+      if (!isCurrent() || !c || c.model) return;
+      if (quick ? c.origin !== "quick-chat" : c.origin === "quick-chat" || this.state.selected !== id) return;
+      this.editable(id);
+      try {
+        this.accept(await this.api.update({ ...values, appType: "chat", conversationId: id, revision: c.revision }));
+      } catch (error) {
+        if (error === "chat_conflict") this.accept(await this.api.get(id));
+        throw error;
+      }
+    });
+  }
   async remove(id: string) {
     this.editable(id);
     if (this.removing.has(id)) throw "chat_not_found";

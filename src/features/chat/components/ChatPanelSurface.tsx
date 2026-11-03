@@ -32,6 +32,9 @@ export interface ChatPanelSurfaceProps {
   };
   controller: ChatPanelController;
   catalog: readonly ChatProvider[];
+  /** The main-window owner initializes defaults; remote projections must not compete. */
+  defaultBindingManaged?: boolean;
+  catalogReady?: boolean;
   pinControl?: { pinned: boolean; toggle: () => void };
 }
 
@@ -39,7 +42,7 @@ export interface ChatPanelSurfaceProps {
 export function ChatPanelSurface({
   mode, attachedSelection, onModeChange, onAttachSelectionChange, onExpand, onClose,
   reasoningEffort, onReasoningEffortChange,
-  dragging = false, dragHandleProps, controller, catalog, pinControl,
+  dragging = false, dragHandleProps, controller, catalog, pinControl, defaultBindingManaged = false, catalogReady = true,
 }: ChatPanelSurfaceProps) {
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   const { t } = useI18n();
@@ -60,13 +63,13 @@ export function ChatPanelSurface({
   // selection is surfaced as an explicit hint instead of silently creating one.
 
   useEffect(() => {
-    if (!conversation || conversation.model || !catalog.length) return;
+    if (defaultBindingManaged || !conversation || conversation.model || !catalog.length) return;
     const fallback = defaultCatalogModel(catalog);
     if (!fallback) return;
     void controller
       .update(conversation.id, { appType: "chat", providerId: fallback.providerId, model: fallback.model })
       .catch((error) => controller.report(error));
-  }, [catalog, controller, conversation]);
+  }, [catalog, controller, conversation, defaultBindingManaged]);
 
   useEffect(() => { setCopiedId(null); setImages([]); }, [selected]);
 
@@ -155,7 +158,7 @@ export function ChatPanelSurface({
           </option>)}
         </Select>
       </label>
-      {state.ready && <ChatPanelModelPicker
+      {state.ready && catalogReady && <ChatPanelModelPicker
         providers={catalog}
         providerId={conversation?.providerId ?? ""}
         model={conversation?.model ?? ""}

@@ -500,7 +500,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         toast.warning(translateCurrent("remoteHandoff.toast.lockedSession"));
         return;
       }
-      if (requireBackendClose && (!closingSession || (closingSession.kind ?? "pty") === "pty")) {
+      if (requireBackendClose && (!closingSession || (closingSession.kind ?? "pty") === "pty" || closingSession.kind === "ephemeral-pi")) {
         if (closingSession) await closeTerminalSource(closingSession);
         else await terminalProcessManager.close(id, true); // Failure retains transport, caches and visible session.
         releaseProviderSnapshot(closingSession?.providerSnapshot);

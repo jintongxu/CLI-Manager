@@ -107,7 +107,7 @@ export function fixture(count = 2) {
 export function elements(tree) {
   return !tree || typeof tree !== 'object' ? [] : [tree, ...[tree.props?.children].flat(Infinity).flatMap(elements)];
 }
-export function hookHarness(controller) {
+export function hookHarness(controller, options = {}) {
   const slots = [], effects = []; let index = 0;
   const react = {
     useSyncExternalStore: (_subscribe, get) => get(),
@@ -133,7 +133,8 @@ export function hookHarness(controller) {
   const en = load('src/shared/i18n/messages/chat.en-US.ts').en;
   const mocks = {
     react,
-    '@tauri-apps/api/core': { invoke: async () => [] },
+    '@tauri-apps/api/core': { invoke: (...args) => options.invoke ? options.invoke(...args) : Promise.resolve([]) },
+    '../../../shared/preferences/settingsStore': { useSettingsStore: Object.assign(selector => selector(options.settings ?? { loaded: true, chatDefaultModel: null }), { getState: () => options.settings ?? { loaded: true, chatDefaultModel: null } }) },
     '@tauri-apps/plugin-opener': { openUrl: async url => { harness.opened.push(url); } },
     '@tauri-apps/plugin-clipboard-manager': { writeText: async text => { if (harness.copyFails) throw Error(); harness.copies.push(text); } },
     '../../../shared/ui/MarkdownContent': { MarkdownContent: function Markdown() {} },
@@ -162,7 +163,15 @@ export function hookHarness(controller) {
     localStorage: localStorageShim,
     FileReader: FileReaderStub,
   });
-  const harness = { opened: [], copies: [], copyFails: false, storage: store,
+  const { ChatPanel } = load('src/features/chat/api/ChatPanel.tsx', mocks);
+  const { useConversationDefaultModel } = load('src/features/chat/hooks/useConversationDefaultModel.ts', mocks);
+  const harness = { renderPanel(props = {}) {
+      index = 0; const tree = ChatPanel({ controller, ...props });
+      while (effects.length) effects.shift()(); return tree;
+    }, renderDefaults() {
+      index = 0; const result = useConversationDefaultModel(controller);
+      while (effects.length) effects.shift()(); return result;
+    }, opened: [], copies: [], copyFails: false, storage: store,
     render(visible = true, props = {}) { index = 0; const tree = ChatWorkspace({ workspaceVisible: visible, controller, ...props }); while (effects.length) effects.shift()(); return tree; },
     renderSelection(tree) {
       index = 1000;

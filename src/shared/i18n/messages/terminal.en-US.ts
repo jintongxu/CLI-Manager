@@ -1,6 +1,13 @@
 import type { zh } from "./terminal.zh-CN";
 
 export const en: Record<keyof typeof zh, string> = {
+  "terminal.resources.delete": "Delete terminal",
+  "terminal.resources.deleteLabel": "Delete terminal: {title}",
+  "terminal.resources.deleteTitle": "Delete terminal?",
+  "terminal.resources.deleteConfirm": "End terminal “{title}” ({id}) and remove its session, including hidden tabs and split panes? Running tasks will stop. This does not delete history or project files.",
+  "terminal.resources.deleting": "Deleting…",
+  "terminal.resources.deleteChanged": "The terminal disappeared or changed. Nothing was deleted; select the current terminal and try again.",
+  "terminal.resources.deleteFailed": "Could not close the terminal. Its session has been retained; try again.",
   "terminal.resources.title": "Terminal resources",
   "terminal.resources.tabs": "Resource views",
   "terminal.resources.systemTab": "System",

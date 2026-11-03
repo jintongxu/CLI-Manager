@@ -1,5 +1,8 @@
-import { useMemo, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { RefreshCw, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { useAppConfirm } from "../../../shared/ui/useAppConfirm";
+import { createTerminalResourceDeletion } from "../hooks/terminalResourceDeletion";
 import { useI18n } from "../../../shared/i18n";
 import { useProjectStore } from "../../projects/api/projectStore";
 import { useWorktreeStore } from "../../projects/api/worktreeStore";
@@ -36,6 +39,22 @@ const errorKeys = {
 
 export function TerminalResourcesPanel({ active }: { active: boolean }) {
   const { t, language } = useI18n();
+  const { confirm, confirmDialog } = useAppConfirm();
+  const [pendingDeletion, setPendingDeletion] = useState<string | null>(null);
+  const deletionInput = {
+    t, confirm, setPending: setPendingDeletion,
+    getSession: (id: string) => useTerminalStore.getState().sessions.find((s) => s.id === id),
+    closeSession: (id: string, strict: true) => useTerminalStore.getState().closeSession(id, strict),
+    showError: (message: string) => { toast.error(message); },
+  };
+  const deletionInputRef = useRef(deletionInput);
+  deletionInputRef.current = deletionInput;
+  // Keep the synchronous duplicate guard across renders, including confirmation renders.
+  const [deleteTerminal] = useState(() => createTerminalResourceDeletion({
+    ...deletionInput,
+    t: (...args) => deletionInputRef.current.t(...args),
+    confirm: (options) => deletionInputRef.current.confirm(options),
+  }));
   const sessions = useTerminalStore((s) => s.sessions);
   const statuses = useTerminalStore((s) => s.sessionStatuses);
   const tabStatuses = useTerminalStore((s) => s.tabStatuses);
@@ -52,7 +71,7 @@ export function TerminalResourcesPanel({ active }: { active: boolean }) {
   const sampledAt = snapshot ? new Date(snapshot.sampledAt).toLocaleTimeString(language, {
     hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
   }) : "—";
-  if (!active) return null;
+  if (!active) return confirmDialog;
   const buttonClass = "ui-focus-ring rounded border px-2 py-1 disabled:opacity-40";
   return <section className="ui-thin-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-2 text-[11px]"
     aria-label={t("terminal.resources.title")} style={{ color: TERM_PANEL.fg }}>
@@ -106,6 +125,14 @@ export function TerminalResourcesPanel({ active }: { active: boolean }) {
             </span>
             <span className="block break-all text-[10px]" style={{ color: TERM_PANEL.dim }}>{session.id}</span>
           </button>
+          <button type="button" className={`${buttonClass} mt-1 inline-flex items-center gap-1 text-red-500`}
+            disabled={pendingDeletion !== null || !exists}
+            onClick={() => void deleteTerminal(session)}
+            aria-label={t("terminal.resources.deleteLabel", { title: session.title })}
+            aria-busy={pendingDeletion === session.id}>
+            <Trash2 size={12} />
+            {t(pendingDeletion === session.id ? "terminal.resources.deleting" : "terminal.resources.delete")}
+          </button>
           <p className="mt-1">{stateText}{hookLabel ? ` · ${hookLabel}` : ""}{session.tabHidden ? ` · ${t("terminal.currentWork.hidden")}` : ""}</p>
           <p className="mt-2 font-semibold tabular-nums">
             {t("terminal.resources.workingSet")}: {typeof memory === "number" ? `${(memory / 1048576).toFixed(1)} MiB` : "—"}
@@ -117,5 +144,6 @@ export function TerminalResourcesPanel({ active }: { active: boolean }) {
         </li>;
       })}
     </ul>
+    {confirmDialog}
   </section>;
 }

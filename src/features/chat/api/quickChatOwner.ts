@@ -1,6 +1,6 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { chatController as owner } from "./lifecycle";
-import { loadChatProviderCatalog, type ChatProvider } from "../lib/chatProviderCatalog";
+import { defaultCatalogModel, loadChatProviderCatalog, type ChatProvider } from "../lib/chatProviderCatalog";
 import { CommandLedger, selectedSnapshot, type CommandEnvelope, type QuickSnapshot } from "../lib/panelController";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { useQuickChatSettings } from "../../../shared/preferences/quickChatSettings";
@@ -19,6 +19,7 @@ export function startQuickChatOwner(continueInMain: (source: ChatHistorySource) 
   return starting ??= (async () => {
     let version = 0;
     let initialized = false;
+    let active = true;
     const epoch = crypto.randomUUID();
     let catalog: ChatProvider[] = [];
     const ledger = new CommandLedger();
@@ -34,10 +35,29 @@ export function startQuickChatOwner(continueInMain: (source: ChatHistorySource) 
       navigationTail = next;
       return next;
     };
+    const refreshCatalog = async () => {
+      await owner.start();
+      if (!owner.getSnapshot().ready) throw "chat_quick_not_ready";
+      if (!useSettingsStore.getState().loaded) await useSettingsStore.getState().load();
+      if (!useSettingsStore.getState().loaded) throw "chat_quick_not_ready";
+      const providers = await loadChatProviderCatalog();
+      if (!active || !owner.getSnapshot().ready) throw "chat_quick_not_ready";
+      catalog = providers.map(p => ({
+        id: p.id, name: p.name, baseUrl: "", protocol: p.protocol, enabled: p.enabled, isDefault: p.isDefault,
+        models: p.models.map(m => ({ modelId: m.modelId, enabled: m.enabled, isDefault: m.isDefault })),
+      }));
+      return providers;
+    };
     const createQuick = () => creating ??= (async () => {
+      // Read before creation: failed settings/catalog loads cannot create an unbound orphan.
+      const providers = await refreshCatalog();
       if (quickSelected && owner.getSnapshot().details[quickSelected]) await owner.flushDraft(quickSelected);
       const id = await owner.createUnselected("quick-chat");
       if (!owner.getSnapshot().details[id]) throw "chat_conflict";
+      const preference = useSettingsStore.getState().chatDefaultModel;
+      const chosen = defaultCatalogModel(providers, preference, "sidebar");
+      if (chosen) await owner.bindQuickDefaultModel(id, chosen, () => active);
+      if (!active || !owner.getSnapshot().details[id]) throw "chat_conflict";
       quickSelected = id;
     })().finally(() => { creating = undefined; });
     const ensureQuick = async () => {
@@ -83,20 +103,14 @@ export function startQuickChatOwner(continueInMain: (source: ChatHistorySource) 
         const execute = async () => {
           if (owner.getSnapshot().suspended) throw "chat_shutting_down";
           if (command.op === "hello") {
-            await owner.start();
-            if (!owner.getSnapshot().ready) throw "chat_quick_not_ready";
-            catalog = (await loadChatProviderCatalog()).map(p => ({
-              id: p.id, name: p.name, baseUrl: "", protocol: p.protocol, enabled: p.enabled, isDefault: p.isDefault,
-              models: p.models.map(m => ({ modelId: m.modelId, enabled: m.enabled, isDefault: m.isDefault })),
-            }));
-            if (!owner.getSnapshot().ready) throw "chat_quick_not_ready";
+            if (quickSelected && owner.getSnapshot().details[quickSelected]) await refreshCatalog();
             await ensureQuick();
             if (owner.getSnapshot().error) owner.clearError();
             initialized = true;
             publish(); return;
           }
           if (envelope.epoch !== epoch) throw "chat_quick_not_ready";
-          if (!owner.getSnapshot().ready) throw "chat_quick_not_ready";
+          if (!active || !initialized || !owner.getSnapshot().ready) throw "chat_quick_not_ready";
           if (command.op === "create") {
             await createQuick(); return;
           }
@@ -136,6 +150,8 @@ export function startQuickChatOwner(continueInMain: (source: ChatHistorySource) 
     const unsubOwner = owner.subscribe(schedule);
     const unsubSettings = useSettingsStore.subscribe(schedule);
     stopCurrentOwner = () => {
+      active = false;
+      initialized = false;
       if (publishTimer) { clearTimeout(publishTimer); publishTimer = undefined; }
       scheduled = false;
       unsubOwner();
