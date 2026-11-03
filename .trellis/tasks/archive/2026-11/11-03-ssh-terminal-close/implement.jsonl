@@ -1,0 +1,2 @@
+{"file":".trellis/spec/backend/ssh-remote-terminal-contracts.md","reason":"SSH PTY 与 daemon 释放边界"}
+{"file":".trellis/spec/frontend/ai-architecture-contracts.md","reason":"前端分层与 2000 行硬限制"}
