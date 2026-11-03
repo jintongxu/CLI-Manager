@@ -1,5 +1,10 @@
 # Changelog
 
+## V1.4.12 — 2026-11-04
+
+- 同步 npm、Cargo 与 Tauri 桌面版本至 1.4.12，沿用 GitHub Actions Windows 正式发布流程生成 EXE、MSI、便携 ZIP 与签名更新文件，不构建 macOS/Linux。/ Align npm, Cargo and Tauri desktop versions at 1.4.12 and reuse the GitHub Windows stable release pipeline for EXE/MSI, portable ZIP and signed updater artifacts; no macOS/Linux build.
+- 包含当前 master 已合入的对话默认模型、资源面板终端删除及侧栏优化等改动，详细记录保留在对应功能条目。/ Includes the default conversation model, resource-panel terminal deletion and sidebar improvements merged into master; detailed entries remain below.
+
 ## TEMP — 新建对话默认模型 / Default model for new conversations
 
 - 设置 → 对话模型新增独立默认供应商＋模型偏好，立即持久化；主对话空间、侧栏与快捷键快聊后续新建空模型会话读取最新设置和最新目录，精确匹配启用身份，失效时按各自原有目录规则回退。已有非空选择不覆盖，不把失效供应商的同名模型显示为其他供应商。/ A persisted default provider/model preference now initializes empty-model workspace, sidebar and hotkey Quick Chat conversations from fresh settings and catalog data, with exact enabled-identity matching and legacy fallback rules; explicit choices are retained without cross-provider same-name relabeling.
