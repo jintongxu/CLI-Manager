@@ -17,6 +17,7 @@ export function DragOverlayTab({
   cliToolIcon,
   worktreeBadge,
   compact = false,
+  compactStyle,
 }: {
   worktreeBadge?: TerminalWorktreeBadge;
   title: string;
@@ -24,13 +25,14 @@ export function DragOverlayTab({
   vendor?: VendorKey | null;
   cliToolIcon?: CliToolIconKey | null;
   compact?: boolean;
+  compactStyle?: CSSProperties;
 }) {
-  if (compact) return <div className="ui-terminal-simple-drag-overlay" data-selected="true">{title}</div>;
+  if (compact) return <div className="ui-terminal-simple-drag-overlay" style={compactStyle} data-selected="true">{title}</div>;
   const tabMinWidthClass = "min-w-[92px]";
 
   return (
     <div
-      className={`ui-tab-trigger ui-terminal-tab-item ui-terminal-drag-overlay-tab mx-1 flex h-7 ${tabMinWidthClass} shrink-0 items-center gap-2 rounded-lg px-3 text-[12px] font-medium`}
+      className={`ui-tab-trigger ui-terminal-tab-item ui-terminal-drag-overlay-tab flex h-7 ${tabMinWidthClass} shrink-0 items-center gap-2 rounded-lg px-3 text-[12px] font-medium`}
       data-selected="true"
       data-worktree-identity={worktreeBadge?.identity}
       style={{ "--worktree-identity-color": worktreeBadge?.color } as CSSProperties}
@@ -86,7 +88,8 @@ export function TerminalTabDragOverlay({
   const compact = dragData?.type === "terminal-tab";
 
   const preview = overlay && compact ? (
-    <DragOverlayTab title={overlay.title} notification={overlay.notification} compact />
+    <DragOverlayTab title={overlay.title} notification={overlay.notification} compact
+      compactStyle={{ ...style, width: active?.rect.current.initial?.width, height: active?.rect.current.initial?.height }} />
   ) : overlay ? (
     <div className="ui-terminal-well ui-terminal-drag-overlay-theme" data-terminal-theme-tone={themeTone}>
       <div className="ui-terminal-pane-chrome ui-terminal-drag-overlay-chrome">
@@ -103,7 +106,7 @@ export function TerminalTabDragOverlay({
 
   return (
     <Portal>
-      <DragOverlay className="ui-terminal-drag-overlay" dropAnimation={null} style={compact ? undefined : style}>
+      <DragOverlay className="ui-terminal-drag-overlay" adjustScale={false} dropAnimation={null} style={compact ? undefined : style}>
         {preview}
       </DragOverlay>
     </Portal>

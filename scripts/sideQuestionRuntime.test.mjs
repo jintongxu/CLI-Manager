@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtemp, mkdir, readFile, rm, writeFile, rename } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile, rename, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -57,6 +57,33 @@ test("staging resolves only production closure, nested versions and optional abs
       assert.equal(frames[0].error, "side_question_node_required");
     }
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("staging accepts a canonical local package reached through a workspace alias", async () => {
+  const scratchRoot = await scratch();
+  try {
+    const actualRoot = path.join(scratchRoot, "actual");
+    const aliasRoot = path.join(scratchRoot, "alias");
+    const put = async (relative, value) => {
+      const target = path.join(actualRoot, relative);
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, typeof value === "string" ? value : JSON.stringify(value));
+    };
+    await put("scripts/piSideQuestionAgent.mjs", "// fixture");
+    await put("scripts/piSideQuestionAgentCore.mjs", "// fixture");
+    await put("node_modules/@earendil-works/pi-coding-agent/package.json", {
+      name: "@earendil-works/pi-coding-agent", version: "1.4.0",
+    });
+    await symlink(actualRoot, aliasRoot, process.platform === "win32" ? "junction" : "dir");
+
+    const output = path.join(aliasRoot, "staged");
+    const result = await stageRuntime({ root: aliasRoot, output });
+    assert.equal(result.packageCount, 1);
+    assert.equal(
+      JSON.parse(await readFile(path.join(output, "runtime-manifest.json"), "utf8")).sdk,
+      "1.4.0",
+    );
+  } finally { await rm(scratchRoot, { recursive: true, force: true }); }
 });
 
 test("real SDK runtime relocates outside checkout and imports without network or credentials", { timeout: 120_000 }, async () => {

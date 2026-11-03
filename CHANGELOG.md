@@ -1,5 +1,41 @@
 # Changelog
 
+## TEMP — 减轻终端活动标签视觉重量 / Lighter active terminal tab
+
+- 保持活动与普通标签相同几何尺寸，减弱活动底色、将顶部强调线从 2px 收紧为 1px；Storm 与海盐蓝主题同步弱化，避免选中项视觉上显得更大。/ Kept active and inactive tab dimensions identical, softened the active fill and reduced the top accent from 2px to 1px, including Storm and Sea Salt themes.
+
+## TEMP — 终端标签拖动外观一致性 / Consistent terminal tab drag appearance
+
+- 实际终端标签拖动预览采用源标签初始宽高、终端主题和 border-box，不再使用独立的标题内容宽度及旧 30px 高度；保留描边与阴影，禁止浮层自动缩放。相邻标签让位仅水平平移，不缩放或纵向偏移；排序提交逻辑不变。定向契约测试与类型检查通过，真实桌面拖动仍需人工复核。/ Terminal-tab drag previews use the source's initial dimensions, terminal theme and border-box instead of content-sized width and the old 30px height. Outlines/shadows remain, overlay scaling is disabled, and sibling displacement stays horizontal without scaling. Ordering commits are unchanged; focused contract tests and type checks pass, with native visual verification still pending.
+
+## TEMP — 轻量连续终端标签 / Refined continuous terminal tabs
+
+- 收紧实际终端标签栏：整行与标签高度从 36px 降至 28px，标题点击区和相邻工具按钮同步收紧，减少顶部占用，保留触控设备的独立最小命中区域规则。/ Reduced the real terminal tab strip and tabs from 36px to 28px, compacting title targets and adjacent controls while retaining separate coarse-pointer minimum hit-area rules.
+
+- 实际终端标签改为无间隙连续底栏，普通项移除完整边框并使用淡竖线分隔；活动项采用顶部 5px 圆角、柔和底色与 2px 顶部强调线。关闭按钮固定占位、默认弱化，悬停或键盘聚焦时增强；兼容海盐蓝主题，不改变排序行为。/ Refined real terminal tabs with a gapless strip, borderless inactive tabs and subtle separators; active tabs use 5px top corners, a soft background and a 2px top accent. Close controls retain fixed space and strengthen on hover/focus, including Sea Salt compatibility, without changing ordering.
+
+## TEMP — 实际终端标签行连续布局 / Continuous real terminal tab row
+
+- 修正真实 TerminalTabRow 标签列表仍存在的 6px 间隙与 7px 外圆角，改为零间距、方角连续标签条；保留标题、关闭按钮、选中反馈与拖动命中区域。本项仅修复间距，不宣称修复尚未复现的排序跳位。/ Removed the remaining 6px gap and 7px outer rounding from the real TerminalTabRow, producing a continuous strip while retaining titles, close buttons, selection feedback and drag hit areas. This fixes spacing only; drag-order jumping remains unverified.
+
+## TEMP — Windows 本地构建长路径兼容 / Windows local-build long-path compatibility
+
+- 修复 side-question 运行时 staging 在 Windows `subst` / junction 短路径下误判本地依赖为外部链接包：依赖路径与仓库根路径统一 canonicalize 后再执行边界检查，真实外部依赖仍会被拒绝。/ Fixed side-question runtime staging falsely classifying local dependencies as external links when the workspace is accessed through a Windows subst drive or junction; both dependency and repository paths are canonicalized before boundary validation, while genuine external links remain rejected.
+- 新增工作区路径别名回归测试；本地开发版采用短工作区路径完成 NSIS 打包，规避 MSVC `C1056` 与 NSIS 超长资源路径失败。/ Added a workspace-alias regression test; the local development build now completes NSIS packaging through a short workspace path, avoiding MSVC C1056 and NSIS long-resource-path failures.
+
+## TEMP — 终端标签间距整理 / Terminal tab spacing cleanup
+
+- 移除终端标签的横向 margin（`SortableTab` / `SortableWorkspanTab` / 拖拽预览的 `mx-1` 与 `.ui-workspan-tabbar .ui-workspace-tab { margin-inline: 2px }`），改用容器既有 `gap`（2px）提供间距：标签之间不再出现 6–10px 的空隙，同组 2px、跨组 4px。/ Removed horizontal margins from terminal tabs (mx-1 on SortableTab, SortableWorkspanTab and the drag overlay, plus margin-inline on workspan tabs); spacing now comes from the existing 2px container gaps, closing the 6–10px gaps between tabs.
+- 移除旧标签组件的额外横向 margin，简化间距来源；排序跳位尚未完成实际复现验证，不宣称本次间距调整已修复排序行为。/ Removed extra horizontal margins from legacy tab components to simplify spacing; multi-position drag jumping has not been reproduced and verified, so no ordering fix is claimed.
+
+## TEMP — 侧栏项目/终端视觉简化 / Sidebar project & terminal visual cleanup
+
+- 去掉项目行的展开箭头（ChevronRight），点击项目行仍可折叠/展开；分组行的箭头保留以表达目录层级。/ Removed the expand chevron from project rows; clicking the row still toggles. Group rows keep their chevron for directory hierarchy.
+- 移除终端列表的装饰竖条与每行连接树线，列表左内边距 8→4，整体更干净。/ Removed the terminal list decorative bar and per-row tree connector line; tightened left padding.
+- 缩小终端缩进：`marginInlineStart` 由 `4 + depth*16 + 20` 改为 `4 + depth*12`，终端名称整体左移约 20px，减少与项目标题的距离。/ Reduced terminal indent so session names sit closer to the project title.
+- 终端行改为单行布局：标题占满左侧，状态/成员/隐藏标记统一靠右，不再分两行。/ Terminal rows are now single-line: title fills the left, status/membership/hidden markers align to the right.
+- 重做终端与 Worktree 行的选中态：去掉渐变背景、描边与外阴影，改为扁平 `primary 14%` 底色 + 左侧 2px 强调色条；hover 同步简化为中性浅底。/ Simplified selected and hover states for terminal and worktree rows to a flat primary tint with a thin left accent bar, removing gradients, borders and outer shadows.
+
 ## TEMP — SSH 终端关闭语义修复 / SSH terminal close lifecycle
 
 - SSH 项目终端与独立 SSH Shell 执行单个或批量关闭时，等待后端确认释放 PTY 后移除会话，不再仅隐藏并保留连接；关闭失败保留会话供重试。本地/WSL 默认关闭和明确的隐藏操作保持原行为。/ Closing SSH project terminals or standalone shells now releases the PTY before removing the session, rather than merely hiding it. Failed closes retain the session for retry; local/WSL defaults and explicit hiding remain unchanged.

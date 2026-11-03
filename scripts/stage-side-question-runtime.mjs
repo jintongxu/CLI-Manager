@@ -19,6 +19,9 @@ async function resolvePackage(name, from) {
 }
 
 export async function stageRuntime({ root = repoRoot, output = defaultOutput } = {}) {
+  // Package resolution returns canonical paths. Canonicalize the repository root too so
+  // Windows subst/junction aliases do not make local packages look externally linked.
+  const canonicalRoot = await realpath(root);
   const temporary = `${output}.staging`;
   await rm(temporary, { recursive: true, force: true });
   await mkdir(temporary, { recursive: true });
@@ -31,7 +34,7 @@ export async function stageRuntime({ root = repoRoot, output = defaultOutput } =
       if (copied.has(source)) return;
       copied.add(source);
       // Preserve npm's hoisted/nested resolution, including multiple versions, without duplication.
-      const relative = path.relative(root, source);
+      const relative = path.relative(canonicalRoot, source);
       if (!relative.startsWith(`node_modules${path.sep}`) || relative.includes(`..${path.sep}`)) {
         throw new Error(`Runtime dependency ${name} is outside local node_modules; use npm ci (no linked packages)`);
       }
