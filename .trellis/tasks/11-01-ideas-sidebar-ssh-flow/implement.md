@@ -1,0 +1,22 @@
+# 实现记录
+
+- [x] 1. 项目想法改造
+  - [x] 1.1 `projectIdeaStore.ts`：`normalizeTitle` 增加 Markdown 标题前缀清洗；`updateIdea` 支持可选标题并回退首行推导（参数改为 `titleOrContent?: string`）。
+  - [x] 1.2 `ProjectIdeasDialog.tsx`：移除 `newTitle` 输入框与校验，改为单 textarea 极简流，支持 Enter 提交、Shift+Enter 换行并保护输入法组合态；详情只编辑正文。
+  - [x] 1.3 `ProjectIdeasPanel.tsx`：同步移除标题输入框；编辑态只保留正文，保存时标题留空回退首行。
+  - [x] 1.4 `projects.zh-CN.ts` / `projects.en-US.ts`：占位提示补充 Enter 速记说明；正文首行自动形成兼容标题。
+- [x] 2. 项目树展开性能与丝滑度优化
+  - [x] 2.1 `useSidebarController.tsx`：`collapsedGroupIds` 持久化改为 250ms 防抖，避免每次点击同步写盘。
+  - [x] 2.2 `project-tree.css`：新增 `ui-tree-slide-in` 关键帧，应用于 `.ui-worktree-children` 与 `.tree-collapse[data-open="true"]`。
+  - [x] 2.3 `TreeNodeItem.tsx`：为含 Worktree/终端项目增加旋转 Chevron 指示器。
+- [x] 3. 当前工作 SSH 文件打开联动与标签自愈
+  - [x] 3.1 `useCurrentWorkSessionController.ts`：`CURRENT_WORK_SESSION_CREATED_EVENT` 处理中，file-editor 会话创建后若当前工作为单窗格则自动向右分屏。
+  - [x] 3.2 `CurrentWorkTabBar.tsx`：文件编辑器标签解析 `editorWorkspaces` 的真实激活文件名、脏标记与主机上下文，并显示文件图标。
+  - [x] 3.3 `useFileEditorController.ts`：关闭最后一个文件且无 Diff 标签时自动 `onClose()` 回收编辑器面板。
+- [x] 3.4 `projectIdeaPreview.ts` 与定向测试：标题和正文首行相同（含 Markdown 标题）时不重复显示，保留历史自定义标题与多行摘要。
+- [x] 3.5 `ChatPanel.tsx` / `chatPanel.css`：推理强度改为带图标、“思考”标签与档位的完整可点击控件，保留 Radix Select 键盘行为。
+- [x] 4. 验证与记录
+  - [x] 4.1 `npx tsc --noEmit` 通过。
+  - [ ] 4.2 `npm run check:architecture -- --strict` 失败：既有 Rust 文件 `web_device.rs` 2024 行、`daemon/server.rs` 2028 行超限，本次改动未涉及该两文件。
+  - [x] 4.3 `node --test src/features/projects/tests/*.test.mjs` 79/80 通过；唯一失败项为既有主题调色板计数断言（期望 22、实际 26），与本次改动无关。
+  - [x] 4.4 更新 `CHANGELOG.md` 与 `docs/功能清单.md`（版本 TEMP）。

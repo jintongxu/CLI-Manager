@@ -219,3 +219,10 @@
 {"type":"cli","id":"CLI-1793362552129-1","timestamp":"2026-10-30T12:15:52.129Z","command":"load","args":{"type":"spec","category":"coding"}}
 {"type":"cli","id":"CLI-1793462968342-1","timestamp":"2026-10-31T16:09:28.342Z","command":"load","args":{"type":"spec","id":"spec:project:coding-conventions"}}
 {"type":"cli","id":"CLI-1793497020093-1","timestamp":"2026-11-01T01:37:00.093Z","command":"load","args":{"type":"knowhow","id":"knowhow-rcp-20261018-tauri-dev-stale-server"}}
+{"type":"cli","id":"CLI-1793600038042-1","timestamp":"2026-11-02T06:13:58.042Z","command":"load","args":{"type":"spec","id":"spec:project:coding-conventions-001"}}
+{"type":"cli","id":"CLI-1793600053203-1","timestamp":"2026-11-02T06:14:13.203Z","command":"load","args":{"type":"knowhow","id":"knowhow-tip-20261013-0006"}}
+{"type":"cli","id":"CLI-1793600053205-1","timestamp":"2026-11-02T06:14:13.205Z","command":"load","args":{"type":"knowhow","id":"knowhow-rcp-20261101-worktree-web-dist-side-question"}}
+{"type":"cli","id":"CLI-1793600053207-1","timestamp":"2026-11-02T06:14:13.207Z","command":"load","args":{"type":"knowhow","id":"knowhow-rcp-20261018-tauri-dev-stale-server"}}
+{"type":"cli","id":"CLI-1793669288006-1","timestamp":"2026-11-03T01:28:08.006Z","command":"load","args":{"type":"spec","id":"spec:project:coding-conventions-001"}}
+{"type":"cli","id":"CLI-1793669288357-1","timestamp":"2026-11-03T01:28:08.357Z","command":"load","args":{"type":"knowhow","id":"knowhow-rcp-20261101-worktree-web-dist-side-question"}}
+{"type":"cli","id":"CLI-1793669306050-1","timestamp":"2026-11-03T01:28:26.050Z","command":"load","args":{"type":"knowhow","id":"knowhow-rcp-20261018-tauri-dev-stale-server"}}

@@ -1151,3 +1151,24 @@
 [data-theme="light"] .ui-tree-status-dot {
   box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 10%, transparent);
 }
+
+@keyframes ui-tree-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ui-worktree-children {
+  animation: ui-tree-slide-in 140ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.tree-collapse[data-open="true"] {
+  animation: ui-tree-slide-in 140ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}

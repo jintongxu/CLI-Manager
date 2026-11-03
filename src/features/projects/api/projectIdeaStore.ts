@@ -47,7 +47,7 @@ interface ProjectIdeaStore {
   updateIdea: (
     id: string,
     projectId: string,
-    titleOrContent: string,
+    titleOrContent?: string,
     content?: string,
   ) => Promise<void>;
   updateIdeaMetadata: (
@@ -140,7 +140,7 @@ function normalizeTags(value: unknown): string[] {
 function normalizeTitle(value: unknown, content: string): string {
   const title = typeof value === "string" ? value.trim() : "";
   if (title) return title.slice(0, PROJECT_IDEA_MAX_TITLE_LENGTH);
-  const firstLine = content.split(/\r?\n/, 1)[0].trim();
+  const firstLine = content.split(/\r?\n/, 1)[0].trim().replace(/^#{1,6}\s+/, "");
   return (firstLine || PROJECT_IDEA_FALLBACK_TITLE).slice(
     0,
     PROJECT_IDEA_MAX_TITLE_LENGTH,
@@ -318,12 +318,9 @@ export const useProjectIdeaStore = create<ProjectIdeaStore>((set, get) => ({
   },
   updateIdea: async (id, projectId, titleOrContent, content) => {
     const normalized = validateContent(
-      content === undefined ? titleOrContent : content,
+      content === undefined ? (titleOrContent ?? "") : content,
     );
-    const title = normalizeTitleForWrite(
-      content === undefined ? undefined : titleOrContent,
-      normalized,
-    );
+    const title = normalizeTitleForWrite(content === undefined ? undefined : titleOrContent, normalized);
     const updatedAt = Date.now();
     const db = await getDb();
     await executeChecked(
