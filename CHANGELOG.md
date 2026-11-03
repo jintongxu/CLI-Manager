@@ -1,5 +1,10 @@
 # Changelog
 
+## V1.4.11 — 2026-11-03
+
+- 发布 Windows 正式版：同步 npm、Cargo 与 Tauri 版本至 1.4.11，沿用 GitHub Actions 生成 EXE、MSI、便携 ZIP 及签名自动更新文件；不构建 macOS/Linux。/ Prepare the Windows stable release with aligned npm, Cargo and Tauri versions, EXE/MSI installers, portable ZIP and signed updater artifacts; no macOS/Linux build.
+- 包含当前 master 已合入的功能与修复；详细记录保留在下方各功能条目中。/ Includes the features and fixes merged into master; detailed entries are retained below.
+
 ### TEMP — 终端应急与重建安全优化 / Safe terminal emergency and rebuild
 
 - 通用可见性修复：导航、终端内容、有效焦点和当前工作 Portal 统一采用“作用域 ∩ 未隐藏 ∩ 当前模式成员”集合；关闭后不再显示导航范围外的旧 SSH 输出，没有可见会话时展示空状态。覆盖项目、Worktree、分组、全部作用域及本地/WSL/SSH、单标签/多标签/分屏，不包含特定项目或 ID 判断；保留后台 PTY 和原始布局。/ Navigation, content, effective focus and Current Work portals now share one scope/visibility/membership boundary, preventing out-of-view fallback surfaces without destroying backing terminals.
