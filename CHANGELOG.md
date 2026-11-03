@@ -1,5 +1,9 @@
 # Changelog
 
+## TEMP — SSH 终端关闭语义修复 / SSH terminal close lifecycle
+
+- SSH 项目终端与独立 SSH Shell 执行单个或批量关闭时，等待后端确认释放 PTY 后移除会话，不再仅隐藏并保留连接；关闭失败保留会话供重试。本地/WSL 默认关闭和明确的隐藏操作保持原行为。/ Closing SSH project terminals or standalone shells now releases the PTY before removing the session, rather than merely hiding it. Failed closes retain the session for retry; local/WSL defaults and explicit hiding remain unchanged.
+
 ## V1.4.11 — 2026-11-03
 
 - 发布 Windows 正式版：同步 npm、Cargo 与 Tauri 版本至 1.4.11，沿用 GitHub Actions 生成 EXE、MSI、便携 ZIP 及签名自动更新文件；不构建 macOS/Linux。/ Prepare the Windows stable release with aligned npm, Cargo and Tauri versions, EXE/MSI installers, portable ZIP and signed updater artifacts; no macOS/Linux build.

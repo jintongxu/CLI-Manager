@@ -44,7 +44,7 @@ import { useHistoryStore } from "../../history/index";
 import { useGitWorkspaceStore } from "../../git/api/gitWorkspaceStore";
 import { useSaveSessionToSidebar } from "../../projects/api/useSaveSessionToSidebar";
 import { shouldConfirmTerminalTabClose, TERMINAL_TAB_CLOSE_REQUEST_EVENT, type TerminalTabCloseRequestDetail } from "../api/terminalCloseConfirm";
-import { closeTerminalSessions, excludeProtectedSessionIds } from "../api/terminalBatchClose";
+import { closeTerminalTab, closeTerminalSessions, excludeProtectedSessionIds } from "../api/terminalBatchClose";
 import { useCloseOtherTerminals } from "./useCloseOtherTerminals";
 import type { Project, TerminalSession, WorktreeRecord } from "../../../shared/types/index";
 import type { NativeProviderAppType } from "../../settings/api/nativeProviderTypes";
@@ -175,7 +175,6 @@ export function useTerminalTabsController({
   const restoreWorkspanToSinglePane = useTerminalStore((s) => s.restoreWorkspanToSinglePane);
   const mergeWorkspanAtPaneEdge = useTerminalStore((s) => s.mergeWorkspanAtPaneEdge);
   const hideSession = useTerminalStore((s) => s.hideSession);
-  const destroySession = useTerminalStore((s) => s.closeSession);
   const showSessions = useTerminalStore((s) => s.showSessions);
   const reorderSessions = useTerminalStore((s) => s.reorderSessions);
   const moveSessionToPane = useTerminalStore((s) => s.moveSessionToPane);
@@ -870,9 +869,10 @@ export function useTerminalTabsController({
   }, [hideSession]);
 
   const closeSessionIds = useCallback((sessionIds: string[], protectedSessionIds: readonly string[] = [], destroy = false) => {
-    void closeTerminalSessions(sessionIds, protectedSessionIds, destroy ? destroySession : hideSession,
+    void closeTerminalSessions(sessionIds, protectedSessionIds,
+      (sessionId) => closeTerminalTab(sessionId, useTerminalStore.getState, destroy),
       (sessionId, err) => logError("Failed to close terminal session", { sessionId, err }));
-  }, [destroySession, hideSession]);
+  }, []);
   const closeSessionsWithDirtyGuard = useCallback(async (sessionIds: string[], protectedSessionIds: readonly string[] = [], destroy = false) => {
     const closeableSessionIds = excludeProtectedSessionIds(sessionIds, protectedSessionIds);
     const currentSessions = useTerminalStore.getState().sessions;

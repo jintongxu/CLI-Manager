@@ -34,6 +34,65 @@ const naming = load("../lib/terminalSessionNaming.ts", {
 const agent = load("../../agents/api/agentTerminal.ts");
 const worktreeAdmission = load("../lib/worktreeSessionAdmission.ts");
 
+test("SSH tab close strictly destroys every connection state, including hidden standalone shells", async () => {
+  for (const connectionState of ["connecting", "connected", "error", "disconnected"]) {
+    for (const projectId of ["project", undefined]) {
+      const calls = [];
+      const session = { id: "ssh", environmentType: "ssh", sshHostId: "host", projectId, connectionState, tabHidden: true };
+      const state = {
+        sessions: [session],
+        hideSession: async () => assert.fail("SSH close must not hide"),
+        closeSession: async (...args) => { calls.push(args); state.sessions = []; },
+      };
+      await batchClose.closeTerminalTab("ssh", () => state);
+      assert.deepEqual(calls, [["ssh", true]]);
+      assert.equal(state.sessions.length, 0);
+    }
+  }
+});
+
+test("SSH tab close failure preserves ownership and mixed batches continue without closing protected sessions", async () => {
+  const calls = [], errors = [];
+  const sessions = [
+    { id: "ssh", environmentType: "ssh" },
+    { id: "local", environmentType: "local" },
+    { id: "wsl", environmentType: "wsl" },
+    { id: "protected", environmentType: "ssh" },
+    { id: "file", kind: "file-editor", environmentType: "ssh" },
+  ];
+  const state = {
+    sessions,
+    hideSession: async id => calls.push(["hide", id]),
+    closeSession: async (id, strict) => { calls.push(["close", id, strict]); throw new Error("close rejected"); },
+  };
+  await batchClose.closeTerminalSessions(sessions.map(s => s.id), ["protected"],
+    id => batchClose.closeTerminalTab(id, () => state), (id, err) => errors.push([id, err.message]));
+  assert.deepEqual(calls, [["close", "ssh", true], ["hide", "local"], ["hide", "wsl"], ["hide", "file"]]);
+  assert.deepEqual(errors, [["ssh", "close rejected"]]);
+  assert.equal(state.sessions, sessions, "dispatch must not remove ownership after a rejected backend close");
+});
+
+test("tab close reads live identity, ignores removed sessions and preserves explicit destroy", async () => {
+  const calls = [];
+  const state = {
+    sessions: [{ id: "a", environmentType: "local" }],
+    hideSession: async id => calls.push(["hide", id]),
+    closeSession: async (...args) => calls.push(["close", ...args]),
+  };
+  await batchClose.closeTerminalTab("missing", () => state);
+  await batchClose.closeTerminalTab("a", () => state, true);
+  state.sessions[0] = { id: "a", kind: "pty", environmentType: "ssh" };
+  await batchClose.closeTerminalTab("a", () => state, true);
+  assert.deepEqual(calls, [["close", "a"], ["close", "a", true]]);
+});
+
+test("tab close controller dispatch stays behind confirmation and keeps project hiding separate", () => {
+  const source = readFileSync(new URL("../hooks/useTerminalTabsController.tsx", import.meta.url), "utf8");
+  assert.match(source, /closeTerminalTab\(sessionId, useTerminalStore.getState, destroy\)/);
+  assert.match(source, /hideProjectTerminalSessions\(ids, \(\) => useTerminalStore.getState\(\).sessions, hideSession/);
+  assert.match(source, /if \(!closeConfirm\) return;/);
+});
+
 test("close-other batch never calls close for current-work protected sessions", async () => {
   const closed = [];
   await batchClose.closeTerminalSessions(
@@ -220,6 +279,44 @@ function fixture(sessions = [], workspans = [], daemon = [], projects = [], work
 }
 function session(id, extra = {}) { return { id, title: id, ...extra }; }
 function span(id, paneId, sessionId) { return workspan.createTerminalWorkspan(id, paneId, sessionId); }
+
+test("actual SSH tab close waits for backend ACK before removing runtime, layout and persisted ownership", async () => {
+  const f = fixture([session("ssh", { environmentType: "ssh" })], [span("w", "p", "ssh")]);
+  let acknowledge, signalEntered;
+  const entered = new Promise(resolve => { signalEntered = resolve; });
+  f.dependencies.terminalProcessManager.close = async (id, strict) => {
+    f.calls.push(["strictClose", id, strict]);
+    await new Promise(resolve => { acknowledge = resolve; signalEntered(); });
+  };
+  f.api.setState({ statusListeners: { ssh: () => f.calls.push(["disposed"]) } });
+  const closing = batchClose.closeTerminalTab("ssh", f.api.getState);
+  await entered;
+  assert.equal(f.api.getState().sessions.length, 1);
+  assert.equal(f.calls.some(([kind]) => kind === "disposed"), false);
+  acknowledge();
+  await closing;
+  assert.deepEqual(f.calls.find(([kind]) => kind === "strictClose"), ["strictClose", "ssh", true]);
+  assert.equal(f.api.getState().sessions.length, 0);
+  assert.equal(f.api.getState().workspans.length, 0);
+  assert.equal(f.persisted.sessions.length, 0);
+  assert.equal(f.calls.some(([kind]) => kind === "disposed"), true);
+});
+
+test("actual SSH close rejection keeps runtime, layout, listeners and persistence while explicit hide is non-destructive", async () => {
+  const backing = [span("w", "p", "ssh")];
+  const f = fixture([session("ssh", { environmentType: "ssh" })], backing);
+  f.dependencies.terminalProcessManager.close = async () => { throw new Error("backend rejected"); };
+  const listener = () => assert.fail("failed close must retain listener");
+  f.api.setState({ statusListeners: { ssh: listener } });
+  await assert.rejects(batchClose.closeTerminalTab("ssh", f.api.getState), /backend rejected/);
+  assert.equal(f.api.getState().sessions.length, 1);
+  assert.equal(f.api.getState().workspans, backing);
+  assert.equal(f.api.getState().statusListeners.ssh, listener);
+  assert.equal(f.persisted.sessions.length, 1);
+  await f.api.getState().hideSession("ssh");
+  assert.equal(f.api.getState().sessions[0].tabHidden, true);
+  assert.equal(f.api.getState().statusListeners.ssh, listener);
+});
 
 test("ordinary close hides without close/unlisten/layout deletion; reopen activates the same ID without create", async () => {
   const backing = [span("w", "p", "a")];
