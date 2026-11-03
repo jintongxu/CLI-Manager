@@ -188,6 +188,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
   const [linuxGraphicsDisableWebgl, setLinuxGraphicsDisableWebgl] = useState(false);
   const [markdownPreviewOpen, setMarkdownPreviewOpen] = useState(false);
   const [markdownPreviewRatio, setMarkdownPreviewRatio] = useState(0.5);
+  const [markdownPreviewDragging, setMarkdownPreviewDragging] = useState(false);
   const markdownPreviewDragCleanupRef = useRef<(() => void) | null>(null);
   const { menuState, menuRef, openMenu, closeContextMenu } = useTerminalContextMenu();
   const osPlatformRef = useRef<OsPlatform>("unknown");
@@ -326,7 +327,9 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
   }, []);
 
   useEffect(() => {
-    if (!markdownPreviewOpen) return;
+    // 打开与关闭都需要立即 fit：关闭时左栏扩回 100%，若只靠 ResizeObserver 的非立即
+    // scheduleFit，TerminalResizeDebouncer 会节流横向 resize，导致 xterm canvas 保持旧列数、
+    // 右侧出现黑框并卡顿。RAF 确保在容器宽度样式提交后再测量。
     const frame = window.requestAnimationFrame(() => scheduleFit(true));
     return () => window.cancelAnimationFrame(frame);
   }, [markdownPreviewOpen, markdownPreviewRatio]);
@@ -338,6 +341,8 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     if (!wrapper) return;
 
     markdownPreviewDragCleanupRef.current?.();
+    // 捕获指针：拖拽中失焦或移出窗口时 pointerup/pointercancel 仍会送达，避免拖拽态残留。
+    event.currentTarget.setPointerCapture(event.pointerId);
     const startX = event.clientX;
     const startRatio = markdownPreviewRatio;
     let frame: number | null = null;
@@ -360,20 +365,26 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     };
     const finish = () => {
       if (pendingRatio !== null) setMarkdownPreviewRatio(pendingRatio);
-      cleanup();
+      // 走 ref 清理入口，确保拖拽态与监听一起被重置。
+      markdownPreviewDragCleanupRef.current?.();
     };
     const cleanup = () => {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", finish);
-      window.removeEventListener("pointercancel", cleanup);
+      window.removeEventListener("pointercancel", finish);
       if (frame !== null) window.cancelAnimationFrame(frame);
       frame = null;
       markdownPreviewDragCleanupRef.current = null;
     };
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", finish);
-    window.addEventListener("pointercancel", cleanup);
-    markdownPreviewDragCleanupRef.current = cleanup;
+    window.addEventListener("pointercancel", finish);
+    // 拖拽期间保持分隔线可见，避免指针快速移出 4px 命中区时线条闪烁。
+    setMarkdownPreviewDragging(true);
+    markdownPreviewDragCleanupRef.current = () => {
+      setMarkdownPreviewDragging(false);
+      cleanup();
+    };
   }, [markdownPreviewRatio]);
 
   const getSessionToolContext = useCallback(() => {
@@ -1952,6 +1963,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     showWorkspaceBackground,
     markdownPreviewButtonVisible,
     markdownPreviewOpen,
+    markdownPreviewDragging,
     markdownPreviewCanOpen,
     setMarkdownPreviewOpen,
     terminalSearchButtonStyle,

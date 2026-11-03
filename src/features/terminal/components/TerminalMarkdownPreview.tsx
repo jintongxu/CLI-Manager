@@ -400,7 +400,7 @@ export function TerminalMarkdownPreview({ sessionId, open, onClose }: TerminalMa
 
   return (
     <aside
-      className="subagent-transcript-shell ai-replay-transcript terminal-markdown-preview flex h-full w-full min-w-0 flex-col overflow-hidden border-l text-[var(--term-panel-fg)] shadow-[-12px_0_30px_rgb(0_0_0/0.12)]"
+      className="subagent-transcript-shell ai-replay-transcript terminal-markdown-preview flex h-full w-full min-w-0 flex-col overflow-hidden text-[var(--term-panel-fg)] shadow-[-12px_0_30px_rgb(0_0_0/0.12)]"
       style={terminalPreviewStyle}
     >
       <header className="flex h-10 shrink-0 items-center gap-2 border-b border-[color-mix(in_srgb,var(--border)_58%,transparent)] px-3">

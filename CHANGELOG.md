@@ -1,5 +1,25 @@
 # Changelog
 
+## TEMP — 新会话预览报 session_file_not_indexed 修复 / Fix session_file_not_indexed for brand-new sessions
+
+- 根因：`history_get_session` 的文件校验（`validate_session_file_ref`）用带 60s TTL 的目录列表缓存匹配候选，`history_refresh_index` 只刷新 catalog 不清该缓存；新建会话文件在缓存窗口内（实测：应用启动后 25 分钟内新建 pi 会话并立即打开预览）不在候选清单内，即使文件存在也被拒为 `session_file_not_indexed`，前端秒级重试全部落在 TTL 内导致“无法加载会话回答”。修复落在校验源头：缓存候选未命中且文件确实存在时，强制重扫一次再校验；缓存快路径保留，覆盖全部来源（pi/claude/codex 等）的新建会话场景。/ Root cause: `history_get_session` validated against a directory-listing cache with a 60s TTL, while `history_refresh_index` only refreshes the catalog and never invalidates that cache. Session files created within the TTL window were rejected as `session_file_not_indexed` even though they existed on disk, and frontend retries all landed inside the TTL, so the preview kept failing. The fix lands at the validation origin: when the cached candidates miss and the file exists on disk, force one rescan and revalidate — the fast cached path is preserved and the fix covers brand-new sessions for all sources.
+- 触点清单：`scope.rs`（修复点，缓存 miss + 文件存在 → 强制重扫）；`discovery.rs` 目录缓存（未改）；`history_refresh_index`/catalog（未改）；前端 `historyRequests.ts` 重试逻辑（未改，重试窗口覆盖修复后的首次成功）。验证：`cargo check` 通过，`cargo test history::tests::scope` 13 项全过，真实场景由 dev 应用重建后人工验收。/ Touchpoints: scope.rs (fix), discovery.rs cache (unchanged), history_refresh_index/catalog (unchanged), frontend retry logic (unchanged). cargo check + 13 scope tests pass; live verification in the rebuilt dev app.
+
+## TEMP — 分隔线采用 VS Code sash 三态模式 / Separator adopts the VS Code sash pattern
+
+- 终端与 Markdown 预览分隔线对齐 VS Code sash 模式三态：静止常驻 1px 主题淡线（`--term-panel-border`，即前景色 14% 的主题感知中性色，等同 `editorGroup.border` 的定位），悬停升至前景 35%，拖拽高亮为主色 65%；三态互斥由条件切换保证，线仅由分隔条单元素绘制，配合指针捕获不产生双线或残留。/ The terminal/preview separator now follows the VS Code sash pattern: a persistent 1px theme-aware subtle line at rest (--term-panel-border, foreground at 14%), medium contrast on hover (foreground 35%), and primary-color highlight while dragging (65%). The three states are mutually exclusive via conditional classes, the line is drawn solely by the separator element, and pointer capture prevents double lines or stuck states.
+- 修复拖拽态残留：pointercancel 与 pointerup 统一走带状态重置的清理入口，并在拖拽开始时对分隔条 `setPointerCapture`，保证指针事件在失焦等场景下必达。/ Drag-state resets now share one cleanup entry for pointerup/pointercancel, and the separator captures the pointer on drag start so pointer events are always delivered.
+
+## TEMP — Markdown 预览分隔线改为仅拖拽期间显示 / Separator line shows only while dragging
+
+- 终端与 Markdown 预览的拖拽分隔条不再显示常驻或悬停引导线，改为仅在拖拽期间显示主色高亮细线（65%），松手立即消失；命中区平时透明，悬停仅保留 cursor 提示。/ The terminal/preview drag separator draws its highlight line only while dragging and disappears immediately on release; the hit strip stays transparent with only the resize cursor on hover.
+
+## TEMP — Markdown 预览关闭后终端恢复卡顿与黑框修复 / Fix terminal restore lag and black box after closing markdown preview
+
+## TEMP — Markdown 预览关闭后终端恢复卡顿与黑框修复 / Fix terminal restore lag and black box after closing markdown preview
+
+- 修复关闭终端 Markdown 预览后终端恢复缓慢、右侧出现黑色矩形的问题：预览打开时调度立即 fit，但关闭时因守卫 `if (!markdownPreviewOpen) return` 跳过立即 fit，只依赖 ResizeObserver 的非立即 `scheduleFit`，被 `TerminalResizeDebouncer` 在有滚动历史的终端上节流，导致 xterm canvas 保持旧列数而容器已扩宽。移除该守卫，打开、关闭与拖拽改宽均在 RAF 后调度 `scheduleFit(true)`，终端立即重新测量并 resize。/ Closing the terminal Markdown preview now re-fits the terminal immediately instead of relying on the debounced ResizeObserver path, eliminating the right-side black box and lag caused by stale column counts during container widen.
+
 ## TEMP — SSH 终端关闭语义修复 / SSH terminal close lifecycle
 
 - SSH 项目终端与独立 SSH Shell 执行单个或批量关闭时，等待后端确认释放 PTY 后移除会话，不再仅隐藏并保留连接；关闭失败保留会话供重试。本地/WSL 默认关闭和明确的隐藏操作保持原行为。/ Closing SSH project terminals or standalone shells now releases the PTY before removing the session, rather than merely hiding it. Failed closes retain the session for retry; local/WSL defaults and explicit hiding remain unchanged.

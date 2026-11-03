@@ -1,9 +1,9 @@
 use super::{
-    collect_session_files, get_or_scan_session_project, is_jsonl, kimi, project_key_from_cwd,
-    resolve_antigravity_history_root, resolve_claude_history_root, resolve_codex_history_root,
-    resolve_copilot_history_root, resolve_cursor_history_root, resolve_gemini_history_root,
-    resolve_grok_history_root, resolve_kiro_history_root, resolve_pi_history_root, HistoryRoots,
-    SessionFileRef,
+    collect_session_files, collect_session_files_with_force, get_or_scan_session_project, is_jsonl,
+    kimi, project_key_from_cwd, resolve_antigravity_history_root, resolve_claude_history_root,
+    resolve_codex_history_root, resolve_copilot_history_root, resolve_cursor_history_root,
+    resolve_gemini_history_root, resolve_grok_history_root, resolve_kiro_history_root,
+    resolve_pi_history_root, HistoryRoots, SessionFileRef,
 };
 use log::{debug, warn};
 use std::path::{Path, PathBuf};
@@ -20,12 +20,24 @@ pub(crate) fn validate_session_file_ref(
     let base = history_source_base(&source, roots)?
         .canonicalize()
         .map_err(|_| "history_source_not_found".to_string())?;
-    resolve_session_file_ref(
+    let result = resolve_session_file_ref(
         file_path,
         &source,
         project_key,
         &base,
         collect_session_files(Some(&source), roots),
+    );
+    if result.is_ok() || !PathBuf::from(file_path).is_file() {
+        return result;
+    }
+    // 全新会话文件可能不在目录列表缓存内（60s TTL），但文件确实存在：强制重扫一次再校验，
+    // 避免新建会话后 60 秒内预览/详情读取一直报 session_file_not_indexed。
+    resolve_session_file_ref(
+        file_path,
+        &source,
+        project_key,
+        &base,
+        collect_session_files_with_force(Some(&source), roots, true),
     )
 }
 

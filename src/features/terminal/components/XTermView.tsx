@@ -17,6 +17,7 @@ export function XTermView({
   showWorkspaceBackground,
   markdownPreviewButtonVisible,
   markdownPreviewOpen,
+  markdownPreviewDragging,
   markdownPreviewCanOpen,
   setMarkdownPreviewOpen,
   terminalSearchButtonStyle,
@@ -227,10 +228,17 @@ export function XTermView({
             role="separator"
             aria-orientation="vertical"
             aria-label={t("terminal.markdownPreview.resize")}
-            className="absolute inset-y-0 z-20 w-1 -translate-x-1/2 cursor-col-resize bg-transparent transition-colors hover:bg-[color-mix(in_srgb,var(--primary)_55%,transparent)]"
+            className="group absolute inset-y-0 z-20 w-1 -translate-x-1/2 cursor-col-resize"
             style={{ left: `${100 - markdownPreviewPanelPercent}%` }}
             onPointerDown={handleMarkdownPreviewResizeStart}
-          />
+          >
+            {/* VS Code sash 模式：静止 = 主题淡线，悬停 = 中等对比，拖拽 = 主色高亮；三态互斥，线仅由此元素绘制。 */}
+            <div className={`absolute inset-y-0 left-1/2 w-px -translate-x-1/2 transition-colors ${
+              markdownPreviewDragging
+                ? "bg-[color-mix(in_srgb,var(--primary)_65%,transparent)]"
+                : "bg-[var(--term-panel-border)] group-hover:bg-[color-mix(in_srgb,var(--term-panel-fg)_35%,transparent)]"
+            }`} />
+          </div>
         )}
         <div
           className="absolute inset-y-0 right-0 min-w-0 overflow-hidden"

@@ -49,7 +49,7 @@ test("failed markdown preview loads are retryable and background terminal layout
   assert.match(successBlock[1], /loadedTriggerRef\.current\s*=\s*trigger/);
 
   const effectBlock = previewSource.match(
-    /if \(loadedTriggerRef\.current === previewLoadTrigger\) return;([\s\S]*?)\n  \}, \[hookStatus,/,
+    /if \(!opened && loadedTriggerRef\.current === previewLoadTrigger\) return;([\s\S]*?)\n  \}, \[hookStatus,/,
   );
   assert.ok(effectBlock, "expected the preview load effect");
   assert.doesNotMatch(effectBlock[1], /loadedTriggerRef\.current\s*=\s*previewLoadTrigger/);
