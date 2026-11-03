@@ -111,3 +111,17 @@ export function sanitizeCurrentWorkPaneTree(
   };
   return visit(value);
 }
+
+/** Live identity substitution, unlike startup remapping, retains every other ID/node. */
+export function replaceCurrentWorkSession(
+  state: CurrentWorkSessionState & { paneTree: TerminalPaneNode | null }, sourceId: string, replacementId: string,
+) {
+  const replace = (id: string | null) => id === sourceId ? replacementId : id;
+  const visit = (node: TerminalPaneNode | null): TerminalPaneNode | null => {
+    if (!node) return null;
+    return node.type === "leaf"
+      ? { ...node, sessionIds: node.sessionIds.map(id => replace(id)!), activeSessionId: replace(node.activeSessionId) }
+      : { ...node, first: visit(node.first)!, second: visit(node.second)! };
+  };
+  return { sessionIds: state.sessionIds.map(id => replace(id)!), activeSessionId: replace(state.activeSessionId), paneTree: visit(state.paneTree) };
+}

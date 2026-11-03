@@ -1,3 +1,4 @@
+import { TerminalRecoveryMenuItems } from "./TerminalRecoveryMenuItems";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
@@ -397,20 +398,9 @@ export function PaneTabBar({
                   })()}
                   <ContextMenuItem onSelect={onNewTab}>{t("terminal.toolbar.newTerminal")}</ContextMenuItem>
                   <ContextMenuItem onSelect={() => onDuplicateSession(session)}>{t("terminal.tab.duplicate")}</ContextMenuItem>
-                  {(session.kind ?? "pty") === "pty" && (() => {
-                    const recoverySupported = session.environmentType !== "ssh" && !session.sshHostId;
-                    const recoveryTitle = recoverySupported ? undefined : t("terminal.recovery.unsupported");
-                    return (
-                      <>
-                        <ContextMenuSeparator />
-                        <ContextMenuItem disabled={!recoverySupported} title={recoveryTitle} onSelect={() => onProbeSession(session.id)}>{t("terminal.recovery.status")}</ContextMenuItem>
-                        <ContextMenuItem disabled={!recoverySupported} title={recoveryTitle} onSelect={() => onInterruptSession(session.id)}>{t("terminal.recovery.interrupt")}</ContextMenuItem>
-                        <ContextMenuItem disabled={!recoverySupported} title={recoveryTitle} onSelect={() => onOpenEmergencyTerminal(session.id)}>{t("terminal.recovery.emergency")}</ContextMenuItem>
-                        <ContextMenuItem disabled={!recoverySupported} title={recoveryTitle} onSelect={() => onRebuildSession(session.id)}>{t("terminal.recovery.rebuild")}</ContextMenuItem>
-                        <ContextMenuItem disabled={!recoverySupported} title={recoveryTitle} onSelect={() => onHardKillSession(session.id)}>{t("terminal.recovery.hardKill")}</ContextMenuItem>
-                      </>
-                    );
-                  })()}
+                  <TerminalRecoveryMenuItems session={session} project={session.projectId ? projectById.get(session.projectId) : undefined}
+                    onProbeSession={onProbeSession} onInterruptSession={onInterruptSession}
+                    onOpenEmergencyTerminal={onOpenEmergencyTerminal} onRebuildSession={onRebuildSession} onHardKillSession={onHardKillSession} />
                   {terminalBackgroundEnabled && terminalBackgroundImagePath && (
                     hiddenBackgroundSessionIds.has(session.id) ? (
                       <ContextMenuItem onSelect={() => onShowBackground(session.id)}>{t("terminal.tab.showBackground")}</ContextMenuItem>

@@ -1,5 +1,14 @@
 # Changelog
 
+### TEMP — 终端应急与重建安全优化 / Safe terminal emergency and rebuild
+
+- 通用可见性修复：导航、终端内容、有效焦点和当前工作 Portal 统一采用“作用域 ∩ 未隐藏 ∩ 当前模式成员”集合；关闭后不再显示导航范围外的旧 SSH 输出，没有可见会话时展示空状态。覆盖项目、Worktree、分组、全部作用域及本地/WSL/SSH、单标签/多标签/分屏，不包含特定项目或 ID 判断；保留后台 PTY 和原始布局。/ Navigation, content, effective focus and Current Work portals now share one scope/visibility/membership boundary, preventing out-of-view fallback surfaces without destroying backing terminals.
+
+- 应急 Shell 保留原终端并复用相同目录、Shell、环境变量与 WSL 发行版，不重放 CLI 启动命令；重建先准备并检查候选 PTY，再严格关闭旧进程并原位替换，失败保留或明确呈现资源所有权。/ Emergency shells retain the original with matching launch context; rebuild prepares and checks a candidate before strict close and in-place replacement, preserving explicit ownership on failures.
+- 修复重建调用启动恢复函数导致其它终端布局丢失的问题；基于最新 Workspan 与当前工作状态替换单个 ID，保留节点、比例、顺序和并发焦点变化；按源实例协调重复恢复及关闭操作。/ Replace only the target identity in the latest layouts, retaining unrelated terminals and concurrent edits; coordinate recovery and close per source incarnation.
+- 持久化采用显式快照字段，区分已提交但保存失败、候选提前退出、关闭拒绝和清理失败；强制结束不再依赖仍可用的启动目录或 Worktree。统一恢复菜单风险分组、处理中状态及中英文确认/错误提示，并补齐导航菜单入口。/ Whitelisted snapshots and actionable failure categories distinguish process truth from persistence; force-end works with missing launch context. Shared menus provide risk groups, busy state, localized confirmations and navigation reachability.
+- 验证：23 项恢复故障注入、18 项持久化/UI 测试及已有布局定向测试通过；TypeScript 和严格架构检查通过。完整生命周期测试有 5 项已通过旧代码对照确认的基线失败；真实 PTY、WSL、桌面键盘和语言切换仍需人工验收。/ Focused recovery tests and static checks pass; five baseline lifecycle failures remain, and native desktop/WSL acceptance is not claimed.
+
 ### TEMP — 当前工作模式下 SSH 远程文件编辑分屏与标签自愈联动 / Current Work SSH remote file editing split and tab sync
 
 - 自动向右分屏对照布局：在「当前工作」（Current Work）模式下触发打开 SSH 远程文件时，监听 `CURRENT_WORK_SESSION_CREATED_EVENT`，判断当前激活窗口是否包含 SSH 终端；若是，自动触发 `splitSessionToEdge` 向右分屏，形成“左终端 + 右代码”经典对照布局，避免编辑器覆盖替换正在运行的终端；已分屏时平滑聚焦。/ Auto split-right side-by-side layout: listening to `CURRENT_WORK_SESSION_CREATED_EVENT` in Current Work mode, automatically splitting editor sessions to the right when the active pane hosts an SSH terminal, preventing the editor from replacing terminal leaves and smoothly focusing existing splits.

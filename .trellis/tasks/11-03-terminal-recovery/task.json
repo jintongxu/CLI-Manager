@@ -1,0 +1,13 @@
+{
+  "id": "terminal-recovery",
+  "name": "terminal-recovery",
+  "title": "终端应急与重建整体优化",
+  "description": "统一恢复事务、环境保真、原位布局替换与可解释反馈",
+  "status": "completed",
+  "completedAt": "2026-11-03",
+  "priority": "P1",
+  "createdAt": "2026-11-03",
+  "branch": "wt/task-1103-1047-b5a117ea9f75",
+  "base_branch": "master",
+  "notes": "Implementation and focused automated checks complete; native PTY/WSL, keyboard and UI language switching remain manual acceptance items in verification.md. Approved Plan 436969945c6a6abcb6670114920ea27aff20a3659d5a41c60f3c6ed1856ddb4b. No git delivery authorization for this task."
+}

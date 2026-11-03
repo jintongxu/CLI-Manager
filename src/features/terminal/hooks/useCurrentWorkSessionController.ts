@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSessionStore } from "../api/sessionStore";
-import { CURRENT_WORK_SESSION_CREATED_EVENT, type CurrentWorkTarget } from "../api/currentWorkEvents";
+import { CURRENT_WORK_SESSION_CREATED_EVENT, CURRENT_WORK_SESSION_REPLACED_EVENT, type CurrentWorkTarget } from "../api/currentWorkEvents";
 import { useTerminalStore } from "../state";
 import { logError } from "../../../shared/platform/logger";
 import { activateCurrentWorkSession, appendCurrentWorkSession, createCurrentWorkLayoutIdFactory } from "../lib/currentWorkModel";
@@ -125,6 +125,20 @@ export function useCurrentWorkSessionController({
     commitLayout(reconciled.tree, reconciled.activePaneId);
     persist(nextIds, nextActiveId);
   }, [commitLayout, persist]);
+  useEffect(() => {
+    const replaced = () => {
+      const current = useSessionStore.getState();
+      sessionIdsRef.current = current.currentWorkSessionIds;
+      activeSessionIdRef.current = current.currentWorkActiveSessionId;
+      setSessionIds(current.currentWorkSessionIds);
+      setActiveSessionId(current.currentWorkActiveSessionId);
+      // Same pane identities: do not reconcile away empty nodes or steal focus.
+      commitLayout(current.currentWorkPaneTree, activePaneIdRef.current);
+      setSelectedSessionIds(selected => new Set([...selected].filter(id => current.currentWorkSessionIds.includes(id))));
+    };
+    window.addEventListener(CURRENT_WORK_SESSION_REPLACED_EVENT, replaced);
+    return () => window.removeEventListener(CURRENT_WORK_SESSION_REPLACED_EVENT, replaced);
+  }, [commitLayout]);
   const cancelAnonymousClose = useCallback((sessionId: string) => {
     anonymousCloseGenerationRef.current.set(sessionId, (anonymousCloseGenerationRef.current.get(sessionId) ?? 0) + 1);
   }, []);
@@ -184,7 +198,7 @@ export function useCurrentWorkSessionController({
   }, [commitLayout, persist]);
   useEffect(() => {
     const handleSessionCreated = (event: Event) => {
-      const { sessionId } = (event as CustomEvent<CurrentWorkTarget>).detail;
+      const { sessionId, activate } = (event as CustomEvent<CurrentWorkTarget>).detail;
       const targetSession = useTerminalStore.getState().sessions.find((s) => s.id === sessionId);
       const isSshFileEditor = Boolean(
         targetSession &&
@@ -219,7 +233,8 @@ export function useCurrentWorkSessionController({
         }
       }
 
-      addSession(sessionId);
+      if (currentWorkMode && activate) activateSession(sessionId);
+      else addSession(sessionId);
     };
     window.addEventListener(CURRENT_WORK_SESSION_CREATED_EVENT, handleSessionCreated);
     return () => window.removeEventListener(CURRENT_WORK_SESSION_CREATED_EVENT, handleSessionCreated);
