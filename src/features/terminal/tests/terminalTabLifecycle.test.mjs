@@ -119,7 +119,12 @@ function fixture(sessions = [], workspans = [], daemon = [], projects = [], work
   const calls = [];
   const persisted = {
     sessions, workspans, activeSessionId: sessions[0]?.id ?? null, activeWorkspanId: workspans[0]?.id ?? null, splits: [],
-    currentWorkSessionIds: [], currentWorkActiveSessionId: null,
+    currentWorkSessionIds: [], currentWorkActiveSessionId: null, currentWorkPaneTree: null,
+    replaceCurrentWorkSession(sourceId, replacementId) {
+      const next = currentWork.replaceCurrentWorkSession({ sessionIds: this.currentWorkSessionIds, activeSessionId: this.currentWorkActiveSessionId, paneTree: this.currentWorkPaneTree }, sourceId, replacementId);
+      this.currentWorkSessionIds = next.sessionIds; this.currentWorkActiveSessionId = next.activeSessionId; this.currentWorkPaneTree = next.paneTree;
+      calls.push(["replaceCurrentWork", sourceId, replacementId]);
+    },
     async saveSessions(value) { calls.push(["saveSessions", plain(value)]); this.sessions = value; },
     async saveActiveSessionId(value) { calls.push(["saveActive", value]); this.activeSessionId = value; },
     async saveWorkspans(value, id) { calls.push(["saveWorkspans", plain(value)]); this.workspans = value; this.activeWorkspanId = id; },
@@ -129,6 +134,9 @@ function fixture(sessions = [], workspans = [], daemon = [], projects = [], work
   const dependencies = {
     ...metadata, ...pane, ...workspan, ...visibility, ...layout, ...currentWork, ...naming, ...worktreeAdmission,
     startPtyOrphanReconcileHeartbeat() {},
+    sshHostNameForLaunch: () => undefined,
+    parseProjectEnvVars: () => undefined,
+    formatTerminalCreateError: String,
     resolveNextSessionIdForShortcut: pane.getNextSessionIdForShortcut,
     unsplitPaneLeaf: pane.unsplitPaneLeaf,
     terminalProcessManager: {
@@ -139,6 +147,13 @@ function fixture(sessions = [], workspans = [], daemon = [], projects = [], work
     },
     async invoke(command) { calls.push(["invoke", command]); return daemon; },
     useSessionStore: { getState: () => persisted },
+    dispatchCurrentWorkSessionCreated(id, activate) { calls.push(["currentWorkCreated", id, activate]); },
+    dispatchCurrentWorkSessionReplaced() { calls.push(["currentWorkReplaced"]); },
+    async saveRecoverySnapshot(getTerminal) {
+      const latest = getTerminal();
+      await persisted.saveWorkspans(latest.workspans, latest.activeWorkspanId, latest.sessions);
+      calls.push(["recoverySnapshot", plain({ sessions: latest.sessions, ids: persisted.currentWorkSessionIds, tree: persisted.currentWorkPaneTree })]);
+    },
     useSettingsStore: { getState: () => ({ workspanEnabled: true, unsplitBehavior: "merge" }) },
     TERMINAL_STORE_IN_TAURI: false,
     reserveWorktreeLaunch: () => () => {},
@@ -147,7 +162,7 @@ function fixture(sessions = [], workspans = [], daemon = [], projects = [], work
     isCliManagerSyncArtifactText: () => false,
     resolveDaemonAttachTaskStatus: status.resolveDaemonAttachTaskStatus, resolveDaemonAttachUpdatedAt: () => "now",
     resolveAttachedDaemonSession: (ps) => ps ?? {},
-    useProjectStore: { getState: () => ({ projects, worktrees }) },
+    useProjectStore: { getState: () => ({ projects, worktrees, groups: [] }) },
     ...agent,
     recordCrashActivity() {}, summarizeStartupCmd: () => null,
     buildTabStatusUpdate: status.buildTabStatusUpdate,
@@ -191,6 +206,14 @@ function fixture(sessions = [], workspans = [], daemon = [], projects = [], work
   });
   dependencies.createTerminalTabLifecycle = lifecycle.createTerminalTabLifecycle;
   dependencies.create = (initialize) => { state = initialize(api.setState, api.getState, api); return api; };
+  Object.assign(dependencies, load("../../projects/api/groupPath.ts"));
+  Object.assign(dependencies, load("../lib/terminalRecoveryEnvironment.ts", dependencies));
+  Object.assign(dependencies, load("../lib/terminalRecoveryLayout.ts", dependencies));
+  Object.assign(dependencies, load("../store/terminalSessionCandidate.ts", dependencies));
+  Object.assign(dependencies, load("../store/terminalRecoveryCoordination.ts", dependencies));
+  Object.assign(dependencies, load("../store/terminalSessionCreation.ts", dependencies));
+  dependencies.assertLocalPty = dependencies.assertRecoverySource;
+  Object.assign(dependencies, load("../store/terminalRecoveryActions.ts", dependencies));
   load("../store/terminalStore.ts", dependencies);
   api.setState({ sessions, ...layout.buildWorkspanMirror(workspans, workspans[0]?.id ?? null, sessions) });
   return { api, calls, persisted, callbacks, dependencies, settled: () => persistenceQueue };
@@ -823,4 +846,265 @@ test("ordinary new context reaches actual create action as fresh project CLI, wh
     assert.equal(f.api.getState().sessions[0].title, "Custom");
     assert.equal(f.calls.some(([kind]) => kind === "create" || kind === "write"), false);
   }
+});
+
+for (const failure of ["create", "subscribe", "close", "cleanup", "save"]) {
+  test(`recovery transaction fault ${failure} retains owned resources and distinguishes commit`, async () => {
+    const f = fixture([session("a", { cwd: "/repo", createdAtMs: 7 })], [span("w", "p", "a")]);
+    const manager = f.dependencies.terminalProcessManager;
+    if (failure === "create") manager.create = async () => { throw new Error("create failure"); };
+    if (failure === "subscribe") manager.subscribeStatus = async () => { throw new Error("subscribe failure"); };
+    if (failure === "close" || failure === "cleanup") manager.close = async (id, strict) => {
+      f.calls.push(["close", id, strict]);
+      if (id === "a" || failure === "cleanup") throw new Error("close failure");
+    };
+    if (failure === "save") f.persisted.saveWorkspans = async () => { throw new Error("disk"); };
+    await assert.rejects(f.api.getState().rebuildSession("a"), error => failure === "save"
+      ? error.message === "terminal_recovery_persistence_failed" && error.committedSessionId === "recreated"
+      : failure === "cleanup" ? error.message === "terminal_recovery_cleanup_failed" : true);
+    const ids = f.api.getState().sessions.map(item => item.id);
+    assert.equal(ids.includes("a"), failure !== "save");
+    assert.equal(ids.includes("recreated"), failure === "cleanup" || failure === "save");
+    if (failure === "create" || failure === "subscribe") assert.equal(f.calls.some(([kind, id]) => kind === "close" && id === "a"), false);
+    if (failure === "cleanup") assert.ok(f.api.getState().workspans.some(w => workspan.collectWorkspanSessionIds(w).includes("recreated")));
+  });
+}
+
+test("recovery subscribe+cleanup double failure keeps a visible retryable candidate", async () => {
+  const f = fixture([session("a", { cwd: "/repo" })], [span("w", "p", "a")]);
+  f.dependencies.terminalProcessManager.subscribeStatus = async () => { throw new Error("subscription"); };
+  f.dependencies.terminalProcessManager.close = async () => { throw new Error("cleanup"); };
+  await assert.rejects(f.api.getState().rebuildSession("a"), /terminal_recovery_cleanup_failed/);
+  assert.deepEqual(plain(f.api.getState().sessions.map(s => s.id)), ["a", "recreated"]);
+  assert.ok(f.api.getState().statusListeners.recreated);
+});
+
+test("recovery prepares unpublished status subscription, deduplicates, and commits latest multi-workspan layout", async () => {
+  const f = fixture([session("a", { cwd: "/repo", createdAtMs: 1 }), session("b")], [span("w", "p", "a"), span("other", "other-pane", "b")]);
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const subscribe = f.dependencies.terminalProcessManager.subscribeStatus;
+  f.dependencies.terminalProcessManager.subscribeStatus = async (id, callback) => {
+    const unlisten = await subscribe(id, callback);
+    callback({ status: "running" });
+    assert.equal(f.api.getState().sessions.some(s => s.id === "recreated"), false);
+    assert.equal(f.api.getState().sessionStatuses.recreated, undefined);
+    await gate;
+    return unlisten;
+  };
+  const first = f.api.getState().rebuildSession("a");
+  const second = f.api.getState().rebuildSession("a");
+  assert.equal(first, second);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.calls.some(([kind]) => kind === "close"), false);
+  f.api.setState({ sessions: [...f.api.getState().sessions, session("concurrent")], workspans: [...f.api.getState().workspans.map(w => ({ ...w, customTitle: "latest" })), span("new", "new-pane", "concurrent")], activeWorkspanId: "other" });
+  f.persisted.currentWorkSessionIds = ["b", "a", "concurrent"];
+  f.persisted.currentWorkActiveSessionId = "b";
+  f.persisted.currentWorkPaneTree = { type: "split", id: "cw-split", direction: "horizontal", ratio: 0.7,
+    first: {type: "leaf", id: "cw-left", sessionIds: ["b", "concurrent"], activeSessionId: "b"},
+    second: {type: "leaf", id: "cw-right", sessionIds: ["a"], activeSessionId: "a"} };
+  release();
+  assert.equal(await first, "recreated");
+  assert.deepEqual(plain(f.persisted.currentWorkSessionIds), ["b", "recreated", "concurrent"]);
+  assert.equal(f.persisted.currentWorkActiveSessionId, "b");
+  assert.equal(f.persisted.currentWorkPaneTree.ratio, 0.7);
+  assert.equal(f.persisted.currentWorkPaneTree.second.id, "cw-right");
+  assert.deepEqual(plain(f.persisted.currentWorkPaneTree.second.sessionIds), ["recreated"]);
+  assert.ok(f.calls.findIndex(([kind]) => kind === "replaceCurrentWork") < f.calls.findIndex(([kind]) => kind === "currentWorkReplaced"));
+  assert.deepEqual(f.api.getState().sessions.map(s => s.id), ["recreated", "b", "concurrent"]);
+  assert.equal(f.api.getState().workspans.length, 3);
+  assert.equal(f.api.getState().workspans[0].customTitle, "latest");
+  assert.equal(f.api.getState().activeSessionId, "b");
+  assert.equal(f.api.getState().sessionStatuses.recreated, "running");
+  assert.equal(f.calls.filter(([kind]) => kind === "create").length, 1);
+  assert.equal(f.calls.some(([kind]) => kind === "write"), false);
+  assert.equal(f.calls.find(([kind]) => kind === "launch")[1].startupCmd, "");
+});
+
+for (const strict of [false, true]) {
+  test(`recovery close race strict=${strict} cancels before destruction without blocking unrelated close`, async () => {
+    const f = fixture([session("a", { cwd: "/repo" }), session("b")], [span("w", "p", "a"), span("other", "other-pane", "b")]);
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    const subscribe = f.dependencies.terminalProcessManager.subscribeStatus;
+    f.dependencies.terminalProcessManager.subscribeStatus = async (...args) => { await gate; return subscribe(...args); };
+    const rebuild = f.api.getState().rebuildSession("a");
+    await new Promise(resolve => setImmediate(resolve));
+    const close = strict ? f.api.getState().hardKillSession("a") : f.api.getState().closeSession("a");
+    await f.api.getState().closeSession("b");
+    assert.equal(f.api.getState().sessions.some(s => s.id === "b"), false);
+    release();
+    await assert.rejects(rebuild, /terminal_recovery_session_changed/);
+    await close;
+    assert.equal(f.api.getState().sessions.length, 0);
+  });
+}
+
+test("recovery environment preserves nondefault WSL UNC, POSIX cwd, inherited path and rejects foreign checkout/SSH", async () => {
+  const f = fixture();
+  const resolve = f.dependencies.resolveRecoveryEnvironment;
+  const state = { projects: [{ id: "project", path: "stale", path_mode: "inherit", group_id: "g", shell: "pwsh" }], groups: [{ id: "g", bound_path: "/inherited" }], worktrees: [] };
+  assert.equal(resolve(session("a", { projectId: "project" }), state).cwd, "/inherited");
+  const wsl = session("a", { cwd: "/home/user/sub", shell: "wsl", environmentType: "wsl", wslDistroName: "Debian-Custom", envVars: { PATH: "/custom" } });
+  const env = resolve(wsl, state);
+  assert.equal(env.cwd, String.raw`\\wsl.localhost\Debian-Custom\home\user\sub`);
+  assert.equal(env.envVars.PATH, "/custom");
+  const unc = String.raw`\\wsl$\Existing\home\user`;
+  assert.equal(resolve({ ...wsl, cwd: unc }, state).cwd, unc);
+  assert.throws(() => resolve({ ...wsl, environmentType: "ssh" }, state), /unsupported_remote/);
+  assert.throws(() => resolve(session("a", { projectId: "project" }), { ...state, projects: [{ ...state.projects[0], environment_type: "ssh" }] }), /unsupported_remote/);
+  assert.throws(() => resolve(session("a", { projectId: "project", worktreeId: "wt" }), { ...state, worktrees: [{ id: "wt", project_id: "foreign", status: "active", path: "/wt" }] }), /worktree_missing/);
+});
+
+test("recovery resolved SSH is rejected before candidate creation or source close", async () => {
+  const f = fixture([session("a", { cwd: "/repo" })], [span("w", "p", "a")], [], [], [], { environmentType: "ssh" });
+  await assert.rejects(f.api.getState().rebuildSession("a"), /unsupported_remote/);
+  assert.equal(f.calls.some(([kind]) => kind === "create" || kind === "close"), false);
+});
+
+test("recovery revalidates project SSH and source incarnation after candidate preparation", async () => {
+  for (const change of ["ssh", "incarnation"]) {
+    const project = { id: "project", path: "/repo" };
+    const f = fixture([session("a", { projectId: project.id, cwd: "/repo", createdAtMs: 1 })], [span("w", "p", "a")], [], [project]);
+    const subscribe = f.dependencies.terminalProcessManager.subscribeStatus;
+    f.dependencies.terminalProcessManager.subscribeStatus = async (...args) => {
+      const result = await subscribe(...args);
+      if (change === "ssh") project.environment_type = "ssh";
+      else f.api.setState({ sessions: [session("a", { cwd: "/new", createdAtMs: 2 })] });
+      return result;
+    };
+    await assert.rejects(f.api.getState().rebuildSession("a"), /unsupported_remote|session_changed/);
+    assert.equal(f.calls.some(([kind, id]) => kind === "close" && id === "a"), false);
+    assert.ok(f.calls.some(([kind, id]) => kind === "close" && id === "recreated"));
+  }
+});
+
+test("recovery ordinary close during source ACK closes replacement even when postcommit persistence fails", async () => {
+  const f = fixture([session("a", { cwd: "/repo", createdAtMs: 1 })], [span("w", "p", "a")]);
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const close = f.dependencies.terminalProcessManager.close;
+  let closeRequested;
+  const ackStarted = new Promise(resolve => { closeRequested = resolve; });
+  f.dependencies.terminalProcessManager.close = async (id, strict) => {
+    if (id === "a") { closeRequested(); await gate; }
+    return close(id, strict);
+  };
+  f.persisted.saveWorkspans = async () => { throw new Error("disk"); };
+  const rebuild = f.api.getState().rebuildSession("a");
+  const rejected = assert.rejects(rebuild, /persistence_failed/);
+  await ackStarted;
+  const closing = f.api.getState().closeSession("a").catch(error => { assert.match(String(error), /disk/); });
+  release();
+  await rejected;
+  await closing;
+  assert.equal(f.api.getState().sessions.length, 0);
+  assert.ok(f.calls.some(([kind, id]) => kind === "close" && id === "recreated"));
+});
+
+test("recovery layout substitution retains empty pane nodes, ratios and other session IDs", () => {
+  const { replaceRecoveryLayoutSession } = load("../lib/terminalRecoveryLayout.ts");
+  const tree = { type: "split", id: "split", ratio: 0.37, direction: "horizontal", first: { type: "leaf", id: "pane", sessionIds: ["a", "b"], activeSessionId: "b" }, second: { type: "leaf", id: "empty", sessionIds: [], activeSessionId: null } };
+  const result = replaceRecoveryLayoutSession([{ id: "w", paneTree: tree, activePaneId: "empty", activeSessionId: "b" }], "a", "new");
+  assert.equal(result[0].paneTree.ratio, 0.37);
+  assert.equal(result[0].activePaneId, "empty");
+  assert.deepEqual(plain(result[0].paneTree.first.sessionIds), ["new", "b"]);
+  assert.deepEqual(plain(result[0].paneTree.second), tree.second);
+});
+
+test("recovery emergency uses normal creation, deduplicates and close still targets source", async () => {
+  const source = session("a", { cwd: "/repo", shell: "powershell", envVars: { CUSTOM: "yes" }, startupCmd: "codex resume old", cliSessionId: "old" });
+  const f = fixture([source], [span("w", "p", "a")]);
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const subscribe = f.dependencies.terminalProcessManager.subscribeStatus;
+  f.dependencies.terminalProcessManager.subscribeStatus = async (...args) => { await gate; return subscribe(...args); };
+  const emergency = f.api.getState().openEmergencyTerminal("a");
+  assert.equal(emergency, f.api.getState().openEmergencyTerminal("a"));
+  await new Promise(resolve => setImmediate(resolve));
+  const closing = f.api.getState().closeSession("a");
+  release();
+  assert.equal(await emergency, "recreated");
+  await closing;
+  assert.deepEqual(plain(f.api.getState().sessions.map(s => s.id)), ["recreated"]);
+  assert.equal(f.api.getState().sessions[0].startupCmd, "");
+  assert.equal(f.api.getState().sessions[0].cliSessionId, undefined);
+  assert.equal(f.calls.some(([kind]) => kind === "write"), false);
+  assert.equal(f.api.getState().activeSessionId, "recreated");
+});
+
+
+test("recovery source removed during close ACK cleans candidate and never resurrects membership", async () => {
+ const f = fixture([session("a", {cwd:"/repo",createdAtMs:1}),session("b")],[span("w","p","a"),span("other","q","b")]);
+ f.persisted.currentWorkSessionIds=["b"];
+ f.dependencies.terminalProcessManager.close=async id=>{
+  f.calls.push(["close",id]);
+  if(id==="a") f.api.setState({sessions:f.api.getState().sessions.filter(s=>s.id!=="a"),workspans:[span("other","q","b")]});
+ };
+ await assert.rejects(f.api.getState().rebuildSession("a"),/session_changed/);
+ assert.deepEqual(plain(f.api.getState().sessions.map(s=>s.id)),["b"]);
+ assert.deepEqual(f.persisted.currentWorkSessionIds,["b"]);
+ assert.ok(f.calls.some(([kind,id])=>kind==="close"&&id==="recreated"));
+});
+
+for (const status of ["exited", "error"]) {
+  for (const cleanupFails of [false, true]) test(`recovery rejects ${status} candidate before source close; cleanup failure=${cleanupFails}`, async () => {
+    const f = fixture([session("a", { cwd: "/repo" })], [span("w", "p", "a")]);
+    f.dependencies.terminalProcessManager.subscribeStatus = async (id, cb) => { cb({ status }); return () => f.calls.push(["unlisten", id]); };
+    f.dependencies.terminalProcessManager.close = async id => { f.calls.push(["close", id]); if (cleanupFails) throw new Error("cleanup"); };
+    await assert.rejects(f.api.getState().rebuildSession("a"), cleanupFails ? /cleanup_failed/ : /candidate_not_ready/);
+    assert.equal(f.calls.some(([kind, id]) => kind === "close" && id === "a"), false);
+    assert.equal(f.api.getState().sessions.some(s => s.id === "a"), true);
+    assert.equal(f.api.getState().sessions.some(s => s.id === "recreated"), cleanupFails);
+    if (cleanupFails) {
+      assert.equal(f.api.getState().sessionStatuses.recreated, status);
+      assert.ok(f.api.getState().statusListeners.recreated);
+      assert.ok(f.api.getState().workspans.some(w => workspan.collectWorkspanSessionIds(w).includes("recreated")));
+    } else assert.ok(f.calls.some(([kind, id]) => kind === "unlisten" && id === "recreated"));
+  });
+  test(`recovery reports ${status} during irreversible source close with committed actual status`, async () => {
+    const f = fixture([session("a", { cwd: "/repo" })], [span("w", "p", "a")]);
+    let callback;
+    f.dependencies.terminalProcessManager.subscribeStatus = async (id, cb) => { callback = cb; return () => {}; };
+    f.dependencies.terminalProcessManager.close = async id => { f.calls.push(["close", id]); if (id === "a") { callback({ status }); await Promise.resolve(); } };
+    await assert.rejects(f.api.getState().rebuildSession("a"), e => e.message === "terminal_recovery_candidate_died_after_close" && e.committedSessionId === "recreated");
+    assert.deepEqual(plain(f.api.getState().sessions.map(s => s.id)), ["recreated"]);
+    assert.equal(f.api.getState().sessionStatuses.recreated, status);
+    assert.ok(f.calls.some(([kind]) => kind === "recoverySnapshot"));
+    assert.equal(f.calls.some(([kind, id]) => kind === "close" && id === "recreated"), false);
+  });
+}
+
+test("general presentation after actual local hide rejects global CW SSH fallback and last scope member", async () => {
+  const presentation = load("../lib/terminalPresentation.ts", visibility);
+  const visibleLayouts = load("../hooks/useTerminalVisibleLayouts.ts", { ...pane, ...workspan, ...visibility, useMemo: (fn) => fn() });
+  const portals = load("../hooks/useCurrentWorkPortalTargets.ts", {
+    ...pane, useMemo: (fn) => fn(), useCallback: (fn) => fn,
+    useState: () => [new Map([["cw-pane", {}]]), () => {}],
+  });
+  const { useTerminalPresentation } = load("../hooks/useTerminalPresentation.ts", {
+    ...pane, ...presentation, ...visibleLayouts, ...portals, useMemo: (fn) => fn(),
+  });
+  const backing = [span("first", "local-pane", "local-shell"), span("second", "ssh-pane", "remote-member"), span("third", "other-pane", "other-shell")];
+  const { api, calls, settled } = fixture([
+    session("local-shell", { environmentType: "local", cliSessionId: "conversation-a" }),
+    session("remote-member", { environmentType: "ssh", connectionState: "disconnected" }),
+    session("other-shell", { environmentType: "wsl" }),
+  ], backing);
+  api.setState({ sessionStatuses: { "remote-member": "exited" } });
+  await api.getState().hideSession("local-shell");
+  await settled();
+  const state = api.getState();
+  assert.equal(state.activeSessionId, "remote-member", "global durable fallback remains permitted");
+  const cw = pane.createPaneLeaf("cw-pane", ["remote-member"], "remote-member");
+  const render = (scope, mode = false) => useTerminalPresentation(state.workspans, state.sessions, scope, state.activeWorkspanId,
+    state.activeSessionId, null, ["remote-member"], mode, cw, "remote-member");
+  assert.equal(render(null).effectiveActiveSessionId, "other-shell");
+  assert.equal(render(new Set(["local-shell"])).effectiveActiveSessionId, null);
+  assert.equal(render(new Set(["local-shell"]), true).currentWorkSessionPortalTargets.size, 0);
+  assert.equal(render(null, true).effectiveActiveSessionId, "remote-member");
+  assert.equal(state.workspans, backing);
+  assert.equal(state.sessions[0].cliSessionId, "conversation-a");
+  assert.equal(state.sessions[1].connectionState, "disconnected");
+  assert.equal(calls.some(([kind]) => ["create", "close", "unlisten"].includes(kind)), false);
 });

@@ -3,7 +3,7 @@ import { queueSessionPersistence } from "./sessionPersistenceBarrier";
 import { Store } from "@tauri-apps/plugin-store";
 import type { TerminalSession, PersistedSplit } from "../../../shared/types/index";
 import type { TerminalPaneNode } from "./terminalPaneTree";
-import { sanitizeCurrentWorkPaneTree } from "../lib/currentWorkModel";
+import { replaceCurrentWorkSession, sanitizeCurrentWorkPaneTree } from "../lib/currentWorkModel";
 import { getCliManagerDataPaths } from "../../../shared/platform/appPaths";
 import { singleFlight } from "../../../shared/lib/singleFlight";
 import {
@@ -29,6 +29,7 @@ interface SessionStore {
   saveActiveSessionId: (id: string | null) => Promise<void>;
   saveWorkspans: (workspans: TerminalWorkspan[], activeWorkspanId: string | null, sessions: TerminalSession[]) => Promise<void>;
   saveCurrentWork: (sessionIds: string[], activeSessionId: string | null, sessions: TerminalSession[], paneTree?: TerminalPaneNode | null) => Promise<void>;
+  replaceCurrentWorkSession: (sourceId: string, replacementId: string) => void;
   clear: () => Promise<void>;
 }
 
@@ -140,8 +141,7 @@ export const useSessionStore = create<SessionStore>(() => ({
     });
   }),
 
-  saveCurrentWork: (sessionIds, activeSessionId, sessions, paneTree) => queueSessionPersistence(async () => {
-    const s = await getStore();
+  saveCurrentWork: (sessionIds, activeSessionId, sessions, paneTree) => {
     const liveSessionIds = new Set(sessions
       .filter((session) => session.kind !== "subagent-transcript"
         && session.kind !== "synced-history"
@@ -166,16 +166,22 @@ export const useSessionStore = create<SessionStore>(() => ({
       runtimeCurrentWorkPaneTree,
       new Set(persistableCurrentWorkSessionIds),
     );
-    await s.set("currentWorkSessionIds", persistableCurrentWorkSessionIds);
-    await s.set("currentWorkActiveSessionId", persistableCurrentWorkActiveSessionId);
-    await s.set("currentWorkPaneTree", persistableCurrentWorkPaneTree);
-    await s.save();
-    useSessionStore.setState({
-      currentWorkSessionIds,
-      currentWorkActiveSessionId,
-      currentWorkPaneTree: runtimeCurrentWorkPaneTree,
+    // Publish user edits before any I/O. A delayed save must never roll runtime back.
+    useSessionStore.setState({ currentWorkSessionIds, currentWorkActiveSessionId, currentWorkPaneTree: runtimeCurrentWorkPaneTree });
+    return queueSessionPersistence(async () => {
+      const s = await getStore();
+      await s.set("currentWorkSessionIds", persistableCurrentWorkSessionIds);
+      await s.set("currentWorkActiveSessionId", persistableCurrentWorkActiveSessionId);
+      await s.set("currentWorkPaneTree", persistableCurrentWorkPaneTree);
+      await s.save();
     });
-  }),
+  },
+
+  replaceCurrentWorkSession: (sourceId, replacementId) => {
+    const current = useSessionStore.getState();
+    const next = replaceCurrentWorkSession({ sessionIds: current.currentWorkSessionIds, activeSessionId: current.currentWorkActiveSessionId, paneTree: current.currentWorkPaneTree }, sourceId, replacementId);
+    useSessionStore.setState({ currentWorkSessionIds: next.sessionIds, currentWorkActiveSessionId: next.activeSessionId, currentWorkPaneTree: next.paneTree });
+  },
 
   clear: () => queueSessionPersistence(async () => {
     const s = await getStore();
@@ -205,13 +211,21 @@ export async function saveRestorableExitSnapshot(snapshot: Pick<SessionStore,
   "sessions" | "splits" | "activeSessionId" | "workspans" | "activeWorkspanId"
   | "currentWorkSessionIds" | "currentWorkActiveSessionId" | "currentWorkPaneTree"
 >): Promise<void> {
-  const s = await getStore();
+  const values = await writeRestorableSnapshot(await getStore(), snapshot);
+  useSessionStore.setState(values);
+}
+
+async function writeRestorableSnapshot(s: Store, snapshot: Pick<SessionStore,
+  "sessions" | "splits" | "activeSessionId" | "workspans" | "activeWorkspanId"
+  | "currentWorkSessionIds" | "currentWorkActiveSessionId" | "currentWorkPaneTree"
+>) {
   const sessions = snapshot.sessions.filter(isPersistableSession);
   const ids = new Set(sessions.map((session) => session.id));
   const workspans = sanitizeTerminalWorkspans(snapshot.workspans, ids);
   const currentWorkSessionIds = snapshot.currentWorkSessionIds.filter((id) => ids.has(id));
   const values = {
-    ...snapshot, sessions, workspans, currentWorkSessionIds,
+    sessions, splits: snapshot.splits, workspans, currentWorkSessionIds,
+    activeWorkspanId: snapshot.activeWorkspanId,
     activeSessionId: snapshot.activeSessionId && ids.has(snapshot.activeSessionId) ? snapshot.activeSessionId : null,
     currentWorkActiveSessionId: snapshot.currentWorkActiveSessionId && ids.has(snapshot.currentWorkActiveSessionId)
       ? snapshot.currentWorkActiveSessionId : currentWorkSessionIds[0] ?? null,
@@ -219,5 +233,23 @@ export async function saveRestorableExitSnapshot(snapshot: Pick<SessionStore,
   };
   for (const [key, value] of Object.entries(values)) await s.set(key, value);
   await s.save();
-  useSessionStore.setState(values);
+  return values;
+}
+
+/** One queued disk transaction, sampled after older writes and async store loading. */
+export function saveRecoverySnapshot(getTerminal: () => Pick<SessionStore,
+  "sessions" | "activeSessionId" | "workspans" | "activeWorkspanId"
+>): Promise<void> {
+  return queueSessionPersistence(async () => {
+    const s = await getStore();
+    const current = useSessionStore.getState();
+    const terminal = getTerminal();
+    await writeRestorableSnapshot(s, {
+      sessions: terminal.sessions, activeSessionId: terminal.activeSessionId,
+      workspans: terminal.workspans, activeWorkspanId: terminal.activeWorkspanId,
+      splits: [], currentWorkSessionIds: current.currentWorkSessionIds,
+      currentWorkActiveSessionId: current.currentWorkActiveSessionId,
+      currentWorkPaneTree: current.currentWorkPaneTree,
+    });
+  });
 }

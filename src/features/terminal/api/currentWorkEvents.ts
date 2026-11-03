@@ -8,6 +8,7 @@ export type CurrentWorkAction =
 
 export interface CurrentWorkTarget {
   sessionId: string;
+  activate?: boolean;
 }
 
 export const CURRENT_WORK_ACTION_EVENT = "cli-manager:current-work-action";
@@ -24,8 +25,14 @@ export function dispatchCurrentWorkTarget(sessionId: string): void {
   }));
 }
 
-export function dispatchCurrentWorkSessionCreated(sessionId: string): void {
+export function dispatchCurrentWorkSessionCreated(sessionId: string, activate = false): void {
   window.dispatchEvent(new CustomEvent<CurrentWorkTarget>(CURRENT_WORK_SESSION_CREATED_EVENT, {
-    detail: { sessionId },
+    detail: { sessionId, activate },
   }));
+}
+
+/** Synchronous notification: runtime membership has already been replaced. */
+export const CURRENT_WORK_SESSION_REPLACED_EVENT = "cli-manager:current-work-session-replaced";
+export function dispatchCurrentWorkSessionReplaced(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(CURRENT_WORK_SESSION_REPLACED_EVENT));
 }

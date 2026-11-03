@@ -1,3 +1,4 @@
+import { terminalRecoveryBindings } from "./terminalRecoveryBindings";
 import { resolveTerminalCreationContext, withoutTerminalTitle } from "../api/terminalCreationContext";
 import { buildAgentTaskNotifications } from "../lib/terminalTaskPresentation";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
@@ -70,7 +71,7 @@ import {
 import { useTerminalPaneAdapter } from "./useTerminalPaneAdapter";
 import { useTerminalToolbarRenderer } from "./useTerminalToolbarRenderer";
 import { useScopedTerminalEmptyState } from "./useScopedTerminalEmptyState";
-import { useTerminalVisibleLayouts } from "./useTerminalVisibleLayouts";
+import { useTerminalPresentation } from "./useTerminalPresentation";
 import { buildWorkspanTabModels } from "../lib/workspanTabModel";
 import { buildGlobalWorktreeBadges } from "../api/terminalWorktreeBadge";
 import { hideProjectTerminalSessions } from "../api/terminalProjectHide";
@@ -80,7 +81,6 @@ import { useTerminalProjectSelection } from "./useTerminalProjectSelection";
 import { useWorkspanTabOverflow } from "./useWorkspanTabOverflow";
 import { useCurrentWorkSessionController } from "./useCurrentWorkSessionController"; import { collectOtherSessionIds } from "../lib/currentWorkModel";
 import { useSshFileEditorCurrentWork } from "./useSshFileEditorCurrentWork";
-import { useCurrentWorkPortalTargets } from "./useCurrentWorkPortalTargets";
 import { createTerminalRecoveryHandlers } from "./terminalRecoveryController";
 export function useTerminalTabsController({
   workspaceVisible = true,
@@ -131,11 +131,6 @@ export function useTerminalTabsController({
     persistedActiveSessionId: persistedCurrentWorkActiveSessionId,
     persistedPaneTree: persistedCurrentWorkPaneTree,
   });
-  const {
-    registerPaneTarget: registerCurrentWorkPaneTarget,
-    sessionPortalTargets: currentWorkSessionPortalTargets,
-    visibleSessionIds: currentWorkVisibleSessionIds,
-  } = useCurrentWorkPortalTargets(currentWorkSessionIds.length > 0 ? currentWorkPaneTree : null);
   const currentWorkReturnRef = useRef<{ workspanId: string | null; sessionId: string | null } | null>(null);
   const createSession = useCallback(async (...args: Parameters<typeof createTerminalSession>) => {
     const sessionId = await createTerminalSession(...args);
@@ -387,12 +382,14 @@ export function useTerminalTabsController({
   const {
     visibleSessionIds, mountedWorkspanLayouts, visibleWorkspanLayouts, effectiveActiveWorkspanId,
     activeWorkspanLayout, visibleSessions, allPanes, activeFullscreenPaneId,
-    preferredScopedSessionId, effectiveActiveSessionId, activeSession,
-  } = useTerminalVisibleLayouts(workspans, sessions, scopedSessionIds, activeWorkspanId, activeSessionId, fullscreenPaneId);
+    preferredScopedSessionId, effectiveActiveSessionId, activeSession, currentWorkSessionPortalTargets,
+    currentWorkVisibleSessionIds, registerCurrentWorkPaneTarget, currentWorkPaneTree: presentationCurrentWorkPaneTree,
+    currentWorkActiveSessionId: presentationCurrentWorkActiveSessionId, currentWorkFullscreenPaneId: presentationCurrentWorkFullscreenPaneId,
+  } = useTerminalPresentation(workspans, sessions, scopedSessionIds, activeWorkspanId, activeSessionId, fullscreenPaneId,
+    currentWorkSessionIds, currentWorkMode, currentWorkPaneTree, currentWorkActiveSessionId, currentWorkFullscreenPaneId);
   // 子 Agent 转录伪会话没有自己的 CLI 会话/项目：实时统计与 Git 面板落到其父终端，
   // 避免聚焦转录 Tab 时面板被清空/错位。
   useEffect(() => {
-    if (!projectScopedTerminalViewEnabled || terminalScopeValue.kind === "all") return;
     const currentActiveSessionId = useTerminalStore.getState().activeSessionId;
     if (currentActiveSessionId && visibleSessionIds.has(currentActiveSessionId)) return;
     if (!preferredScopedSessionId || preferredScopedSessionId === currentActiveSessionId) return;
@@ -802,8 +799,14 @@ export function useTerminalTabsController({
   }, [projectById, saveSessionToSidebar]);
   const recoveryHandlers = useMemo(() => createTerminalRecoveryHandlers({
     t, confirm, sessions, setActive, probeSession, interruptSession,
-    openEmergencyTerminal, rebuildSession, hardKillSession,
-  }), [confirm, hardKillSession, interruptSession, openEmergencyTerminal, probeSession, rebuildSession, sessions, setActive, t]);
+    ...terminalRecoveryBindings,
+    openEmergencyTerminal: async (id) => {
+      const created = await openEmergencyTerminal(id);
+      closeHistory();
+      setActiveWorkspaceTab("terminal");
+      return created;
+    }, rebuildSession, hardKillSession,
+  }), [closeHistory, setActiveWorkspaceTab, confirm, hardKillSession, interruptSession, openEmergencyTerminal, probeSession, rebuildSession, sessions, setActive, t]);
   const handleProbeSession = recoveryHandlers.probe;
   const handleInterruptSession = recoveryHandlers.interrupt;
   const handleOpenEmergencyTerminal = recoveryHandlers.emergency;
@@ -1963,9 +1966,9 @@ export function useTerminalTabsController({
     renderWorkspanLeaf, paneNavigationProps, groups, terminalScopeValue, addCurrentWorkSession, handleActivateSession,
     currentWorkMode,
     currentWorkSessionIds,
-    currentWorkActiveSessionId,
-    currentWorkPaneTree,
-    currentWorkFullscreenPaneId,
+    currentWorkActiveSessionId: presentationCurrentWorkActiveSessionId,
+    currentWorkPaneTree: presentationCurrentWorkPaneTree,
+    currentWorkFullscreenPaneId: presentationCurrentWorkFullscreenPaneId,
     currentWorkSessionPortalTargets,
     activeDropPreview,
     currentWorkVisibleSessionIds,

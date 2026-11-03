@@ -18,6 +18,16 @@ import type { getCurrentTerminalColors } from "../lib/terminalLaunch";
 
 export type SessionStatus = "running" | "exited" | "error";
 
+export interface PreparedTerminalSession {
+  session: TerminalSession;
+  launch: ResolvedPtyLaunch;
+  unlisten: UnlistenFn;
+  publish: () => void;
+  getStatus: () => SessionStatus;
+  activate: () => SessionStatus;
+  releaseReservation: () => void;
+}
+
 export type CliHookSource = "claude" | "codex" | "kimi" | "pi" | "grok" | "opencode";
 
 export type CliHookEventName =
@@ -202,6 +212,7 @@ export interface TerminalStore {
   /** Runtime-only pane focus mode; explicit navigation reconciles it atomically. */
   fullscreenPaneId: string | null;
   setFullscreenPaneId: (id: string | null) => void;
+  recoveryBusy: Record<string, boolean>;
   sessionStatuses: Record<string, SessionStatus>;
   statusListeners: Record<string, UnlistenFn>;
   tabNotifications: Record<string, TabNotificationState>;
@@ -231,6 +242,8 @@ export interface TerminalStore {
       transientBackground?: boolean;
       oneShot?: boolean;
       allowDuplicateWorktree?: boolean;
+      /** Recovery must reject a project that resolves to SSH before PTY creation. */
+      recoveryShell?: boolean;
       providerSnapshot?: TerminalSession["providerSnapshot"];
       extensionSnapshotId?: string | null;
       providerId?: string | null;

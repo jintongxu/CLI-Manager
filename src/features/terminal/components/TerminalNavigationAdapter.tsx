@@ -4,6 +4,7 @@ import { useI18n } from "../../../shared/i18n";
 import { useTerminalStore } from "../state";
 import { useTerminalNavigation } from "../hooks/useTerminalNavigation";
 import { buildTerminalNavigationModel } from "../lib/terminalNavigationModel";
+import { terminalPresentationAllowedIds } from "../lib/terminalPresentation";
 import type { useTerminalTabsController } from "../hooks/useTerminalTabsController";
 import { collectPaneLeaves } from "../api/terminalPaneTree";
 import { PaneTabBar } from "./PaneTabBar";
@@ -28,7 +29,8 @@ export function TerminalNavigationAdapter(props: Props) {
   const sessionStatuses = useTerminalStore((state) => state.sessionStatuses);
   const baseInput = { ...props, sessionStatuses };
   const rawNavigation = useTerminalNavigation(baseInput);
-  const visibleEntries = rawNavigation.entries.filter((entry) => !entry.session.tabHidden && (props.currentWorkMode ? entry.inCurrentWork : !entry.inCurrentWork));
+  const allowedIds = terminalPresentationAllowedIds(props.sessions, new Set(rawNavigation.entries.map((entry) => entry.id)), props.currentWorkSessionIds, props.currentWorkMode);
+  const visibleEntries = rawNavigation.entries.filter((entry) => allowedIds.has(entry.id));
   const visibleIds = new Set(visibleEntries.map((entry) => entry.id));
   const navigation = {
     ...rawNavigation,
@@ -45,6 +47,7 @@ export function TerminalNavigationAdapter(props: Props) {
   const addEntries = allModel.entries.filter((entry) => !entry.session.tabHidden && !entry.inCurrentWork);
   const activationRequestRef = useRef(0);
   const activate = (id: string) => {
+    if (!allowedIds.has(id)) return;
     const target = navigation.resolveActivation(id);
     if (!target) return;
     const request = ++activationRequestRef.current;
@@ -89,7 +92,7 @@ export function TerminalNavigationAdapter(props: Props) {
       {entry.session.worktreeId && (!entry.worktree || entry.worktree.status === "missing") ? " !" : ""}
     </span>}
     renderSessionActions={(entry) => { const pane = panes.find((item) => item.sessionIds.includes(entry.id));
-      return pane ? paneBar(pane, entry.id) : null; }}
+      return paneBar(pane ?? { type: "leaf", id: `navigation-${entry.id}`, sessionIds: [entry.id], activeSessionId: entry.id }, entry.id); }}
     contextLabels={{ unboundProject: t("terminal.context.unboundProject"), anonymousPi: t("terminal.context.anonymousPi"), missingWorktree: t("terminal.context.worktreeMissing"), defaultShell: t("terminal.context.defaultShell") }}
     management={{ entries: navigation.entries, selectedIds: props.selectedIds, onToggleSelection: props.onToggleSelection,
       onRemoveFromCurrentWork: props.onRemove, onRemoveSelected: props.onRemoveSelected, onCloseOthers: props.onCloseOthers,

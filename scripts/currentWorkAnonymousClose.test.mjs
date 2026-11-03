@@ -4,13 +4,14 @@ import {readFileSync} from "node:fs";
 import vm from "node:vm";
 import ts from "typescript";
 
+const listeners = new Map();
 function compile(path, dependencies = {}) {
  const source = readFileSync(new URL(path, import.meta.url), "utf8");
  const code = ts.transpileModule(source, {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022}}).outputText;
  const exports = {};
  vm.runInNewContext(code, {exports, require(name) {
   assert.ok(name in dependencies, `Unexpected dependency: ${name}`); return dependencies[name];
- }, window: {addEventListener() {}, removeEventListener() {}}});
+ }, window: {addEventListener(name, fn) {listeners.set(name, fn);}, removeEventListener(name) {listeners.delete(name);}}});
  return exports;
 }
 const tree = compile("../src/features/terminal/api/terminalPaneTree.ts");
@@ -25,13 +26,15 @@ const react = {
  useEffect(fn, deps) { const i = cursor++; const old = cells[i]; cells[i] = deps;
   if (!old || deps.some((value, n) => value !== old[n])) effects.push(fn); },
 };
-let state, saved, closed, errors;
+let state, saved, closed, errors, persisted;
+const sessionStore = selector => selector({saveCurrentWork});
+sessionStore.getState = () => persisted;
 function saveCurrentWork(...args) {saved.push(args);}
 const {useCurrentWorkSessionController} = compile("../src/features/terminal/hooks/useCurrentWorkSessionController.ts", {
  react,
- "../api/sessionStore": {useSessionStore: selector => selector({saveCurrentWork})},
+ "../api/sessionStore": {useSessionStore: sessionStore},
  "../state": {useTerminalStore: {getState: () => state}},
- "../api/currentWorkEvents": {CURRENT_WORK_SESSION_CREATED_EVENT: "created"},
+ "../api/currentWorkEvents": {CURRENT_WORK_SESSION_CREATED_EVENT: "created", CURRENT_WORK_SESSION_REPLACED_EVENT: "replaced"},
  "../lib/currentWorkModel": model,
  "../api/terminalPaneTree": tree,
  "../../../shared/platform/logger": {logError: (...args) => errors.push(args)},
@@ -129,4 +132,33 @@ test("explicit navigation add works outside current work, is idempotent, and pre
  s.render().setCurrentWorkMode(true);
  s.render().addCurrentWorkSession("pi");
  assert.deepEqual(plain(s.render().currentWorkSessionIds), ["shell", "outside", "pi"]);
+});
+
+
+test("recovery event replaces hook refs synchronously and preserves pane focus for following edits", () => {
+ const layout = {type:"split", id:"split", direction:"horizontal",ratio:0.7,
+  first:{type:"leaf",id:"left",sessionIds:["shell"],activeSessionId:"shell"},
+  second:{type:"leaf",id:"right",sessionIds:["pi"],activeSessionId:"pi"}};
+ const s = setup(["shell","pi"], layout);
+ persisted = {currentWorkSessionIds:["shell","new"],currentWorkActiveSessionId:"shell",
+  currentWorkPaneTree:{...layout,second:{...layout.second,sessionIds:["new"],activeSessionId:"new"}}};
+ listeners.get("replaced")();
+ assert.deepEqual(plain(s.controller.currentWorkSessionIdsRef.current),["shell","new"]);
+ const next=s.render();
+ assert.equal(next.currentWorkActivePaneId,"left");
+ assert.equal(next.currentWorkPaneTree.second.id,"right");
+ assert.equal(next.currentWorkPaneTree.ratio,0.7);
+ next.reorderCurrentWork("new","shell");
+ assert.deepEqual(plain(saved.at(-1)[0]),["new","shell"]);
+});
+
+test("emergency created event adds and activates only in current work mode", () => {
+ const s=setup(["shell"]);
+ listeners.get("created")({detail:{sessionId:"emergency",activate:true}});
+ assert.deepEqual(plain(s.render().currentWorkSessionIds),["shell"]);
+ s.controller.setCurrentWorkMode(true); s.render();
+ listeners.get("created")({detail:{sessionId:"emergency",activate:true}});
+ const next=s.render();
+ assert.deepEqual(plain(next.currentWorkSessionIds),["shell","emergency"]);
+ assert.equal(next.currentWorkActiveSessionId,"emergency");
 });

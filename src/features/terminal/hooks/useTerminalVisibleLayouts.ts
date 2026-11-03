@@ -33,7 +33,7 @@ export function useTerminalVisibleLayouts(
     const renderPaneTree = activeWorkspanLayout?.paneTree ?? null;
     const allPanes = activeWorkspanLayout?.panes ?? [];
     const activeFullscreenPaneId = allPanes.some((pane) => pane.id === fullscreenPaneId) ? fullscreenPaneId : null;
-    const preferredScopedSessionId = activeSessionId && visibleSessionIds.has(activeSessionId)
+    const preferredScopedSessionId = activeSessionId && activeWorkspanLayout?.sessionIds.includes(activeSessionId)
       ? activeSessionId : findFirstSessionId(renderPaneTree);
     const effectiveActiveSessionId = preferredScopedSessionId;
     const activeSession = sessions.find((session) => session.id === effectiveActiveSessionId) ?? null;
