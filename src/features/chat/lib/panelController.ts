@@ -1,5 +1,6 @@
 import type { ChatController, ChatSnapshot } from "./chatController";
 import type { ChatProvider } from "./chatProviderCatalog";
+import type { ReasoningEffort } from "./types";
 
 /** Presentation contract: no transport or window-local request ownership. */
 export type ChatPanelController = Pick<ChatController,
@@ -10,7 +11,7 @@ export type QuickCommand =
   | { op: "select" | "stop"; conversationId: string }
   | { op: "draft"; conversationId: string; text: string }
   | { op: "update"; conversationId: string; providerId: string; model: string }
-  | { op: "generate"; conversationId: string; retry: boolean; reasoning: "off" | "low" | "medium" | "high"; images: readonly string[] };
+  | { op: "generate"; conversationId: string; retry: boolean; reasoning: ReasoningEffort; images: readonly string[] };
 export interface CommandEnvelope { id: string; epoch?: string; seq?: number; command: QuickCommand }
 export interface QuickSnapshot { epoch: string; version: number; state: ChatSnapshot; catalog: readonly ChatProvider[]; language: string; theme: string; lightPalette: string; darkPalette: string }
 export interface QuickAck { id: string; error: string | null }

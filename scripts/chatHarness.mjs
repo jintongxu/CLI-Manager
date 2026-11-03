@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import vm from 'node:vm';
@@ -12,9 +12,9 @@ export function load(path, mocks = {}, globals = {}) {
   const dir = dirname(path);
   const resolveLocal = (name) => {
     if (!name.startsWith('.')) return null;
-    for (const ext of ['', '.ts', '.tsx', '.js', '.mjs']) {
+    for (const ext of ['', '.ts', '.tsx', '.js', '.mjs', '/index.ts', '/index.tsx']) {
       const target = resolve(dir, name + ext).replace(/\\/g, '/');
-      if (existsSync(target)) {
+      if (existsSync(target) && !statSync(target).isDirectory()) {
         return load(target, mocks, globals);
       }
     }

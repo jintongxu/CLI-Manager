@@ -1,0 +1,30 @@
+{
+  "id": "11-03-ssh-file-split-tab-sync",
+  "name": "11-03-ssh-file-split-tab-sync",
+  "title": "当前工作模式下 SSH 远程文件编辑分屏与标签自愈联动",
+  "description": "打开 SSH 远程文件时自动在终端右侧分屏、顶栏标签文件名/脏标记/远程主机名动态自愈展示、文件全关自动销毁面板恢复终端",
+  "status": "completed",
+  "dev_type": "frontend",
+  "scope": "feature",
+  "package": "terminal",
+  "priority": "P2",
+  "creator": "pi",
+  "assignee": "pi",
+  "createdAt": "2026-11-03",
+  "completedAt": "2026-11-03",
+  "branch": "wt/task-1103-1047-b5a117ea9f75",
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "src/features/terminal/hooks/useCurrentWorkSessionController.ts",
+    "src/features/terminal/components/CurrentWorkTabBar.tsx",
+    "src/features/files/hooks/useFileEditorController.ts"
+  ],
+  "notes": "",
+  "meta": {}
+}

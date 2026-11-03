@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { FileText } from "lucide-react";
 import type { Project, TerminalSession, WorktreeRecord } from "../../../shared/types/index";
 import type { TabNotificationState } from "../state";
 import { useI18n } from "../../../shared/i18n";
@@ -10,6 +11,8 @@ import { useSortable, SortableContext, horizontalListSortingStrategy } from "@dn
 import { CSS } from "@dnd-kit/utilities";
 import { CURRENT_WORK_DRAG_PREFIX, CURRENT_WORK_ORDER_DRAG_PREFIX, DND_SORTABLE_TRANSITION } from "../../workspace/api/dragInteraction";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "../../../shared/ui/context-menu";
+import { useFileExplorerStore } from "../../files/api/fileExplorerStore";
+import { useSshHostStore } from "../../remote/api/sshHostStore";
 
 interface CurrentWorkTabBarProps {
   sessions: TerminalSession[];
@@ -63,16 +66,37 @@ function SortableCurrentWorkItem({
   session, active, selected, notification, project, worktree, selectedLabel, removeLabel, renameLabel,
   statusLabels, contextLabels, onActivate, onToggleSelected, onRemove, onRename, orderingOnly,
 }: SortableCurrentWorkItemProps) {
+  const fileTitle = useFileExplorerStore((state) => {
+    if (session.kind !== "file-editor") return null;
+    const workspace = state.project?.id === session.projectId
+      ? state
+      : state.editorWorkspaces.find((w) => w.project.id === session.projectId);
+    if (!workspace) return null;
+    const file = workspace.openFiles.find((item) => item.path === workspace.activeFilePath)
+      ?? workspace.openFiles[0];
+    return file ? `${file.name}${file.content !== file.savedContent ? " *" : ""}` : null;
+  });
+
+  const isFileEditor = session.kind === "file-editor";
+  const displayTitle = fileTitle ?? session.title;
+
+  const isSshProject = project?.environment_type === "ssh";
+  const sshHostName = useSshHostStore((state) =>
+    state.hosts.find((host) => host.id === project?.ssh_host_id)?.name);
+  const sshHostLabel = sshHostName || project?.name || "SSH";
+  const context = isFileEditor && isSshProject
+    ? `SSH: ${sshHostLabel}`
+    : formatTerminalTabContext(session, project, worktree, contextLabels);
+
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `${orderingOnly ? CURRENT_WORK_ORDER_DRAG_PREFIX : CURRENT_WORK_DRAG_PREFIX}${session.id}`,
     data: {
       type: "current-work",
       sessionId: session.id,
-      overlay: { title: session.title, notification },
+      overlay: { title: displayTitle, notification },
     },
     transition: DND_SORTABLE_TRANSITION,
   });
-  const context = formatTerminalTabContext(session, project, worktree, contextLabels);
   const statusLabel = session.tabHidden
     ? statusLabels.hidden
     : session.worktreeId && worktree?.status === "missing"
@@ -120,17 +144,23 @@ function SortableCurrentWorkItem({
         onClick={() => onActivate(session.id)}
         title={`${context}${statusLabel ? ` · ${statusLabel}` : ""}\n${hover.path}`}
       >
-        <span className="inline-flex min-w-0 items-center gap-1">
-          {statusLabel ? <span className="ui-workspan-status-failed" title={statusLabel}>!</span> : notification === "running" ? <span className="ui-workspan-status-running">●</span> : null}
-          <span className="truncate">{session.title}</span>
+        <span className="inline-flex min-w-0 items-center gap-1.5">
+          {isFileEditor ? (
+            <FileText size={12} className="shrink-0 opacity-70" aria-hidden="true" />
+          ) : (
+            <>
+              {statusLabel ? <span className="ui-workspan-status-failed" title={statusLabel}>!</span> : notification === "running" ? <span className="ui-workspan-status-running">●</span> : null}
+            </>
+          )}
+          <span className="truncate">{displayTitle}</span>
         </span>
         <span className="ui-current-work-tab-context max-w-56 truncate text-[10px] opacity-65">{context}</span>
       </button>
       {!orderingOnly && <button
         type="button"
         className="ui-current-work-remove ui-focus-ring inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md opacity-70 hover:opacity-100"
-        aria-label={removeLabel(session.title)}
-        title={removeLabel(session.title)}
+        aria-label={removeLabel(displayTitle)}
+        title={removeLabel(displayTitle)}
         onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => { event.stopPropagation(); onRemove(session.id); }}
       >

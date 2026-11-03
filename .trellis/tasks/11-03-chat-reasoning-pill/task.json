@@ -1,0 +1,32 @@
+{
+  "id": "11-03-chat-reasoning-pill",
+  "name": "11-03-chat-reasoning-pill",
+  "title": "侧栏伴随式 AI 对话「思考/推理强度」控件重构",
+  "description": "胶囊控件外观（Brain 图标 + 思考前缀 + 档位 + 下拉箭头）、Radix 下拉层、高亮激活态与全键盘支持",
+  "status": "completed",
+  "dev_type": "frontend",
+  "scope": "feature",
+  "package": "chat",
+  "priority": "P2",
+  "creator": "pi",
+  "assignee": "pi",
+  "createdAt": "2026-11-03",
+  "completedAt": "2026-11-03",
+  "branch": "wt/task-1103-1047-b5a117ea9f75",
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "src/features/chat/components/ChatPanelSurface.tsx",
+    "src/features/chat/components/ChatReasoningPill.tsx",
+    "src/features/chat/components/chatPanel.css",
+    "src/shared/i18n/messages/chat.zh-CN.ts",
+    "src/shared/i18n/messages/chat.en-US.ts"
+  ],
+  "notes": "",
+  "meta": {}
+}

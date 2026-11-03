@@ -215,7 +215,16 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
     onClose();
   };
 
-  const closeFiles = (paths: string[]) => paths.forEach(closeFile);
+  const closeFiles = (paths: string[]) => {
+    const remainingCount = visibleFiles.filter((file) => !paths.includes(file.path)).length;
+    const hasDiffTabs = diffWorkspace.tabs.length > 0;
+    paths.forEach(closeFile);
+    if (remainingCount === 0 && !hasDiffTabs) {
+      onClose();
+      return true;
+    }
+    return false;
+  };
   const requestCloseFiles = (paths: string[]) => {
     const targetFiles = visibleFiles.filter((file) => paths.includes(file.path));
     if (targetFiles.length === 0) return;
@@ -232,8 +241,8 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
     if (!pendingAction) return;
     const { closePane, paths } = pendingAction;
     setPendingAction(null);
-    closeFiles(paths);
-    if (closePane) onClose();
+    const closed = closeFiles(paths);
+    if (closePane && !closed) onClose();
   };
 
   const saveAndRun = async () => {
@@ -241,9 +250,9 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
     try {
       const { closePane, dirtyPaths, paths } = pendingAction;
       for (const path of dirtyPaths) await saveFile(path);
-      closeFiles(paths);
+      const closed = closeFiles(paths);
       setPendingAction(null);
-      if (closePane) onClose();
+      if (closePane && !closed) onClose();
     } catch {
       // 保存失败时保持确认框和未保存文件不变。
     }

@@ -172,13 +172,58 @@ export function useCurrentWorkSessionController({
     const next = appendCurrentWorkSession(sessionIdsRef.current, activeSessionIdRef.current, sessionId);
     updateMembership(next.sessionIds, next.activeSessionId);
   }, [cancelAnonymousClose, removeSessions, updateMembership]);
+  const splitSessionToEdge = useCallback((sessionId: string, targetPaneId: string, edge: TerminalPaneDropEdge) => {
+    const result = splitExistingSessionToPaneEdge(paneTreeRef.current, sessionId, targetPaneId, edge, createCurrentWorkLayoutId);
+    if (!result.changed) return false;
+    commitLayout(result.tree, result.activePaneId);
+    activeSessionIdRef.current = result.activeSessionId;
+    setActiveSessionId(result.activeSessionId);
+    if (result.activeSessionId) useTerminalStore.getState().setActive(result.activeSessionId);
+    persist(sessionIdsRef.current, result.activeSessionId);
+    return true;
+  }, [commitLayout, persist]);
   useEffect(() => {
     const handleSessionCreated = (event: Event) => {
-      addSession((event as CustomEvent<CurrentWorkTarget>).detail.sessionId);
+      const { sessionId } = (event as CustomEvent<CurrentWorkTarget>).detail;
+      const targetSession = useTerminalStore.getState().sessions.find((s) => s.id === sessionId);
+      const isSshFileEditor = Boolean(
+        targetSession &&
+        targetSession.kind === "file-editor" &&
+        targetSession.fileEditor?.project?.environment_type === "ssh"
+      );
+
+      if (currentWorkMode && isSshFileEditor) {
+        const targetPaneId = activePaneIdRef.current;
+        const currentActiveSession = useTerminalStore.getState().sessions.find((s) => s.id === activeSessionIdRef.current);
+        const isCurrentActiveSsh = Boolean(
+          currentActiveSession &&
+          currentActiveSession.kind !== "file-editor" &&
+          currentActiveSession.environmentType === "ssh"
+        );
+
+        if (targetPaneId && isCurrentActiveSsh) {
+          if (!sessionIdsRef.current.includes(sessionId)) {
+            cancelAnonymousClose(sessionId);
+            const next = appendCurrentWorkSession(sessionIdsRef.current, activeSessionIdRef.current, sessionId);
+            updateMembership(next.sessionIds, next.activeSessionId);
+            splitSessionToEdge(sessionId, targetPaneId, "right");
+            return;
+          }
+          const existingPane = findPaneLeafBySession(paneTreeRef.current, sessionId);
+          if (existingPane && existingPane.id === targetPaneId) {
+            splitSessionToEdge(sessionId, targetPaneId, "right");
+            return;
+          }
+          activateSession(sessionId);
+          return;
+        }
+      }
+
+      addSession(sessionId);
     };
     window.addEventListener(CURRENT_WORK_SESSION_CREATED_EVENT, handleSessionCreated);
     return () => window.removeEventListener(CURRENT_WORK_SESSION_CREATED_EVENT, handleSessionCreated);
-  }, [addSession]);
+  }, [activateSession, addSession, cancelAnonymousClose, currentWorkMode, splitSessionToEdge, updateMembership]);
   const reorder = useCallback((fromId: string, toId: string) => {
     const nextIds = [...sessionIdsRef.current];
     const fromIndex = nextIds.indexOf(fromId);
@@ -190,16 +235,6 @@ export function useCurrentWorkSessionController({
     setSessionIds(nextIds);
     persist(nextIds, activeSessionIdRef.current);
   }, [persist]);
-  const splitSessionToEdge = useCallback((sessionId: string, targetPaneId: string, edge: TerminalPaneDropEdge) => {
-    const result = splitExistingSessionToPaneEdge(paneTreeRef.current, sessionId, targetPaneId, edge, createCurrentWorkLayoutId);
-    if (!result.changed) return false;
-    commitLayout(result.tree, result.activePaneId);
-    activeSessionIdRef.current = result.activeSessionId;
-    setActiveSessionId(result.activeSessionId);
-    if (result.activeSessionId) useTerminalStore.getState().setActive(result.activeSessionId);
-    persist(sessionIdsRef.current, result.activeSessionId);
-    return true;
-  }, [commitLayout, persist]);
   const moveSession = useCallback((sessionId: string, targetPaneId: string) => {
     const sourcePane = findPaneLeafBySession(paneTreeRef.current, sessionId);
     if (!sourcePane || sourcePane.id === targetPaneId) return false;

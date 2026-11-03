@@ -324,11 +324,14 @@ pub struct Request {
 }
 
 /// Anthropic budgets thinking tokens instead of naming an effort level.
+/// Levels mirror the shared reasoning scale; `minimal` collapses onto the API minimum.
 fn thinking_budget(level: &str) -> Option<u32> {
     match level {
-        "low" => Some(1024),
+        "minimal" | "low" => Some(1024),
         "medium" => Some(2048),
         "high" => Some(4096),
+        "xhigh" => Some(8192),
+        "max" => Some(16384),
         _ => None,
     }
 }
@@ -408,7 +411,7 @@ pub fn body(
     let messages: Vec<Value> = messages_with_images(protocol, history, images);
     let effort = reasoning
         .map(str::trim)
-        .filter(|level| matches!(*level, "minimal" | "low" | "medium" | "high"));
+        .filter(|level| matches!(*level, "minimal" | "low" | "medium" | "high" | "xhigh" | "max"));
     let mut payload = match protocol {
         Protocol::Messages => {
             json!({"model":model,"messages":messages,"stream":true,"max_tokens":8192})

@@ -7,17 +7,17 @@ function store() {
   return { map, getItem: k => (map.has(k) ? map.get(k) : null), setItem: (k, v) => map.set(k, String(v)), removeItem: k => map.delete(k), clear: () => map.clear() };
 }
 
-test('reasoning effort defaults to medium while explicit off is retained per conversation', () => {
+test('reasoning defaults to medium and legacy low/off choices resolve to the new medium floor', () => {
   const shim = store();
   const mod = load('src/features/chat/lib/reasoning.ts', {}, { localStorage: shim });
   assert.equal(mod.readReasoning('c1'), 'medium');
   mod.persistReasoning('c1', 'high');
   mod.persistReasoning('c2', 'low');
   assert.equal(mod.readReasoning('c1'), 'high');
-  assert.equal(mod.readReasoning('c2'), 'low');
+  assert.equal(mod.readReasoning('c2'), 'medium');
   assert.equal(mod.readReasoning('c3'), 'medium');
   mod.persistReasoning('c1', 'off');
-  assert.equal(mod.readReasoning('c1'), 'off');
+  assert.equal(mod.readReasoning('c1'), 'medium');
   assert.deepEqual(JSON.parse(shim.getItem(mod.CHAT_REASONING_STORAGE_KEY)), { c1: 'off', c2: 'low' });
   shim.setItem(mod.CHAT_REASONING_STORAGE_KEY, JSON.stringify({ c4: 'turbo' }));
   assert.equal(mod.readReasoning('c4'), 'medium');

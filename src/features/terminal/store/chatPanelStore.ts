@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ReasoningEffort } from "../../chat/api/chatReasoning";
+import { DEFAULT_REASONING_EFFORT, type ReasoningEffort } from "../../chat/api/chatReasoning";
 
 /** Panel chrome state only; conversation data stays in the chat controller. */
 export type ChatPanelMode = "dock" | "float";
@@ -23,7 +23,7 @@ export const useChatPanelStore = create<ChatPanelState>((set) => ({
   mode: "dock",
   floatOpen: false,
   attachedSelection: "",
-  reasoningEffort: "medium",
+  reasoningEffort: DEFAULT_REASONING_EFFORT,
   floatPosition: null,
   setMode: (mode) => set({ mode }),
   setFloatOpen: (floatOpen) => set({ floatOpen }),

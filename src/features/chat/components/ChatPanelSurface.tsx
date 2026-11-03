@@ -2,14 +2,9 @@ import { useEffect, useState, useSyncExternalStore, type KeyboardEvent as ReactK
 import { Maximize2, MessageSquare, Pin, Plus, X } from "lucide-react";
 import { useI18n, type TranslationKey } from "../../../shared/i18n/index";
 import { Select } from "../../../shared/ui/select";
-import { REASONING_EFFORT_OPTIONS, type ReasoningEffort } from "../api/chatReasoning";
-
-const REASONING_LABELS: Record<ReasoningEffort, TranslationKey> = {
-  off: "chat.panel.reasoningDefault",
-  low: "chat.panel.reasoningLow",
-  medium: "chat.panel.reasoningMedium",
-  high: "chat.panel.reasoningHigh",
-};
+import type { ReasoningEffort } from "../api/chatReasoning";
+import { normalizeReasoningFor } from "../lib/reasoningCapabilities";
+import { ChatReasoningPill } from "./ChatReasoningPill";
 import type { ChatPanelController } from "../lib/panelController";
 import { defaultCatalogModel, type ChatProvider } from "../lib/chatProviderCatalog";
 import { panelTitle } from "../lib/chatPanelActions";
@@ -77,21 +72,23 @@ export function ChatPanelSurface({
 
   const report = (error: unknown) => controller.report(error);
 
-  const reasoningControl = <div className="chat-panel-reasoning">
-    <Select
-      aria-label={t("chat.panel.reasoning")}
-      unstyled
-      showChevron={false}
-      className="chat-panel-reasoning-select w-auto"
-      contentClassName="min-w-[110px] py-1 text-[11px]"
-      value={reasoningEffort}
-      onChange={(event) => onReasoningEffortChange(event.target.value as ReasoningEffort)}
-    >
-      {REASONING_EFFORT_OPTIONS.map((option) => <option key={option} value={option}>
-        {t(REASONING_LABELS[option])}
-      </option>)}
-    </Select>
-  </div>;
+  // The upstream protocol decides which levels exist (enum vs token budget) and the
+  // model decides which enum values it accepts, so the control follows the selection.
+  const activeProvider = conversation
+    ? catalog.find((provider) => provider.id === conversation.providerId)
+    : undefined;
+  const reasoningProtocol = activeProvider?.protocol ?? null;
+  const reasoningModel = conversation?.model ?? null;
+  const effectiveReasoning = normalizeReasoningFor(reasoningProtocol, reasoningModel, reasoningEffort);
+
+  const reasoningControl = (
+    <ChatReasoningPill
+      value={effectiveReasoning}
+      protocol={reasoningProtocol}
+      modelId={reasoningModel}
+      onChange={onReasoningEffortChange}
+    />
+  );
 
   const act = (action: () => Promise<unknown>) => {
     void action().catch(report);
@@ -177,7 +174,7 @@ export function ChatPanelSurface({
       conversationId={selected}
       copiedId={copiedId}
       onCopied={setCopiedId}
-      onRetry={() => { if (selected) act(() => controller.generate(selected, true, reasoningEffort)); }}
+      onRetry={() => { if (selected) act(() => controller.generate(selected, true, effectiveReasoning)); }}
       report={report}
     />
 
@@ -202,7 +199,7 @@ export function ChatPanelSurface({
             break;
           case "wait":
             if (selected) {
-              act(() => controller.generate(selected, true, reasoningEffort));
+              act(() => controller.generate(selected, true, effectiveReasoning));
             }
             break;
         }
@@ -230,7 +227,7 @@ export function ChatPanelSurface({
       running={running}
       suspended={state.suspended}
       reasoningControl={reasoningControl}
-      reasoningEffort={reasoningEffort}
+      reasoningEffort={effectiveReasoning}
       images={images}
       onImagesChange={setImages}
       onAttachSelection={onAttachSelectionChange}

@@ -139,9 +139,12 @@ pub enum Command {
 #[serde(rename_all = "lowercase")]
 pub enum Reasoning {
     Off,
+    Minimal,
     Low,
     Medium,
     High,
+    Xhigh,
+    Max,
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -324,6 +327,10 @@ mod tests {
         )
         .is_err());
         assert!(serde_json::from_str::<Reasoning>(r#""extreme""#).is_err());
+        // The extended scale must survive the narrow command envelope verbatim.
+        for level in ["off", "minimal", "low", "medium", "high", "xhigh", "max"] {
+            assert!(serde_json::from_str::<Reasoning>(&format!("\"{level}\"")).is_ok());
+        }
         assert!(serde_json::from_str::<Envelope>(
             r#"{"id":"a","command":{"op":"draft","conversationId":"c","text":"hello"}}"#
         )
