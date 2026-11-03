@@ -21,6 +21,7 @@ export const SETTING_BACKUP_POLICY = {
   uiFontSize: "preferences",
   uiTextColor: "preferences",
   lastSettingsTab: "excluded",
+  chatDefaultModel: "preferences",
   translatorModelKey: "preferences",
   translatorPrompt: "preferences",
   translatorGlobalShortcuts: "preferences",

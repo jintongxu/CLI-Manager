@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
-import { invoke } from "@tauri-apps/api/core";
+import { useConversationDefaultModel } from "../hooks/useConversationDefaultModel";
 import {
   ArrowUp,
   Bot,
@@ -34,21 +34,6 @@ import { HistorySelection } from "../lib/historySelection";
 import { HistorySelectionControls } from "../components/HistorySelectionControls";
 import type { ReasoningEffort } from "../lib/types";
 import { diagnoseChatError } from "../lib/chatErrors";
-
-interface CatalogModel {
-  modelId: string;
-  enabled: boolean;
-  isDefault: boolean;
-}
-interface CatalogProvider {
-  id: string;
-  name: string;
-  baseUrl: string;
-  protocol: string;
-  enabled: boolean;
-  isDefault: boolean;
-  models: CatalogModel[];
-}
 
 interface AttachedFile {
   id: string;
@@ -107,7 +92,7 @@ export function ChatWorkspace({
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [outlineHovered, setOutlineHovered] = useState(false);
   const outlineDismissed = useRef(false);
-  const [catalogProviders, setCatalogProviders] = useState<CatalogProvider[]>([]);
+  const { catalog: catalogProviders, ready: catalogReady, reloadCatalog } = useConversationDefaultModel(controller);
 
   // Kivio custom dropdown & context menu states
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
@@ -204,20 +189,6 @@ export function ChatWorkspace({
   const foreign = !!c?.requestId && !running && (c.leaseUntil ?? 0) > Date.now();
   const frozen = state.suspended || foreign;
 
-  // Load chat models from independent chat provider catalog
-  const reloadCatalog = async () => {
-    try {
-      const providers = await invoke<CatalogProvider[]>("chat_provider_catalog_list");
-      setCatalogProviders(providers || []);
-    } catch {
-      setCatalogProviders([]);
-    }
-  };
-
-  useEffect(() => {
-    void reloadCatalog();
-  }, []);
-
   // Close menus on document click
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
@@ -247,7 +218,7 @@ export function ChatWorkspace({
       for (const m of p.models) {
         if (!m.enabled) continue;
         list.push({
-          key: `chat:${p.id}:${m.modelId}`,
+          key: JSON.stringify(["chat", p.id, m.modelId]),
           providerId: p.id,
           providerName: p.name || p.id,
           modelId: m.modelId,
@@ -265,7 +236,6 @@ export function ChatWorkspace({
       chatModelOptions.find(
         (m) => m.providerId === c.providerId && m.modelId === c.model
       ) ||
-      chatModelOptions.find((m) => m.modelId === c.model) ||
       null
     );
   }, [c?.providerId, c?.model, chatModelOptions]);
@@ -282,19 +252,6 @@ export function ChatWorkspace({
   useEffect(() => {
     if (!reasoningLevels.includes(reasoning)) setReasoning(DEFAULT_REASONING_EFFORT);
   }, [reasoning, reasoningLevels]);
-
-  // Auto-bind default model if current conversation has none
-  useEffect(() => {
-    if (!c || c.model || !chatModelOptions.length) return;
-    const defaultOpt = chatModelOptions.find((m) => m.isDefault) || chatModelOptions[0];
-    if (defaultOpt) {
-      void controller.update(c.id, {
-        appType: "chat",
-        providerId: defaultOpt.providerId,
-        model: defaultOpt.modelId,
-      });
-    }
-  }, [c?.id, c?.model, chatModelOptions, controller]);
 
   // Reorder conversations if user has dragged
   const sortedConversations = useMemo(
@@ -1040,7 +997,7 @@ export function ChatWorkspace({
                             </button>
                           );
                         })
-                      ) : state.providers.length > 0 ? (
+                      ) : catalogReady && state.providers.length > 0 ? (
                         state.providers.map((p) => (
                           <button
                             key={`${p.appType}:${p.providerId}`}

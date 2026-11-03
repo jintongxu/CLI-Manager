@@ -1,4 +1,11 @@
 export const zh = {
+  "terminal.resources.delete": "删除终端",
+  "terminal.resources.deleteLabel": "删除终端：{title}",
+  "terminal.resources.deleteTitle": "删除终端？",
+  "terminal.resources.deleteConfirm": "结束终端“{title}”（{id}）并移除会话（包括隐藏标签与分屏）？运行中的任务将停止。不会删除历史记录或项目文件。",
+  "terminal.resources.deleting": "正在删除…",
+  "terminal.resources.deleteChanged": "目标终端已消失或身份发生变化，未执行删除；请重新选择当前终端。",
+  "terminal.resources.deleteFailed": "关闭终端失败，已保留会话，请重试。",
   "terminal.resources.title": "终端资源",
   "terminal.resources.tabs": "资源视图",
   "terminal.resources.systemTab": "系统",

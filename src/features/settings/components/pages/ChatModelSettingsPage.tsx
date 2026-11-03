@@ -20,6 +20,8 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { Eye, EyeOff, ListFilter, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { useI18n } from "../../../../shared/i18n/index";
+import { useSettingsStore } from "../../../../shared/preferences/settingsStore";
+import { defaultCatalogModel } from "../../../chat/api/chatProviderCatalog";
 
 type Model = { modelId: string; enabled: boolean; isDefault: boolean };
 type Provider = {
@@ -104,6 +106,12 @@ function deriveId(name: string, fallbackSuffix = ""): string {
 
 export function ChatModelSettingsPage() {
   const { t } = useI18n();
+  const preference = useSettingsStore((state) => state.chatDefaultModel);
+  const settingsLoaded = useSettingsStore((state) => state.loaded);
+  const updateSetting = useSettingsStore((state) => state.update);
+  const [defaultSaving, setDefaultSaving] = useState(false);
+  const [defaultSaveError, setDefaultSaveError] = useState(false);
+  const [catalogState, setCatalogState] = useState<"loading" | "ready" | "error">("loading");
   const [items, setItems] = useState<Provider[]>([]);
   const [selected, setSelected] = useState("");
   const [isNew, setIsNew] = useState(false);
@@ -128,7 +136,14 @@ export function ChatModelSettingsPage() {
   const selectedProvider = items.find((item) => item.id === selected);
 
   const reload = async (preferredId = selected) => {
-    const next = await invoke<Provider[]>("chat_provider_catalog_list");
+    let next: Provider[];
+    try {
+      next = await invoke<Provider[]>("chat_provider_catalog_list") ?? [];
+      setCatalogState("ready");
+    } catch (error) {
+      setCatalogState("error");
+      throw error;
+    }
     setItems(next);
     if (next.some((item) => item.id === preferredId)) return;
     if (next[0]) {
@@ -338,6 +353,36 @@ export function ChatModelSettingsPage() {
     const q = modelSearch.toLowerCase();
     return remoteModels.filter((m) => m.toLowerCase().includes(q));
   }, [remoteModels, modelSearch]);
+
+  // JSON tuples avoid collisions when provider/model IDs contain separators.
+  const identityKey = (value: { providerId: string; model: string }) => JSON.stringify([value.providerId, value.model]);
+  const defaultOptions = items.filter((provider) => provider.enabled).flatMap((provider) =>
+    provider.models.filter((item) => item.enabled).map((item) => ({
+      value: identityKey({ providerId: provider.id, model: item.modelId }),
+      label: `${provider.name || provider.id} · ${item.modelId}`,
+    })),
+  );
+  const savedKey = preference ? identityKey(preference) : "catalog";
+  const preferenceUnavailable = !!preference && !defaultOptions.some((item) => item.value === savedKey);
+  const effectiveDefault = catalogState === "ready" ? defaultCatalogModel(items, preference, "workspace") : null;
+  const effectiveProvider = items.find((item) => item.id === effectiveDefault?.providerId);
+  const saveDefault = async (value: string | null) => {
+    if (!value || defaultSaving) return;
+    setDefaultSaving(true);
+    setDefaultSaveError(false);
+    try {
+      if (value === "catalog") {
+        await updateSetting("chatDefaultModel", null);
+      } else {
+        const [providerId, model] = JSON.parse(value) as [string, string];
+        await updateSetting("chatDefaultModel", { providerId, model });
+      }
+    } catch {
+      setDefaultSaveError(true);
+    } finally {
+      setDefaultSaving(false);
+    }
+  };
 
   const initial = (draft.name || draft.id || "?").trim().charAt(0).toUpperCase() || "?";
   const statusKey =
@@ -702,6 +747,34 @@ export function ChatModelSettingsPage() {
           {t("settings.tabs.chatModels.description")}
         </Text>
       </Box>
+      <Card padding="md" radius="md" className="border border-border/60 bg-surface-container-lowest">
+        <Stack gap="xs">
+          <Select
+            label={t("settings.chatModels.conversationDefault")}
+            description={t("settings.chatModels.conversationDefaultHint")}
+            value={savedKey}
+            data={[
+              { value: "catalog", label: t("settings.chatModels.followCatalog") },
+              ...defaultOptions,
+              ...(preferenceUnavailable ? [{ value: savedKey, label: `${preference!.providerId} · ${preference!.model} (${t("settings.chatModels.savedUnavailable")})`, disabled: true }] : []),
+            ]}
+            disabled={!settingsLoaded || defaultSaving || catalogState !== "ready"}
+            allowDeselect={false}
+            searchable
+            comboboxProps={comboboxProps}
+            onChange={(value) => void saveDefault(value)}
+          />
+          <Text size="sm" role="status">
+            {catalogState === "loading" ? t("settings.chatModels.catalogLoading")
+              : catalogState === "error" ? t("settings.chatModels.loadError")
+              : effectiveDefault ? t(preferenceUnavailable ? "settings.chatModels.defaultFallback" : "settings.chatModels.defaultEffective", {
+                model: `${effectiveProvider?.name || effectiveDefault.providerId} · ${effectiveDefault.model}`,
+              }) : t("settings.chatModels.noEnabledModels")}
+          </Text>
+          {catalogState === "error" && <Button variant="subtle" onClick={() => void reload().catch(() => {})}>{t("settings.chatModels.retryCatalog")}</Button>}
+          {defaultSaveError && <Text c="red" role="alert">{t("settings.chatModels.defaultSaveError")}</Text>}
+        </Stack>
+      </Card>
       <Card padding={0} radius="md" className="border border-border/60 bg-surface-container-lowest" style={{ overflow: "hidden" }}>
         <Group align="stretch" gap={0} wrap="nowrap" mih={620}>
           <Stack gap="sm" p="md" w={260} miw={220} className="border-r border-border/50 bg-surface-container-low/50">

@@ -205,7 +205,7 @@ test("actual hook gates document/panel visibility and drops pending native resul
   f.dispose();
 });
 
-test("bilingual copy covers all reasons and explains page-local/shared-page semantics; no kill control", () => {
+test("bilingual copy covers all reasons and explains page-local/shared-page semantics; deletion uses guarded store close", () => {
   const load = loader();
   const zh = load("../../shared/i18n/messages/terminal.zh-CN.ts").zh;
   const en = load("../../shared/i18n/messages/terminal.en-US.ts").en;
@@ -216,7 +216,9 @@ test("bilingual copy covers all reasons and explains page-local/shared-page sema
   assert.match(en["terminal.resources.pageSort"], /Not a global ranking/);
   const panel = readFileSync(resolve(root, "components/TerminalResourcesPanel.tsx"), "utf8");
   assert.match(panel, /hour12: false/);
-  assert.doesNotMatch(panel, /hardKill|closeSession|interruptSession|envVars|startupCmd/);
+  assert.doesNotMatch(panel, /hardKill|interruptSession|envVars|startupCmd/);
+  assert.match(panel, /createTerminalResourceDeletion/);
+  assert.match(panel, /useTerminalStore.getState\(\).closeSession\(id, strict\)/);
 });
 
 test("actual SystemResourcesPanel defaults to System and pauses its collector while Terminals is selected", () => {

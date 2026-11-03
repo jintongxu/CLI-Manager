@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { load, fixture, tick, deferred } from './chatHarness.mjs';
 const contract = load('src/features/chat/lib/panelController.ts');
+const { defaultCatalogModel } = load('src/features/chat/lib/chatProviderCatalog.ts', { '@tauri-apps/api/core': {} });
 
 test('selected snapshot excludes other message histories, drafts and provider options', async () => {
   const f = fixture(); await f.controller.start(); await f.controller.select('c2');
@@ -120,11 +121,11 @@ test('main owner executes remote intents once and publishes only projected catal
   let channel; let navigations = 0; const publications = [];
   class Channel { constructor() { channel = this; } }
   const invoke = async (name, args) => { if (name === 'quick_chat_publish') publications.push(args); };
-  const settings = { getState: () => ({ language: 'en-US', resolvedTheme: 'dark' }), subscribe: () => () => {} };
+  const settings = { getState: () => ({ loaded: true, language: 'en-US', resolvedTheme: 'dark' }), subscribe: () => () => {} };
   const { startQuickChatOwner } = load('src/features/chat/api/quickChatOwner.ts', {
     '@tauri-apps/api/core': { Channel, invoke }, './lifecycle': { chatController: f.controller },
     '../lib/panelController': contract,
-    '../lib/chatProviderCatalog': { loadChatProviderCatalog: async () => [{ id: 'p', name: 'P', baseUrl: 'secret-url', credential: 'secret',
+    '../lib/chatProviderCatalog': { defaultCatalogModel, loadChatProviderCatalog: async () => [{ id: 'p', name: 'P', baseUrl: 'secret-url', credential: 'secret',
       enabled: true, isDefault: true, protocol: 'chat', models: [{ modelId: 'm', enabled: true, isDefault: true, credential: 'secret' }] }] },
     '../../../shared/preferences/settingsStore': { useSettingsStore: settings },
     '../../../shared/preferences/quickChatSettings': { useQuickChatSettings: { getState: () => ({ load: async () => {} }) } },
@@ -237,11 +238,11 @@ test('quick selection cannot be overwritten by an older load racing explicit new
   f.rows.get('c2').conversation.origin = 'quick-chat';
   let channel; const publications = [];
   class Channel { constructor() { channel = this; } }
-  const settings = { getState: () => ({}), subscribe: () => () => {} };
+  const settings = { getState: () => ({ loaded: true }), subscribe: () => () => {} };
   const { startQuickChatOwner } = load('src/features/chat/api/quickChatOwner.ts', {
     '@tauri-apps/api/core': { Channel, invoke: async (name, args) => { if (name === 'quick_chat_publish') publications.push(args); } },
     './lifecycle': { chatController: f.controller }, '../lib/panelController': contract,
-    '../lib/chatProviderCatalog': { loadChatProviderCatalog: async () => [] },
+    '../lib/chatProviderCatalog': { defaultCatalogModel, loadChatProviderCatalog: async () => [] },
     '../../../shared/preferences/settingsStore': { useSettingsStore: settings },
     '../../../shared/preferences/quickChatSettings': { useQuickChatSettings: { getState: () => ({ load: async () => {} }) } },
   }, { crypto: { randomUUID: () => 'epoch' } });
@@ -289,8 +290,8 @@ test('failed deleted-chat recovery publishes error and a later hello successfull
   const { startQuickChatOwner } = load('src/features/chat/api/quickChatOwner.ts', {
     '@tauri-apps/api/core': { Channel, invoke: async (name, args) => { if (name === 'quick_chat_publish') publications.push(args); } },
     './lifecycle': { chatController: f.controller }, '../lib/panelController': contract,
-    '../lib/chatProviderCatalog': { loadChatProviderCatalog: async () => [] },
-    '../../../shared/preferences/settingsStore': { useSettingsStore: { getState: () => ({}), subscribe: () => () => {} } },
+    '../lib/chatProviderCatalog': { defaultCatalogModel, loadChatProviderCatalog: async () => [] },
+    '../../../shared/preferences/settingsStore': { useSettingsStore: { getState: () => ({ loaded: true }), subscribe: () => () => {} } },
     '../../../shared/preferences/quickChatSettings': { useQuickChatSettings: { getState: () => ({ load: async () => {} }) } },
   }, { crypto: { randomUUID: () => 'recover-failure-epoch' } });
   await startQuickChatOwner(() => {});
@@ -318,8 +319,8 @@ test('quick hello after DB failure never loads catalog, creates conversation or 
   const { startQuickChatOwner } = load('src/features/chat/api/quickChatOwner.ts', {
     '@tauri-apps/api/core': { Channel, invoke: async (name,args) => { if (name === 'quick_chat_publish') publications.push(args); } },
     './lifecycle': { chatController: f.controller }, '../lib/panelController': contract,
-    '../lib/chatProviderCatalog': { loadChatProviderCatalog: async () => { catalogCalls++; throw 'chat_model_missing'; } },
-    '../../../shared/preferences/settingsStore': { useSettingsStore: { getState: () => ({ language: 'en-US', resolvedTheme: 'dark' }), subscribe: () => () => {} } },
+    '../lib/chatProviderCatalog': { defaultCatalogModel, loadChatProviderCatalog: async () => { catalogCalls++; throw 'chat_model_missing'; } },
+    '../../../shared/preferences/settingsStore': { useSettingsStore: { getState: () => ({ loaded: true, language: 'en-US', resolvedTheme: 'dark' }), subscribe: () => () => {} } },
     '../../../shared/preferences/quickChatSettings': { useQuickChatSettings: { getState: () => ({ load: async () => {} }) } },
   }, { crypto: { randomUUID: () => 'db-failed-owner' } });
   await startQuickChatOwner(() => {});
@@ -415,8 +416,8 @@ test('real owner continuation rejects failed or superseded selection even with c
     const { startQuickChatOwner } = load('src/features/chat/api/quickChatOwner.ts', {
       '@tauri-apps/api/core': { Channel, invoke: async (name, args) => { if (name === 'quick_chat_publish') publications.push(args); } },
       './lifecycle': { chatController: f.controller }, '../lib/panelController': contract,
-      '../lib/chatProviderCatalog': { loadChatProviderCatalog: async () => [] },
-      '../../../shared/preferences/settingsStore': { useSettingsStore: { getState: () => ({}), subscribe: () => () => {} } },
+      '../lib/chatProviderCatalog': { defaultCatalogModel, loadChatProviderCatalog: async () => [] },
+      '../../../shared/preferences/settingsStore': { useSettingsStore: { getState: () => ({ loaded: true }), subscribe: () => () => {} } },
       '../../../shared/preferences/quickChatSettings': { useQuickChatSettings: { getState: () => ({ load: async () => {} }) } },
     }, { crypto: { randomUUID: () => 'continuation-epoch' } });
     await startQuickChatOwner(() => { navigations++; });
@@ -454,8 +455,8 @@ for (const deleteRecovery of [false, true]) test(`queued deletion recovery yield
   const { startQuickChatOwner } = load('src/features/chat/api/quickChatOwner.ts', {
     '@tauri-apps/api/core': { Channel, invoke: async (name, args) => { if (name === 'quick_chat_publish') publications.push(args); } },
     './lifecycle': { chatController: f.controller }, '../lib/panelController': contract,
-    '../lib/chatProviderCatalog': { loadChatProviderCatalog: async () => [] },
-    '../../../shared/preferences/settingsStore': { useSettingsStore: { getState: () => ({}), subscribe: () => () => {} } },
+    '../lib/chatProviderCatalog': { defaultCatalogModel, loadChatProviderCatalog: async () => [] },
+    '../../../shared/preferences/settingsStore': { useSettingsStore: { getState: () => ({ loaded: true }), subscribe: () => () => {} } },
     '../../../shared/preferences/quickChatSettings': { useQuickChatSettings: { getState: () => ({ load: async () => {} }) } },
   }, { crypto: { randomUUID: () => 'recovery-epoch' } });
   await startQuickChatOwner(() => {});
@@ -487,4 +488,150 @@ for (const deleteRecovery of [false, true]) test(`queued deletion recovery yield
   await f.controller.remove('c2'); await tick();
   assert.equal(selected(), 'c5', 'a subsequent selected deletion gets its own recovery');
   assert.equal(f.calls.filter(c => c[0] === 'create').length, 3);
+});
+
+async function defaultOwnerFixture({ loaded = true, preference = { providerId: 'b', model: 'chosen' }, explicit = '' } = {}) {
+  const f = fixture();
+  const create = f.api.create;
+  f.api.create = async origin => {
+    const detail = await create(origin);
+    Object.assign(f.rows.get(detail.conversation.id).conversation, { appType: 'chat', providerId: '', model: explicit });
+    return structuredClone(f.rows.get(detail.conversation.id));
+  };
+  const gate = deferred();
+  let channel, catalogCalls = 0, settingsCalls = 0, epoch = 0;
+  const publications = [];
+  let providers = [
+    { id: 'a', name: 'A', protocol: 'chat', enabled: true, isDefault: false, models: [{ modelId: 'legacy', enabled: true, isDefault: true }] },
+    { id: 'b', name: 'B', protocol: 'chat', enabled: true, isDefault: true, models: [{ modelId: 'chosen', enabled: true, isDefault: true }] },
+  ];
+  let catalogError = null, settingsError = null;
+  const settings = { loaded, chatDefaultModel: preference, load: async () => {
+    settingsCalls++; await gate.promise;
+    if (settingsError) throw settingsError;
+    settings.loaded = true;
+  } };
+  const ownerModule = load('src/features/chat/api/quickChatOwner.ts', {
+    '@tauri-apps/api/core': { Channel: class { constructor() { channel = this; } }, invoke: async (name, args) => {
+      if (name === 'quick_chat_publish') publications.push(args);
+    } },
+    './lifecycle': { chatController: f.controller }, '../lib/panelController': contract,
+    '../lib/chatProviderCatalog': { defaultCatalogModel, loadChatProviderCatalog: async () => {
+      catalogCalls++; if (catalogError) throw catalogError; return providers;
+    } },
+    '../../../shared/preferences/settingsStore': { useSettingsStore: { getState: () => settings, subscribe: () => () => {} } },
+    '../../../shared/preferences/quickChatSettings': { useQuickChatSettings: { getState: () => ({ load: async () => {} }) } },
+  }, { crypto: { randomUUID: () => `defaults-${++epoch}` } });
+  await ownerModule.startQuickChatOwner(() => {});
+  let sequence = 0;
+  const send = command => {
+    const id = `intent-${++sequence}`;
+    channel.onmessage({ id, epoch: `defaults-${epoch}`, command });
+    return id;
+  };
+  return { ...f, ...ownerModule, settings, gate, send, publications,
+    selected: () => publications.filter(p => p.kind === 'snapshot').at(-1)?.payload.state.selected,
+    ack: id => publications.find(p => p.kind === 'ack' && p.payload.id === id)?.payload,
+    catalogCalls: () => catalogCalls, settingsCalls: () => settingsCalls,
+    setProviders: value => { providers = value; }, failCatalog: value => { catalogError = value; }, failSettings: value => { settingsError = value; } };
+}
+
+test('owner waits for DB start and main settings load; ordered hello/create bind exact IDs without selecting main', async () => {
+  const f = await defaultOwnerFixture({ loaded: false });
+  const initializing = deferred(), initialize = f.api.initialize;
+  f.api.initialize = async () => { await initializing.promise; return initialize(); };
+  const hello = f.send({ op: 'hello' });
+  const next = f.send({ op: 'create' });
+  await tick();
+  assert.equal(f.settingsCalls(), 0); assert.equal(f.catalogCalls(), 0);
+  assert.equal(f.calls.some(c => c[0] === 'create'), false);
+  initializing.resolve(); await tick();
+  assert.equal(f.settingsCalls(), 1); assert.equal(f.catalogCalls(), 0);
+  assert.equal(f.publications.some(p => p.kind === 'snapshot' && p.payload.state.ready), false);
+  f.gate.resolve(); await tick(); await tick();
+  assert.equal(f.ack(hello).error, null); assert.equal(f.ack(next).error, null);
+  assert.equal(f.catalogCalls(), 2);
+  assert.equal(f.selected(), 'c4'); assert.equal(f.controller.getSnapshot().selected, 'c1');
+  for (const id of ['c3', 'c4']) {
+    assert.equal(f.rows.get(id).conversation.providerId, 'b'); assert.equal(f.rows.get(id).conversation.model, 'chosen');
+  }
+  assert.equal(f.rows.get('c1').conversation.model, 'm');
+  f.stopQuickChatOwner();
+});
+
+test('settings saved after hello and catalog edits apply only to the next new quick conversation', async () => {
+  const f = await defaultOwnerFixture(); f.send({ op: 'hello' }); await tick();
+  const first = f.selected();
+  await f.controller.update(first, { providerId: 'a', model: 'manual' });
+  f.settings.chatDefaultModel = { providerId: 'fresh', model: 'new' };
+  f.setProviders([{ id: 'fresh', name: 'Fresh', enabled: true, protocol: 'chat', models: [{ modelId: 'new', enabled: true }] }]);
+  f.send({ op: 'hello' }); await tick();
+  assert.equal(f.selected(), first); assert.equal(f.rows.get(first).conversation.model, 'manual');
+  await f.controller.select('c2');
+  f.send({ op: 'create' }); await tick();
+  const fresh = f.selected(); assert.notEqual(fresh, first);
+  assert.equal(f.rows.get(fresh).conversation.providerId, 'fresh'); assert.equal(f.rows.get(fresh).conversation.model, 'new');
+  assert.equal(f.controller.getSnapshot().selected, 'c2');
+  f.send({ op: 'select', conversationId: first }); await tick();
+  assert.equal(f.rows.get(first).conversation.model, 'manual');
+  f.stopQuickChatOwner();
+  await f.startQuickChatOwner(() => {});
+  f.send({ op: 'hello' }); await tick();
+  assert.equal(f.rows.get(first).conversation.model, 'manual', 'owner reload must not rewrite old choices');
+  assert.equal(f.rows.get(fresh).conversation.model, 'new');
+  f.stopQuickChatOwner();
+});
+
+for (const preference of [null, { providerId: 'missing', model: 'chosen' }]) test(`quick fallback retains sidebar catalog order: ${JSON.stringify(preference)}`, async () => {
+  const f = await defaultOwnerFixture({ preference }); f.send({ op: 'hello' }); await tick();
+  assert.equal(f.rows.get(f.selected()).conversation.providerId, 'a', 'must not use workspace/provider.isDefault fallback');
+  assert.equal(f.rows.get(f.selected()).conversation.model, 'legacy');
+  f.stopQuickChatOwner();
+});
+
+test('empty catalog stays unbound; failed catalog/settings reads do not create or publish ready and hello retries', async () => {
+  for (const failure of ['settings', 'catalog', 'empty']) {
+    const f = await defaultOwnerFixture({ loaded: failure !== 'settings' });
+    if (failure === 'settings') { f.failSettings('chat_storage'); f.gate.resolve(); }
+    if (failure === 'catalog') f.failCatalog('chat_storage');
+    if (failure === 'empty') f.setProviders([]);
+    const hello = f.send({ op: 'hello' }); await tick(); await tick();
+    if (failure === 'empty') {
+      assert.equal(f.ack(hello).error, null); assert.equal(f.rows.get(f.selected()).conversation.model, '');
+    } else {
+      assert.ok(f.ack(hello).error);
+      assert.equal(f.calls.some(c => c[0] === 'create'), false);
+      assert.equal(f.publications.some(p => p.kind === 'snapshot' && p.payload.state.ready), false);
+      if (failure === 'settings') assert.equal(f.catalogCalls(), 0);
+      f.failSettings(null); f.failCatalog(null);
+      const retry = f.send({ op: 'hello' }); await tick(); await tick(); assert.equal(f.ack(retry).error, null);
+    }
+    f.stopQuickChatOwner();
+  }
+});
+
+test('quick targeted binding skips explicit choices, rejects other origins, and keeps queued user edits', async () => {
+  const f = await defaultOwnerFixture({ explicit: 'explicit' }); f.send({ op: 'hello' }); await tick();
+  assert.equal(f.rows.get(f.selected()).conversation.model, 'explicit');
+  assert.equal(f.calls.some(c => c[0] === 'update'), false);
+  await f.controller.bindQuickDefaultModel('c1', { providerId: 'b', model: 'chosen' }, () => true);
+  assert.equal(f.rows.get('c1').conversation.model, 'm');
+  const quick = await f.controller.createUnselected('quick-chat');
+  f.rows.get(quick).conversation.model = '';
+  await f.controller.loadDetail(quick);
+  const gate = deferred(), update = f.api.update;
+  f.api.update = async input => { if (input.model === 'manual') await gate.promise; return update(input); };
+  const manual = f.controller.update(quick, { providerId: 'a', model: 'manual' });
+  const binding = f.controller.bindQuickDefaultModel(quick, { providerId: 'b', model: 'chosen' }, () => true);
+  gate.resolve(); await manual; await binding;
+  assert.equal(f.rows.get(quick).conversation.model, 'manual');
+  f.stopQuickChatOwner();
+});
+
+test('remote delegates binding to main; mutations before hello fail closed', async () => {
+  assert.match(readFileSync('src/features/chat/api/QuickChatWindowApp.tsx', 'utf8'), /catalog=\{remote.catalog\} defaultBindingManaged/);
+  const f = await defaultOwnerFixture();
+  const early = f.send({ op: 'create' }); await tick();
+  assert.ok(f.ack(early).error); assert.equal(f.calls.some(c => c[0] === 'create'), false);
+  f.stopQuickChatOwner();
 });

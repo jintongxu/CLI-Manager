@@ -53,7 +53,7 @@ export default function QuickChatWindowApp() {
       <button onClick={hide}>{t("chat.panel.close")}</button>
     </div>}
     <ChatPanelSurface mode="float" attachedSelection="" onAttachSelectionChange={() => {}}
-      controller={remote} catalog={remote.catalog} onModeChange={() => {}} onClose={hide}
+      controller={remote} catalog={remote.catalog} defaultBindingManaged onModeChange={() => {}} onClose={hide}
       onExpand={() => {
         void remote.continueInMain().then(() => invoke("quick_chat_window", { action: "main" })).catch(remote.report);
       }}

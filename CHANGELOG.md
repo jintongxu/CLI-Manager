@@ -1,5 +1,20 @@
 # Changelog
 
+## TEMP — 新建对话默认模型 / Default model for new conversations
+
+- 设置 → 对话模型新增独立默认供应商＋模型偏好，立即持久化；主对话空间、侧栏与快捷键快聊后续新建空模型会话读取最新设置和最新目录，精确匹配启用身份，失效时按各自原有目录规则回退。已有非空选择不覆盖，不把失效供应商的同名模型显示为其他供应商。/ A persisted default provider/model preference now initializes empty-model workspace, sidebar and hotkey Quick Chat conversations from fresh settings and catalog data, with exact enabled-identity matching and legacy fallback rules; explicit choices are retained without cross-provider same-name relabeling.
+- 异步目录按稳定会话 ID 和请求生命周期核对；写入队列内再次检查空模型、当前选择与偏好，保留 revision CAS；目录失败显式报错而非当空目录回退，成功空目录保留 native 手选兼容路径。快聊由主 owner 在新建路径等待设置和最新目录后定向绑定，不改变主窗口选择，重开旧会话不覆盖。不更改 Pi 配置或翻译。/ Stable IDs, request lifetime checks, queued empty-model checks and revision CAS protect asynchronous binding. Catalog errors remain visible; successful empty catalogs retain native manual selection. The main owner initializes new Quick Chat IDs without changing main selection; reopening existing chats preserves their models. Pi configuration and translation are unchanged.
+
+## TEMP — 资源面板删除终端 / Delete terminals from resources
+
+- 补齐匿名 Pi（ephemeral-pi）的严格关闭分支，后台成功前不移除或释放会话资源，关闭失败保留重试。/ Strict close now also waits for anonymous Pi PTYs before removing sessions or releasing resources; failures retain them for retry.
+
+- 终端内存列表提供独立删除入口，危险确认后严格等待后台关闭再移除会话；覆盖隐藏、本地、WSL 与 SSH 终端，确认期间身份变化不误删，失败保留并提示，末页删空自动回退。不会删除历史或项目文件。/ Independent delete actions confirm before strict backend close; hidden/local/WSL/SSH sessions are supported, identity changes abort, failures retain the session with visible feedback, and empty last pages clamp automatically. History and project files are untouched.
+
+## TEMP — 移除侧栏底部翻译按钮 / Remove sidebar footer translation button
+
+- 移除展开与折叠侧栏底部的翻译按钮，保留翻译功能、快捷键及设置入口。/ Remove the translation button from expanded and collapsed sidebar footers, retaining translation functionality, shortcuts and settings.
+
 ## TEMP — 新会话预览报 session_file_not_indexed 修复 / Fix session_file_not_indexed for brand-new sessions
 
 - 根因：`history_get_session` 的文件校验（`validate_session_file_ref`）用带 60s TTL 的目录列表缓存匹配候选，`history_refresh_index` 只刷新 catalog 不清该缓存；新建会话文件在缓存窗口内（实测：应用启动后 25 分钟内新建 pi 会话并立即打开预览）不在候选清单内，即使文件存在也被拒为 `session_file_not_indexed`，前端秒级重试全部落在 TTL 内导致“无法加载会话回答”。修复落在校验源头：缓存候选未命中且文件确实存在时，强制重扫一次再校验；缓存快路径保留，覆盖全部来源（pi/claude/codex 等）的新建会话场景。/ Root cause: `history_get_session` validated against a directory-listing cache with a 60s TTL, while `history_refresh_index` only refreshes the catalog and never invalidates that cache. Session files created within the TTL window were rejected as `session_file_not_indexed` even though they existed on disk, and frontend retries all landed inside the TTL, so the preview kept failing. The fix lands at the validation origin: when the cached candidates miss and the file exists on disk, force one rescan and revalidate — the fast cached path is preserved and the fix covers brand-new sessions for all sources.

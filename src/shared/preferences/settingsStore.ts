@@ -1,6 +1,7 @@
 import { DEFAULT_TRANSLATOR_GLOBAL_SHORTCUTS, migrateTranslatorGlobalShortcuts, syncTranslatorGlobalShortcutsToNative, type TranslatorGlobalShortcuts } from "./translatorSettings";
 import { createSettingsPersistence, type SettingsPersistence } from "./settingsPersistence";
 import { createWorktreeRootSaver, loadedWorktreeRoot } from "./worktreeRootPersistence";
+import { normalizeChatDefaultModelPreference, type ChatDefaultModelPreference } from "./chatDefaultModel";
 import { normalizeExitWithRunningTasksBehavior } from "./exitPolicy";
 export { normalizeExitWithRunningTasksBehavior } from "./exitPolicy";
 import { isAppearanceKey } from "./appearanceTransaction";
@@ -65,11 +66,9 @@ import {
 } from "../lib/workspaceLayout";
 
 export const HISTORY_SMART_TITLE_CUSTOM_PROMPT_MAX_BYTES = 4096;
-
 export function getHistorySmartTitleCustomPromptByteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;
 }
-
 export {
   DESKTOP_PET_SIZE_DEFAULT_PERCENT,
   DESKTOP_PET_SIZE_MAX_PERCENT,
@@ -418,6 +417,7 @@ export interface Settings {
   uiFontSize: number;
   uiTextColor: string;
   lastSettingsTab: LastSettingsTab;
+  chatDefaultModel: ChatDefaultModelPreference | null;
   translatorModelKey: string;
   translatorPrompt: string;
   statuslineEditorSource: StatuslineEditorSource;
@@ -590,6 +590,7 @@ const DEFAULTS: Settings = {
   uiFontSize: UI_FONT_SIZE_DEFAULT,
   uiTextColor: "",
   lastSettingsTab: "general",
+  chatDefaultModel: null,
   translatorModelKey: "",
   translatorPrompt: "",
   statuslineEditorSource: "claude",
@@ -1499,9 +1500,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         : DEFAULTS.uiFontFamily;
     entries.sidebarWidth = clampNumber(entries.sidebarWidth, 64, 500, DEFAULTS.sidebarWidth);
     entries.historySidebarWidth = clampNumber(entries.historySidebarWidth, 180, 520, DEFAULTS.historySidebarWidth);
+    entries.chatDefaultModel = normalizeChatDefaultModelPreference(entries.chatDefaultModel);
     entries.historySmartTitle = migrateHistorySmartTitleSettings(entries.historySmartTitle);
     entries.worktreeOrderByProject = sanitizeWorktreeOrder(entries.worktreeOrderByProject);
-
     const storedHistoryDetailSortDirections = entries.historyDetailSortDirections;
     const historyDetailSortDirections = migrateHistoryDetailSortDirections(storedHistoryDetailSortDirections);
     entries.historyDetailSortDirections = historyDetailSortDirections;
@@ -1945,8 +1946,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       return;
     }
     const s = await getStore();
-    const normalized = key === "exitWithRunningTasksBehavior" ? normalizeExitWithRunningTasksBehavior(value) : value;
-    await s.set(key, normalized);
+    const normalized = key === "chatDefaultModel"
+      ? normalizeChatDefaultModelPreference(value)
+      : key === "exitWithRunningTasksBehavior" ? normalizeExitWithRunningTasksBehavior(value) : value;
+    await (key === "chatDefaultModel" ? s.setConfirmed(key, normalized) : s.set(key, normalized));
     set({ [key]: normalized } as Partial<SettingsStore>);
     if (key === "debugMode") {
       void applyDebugMode(value as boolean);
@@ -1955,7 +1958,6 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       syncTranslatorGlobalShortcutsToNative(value as TranslatorGlobalShortcuts);
     }
   },
-
   updateHistoryDetailSortDirections: (value) => {
     const next = { ...value };
     set({ historyDetailSortDirections: next });
@@ -1969,7 +1971,6 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         console.warn("Failed to persist history detail sort directions:", err);
       });
   },
-
   recordTerminalInputSuggestionUsage: (event) => {
     const next = mergeTerminalInputSuggestionUsage(get().terminalInputSuggestionUsage, event);
     set({ terminalInputSuggestionUsage: next });
@@ -1983,14 +1984,12 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         .catch(() => {});
     }, TERMINAL_INPUT_SUGGESTION_USAGE_SAVE_DELAY_MS);
   },
-
   recordCliArgsHistory: async (cliTool, cliArgs) => {
     const next = recordCliArgsUsage(get().cliArgsHistory, cliTool, cliArgs);
     const s = await getStore();
     await s.set("cliArgsHistory", next);
     set({ cliArgsHistory: next });
   },
-
   setTheme: settingsAppearance.setTheme,
   setTerminalThemeMode: settingsAppearance.setTerminalThemeMode,
 

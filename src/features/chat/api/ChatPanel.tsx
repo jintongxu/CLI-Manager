@@ -1,17 +1,12 @@
-import { useEffect, useState } from "react";
 import { chatController } from "./lifecycle";
-import { loadChatProviderCatalog, type ChatProvider } from "../lib/chatProviderCatalog";
+import { useConversationDefaultModel } from "../hooks/useConversationDefaultModel";
+import type { ChatController } from "../lib/chatController";
 import { ChatPanelSurface, type ChatPanelSurfaceProps } from "../components/ChatPanelSurface";
 
-export type ChatPanelProps = Omit<ChatPanelSurfaceProps, "controller" | "catalog"> & {
-  controller?: ChatPanelSurfaceProps["controller"];
+export type ChatPanelProps = Omit<ChatPanelSurfaceProps, "controller" | "catalog" | "defaultBindingManaged" | "catalogReady"> & {
+  controller?: ChatController;
 };
 export function ChatPanel({ controller = chatController, ...props }: ChatPanelProps) {
-  const [catalog, setCatalog] = useState<readonly ChatProvider[]>([]);
-  useEffect(() => {
-    let active = true;
-    void loadChatProviderCatalog().then(value => { if (active) setCatalog(value); }).catch(() => {});
-    return () => { active = false; };
-  }, []);
-  return <ChatPanelSurface {...props} controller={controller} catalog={catalog} />;
+  const { catalog, ready } = useConversationDefaultModel(controller);
+  return <ChatPanelSurface {...props} controller={controller} catalog={catalog} catalogReady={ready} defaultBindingManaged />;
 }

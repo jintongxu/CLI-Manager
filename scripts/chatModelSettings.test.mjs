@@ -2,7 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { load, elements, tick, deferred } from './chatHarness.mjs';
 
-function fixture(rows = [{ id: 'first', name: 'First', baseUrl: 'https://first.example', protocol: 'openai_chat', enabled: true, isDefault: false, models: [] }]) {
+function fixture(rows = [{ id: 'first', name: 'First', baseUrl: 'https://first.example', protocol: 'openai_chat', enabled: true, isDefault: false, models: [] }], options = {}) {
+  const settings = { chatDefaultModel: options.preference ?? null, loaded: true, async update(key, value) {
+    if (options.saveFails) throw new Error('save failed');
+    settings[key] = value;
+  } };
   const slots = [], effects = [], calls = []; let index = 0;
   const react = {
     useState(initial) {
@@ -20,7 +24,10 @@ function fixture(rows = [{ id: 'first', name: 'First', baseUrl: 'https://first.e
   let response;
   const invoke = async (command, args) => {
     calls.push({ command, args });
-    if (command === 'chat_provider_catalog_list') return structuredClone(rows);
+    if (command === 'chat_provider_catalog_list') {
+      if (options.loadFails) throw new Error('load failed');
+      return structuredClone(rows);
+    }
     if (command === 'chat_provider_fetch_remote_models') return ['gpt-4o', 'gpt-5.6-luna'];
     if (command === 'chat_provider_batch_sync_models') {
       const found = rows.find(r => r.id === args.providerId);
@@ -40,13 +47,15 @@ function fixture(rows = [{ id: 'first', name: 'First', baseUrl: 'https://first.e
   };
   const { ChatModelSettingsPage } = load('src/features/settings/components/pages/ChatModelSettingsPage.tsx', {
     react,
+    '../../../../shared/preferences/settingsStore': { useSettingsStore: selector => selector(settings) },
     '@mantine/core': mantine,
     '@tauri-apps/api/core': { invoke },
     '../../../../shared/i18n/index': { useI18n: () => ({ t: key => key }) },
   });
   let tree;
   const f = {
-    calls,
+    calls, settings,
+    defaultSelect() { return f.nodes().find(n => n.type === 'Select' && n.props.label === 'settings.chatModels.conversationDefault'); },
     render() { index = 0; tree = ChatModelSettingsPage(); effects.splice(0).forEach(fn => fn()); return tree; },
     nodes() { return elements(tree); },
     button(key) {
@@ -150,4 +159,34 @@ test('manage models on new unsaved provider persists provider first, preventing 
   const syncCall = f.calls.find(c => c.command === 'chat_provider_batch_sync_models');
   assert.ok(syncCall, 'Should batch sync models with the returned id');
   assert.equal(syncCall.args.providerId, upsertCall.args.input.id);
+});
+
+const modelProvider = (id, enabled = true) => ({ id, name: id, baseUrl: 'https://example.com', protocol: 'openai_chat', enabled, isDefault: false, models: [{ modelId: 'same:model', enabled: true, isDefault: false }] });
+test('default selector saves exact identity, offers only enabled identities and can follow catalog', async () => {
+  const f = fixture([modelProvider('a'), modelProvider('b'), modelProvider('disabled', false)]);
+  await tick(); f.render();
+  assert.equal(f.defaultSelect().props.data.length, 3);
+  f.defaultSelect().props.onChange(JSON.stringify(['b', 'same:model'])); await tick(); f.render();
+  assert.equal(JSON.stringify(f.settings.chatDefaultModel), JSON.stringify({ providerId: 'b', model: 'same:model' }));
+  f.defaultSelect().props.onChange('catalog'); await tick(); f.render();
+  assert.equal(f.settings.chatDefaultModel, null);
+});
+test('unavailable saved preference is retained and fallback, empty and load failure are distinct', async () => {
+  const preference = { providerId: 'deleted', model: 'same:model' };
+  for (const [rows, options, status] of [
+    [[modelProvider('a')], {}, 'defaultFallback'],
+    [[], {}, 'noEnabledModels'],
+    [[], { loadFails: true }, 'loadError'],
+  ]) {
+    const f = fixture(rows, { preference, ...options }); await tick(); f.render();
+    assert.equal(f.settings.chatDefaultModel, preference);
+    assert.ok(f.defaultSelect().props.data.find(o => o.disabled && o.value === JSON.stringify(['deleted', 'same:model'])));
+    assert.ok(f.nodes().some(n => n.props?.role === 'status' && n.props.children === `settings.chatModels.${status}`));
+  }
+});
+test('save failure keeps old preference and reports error', async () => {
+  const f = fixture([modelProvider('a')], { saveFails: true }); await tick(); f.render();
+  f.defaultSelect().props.onChange(JSON.stringify(['a', 'same:model'])); await tick(); f.render();
+  assert.equal(f.settings.chatDefaultModel, null);
+  assert.ok(f.nodes().some(n => n.props?.role === 'alert' && n.props.children === 'settings.chatModels.defaultSaveError'));
 });
