@@ -27,7 +27,8 @@ import { chatController } from "./lifecycle";
 import type { ChatController } from "../lib/chatController";
 import { activateChatLink, chatTime, copyChatText, isFollowing, shouldSubmit } from "../lib/interactions";
 import { applyPinnedOrder, applyStoredOrder, moveIndexWithinOrder, moveWithinOrder, persistOrder, persistPinnedIds, readPinnedIds, readStoredOrder } from "../lib/conversationOrder";
-import { REASONING_LEVELS, persistReasoning, readReasoning } from "../lib/reasoning";
+import { DEFAULT_REASONING_EFFORT, persistReasoning, readReasoning } from "../lib/reasoning";
+import { reasoningLevelsFor } from "../lib/reasoningCapabilities";
 import { CHAT_HISTORY_SOURCES, type ChatHistorySource } from "./historySource";
 import { HistorySelection } from "../lib/historySelection";
 import { HistorySelectionControls } from "../components/HistorySelectionControls";
@@ -268,6 +269,19 @@ export function ChatWorkspace({
       null
     );
   }, [c?.providerId, c?.model, chatModelOptions]);
+
+  // The workspace offers the same model-aware scale as the sidebar pill.
+  const reasoningLevels = useMemo(() => {
+    const provider = activeChatModel
+      ? catalogProviders.find((p) => p.id === activeChatModel.providerId)
+      : undefined;
+    return reasoningLevelsFor(provider?.protocol ?? null, c?.model ?? null);
+  }, [activeChatModel, c?.model, catalogProviders]);
+
+  // Switching to a model with a narrower scale must not keep an unsupported level.
+  useEffect(() => {
+    if (!reasoningLevels.includes(reasoning)) setReasoning(DEFAULT_REASONING_EFFORT);
+  }, [reasoning, reasoningLevels]);
 
   // Auto-bind default model if current conversation has none
   useEffect(() => {
@@ -1451,12 +1465,14 @@ export function ChatWorkspace({
                             }
                           }}
                         >
-                          {REASONING_LEVELS.map((level) => (
+                          {reasoningLevels.map((level) => (
                             <button
                               key={level}
                               type="button"
                               role="menuitemradio"
                               aria-checked={reasoning === level}
+                              title={level === "xhigh" || level === "max"
+                                ? t("chat.panel.reasoningUnsupportedHint") : undefined}
                               className="chat-reasoning-option"
                               onClick={() => {
                                 setReasoning(level);

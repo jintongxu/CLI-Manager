@@ -1,8 +1,12 @@
 import type { ReasoningEffort } from "./types";
+import { normalizeReasoningFor } from "./reasoningCapabilities";
 
 export const CHAT_REASONING_STORAGE_KEY = "cli-manager.chat.reasoning";
 
-export const REASONING_LEVELS: ReasoningEffort[] = ["off", "low", "medium", "high"];
+/** Single source of truth: every chat surface starts at medium unless the user picks otherwise. */
+export const DEFAULT_REASONING_EFFORT: ReasoningEffort = "medium";
+
+export const REASONING_LEVELS: ReasoningEffort[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 function readMap(): Record<string, ReasoningEffort> {
   try {
@@ -16,7 +20,9 @@ function readMap(): Record<string, ReasoningEffort> {
 
 export function readReasoning(conversationId: string): ReasoningEffort {
   const level = readMap()[conversationId];
-  return level && REASONING_LEVELS.includes(level) ? level : "medium";
+  return level && REASONING_LEVELS.includes(level)
+    ? normalizeReasoningFor(null, null, level)
+    : DEFAULT_REASONING_EFFORT;
 }
 
 export function persistReasoning(conversationId: string, level: ReasoningEffort) {

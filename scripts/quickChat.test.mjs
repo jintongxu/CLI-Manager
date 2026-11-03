@@ -345,6 +345,7 @@ test('unready panel never diagnoses an unloaded catalog as missing models', () =
     './ChatPanelComposer': { ChatPanelComposer: () => null },
     './ChatPanelMessages': { ChatPanelMessages: () => null },
     './ChatPanelModelPicker': { ChatPanelModelPicker: picker },
+    './ChatReasoningPill': { ChatReasoningPill: () => null },
   });
   const containsPicker = node => !!node && (Array.isArray(node) ? node.some(containsPicker)
     : typeof node === 'object' && (node.type === picker || containsPicker(node.props?.children)));
@@ -355,7 +356,7 @@ test('unready panel never diagnoses an unloaded catalog as missing models', () =
   assert.equal(containsPicker(render(true)), true, 'successful empty catalog still offers configuration');
 });
 
-test('shared sidebar/quick reasoning opts out of input chrome and chevron, retaining accessible Select', () => {
+test('shared sidebar/quick reasoning renders reasoning pill with full keyboard access', () => {
   const source = readFileSync('src/shared/ui/select.tsx', 'utf8');
   assert.match(source, /unstyled = false/);
   assert.match(source, /showChevron = true/);
@@ -364,10 +365,11 @@ test('shared sidebar/quick reasoning opts out of input chrome and chevron, retai
   assert.match(source, /<SelectPrimitive.Trigger[\s\S]*aria-label=\{ariaLabel\}/);
   assert.match(source, /ui-focus-ring/);
   const css = readFileSync('src/features/chat/components/chatPanel.css', 'utf8');
-  assert.match(css, /\.chat-panel-reasoning-select \{[^}]*background: transparent/);
-  assert.match(css, /\.chat-panel-reasoning-select:focus-visible \{[^}]*outline: 2px solid var\(--primary\)/);
+  assert.match(css, /\.chat-reasoning-pill \{[^}]*display: inline-flex/);
+  assert.match(css, /\.chat-reasoning-pill\.is-active \{[^}]*var\(--accent/);
   const react = { useEffect() {}, useState: value => [value, () => {}], useSyncExternalStore: (_subscribe, snapshot) => snapshot() };
   const composer = () => null;
+  const pill = (props) => ({ type: 'pill', props });
   const { ChatPanelSurface } = load('src/features/chat/components/ChatPanelSurface.tsx', {
     react, '../../../shared/i18n/index': { useI18n: () => ({ t: key => key }) },
     '../../../shared/ui/select': { Select: 'select' },
@@ -377,6 +379,7 @@ test('shared sidebar/quick reasoning opts out of input chrome and chevron, retai
     './ChatPanelComposer': { ChatPanelComposer: composer },
     './ChatPanelMessages': { ChatPanelMessages: () => null },
     './ChatPanelModelPicker': { ChatPanelModelPicker: () => null },
+    './ChatReasoningPill': { ChatReasoningPill: pill },
   });
   const find = (node, predicate) => !node ? undefined : Array.isArray(node)
     ? node.map(x => find(x, predicate)).find(Boolean)
@@ -386,10 +389,10 @@ test('shared sidebar/quick reasoning opts out of input chrome and chevron, retai
     const tree = ChatPanelSurface({ mode, catalog: [], attachedSelection: '', reasoningEffort: 'medium',
       onReasoningEffortChange: value => { changed = value; },
       controller: { subscribe() {}, getSnapshot: () => ({ ready: true, selected: null, details: {}, running: [], busy: [], conversations: [], drafts: {}, suspended: false }) } });
-    const control = find(tree, node => node.type === composer).props.reasoningControl.props.children;
-    assert.equal(control.type, 'select'); assert.equal(control.props.unstyled, true);
-    assert.equal(control.props.showChevron, false); assert.equal(control.props['aria-label'], 'chat.panel.reasoning');
-    assert.equal(control.props.value, 'medium'); control.props.onChange({ target: { value: 'off' } });
+    const control = find(tree, node => node.type === composer).props.reasoningControl;
+    assert.equal(control.type, pill);
+    assert.equal(control.props.value, 'medium');
+    control.props.onChange('off');
     assert.equal(changed, 'off');
     const history = find(tree, node => node.props?.className === 'chat-panel-compact-select');
     assert.equal(history.props.unstyled, undefined); assert.equal(history.props.showChevron, undefined);

@@ -26,7 +26,8 @@ export interface UpdateInput {
   conversationId: string; revision: number; title?: string; draft?: string;
   appType?: string; providerId?: string; model?: string;
 }
-export type ReasoningEffort = "off" | "low" | "medium" | "high";
+/** Mirrors the upstream reasoning controls: enum levels plus Anthropic-style token budgets. */
+export type ReasoningEffort = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 export interface GenerateInput {
   conversationId: string; revision: number; requestId: string; appType: string;
   providerId: string; model: string; text: string | null; retry: boolean;

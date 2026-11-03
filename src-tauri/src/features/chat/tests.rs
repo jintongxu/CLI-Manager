@@ -754,6 +754,18 @@ fn chat_reasoning_effort_maps_per_protocol_and_defaults_to_absent() {
     assert_eq!(messages["thinking"]["type"], "enabled");
     assert_eq!(messages["thinking"]["budget_tokens"], 1024);
     assert_eq!(messages["max_tokens"], 8192 + 1024);
+    // Extended scale: minimal collapses onto the API minimum, xhigh/max scale the budget.
+    let minimal = body(Protocol::Messages, "m", &history, Some("minimal"), &[]);
+    assert_eq!(minimal["thinking"]["budget_tokens"], 1024);
+    let xhigh = body(Protocol::Messages, "m", &history, Some("xhigh"), &[]);
+    assert_eq!(xhigh["thinking"]["budget_tokens"], 8192);
+    assert_eq!(xhigh["max_tokens"], 8192 + 8192);
+    let max = body(Protocol::Messages, "m", &history, Some("max"), &[]);
+    assert_eq!(max["thinking"]["budget_tokens"], 16384);
+    assert!(max["max_tokens"].as_u64().unwrap() > 16384);
+    // OpenAI-style enums forward the extended values verbatim.
+    assert_eq!(body(Protocol::Chat, "m", &history, Some("xhigh"), &[])["reasoning_effort"], "xhigh");
+    assert_eq!(body(Protocol::Responses, "m", &history, Some("minimal"), &[])["reasoning"]["effort"], "minimal");
     let off = body(Protocol::Chat, "m", &history, Some("off"), &[]);
     assert!(off.get("reasoning_effort").is_none());
 }

@@ -438,6 +438,99 @@
   flex-shrink: 0;
 }
 
+.chat-reasoning-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 5px 0 4px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--on-surface-variant, inherit);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+  white-space: nowrap;
+  outline: none;
+  box-shadow: none;
+  opacity: 0.72;
+  transition: opacity 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+
+.chat-reasoning-pill:hover {
+  opacity: 1;
+  background: rgba(127, 127, 127, 0.12);
+  border-color: rgba(127, 127, 127, 0.18);
+  color: var(--on-surface, inherit);
+}
+
+.chat-reasoning-pill:focus-visible {
+  outline: 2px solid var(--accent, var(--primary));
+  outline-offset: 2px;
+  opacity: 1;
+}
+
+.chat-reasoning-pill-icon {
+  color: var(--on-surface-variant, inherit);
+  opacity: 0.65;
+  flex-shrink: 0;
+  transition: color 120ms ease, opacity 120ms ease;
+}
+
+.chat-reasoning-pill-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 2.5px;
+}
+
+.chat-reasoning-pill-prefix {
+  opacity: 0.75;
+  font-size: 10px;
+}
+
+.chat-reasoning-pill-label {
+  font-weight: 500;
+  font-size: 10.5px;
+}
+
+.chat-reasoning-pill-chevron {
+  opacity: 0.5;
+  flex-shrink: 0;
+  transition: transform 150ms ease, opacity 120ms ease;
+}
+
+.chat-reasoning-pill[data-state="open"] .chat-reasoning-pill-chevron {
+  transform: rotate(180deg);
+}
+
+/* 激活态（非 off 档位）：仅保持微弱胶囊轮廓与脑图标点缀，不涂抹浓重底色 */
+.chat-reasoning-pill.is-active {
+  opacity: 0.88;
+  border-color: color-mix(in srgb, var(--accent, #7aa2f7) 22%, rgba(127, 127, 127, 0.16));
+  background: color-mix(in srgb, var(--accent, #7aa2f7) 6%, transparent);
+  color: var(--on-surface, inherit);
+}
+
+.chat-reasoning-pill.is-active:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent, #7aa2f7) 12%, rgba(127, 127, 127, 0.1));
+  border-color: color-mix(in srgb, var(--accent, #7aa2f7) 35%, rgba(127, 127, 127, 0.22));
+}
+
+.chat-reasoning-pill.is-active .chat-reasoning-pill-icon {
+  color: var(--accent, var(--primary));
+  opacity: 0.95;
+}
+
+.chat-reasoning-pill.is-active .chat-reasoning-pill-label {
+  color: var(--on-surface, inherit);
+  font-weight: 500;
+}
+
 .chat-panel-reasoning-select {
   height: 20px;
   min-width: 40px;
