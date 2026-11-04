@@ -64,6 +64,7 @@ import { createTerminalRecoveryActions } from "./terminalRecoveryActions";
 import { sshHostNameForLaunch } from "../lib/terminalSshNaming";
 import { createTerminalSessionCreation } from "./terminalSessionCreation";
 import { createTerminalRecoveryCoordination } from "./terminalRecoveryCoordination";
+import { createDormantRestoreCoordinator } from "./terminalDormantRestore";
 import { preparedTerminalSessionIds, closeTerminalSource } from "./terminalSessionCandidate";
 let restoreInProgress = false;
 let pendingNamingSessions: TerminalSession[] = [];
@@ -79,7 +80,13 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
     clearPendingSubagentPanesForParent,
     scheduleSaveActiveId,
   } = createTerminalRuntime(set, get, api);
-  const tabLifecycle = createTerminalTabLifecycle(set, get, queueSshSessionPersistence);
+  const dormantRestore = createDormantRestoreCoordinator({
+    get,
+    set,
+    queueSshSessionPersistence,
+    persistSshConnectionStateAfterPtyStatus,
+  });
+  const tabLifecycle = createTerminalTabLifecycle(set, get, queueSshSessionPersistence, dormantRestore);
   const creation = createTerminalSessionCreation(set, get, queueSshSessionPersistence, persistSshConnectionStateAfterPtyStatus, createWorkspanId, createPaneId, () => pendingNamingSessions);
   const coordination = createTerminalRecoveryCoordination((id, busy) => {
     const recoveryBusy = { ...get().recoveryBusy };
@@ -107,6 +114,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
     splits: {},
     hiddenBackgroundSessionIds: new Set<string>(),
     daemonAttachPendingSessionIds: new Set<string>(),
+    dormantRestoredSessionIds: new Set<string>(),
     subagentTranscripts: {},
     statsPanelRefreshSeq: 0,
 
@@ -555,6 +563,8 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       }
       const newDaemonAttachPending = new Set(state.daemonAttachPendingSessionIds);
       newDaemonAttachPending.delete(id);
+      const dormantRestoredSessionIds = new Set(state.dormantRestoredSessionIds);
+      dormantRestoredSessionIds.delete(id);
 
       state.statusListeners[id]?.();
 
@@ -570,6 +580,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         subagentTranscripts: newSubagentTranscripts,
         splits: {},
         daemonAttachPendingSessionIds: newDaemonAttachPending,
+        dormantRestoredSessionIds,
         ...(newHidden !== prevHidden ? { hiddenBackgroundSessionIds: newHidden } : {}),
       });
 
@@ -619,6 +630,11 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       } finally { coordination.afterClose(requestedId); }
     },
     setActive: (id) => {
+      if (get().dormantRestoredSessionIds.has(id)) {
+        // 休眠会话先实体化 PTY，完成后再激活；期间不改变当前焦点。
+        void dormantRestore.materializeDormantSession(id);
+        return;
+      }
       const state = get();
       const owner = findWorkspanBySession(state.workspans, id);
       if (!owner) return;
@@ -1301,6 +1317,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
           tabStatusDetails: {},
         };
         const skippedSessions: string[] = [];
+        const dormantIds = new Set<string>();
 
         const newIdMap: Record<string, string> = {}; // oldId -> newId
 
@@ -1338,6 +1355,18 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
               deferStartupUntilInitialOutput: false,
             });
             restoredStatuses[ps.id] = "exited";
+            continue;
+          }
+
+          // 休眠恢复：隐藏终端仅回填元数据，不 attach / 不重建 PTY；重新打开时惰性实体化。
+          if (ps.tabHidden && !ps.remoteHandoff) {
+            newIdMap[ps.id] = ps.id;
+            restoredSessions.push({
+              ...ps,
+              deferStartupUntilInitialOutput: false,
+            });
+            restoredStatuses[ps.id] = "exited";
+            dormantIds.add(ps.id);
             continue;
           }
 
@@ -1613,6 +1642,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
           sessionStatuses: restoredStatuses,
           statusListeners: restoredListeners,
           daemonAttachPendingSessionIds,
+          dormantRestoredSessionIds: dormantIds,
           ...restoredTabState,
           splits: {},
         });
@@ -1627,17 +1657,21 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         await sessionStore.saveWorkspans(workspans, mirror.activeWorkspanId, updatedPersistedSessions);
         await persistRestoredCurrentWork(currentWork.sessionIds, currentWork.activeSessionId, updatedPersistedSessions, newIdMap);
 
-        // 显示恢复结果提示
+        // 显示恢复结果提示：仅统计实体化（可见）会话；休眠会话单独说明。
         if (skippedSessions.length > 0) {
           toast.info("部分终端会话未恢复", {
             description: `以下会话因项目不存在或创建失败而跳过: ${skippedSessions.join(", ")}`,
           });
         }
+        const materializedCount = restoredSessions.length - dormantIds.size;
+        if (materializedCount > 0) {
+          toast.success(translateCurrent("terminal.restore.success", { count: materializedCount }),
+            dormantIds.size > 0 ? { description: translateCurrent("terminal.restore.dormantNotice", { count: dormantIds.size }) } : undefined);
+        } else if (dormantIds.size > 0) {
+          toast.info(translateCurrent("terminal.restore.dormantNotice", { count: dormantIds.size }));
+        }
         if (restoredSessions.some((session) => session.extensionLaunchStatus === "error")) {
           toast.warning(translateCurrent("extensions.project.startupFallbackWarning"));
-        }
-        if (restoredSessions.length > 0) {
-          toast.success(`已恢复 ${restoredSessions.length} 个终端会话`);
         }
       } finally {
         restoreInProgress = false;

@@ -5,11 +5,13 @@ import { useSessionStore } from "../api/sessionStore";
 import { buildWorkspanMirror, persistWorkspanState } from "../lib/terminalStoreLayout";
 import { isHideableTerminalSession } from "../lib/terminalTabVisibility";
 import { orderTerminalWorkspans } from "../api/terminalWorkspan";
+import type { DormantRestoreCoordinator } from "./terminalDormantRestore";
 
 /** Presentation close never tears down listeners, buffers, backing trees or PTYs. */
 export function createTerminalTabLifecycle(
   set: StoreApi<TerminalStore>["setState"], get: StoreApi<TerminalStore>["getState"],
   saveSessions: (sessions: TerminalSession[]) => Promise<void>,
+  dormantRestore?: DormantRestoreCoordinator,
 ) {
   return {
     setFullscreenPaneId: (fullscreenPaneId: string | null): void => {
@@ -35,12 +37,20 @@ export function createTerminalTabLifecycle(
       await persistence.saveWorkspans(current.workspans, current.activeWorkspanId, current.sessions);
     },
     showSessions: async (ids: readonly string[]): Promise<void> => {
-      const visibleIds = new Set(ids);
+      // 休眠会话先实体化（成功后自行激活/显示），其余可见会话立即取消隐藏。
+      const dormantIds = dormantRestore ? ids.filter((id) => dormantRestore.isDormant(id)) : [];
+      const visibleIds = new Set(dormantRestore
+        ? ids.filter((id) => !dormantRestore.isDormant(id))
+        : ids);
       const state = get();
       const sessions = state.sessions.map((item) => visibleIds.has(item.id) && item.tabHidden ? { ...item, tabHidden: false } : item);
-      if (sessions.every((session, index) => session === state.sessions[index])) return;
-      set({ sessions });
-      await saveSessions(sessions);
+      if (sessions.some((session, index) => session !== state.sessions[index])) {
+        set({ sessions });
+        await saveSessions(sessions);
+      }
+      for (const id of dormantIds) {
+        await dormantRestore!.materializeDormantSession(id);
+      }
     },
     inheritSessionTitle: (id: string, title: string): void => {
       const trimmed = title.trim();

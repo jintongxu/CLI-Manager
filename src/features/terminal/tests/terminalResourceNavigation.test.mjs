@@ -34,6 +34,7 @@ function fixture(member = false, hidden = true, secondWorkspan = true) {
   if (!secondWorkspan) first.paneTree = deep;
   const spans = secondWorkspan ? [first, second] : [first];
   let state = { sessions: [{ id: "a", title: "A" }, { id: "b", title: "B", tabHidden: hidden }, { id: "c", title: "C" }],
+    dormantRestoredSessionIds: new Set(),
     ...layout.buildWorkspanMirror(spans, "w1"), fullscreenPaneId: "p1" };
   const calls = [], currentWorkIds = member ? ["a", "b"] : ["a"];
   let mode = true;

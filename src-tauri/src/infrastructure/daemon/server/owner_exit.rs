@@ -370,4 +370,66 @@ mod preparation_tests {
             matches!(server.exit_owner(1, 5, "transaction", &binding), DaemonFrame::Err { message, .. } if message == "owner_transaction_retired")
         );
     }
+
+    #[test]
+    fn rebind_after_mid_exit_connection_loss_clears_stale_fence() {
+        let server = DaemonServer {
+            host: Arc::new(DaemonHost::new()),
+            next_client_id: AtomicU64::new(1),
+            token: "test".into(),
+            version: "test".into(),
+            info_path: PathBuf::new(),
+        };
+        let owner = InstanceId(uuid::Uuid::new_v4().to_string());
+        let DaemonFrame::OwnerRegistered { binding, .. } = server.handle_frame(
+            1,
+            ClientFrame::RegisterOwner { id: 1, instance_id: owner.clone() },
+        ) else {
+            panic!()
+        };
+        server
+            .host
+            .ownership
+            .lock()
+            .unwrap()
+            .sessions
+            .insert("s1".into(), owner.clone());
+        assert!(matches!(
+            server.prepare_owner(1, 2, "transaction", &binding),
+            DaemonFrame::Ok { .. }
+        ));
+        assert!(
+            matches!(server.handle_frame(1, write_frame(3)), DaemonFrame::Err { message, .. } if message == "owner_draining")
+        );
+
+        // 同 instance 活连接仍在时，重绑定不得清除进行中的退出栅栏。
+        assert!(matches!(
+            server.handle_frame(2, ClientFrame::BindOwner { id: 10, binding: binding.clone() }),
+            DaemonFrame::Ok { .. }
+        ));
+        assert!(server.host.ownership.lock().unwrap().exits.contains_key(&owner));
+        assert!(
+            matches!(server.handle_frame(2, write_frame(13)), DaemonFrame::Err { message, .. } if message == "owner_draining")
+        );
+
+        // 归属连接死亡后重启（同 token 重绑）→ 陈旧栅栏自愈，写入恢复许可。
+        server.host.ownership.lock().unwrap().connections.remove(&1);
+        assert!(matches!(
+            server.handle_frame(2, ClientFrame::BindOwner { id: 11, binding: binding.clone() }),
+            DaemonFrame::Ok { .. }
+        ));
+        {
+            let state = server.host.ownership.lock().unwrap();
+            assert!(state.exits.is_empty());
+            assert!(state.retired.contains("transaction"));
+            assert_eq!(state.generation, 1);
+        }
+        assert!(
+            matches!(server.handle_frame(2, write_frame(12)), DaemonFrame::Err { message, .. } if message != "session_owner_mismatch")
+        );
+    }
+
+    fn write_frame(id: u64) -> ClientFrame {
+        ClientFrame::Write { id, session_id: "s1".into(), data: "x".into() }
+    }
 }

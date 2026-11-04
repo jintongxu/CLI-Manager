@@ -223,6 +223,8 @@ export interface TerminalStore {
   hiddenBackgroundSessionIds: Set<string>;
   /** 仅运行态：XTerm 输出监听就绪后才可执行 daemon attach。 */
   daemonAttachPendingSessionIds: Set<string>;
+  /** 仅运行态：重启恢复为休眠元数据、尚未实体化 PTY 的隐藏终端。 */
+  dormantRestoredSessionIds: Set<string>;
   subagentTranscripts: Record<string, SubagentTranscriptContent>;
   createSession: (
     projectId?: string,

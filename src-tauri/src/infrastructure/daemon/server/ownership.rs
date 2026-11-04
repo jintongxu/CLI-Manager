@@ -168,6 +168,25 @@ impl DaemonServer {
                 {
                     return err_frame(*id, "owner_connection_already_bound");
                 }
+                // Re-bind with a valid owner token proves the instance is alive again.
+                // A previous exit transaction that lost its connection mid-exit would
+                // otherwise fence every write for this instance forever: the restart has
+                // no transaction id to resume with. Clear the stale fence only when no
+                // other live connection of this instance exists and the daemon is not
+                // draining (a live in-flight exit keeps its own connection bound).
+                let stale_exit = state.exits.contains_key(&binding.instance_id)
+                    && !state.draining
+                    && state
+                        .connections
+                        .iter()
+                        .all(|(client_id, owner)| *client_id == client || owner != &binding.instance_id)
+                    && state.inflight.get(&binding.instance_id).copied().unwrap_or(0) == 0;
+                if stale_exit {
+                    if let Some(exit) = state.exits.remove(&binding.instance_id) {
+                        state.retired.insert(exit.transaction);
+                        state.generation += 1;
+                    }
+                }
                 state
                     .connections
                     .insert(client, binding.instance_id.clone());

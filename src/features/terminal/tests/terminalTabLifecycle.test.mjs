@@ -205,6 +205,7 @@ function fixture(sessions = [], workspans = [], daemon = [], projects = [], work
       async subscribeStatus(id, callback) { calls.push(["subscribe", id]); callbacks.set(id, callback); return () => calls.push(["unlisten", id]); },
     },
     async invoke(command) { calls.push(["invoke", command]); return daemon; },
+    async listOwnedDaemonSessions() { return daemon; },
     useSessionStore: { getState: () => persisted },
     dispatchCurrentWorkSessionCreated(id, activate) { calls.push(["currentWorkCreated", id, activate]); },
     dispatchCurrentWorkSessionReplaced() { calls.push(["currentWorkReplaced"]); },
@@ -268,6 +269,7 @@ function fixture(sessions = [], workspans = [], daemon = [], projects = [], work
   Object.assign(dependencies, load("../../projects/api/groupPath.ts"));
   Object.assign(dependencies, load("../lib/terminalRecoveryEnvironment.ts", dependencies));
   Object.assign(dependencies, load("../lib/terminalRecoveryLayout.ts", dependencies));
+  Object.assign(dependencies, load("../store/terminalDormantRestore.ts", dependencies));
   Object.assign(dependencies, load("../store/terminalSessionCandidate.ts", dependencies));
   Object.assign(dependencies, load("../store/terminalRecoveryCoordination.ts", dependencies));
   Object.assign(dependencies, load("../store/terminalSessionCreation.ts", dependencies));
@@ -443,23 +445,54 @@ test("keyboard navigation excludes hidden tabs and all-hidden Workspans", async 
 });
 
 for (const daemon of [false, true]) {
-  test(`restore ${daemon ? "daemon attach" : "recreate"} preserves hidden state, backing ownership and legacy default`, async () => {
-    for (const tabHidden of [true, undefined]) {
-      const original = session("a", { tabHidden, sidebarPinned: tabHidden ? true : undefined, sidebarOrder: tabHidden ? 7 : undefined });
-      const { api, calls, callbacks } = fixture([original], [span("w", "p", "a")], daemon ? [{ sessionId: "a", alive: true }] : []);
-      await api.getState().restoreSessions(new Map(), {});
-      const restored = api.getState().sessions[0];
-      assert.equal(api.getState().tabNotifications[restored.id] ?? "none", "none", "no command/task signal must not restore running");
-      assert.equal(restored.tabHidden, tabHidden);
-      assert.equal(restored.sidebarPinned, original.sidebarPinned);
-      assert.equal(restored.sidebarOrder, original.sidebarOrder);
-      assert.equal(restored.id, daemon ? "a" : "recreated");
-      assert.equal(api.getState().workspans[0].paneTree.sessionIds[0], restored.id);
-      assert.equal(api.getState().activeSessionId, tabHidden ? null : restored.id);
-      assert.equal(calls.some(([kind]) => kind === "create"), !daemon);
-      callbacks.get(restored.id)({ status: "exited" });
-      assert.equal(api.getState().sessions[0].tabHidden, tabHidden, "background exit must not reopen");
-      assert.equal(api.getState().activeSessionId, tabHidden ? null : restored.id);
+  test(`restore ${daemon ? "daemon attach" : "recreate"} materializes visible sessions and preserves hidden metadata`, async () => {
+    const original = session("a");
+    const { api, calls, callbacks } = fixture([original], [span("w", "p", "a")], daemon ? [{ sessionId: "a", alive: true }] : []);
+    await api.getState().restoreSessions(new Map(), {});
+    const restored = api.getState().sessions[0];
+    assert.equal(api.getState().tabNotifications[restored.id] ?? "none", "none", "no command/task signal must not restore running");
+    assert.equal(restored.tabHidden, undefined);
+    assert.equal(restored.id, daemon ? "a" : "recreated");
+    assert.equal(api.getState().workspans[0].paneTree.sessionIds[0], restored.id);
+    assert.equal(api.getState().activeSessionId, restored.id);
+    assert.equal(api.getState().dormantRestoredSessionIds.has(restored.id), false);
+    assert.equal(calls.some(([kind]) => kind === "create"), !daemon);
+    callbacks.get(restored.id)({ status: "exited" });
+    assert.equal(api.getState().activeSessionId, restored.id);
+  });
+
+  test(`restore ${daemon ? "daemon attach" : "recreate"} keeps hidden sessions dormant until reopen`, async () => {
+    const original = session("a", { tabHidden: true, sidebarPinned: true, sidebarOrder: 7, initialTerminalOutput: "history" });
+    const f = fixture([original], [span("w", "p", "a")], daemon ? [{ sessionId: "a", alive: true }] : []);
+    await f.api.getState().restoreSessions(new Map(), {});
+    const dormant = f.api.getState().sessions[0];
+    assert.equal(dormant.id, "a", "dormant restore must preserve the persisted id");
+    assert.equal(dormant.tabHidden, true);
+    assert.equal(dormant.initialTerminalOutput, "history", "dormant metadata keeps scrollback for later rebuild");
+    assert.equal(f.api.getState().sessionStatuses["a"], "exited");
+    assert.equal(f.api.getState().dormantRestoredSessionIds.has("a"), true);
+    assert.equal(f.calls.some(([kind]) => kind === "create"), false, "dormant restore must not create PTY");
+    assert.equal(f.calls.some(([kind]) => kind === "subscribe"), false, "dormant restore must not subscribe PTY status");
+    assert.equal(f.api.getState().activeSessionId, null);
+    assert.equal(f.api.getState().workspans[0].paneTree.sessionIds[0], "a");
+
+    // Reopen materializes: daemon alive → attach with the same id; otherwise rebuild.
+    f.api.getState().setActive("a");
+    await f.settled().catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const restored = f.api.getState().sessions[0];
+    const finalId = daemon ? "a" : "recreated";
+    assert.equal(restored.id, finalId);
+    assert.equal(restored.tabHidden, false, "materialize completes the pending activation");
+    assert.equal(f.api.getState().dormantRestoredSessionIds.has("a"), false);
+    assert.equal(f.api.getState().activeSessionId, finalId);
+    assert.equal(f.api.getState().workspans[0].paneTree.sessionIds[0], finalId);
+    if (daemon) {
+      assert.equal(f.calls.some(([kind]) => kind === "create"), false, "daemon materialize attaches without create");
+      assert.equal(f.api.getState().sessionStatuses[finalId], "running");
+    } else {
+      assert.equal(f.calls.some(([kind]) => kind === "create"), true, "recreate materialize rebuilds the PTY");
+      assert.equal(f.api.getState().sessionStatuses[finalId], "running");
     }
   });
 }

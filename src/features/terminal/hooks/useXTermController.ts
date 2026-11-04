@@ -1842,12 +1842,15 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
   const showBackgroundImage = showLocalBackgroundImage || showWorkspaceBackground;
   const terminalForegroundColor = normalizeHexColor(terminalTheme.foreground, "#d8dee9");
   const terminalBackgroundColor = normalizeHexColor(terminalTheme.background, backgroundColor);
+  // 休眠会话尚无 PTY，颜色写入必然失败；实体化后依赖翻转自动补发。
+  const isDormantSession = useTerminalStore((state) => state.dormantRestoredSessionIds.has(sessionId));
   useEffect(() => {
+    if (isDormantSession) return;
     terminalProcessManager.setTerminalColors(sessionId, {
       foreground: terminalForegroundColor,
       background: terminalBackgroundColor,
     }).catch((err) => reportPtyWriteError("terminal_colors", err));
-  }, [sessionId, terminalForegroundColor, terminalBackgroundColor]);
+  }, [sessionId, terminalForegroundColor, terminalBackgroundColor, isDormantSession]);
   const searchForeground = normalizeHexColor(terminalTheme.foreground, "#d8dee9");
   const searchBackground = normalizeHexColor(terminalTheme.background, backgroundColor);
   const searchAccent = normalizeHexColor(terminalTheme.cursor, searchForeground);
