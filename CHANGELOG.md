@@ -1,5 +1,9 @@
 # Changelog
 
+## TEMP — 文件面板复制文件名 / Copy file names
+
+- 文件和目录右键菜单新增“复制文件名”，仅复制末级名称（保留扩展名、不带路径）；支持中文、空格与正反斜杠，复用既有剪贴板成功/失败提示和本地/远程菜单，根目录空白处菜单不变。/ File and directory context menus now copy the basename with extensions, without a path. Unicode, spaces and both path separators are supported, reusing clipboard feedback and existing local/remote menus; blank root menus are unchanged.
+
 ## TEMP — 对话默认推理强度 / Default chat reasoning effort
 
 - 设置→对话模型新增默认推理强度，与默认供应商/模型并列，独立确认落盘并提供保存中/失败反馈；当前提供中、高、超高、最大四档，缺失或无效配置回退到中。主对话、侧栏和快捷对话在设置就绪后初始化未保存强度的会话，保留已有会话选择；修改默认值不覆盖已初始化的会话。快捷窗口通过主窗口快照获得最新默认值，配置纳入偏好同步，支持中英文。/ Chat model settings now include an independently persisted default reasoning effort with saving/error feedback. Medium, High, Extra High and Maximum are offered; missing/invalid values fall back to Medium. Workspace, sidebar and Quick Chat initialize conversations after preferences are ready without overwriting stored choices. Quick Chat receives the authoritative default from the main window; preference sync and bilingual copy are included.

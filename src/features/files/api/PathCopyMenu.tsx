@@ -15,6 +15,7 @@ interface PathCopyMenuProps {
 export function PathCopyMenu({ project, relativePath, kind }: PathCopyMenuProps) {
   const { t } = useI18n();
   const [showFormats, setShowFormats] = useState(false);
+  const entryName = relativePath.replace(/\\/g, "/").replace(/\/+$/, "").split("/").pop() ?? "";
   const firstFormatItemRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -45,6 +46,9 @@ export function PathCopyMenu({ project, relativePath, kind }: PathCopyMenuProps)
 
   return (
     <>
+      {entryName && <ContextMenuItem onSelect={() => copy(entryName, t("files.toast.nameCopied"))}>
+        <Copy size={13} /> {t("files.menu.copyName")}
+      </ContextMenuItem>}
       <ContextMenuItem onSelect={() => copy(formatProjectAbsolutePath(project, relativePath), t("files.toast.pathCopied"))}>
         <Copy size={13} /> {t("files.menu.copyPath")}
       </ContextMenuItem>
