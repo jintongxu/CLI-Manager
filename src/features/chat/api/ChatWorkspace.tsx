@@ -1173,7 +1173,10 @@ export function ChatWorkspace({
 
                   {message.role === "assistant" &&
                     (message.status !== "completed" || message.errorCode) && (
-                      <footer>
+                      <footer className={message.status === "pending" ? "chat-message-outputting" : undefined}>
+                        {message.status === "pending" && (
+                          <span className="chat-outputting-dot" aria-hidden="true" />
+                        )}
                         {message.status !== "completed" &&
                           t(`chat.${message.status}` as TranslationKey)}
                         {message.errorCode && (

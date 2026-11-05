@@ -264,7 +264,8 @@ export class ChatController {
   async generate(id: string, retry = false, reasoning: ReasoningEffort = "off", images?: readonly string[]) {
     this.editable(id);
     if (this.runs.has(id)) throw "chat_busy";
-    if (this.state.unsaved[id] || this.state.dirty.includes(id) && this.state.error) throw "chat_storage";
+    if (this.state.unsaved[id]) throw "chat_storage";
+    const refreshDraftBase = this.state.dirty.includes(id) && this.state.error !== null;
     let settle!: () => void;
     const completion = new Promise<void>(resolve => { settle = resolve; });
     const run: Run = { requestId: this.uuid(), sequence: -1, terminal: false, stopped: false, completion, settle };
@@ -272,6 +273,9 @@ export class ChatController {
     let accepted = false;
     try {
       await this.enqueue(id, async () => {
+        // Explicit send may recover an autosave CAS failure after terminal persistence.
+        // accept preserves the dirty local draft; subsequent writes still require CAS.
+        if (refreshDraftBase) this.accept(await this.api.get(id));
         await this.saveDraft(id);
         this.editable(id);
         if (run.stopped) throw "chat_cancelled";

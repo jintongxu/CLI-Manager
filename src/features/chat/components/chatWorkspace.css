@@ -413,7 +413,9 @@
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  padding: 24px max(20px, calc((100% - 850px) / 2));
+  /* 60rem (960px)：主流 AI 对话最受欢迎的加宽档位（ChatGPT 默认 768px，
+     Wide 档 960px）；两侧留白是刻意设计，不随窗口宽度变化。 */
+  padding: 24px max(20px, calc((100% - 960px) / 2));
 }
 .chat-outline-rail {
   position: absolute;
@@ -625,7 +627,7 @@
 }
 .chat-user-bubble {
   padding: 10px 16px;
-  border-radius: 20px;
+  border-radius: 18px 18px 6px 18px;
   background: color-mix(in srgb, var(--primary) 9%, var(--surface-container-high));
   color: var(--text-primary);
 }
@@ -643,6 +645,16 @@
   max-width: 100%;
   padding: 12px 0;
 }
+/* 对话轮次呼吸感：对齐 ChatGPT/Claude 的 ~24px 轮次间距。 */
+.chat-message + .chat-message {
+  margin-top: 22px;
+}
+.chat-message header {
+  margin-bottom: 8px;
+}
+.chat-message header strong {
+  letter-spacing: 0.2px;
+}
 .chat-message-assistant footer {
   display: flex;
   flex-wrap: wrap;
@@ -654,6 +666,26 @@
 }
 .chat-message-assistant footer [role="alert"] {
   color: var(--danger);
+}
+/* 流式输出中的显眼提示：脉动点 + 主题色文字（区别于静默的灰色 footer）。 */
+.chat-message-assistant footer.chat-message-outputting {
+  align-items: center;
+  font-size: 12px;
+  color: var(--primary, #6ea8ff);
+}
+.chat-outputting-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--primary, #6ea8ff);
+  animation: chatOutputtingPulse 1.1s ease-in-out infinite;
+}
+@keyframes chatOutputtingPulse {
+  0%, 100% { opacity: 0.25; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-outputting-dot { animation: none; opacity: 0.7; }
 }
 
 @keyframes chatMessageIn {
@@ -681,6 +713,19 @@
   font-size: 15px;
   line-height: 1.68;
 }
+/* 代码块按内容自适应：短命令不撑满整行（长代码仍占满并横向滚动）。 */
+.chat-message-assistant .ui-markdown-code-block {
+  width: fit-content;
+  min-width: min(100%, 380px);
+  max-width: 100%;
+  border: none;
+  border-radius: 10px;
+  background-color: color-mix(in srgb, var(--bg-primary) 82%, var(--text-primary));
+}
+.chat-message-assistant .ui-markdown-code-header {
+  letter-spacing: 0.4px;
+  text-transform: lowercase;
+}
 .chat-message-assistant .ui-markdown-code-block {
   border-radius: 10px;
 }
@@ -706,7 +751,7 @@
 
 /* Card Composer */
 .chat-composer-container {
-  margin: 8px max(16px, calc((100% - 850px) / 2)) 16px;
+  margin: 8px max(16px, calc((100% - 960px) / 2)) 16px;
 }
 
 .chat-composer-card {

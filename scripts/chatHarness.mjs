@@ -63,6 +63,8 @@ export function fixture(count = 2) {
       let answer;
       if (input.retry) answer = d.messages.at(-1);
       else {
+        const last = d.messages.at(-1);
+        if (last?.role === 'assistant' && !['completed', 'stopped'].includes(last.status)) throw 'chat_retry_required';
         d.messages.push({ id: `u${input.requestId}`, conversationId: input.conversationId, ordinal: d.messages.length,
           role: 'user', content: input.text, requestId: input.requestId, status: 'completed', createdAt: 1, updatedAt: 1 });
         answer = { id: `a${input.requestId}`, conversationId: input.conversationId, ordinal: d.messages.length,

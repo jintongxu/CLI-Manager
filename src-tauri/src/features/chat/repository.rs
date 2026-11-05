@@ -277,7 +277,7 @@ impl Repository {
         } else {
             if history
                 .last()
-                .is_some_and(|m| m.role == "assistant" && m.status != "completed")
+                .is_some_and(|m| m.role == "assistant" && !["completed", "stopped"].contains(&m.status.as_str()))
             {
                 return Err("chat_retry_required".into());
             }

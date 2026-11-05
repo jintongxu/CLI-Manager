@@ -1,5 +1,19 @@
 # Changelog
 
+## TEMP — 对话阅读区与流式提示 / Chat reading layout and streaming status
+
+- 主对话阅读列与输入框统一加宽至 960px，保持助手通栏排版；调整轮次间距及用户气泡圆角，短代码块按内容收缩、长代码保留块内横向滚动。生成中显示主题色脉动点与现有双语状态文案，并遵循减少动态效果设置。/ Workspace messages and composer use a 960px reading column with flat assistant turns, refined spacing and user bubbles. Short code blocks fit content while long code retains internal horizontal scrolling. Streaming shows a themed status indicator with existing bilingual labels and reduced-motion support.
+
+## TEMP — 侧栏与快捷对话输出提示 / Panel generation indicator
+
+- 侧栏 AI 对话和快捷对话生成中持续显示主题色脉动点与“正在生成…”；不再被仅悬停可见的消息元信息隐藏。完成后消失，停止/失败显示对应状态；减少动态效果时使用静态指示。复用中英文翻译。/ Sidebar and Quick Chat keep a themed generation indicator visible without hover; completion removes it and other terminal states retain their labels. Reduced-motion uses a static dot and existing bilingual labels are reused.
+- 两例定向组件/样式测试通过，覆盖 pending 到完成/停止/失败/中断，以及非悬停可见性和减少动画。/ Two targeted rendering/style tests cover pending and terminal states, persistent visibility and reduced motion.
+
+## TEMP — 停止回答后继续发问 / Continue after stopping an answer
+
+- 允许已保存的主动停止回答之后直接发送新问题，保留部分回答与原有重试功能；失败/中断回答仍按既有规则重试。修复停止终态提升 revision 与草稿自动保存竞争后，下一次发送被任意全局错误误报为保存失败的问题：显式发送先刷新 CAS 基数再保存本地草稿，真正未保存快照仍阻止生成，不自动重试模型请求。/ Saved stopped answers now allow a new question without discarding partial content or removing retry. Failed/interrupted answers retain retry admission. Explicit send refreshes the draft CAS base after a prior error instead of misreporting it as storage failure; unsaved snapshots still block generation and model requests are never automatically replayed.
+- 主对话、侧栏 AI 对话与快捷对话共用此修复；停止与草稿 CAS 回归覆盖三个来源。补验 chatPersistence/chatUi/quickChat 定向测试共 77 例通过（含既有快捷命令通路）；SQLite stopped 续问及旧回答重试两例通过；类型检查、严格架构检查通过。真机“长回答→停止→续问”尚待在更新后端的开发版验收。/ 17 frontend controller/persistence tests and two SQLite stop/retry tests pass, with clean type and strict architecture checks. Live stop-to-follow-up validation requires the rebuilt backend.
+
 ## TEMP — 隐藏终端重启惰性重建 / Lazy rebuild for hidden terminals on restart
 
 - 根因：标签“隐藏”仅关闭展示层（PTY 与持久化保留），重启恢复却把全部持久化会话（含长期隐藏的旧终端）立即 attach/重建 PTY，导致用户可见标签只有几个却提示“恢复了好多个终端”。修复落在恢复入口：隐藏（`tabHidden`）终端重启时仅回填元数据并标记休眠，不创建进程、不订阅状态；从侧栏/待加入/资源页重新打开时才按原语义实体化（daemon 存活 → attach，否则重建并贴回 scrollback / CLI resume）。恢复提示只统计实体化会话，休眠数量以双语补充文案说明；休眠 id 仍进入孤儿对账活跃列表，daemon 后台会话不受影响。/ Root cause: hiding a tab only closes the presentation layer (PTY and persistence retained), while restart restore immediately attached/recreated every persisted session including long-hidden ones, so a few visible tabs produced a “restored many terminals” prompt. The fix lands at the restore entry: hidden sessions restore as dormant metadata without spawning processes or subscribing status; reopening from the sidebar/pending/resources panel materializes them with existing semantics (daemon attach, or rebuild with scrollback paste-back / CLI resume). The restore toast counts only materialized sessions, with a bilingual notice for dormant ones; dormant ids still feed the orphan reconcile heartbeat so daemon background sessions are untouched.

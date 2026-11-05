@@ -36,6 +36,42 @@ test('CAS conflict refreshes base without replacing draft, retries only on expli
   assert.equal(f.rows.get('c1').conversation.draft, 'other window');
   await f.controller.retryPersistence(); assert.equal(f.rows.get('c1').conversation.draft, 'my draft');
 });
+for (const origin of ['workspace', 'sidebar', 'quick-chat']) {
+test(`${origin}: explicit next question recovers draft CAS after a stopped terminal races autosave`, async () => {
+  const f = fixture();
+  f.rows.get('c1').conversation.origin = origin;
+  await f.controller.start();
+  f.controller.setDraft('c1', 'first'); await f.controller.generate('c1');
+  const held = deferred(), update = f.api.update;
+  let first = true;
+  f.api.update = async input => {
+    if (first) { first = false; await held.promise; }
+    return update(input);
+  };
+  f.controller.setDraft('c1', 'next question');
+  const saving = f.controller.flushDraft('c1'); await tick();
+  f.emit('r1', { status: 'stopped', saved: true, content: 'partial answer' });
+  held.resolve();
+  await assert.rejects(saving, error => error === 'chat_conflict');
+  f.controller.report('chat_conflict'); await tick();
+  await f.controller.generate('c1');
+  assert.equal(f.calls.filter(call => call[0] === 'generate').length, 2);
+  assert.equal(f.rows.get('c1').messages[1].status, 'stopped');
+  assert.equal(f.rows.get('c1').messages[2].content, 'next question');
+  assert.equal(f.controller.getSnapshot().error, null);
+  assert.equal(f.rows.get('c1').conversation.origin, origin);
+});
+}
+test('explicit send after a reported error still blocks a genuine storage failure and retains draft', async () => {
+  const f = fixture(); await f.controller.start();
+  f.controller.setDraft('c1', 'retain exact text');
+  f.controller.report('chat_conflict'); f.failUpdate(true);
+  await assert.rejects(f.controller.generate('c1'), error => error === 'chat_storage');
+  assert.equal(f.calls.some(call => call[0] === 'generate'), false);
+  assert.equal(f.controller.getSnapshot().drafts.c1, 'retain exact text');
+  assert.equal(f.controller.getSnapshot().draftStatus.c1, 'failed');
+  f.failUpdate(false); await f.controller.flush();
+});
 test('unsaved terminal snapshot blocks exit/send; empty backend flush acknowledgement refreshes it', async () => {
   const f = fixture(); await f.controller.start(); f.controller.setDraft('c1', 'hello'); await f.controller.generate('c1');
   f.emit('r1', { status: 'failed', errorCode: 'chat_storage', content: 'retained partial', saved: false }); await tick();

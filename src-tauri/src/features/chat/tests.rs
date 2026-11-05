@@ -642,6 +642,32 @@ async fn chat_mock_http_cancel_stalled_body_read() {
 }
 
 #[tokio::test]
+async fn chat_stopped_answer_allows_new_question_but_failed_answers_require_retry() {
+    for status in ["stopped", "failed", "interrupted"] {
+        let (_dir, repo) = database().await;
+        let c = repo.create(CreateInput { title: None, origin: ConversationOrigin::Workspace })
+            .await.unwrap().conversation;
+        let (m, _) = repo.begin(&generation(&c), "owner").await.unwrap();
+        repo.checkpoint(&m, "owner", "partial answer", status, None, None).await.unwrap();
+        let detail = repo.get(&c.id).await.unwrap();
+        let mut next = generation(&detail.conversation);
+        next.text = Some("a different question".into());
+        let result = repo.begin(&next, "owner").await;
+        if status == "stopped" {
+            let (_, history) = result.unwrap();
+            assert_eq!(history[1].content, "partial answer");
+            let saved = repo.get(&c.id).await.unwrap();
+            assert_eq!(saved.messages.len(), 4);
+            assert_eq!(saved.messages[1].status, "stopped");
+            assert_eq!(saved.messages[2].content, "a different question");
+        } else {
+            assert!(matches!(result, Err(error) if error == "chat_retry_required"));
+            assert_eq!(repo.get(&c.id).await.unwrap().messages.len(), 2);
+        }
+    }
+}
+
+#[tokio::test]
 async fn chat_retry_preserves_independent_saved_draft() {
     let (_dir, repo) = database().await;
     let c = repo
