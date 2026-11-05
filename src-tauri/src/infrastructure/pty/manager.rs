@@ -602,6 +602,18 @@ function global:prompt {
         shell: &str,
         env_vars: Option<&HashMap<String, String>>,
     ) -> Result<(String, Vec<String>), String> {
+        // Sidebar policy must precede both command and monitoring injection:
+        // launch the interactive shell itself, without profiles or prompt scripts.
+        if shell == "pwsh"
+            && env_vars
+                .and_then(|vars| vars.get("CLI_MANAGER_SIDEBAR_CLEAN_PWSH"))
+                .map(String::as_str)
+                == Some("1")
+        {
+            let (exe, mut args) = Self::resolve_shell(shell)?;
+            args.push("-NoProfile".to_string());
+            return Ok((exe, args));
+        }
         if let Some(command) = env_vars.and_then(|vars| vars.get("CLI_MANAGER_ONE_SHOT_COMMAND")) {
             if !command.trim().is_empty() {
                 return match shell {
@@ -784,6 +796,10 @@ function global:prompt {
             launch_context.login_shell,
             launch_context.cwd
         );
+        // Consume the internal launch policy; do not export it to user commands.
+        if let Some(vars) = env_vars.as_mut() {
+            vars.retain(|key, _| !key.eq_ignore_ascii_case("CLI_MANAGER_SIDEBAR_CLEAN_PWSH"));
+        }
         let launch_env = merge_ssh_launch_environment(ssh_env, env_vars.unwrap_or_default());
         let spawned = platform::spawn(PtyLaunchOptions {
             exe: exe.clone(),
@@ -1553,6 +1569,60 @@ mod tests {
         assert_eq!(summary.active_count, 1);
         assert_eq!(summary.tracked_count, 0);
         assert_eq!(summary.cleaned_count, 0);
+    }
+
+    #[test]
+    fn build_shell_args_sidebar_clean_pwsh_bypasses_all_scripts() {
+        for monitoring in ["0", "1"] {
+            let vars = HashMap::from([
+                (
+                    "CLI_MANAGER_SIDEBAR_CLEAN_PWSH".to_string(),
+                    "1".to_string(),
+                ),
+                (
+                    "CLI_MANAGER_SHELL_RUNTIME_MONITORING".to_string(),
+                    monitoring.to_string(),
+                ),
+                (
+                    "CLI_MANAGER_ONE_SHOT_COMMAND".to_string(),
+                    "must-not-run".to_string(),
+                ),
+            ]);
+            let (exe, args) = PtyManager::build_shell_args("pwsh", Some(&vars)).unwrap();
+            assert_eq!(exe, if cfg!(windows) { "pwsh.exe" } else { "pwsh" });
+            assert_eq!(args, vec!["-NoLogo", "-NoProfile"]);
+        }
+    }
+
+    #[test]
+    fn build_shell_args_sidebar_marker_is_exact_and_pwsh_only() {
+        for value in ["0", "", "true"] {
+            let vars = HashMap::from([(
+                "CLI_MANAGER_SIDEBAR_CLEAN_PWSH".to_string(),
+                value.to_string(),
+            )]);
+            assert_eq!(
+                PtyManager::build_shell_args("pwsh", Some(&vars)).unwrap(),
+                PtyManager::build_shell_args("pwsh", None).unwrap()
+            );
+        }
+        let vars = HashMap::from([(
+            "CLI_MANAGER_SIDEBAR_CLEAN_PWSH".to_string(),
+            "1".to_string(),
+        )]);
+        for shell in ["cmd", "powershell", "bash", "wsl"] {
+            assert_eq!(
+                PtyManager::build_shell_args(shell, Some(&vars)).unwrap(),
+                PtyManager::build_shell_args(shell, None).unwrap()
+            );
+        }
+        let monitored = HashMap::from([(
+            "CLI_MANAGER_SHELL_RUNTIME_MONITORING".to_string(),
+            "1".to_string(),
+        )]);
+        let (_, args) = PtyManager::build_shell_args("pwsh", Some(&monitored)).unwrap();
+        assert!(args.iter().any(|arg| arg == "-Command"));
+        assert!(!args.iter().any(|arg| arg == "-NoProfile"));
     }
 
     #[cfg(target_os = "windows")]

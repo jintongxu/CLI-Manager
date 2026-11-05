@@ -143,7 +143,9 @@ export function PaneLeafView({
 }: PaneLeafViewProps) {
   const paneSessions = pane.sessionIds
     .map((id) => sessions.find((session) => session.id === id))
-    .filter((session): session is TerminalSession => Boolean(session));
+    // Transient shells have their own stable parser host. Managed retention
+    // clears this flag when transferring a failed launch to a recovery pane.
+    .filter((session): session is TerminalSession => Boolean(session) && session?.transientBackground !== true);
   const visiblePaneSessionIds = visibleSessionIds
     ? pane.sessionIds.filter((id) => visibleSessionIds.has(id))
     : pane.sessionIds;

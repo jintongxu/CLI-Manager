@@ -1,5 +1,12 @@
 # Changelog
 
+## TEMP — 当前项目底部辅助终端 / Project bottom terminal
+
+- 本地侧栏使用干净模式 PowerShell 7（`pwsh -NoLogo -NoProfile`），跳过用户 profile、运行监控及快速 prompt 脚本，不继承主会话或项目的其他 Shell 选择；仅侧栏本地创建启用，普通终端及 WSL/SSH 行为不变。/ Local sidebar shells use clean PowerShell 7 (`pwsh -NoLogo -NoProfile`), skipping user profiles, runtime monitoring and fast-prompt scripts independently of main-session shell selection; ordinary terminals and WSL/SSH are unchanged.
+
+- 操作栏新增可配置“终端”入口，在主 Pi 区域下方打开辅助终端（文件/Git 右侧栏不变）；默认240px，支持拖动记忆高度、键盘调整、最大化/还原及独立收起。使用当前项目或 Worktree 根目录打开普通 Shell，不执行项目 CLI 启动命令、不切换主 Pi 会话；按环境复用运行态终端，切换项目不自动创建，收起或切页签仍保留进程与输出解析器。显式关闭等待后端确认，失败可重试；自然退出可重新打开，临时终端不参与重启恢复。支持中英文。/ Adds a configurable Shell entry opening a bottom panel beneath Pi, leaving file/Git side panels unchanged. Height defaults to 240px with persisted drag/keyboard resizing, maximize/restore and independent collapse. It opens at the project or worktree root, without executing project CLI commands or activating the main Pi session. Runtime shells are reused per environment, remain alive while hidden, and are not restored on restart. Explicit close awaits backend confirmation and can be retried; exited shells can be reopened. Bilingual UI is included.
+- 自动化覆盖上下文、并发创建、严格关闭、侧栏显示和偏好迁移；真实桌面焦点、左右停靠及 WSL/SSH 环境仍需手动验收，SSH Worktree 不支持的路径覆盖会明确阻止。/ Automated coverage includes context, concurrent creation, strict close, retained rendering, and preference migration. Desktop focus/docking and live WSL/SSH remain manual checks; unsupported SSH worktree path overrides are rejected explicitly.
+
 ## TEMP — 文件面板复制文件名 / Copy file names
 
 - 文件和目录右键菜单新增“复制文件名”，仅复制末级名称（保留扩展名、不带路径）；支持中文、空格与正反斜杠，复用既有剪贴板成功/失败提示和本地/远程菜单，根目录空白处菜单不变。/ File and directory context menus now copy the basename with extensions, without a path. Unicode, spaces and both path separators are supported, reusing clipboard feedback and existing local/remote menus; blank root menus are unchanged.

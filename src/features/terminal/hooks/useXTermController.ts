@@ -91,7 +91,7 @@ import {
 
 let terminalImageAddonFallbackLogged = false;
 
-export function useXTermController({ sessionId, isActive = true, isVisible = true, fontSize = 16, fontFamily = "\"JetBrainsMono Nerd Font\", \"JetBrains Mono\", \"Cascadia Code\", Consolas, monospace", resolvedTheme = "dark", terminalThemeName = "midnightAuroraTerminal", lightThemePalette = "clear-focus", darkThemePalette = "midnight-aurora", onNewTab, onAskBtw, onCloseSession, onCloseOthers, onCloseToLeft, onCloseToRight, onSplitRight, onSplitDown }: Props) {
+export function useXTermController({ sessionId, isActive = true, isVisible = true, minTerminalCols, fontSize = 16, fontFamily = "\"JetBrainsMono Nerd Font\", \"JetBrains Mono\", \"Cascadia Code\", Consolas, monospace", resolvedTheme = "dark", terminalThemeName = "midnightAuroraTerminal", lightThemePalette = "clear-focus", darkThemePalette = "midnight-aurora", onNewTab, onAskBtw, onCloseSession, onCloseOthers, onCloseToLeft, onCloseToRight, onSplitRight, onSplitDown }: Props) {
   const { t } = useI18n();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -433,7 +433,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     cancelScheduledFit,
     resetViewportRefreshState,
   } = useTerminalDisplay({
-    sessionId,
+    sessionId, minTerminalCols,
     containerRef,
     terminalRef,
     fitAddonRef,

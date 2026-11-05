@@ -23,7 +23,7 @@ export * from '${resolve('src/features/terminal/hooks/useTerminalDisplay.ts').re
 export * from '${resolve('src/features/terminal/hooks/useTerminalInput.ts').replaceAll('\\','/')}';
 `);
 writeFileSync(join(dir,'seams.mjs'),`
-export const writes=[], binary=[], callbacks={output:null,disconnect:null}, session={id:'test'};
+export const writes=[], binary=[], resizes=[], callbacks={output:null,disconnect:null}, session={id:'test'};
 export const settings={terminalInputSuggestionsEnabled:false,terminalFontSize:14};
 export const TERMINAL_FONT_SIZE_MAX=40,TERMINAL_FONT_SIZE_MIN=8;
 export const useRef=current=>({current});
@@ -33,7 +33,7 @@ export const useCommandHistoryStore={getState:()=>({entries:[],addEntry(){}})};
 export const useTemplateStore={getState:()=>({templates:[]})};
 export const useProjectStore={getState:()=>({projects:[]})};
 export const terminalProcessManager={
- async write(id,data){writes.push(data);},async writeBinary(id,data){binary.push(data);},async resize(){},
+ async write(id,data){writes.push(data);},async writeBinary(id,data){binary.push(data);},async resize(id,cols,rows){resizes.push({id,cols,rows});},
  hasInteractivePriority:()=>false,consumeInteractivePriority:()=>false,
  subscribeDisconnect(fn){callbacks.disconnect=fn;return()=>{callbacks.disconnect=null;};},
  async subscribeOutput(id,fn){callbacks.output=fn;return()=>{callbacks.output=null;};}
@@ -65,18 +65,26 @@ const frames=new Map();let rafId=0;
 globalThis.requestAnimationFrame=fn=>{const id=++rafId;frames.set(id,fn);return id;};
 globalThis.cancelAnimationFrame=id=>frames.delete(id);
 function raf(){const callbacks=[...frames.values()];frames.clear();callbacks.forEach(fn=>fn(performance.now()));}
-function fixture(width=800,height=400, pasteContainer=null){
+function fixture(width=800,height=400, pasteContainer=null, viewport={}){
  const t=new Terminal({allowProposedApi:true,cols:80,rows:24});t._core.textarea={value:'',focus(){}};
  t.select=()=>{}; // DOM selection painting only; real buffer, parser and input remain.
 
  m.beginTerminalContinuation(t);
  const parser=m.installTerminalHistoricalParser(t,()=>m.canAcceptTerminalInput(t));
  const container={offsetWidth:width,offsetHeight:height,addEventListener(){},removeEventListener(){}};
- const display=m.useTerminalDisplay({sessionId:'test',containerRef:ref(container),terminalRef:ref(t),fitAddonRef:ref({proposeDimensions:()=>({cols:60,rows:16})}),isVisibleRef:ref(false),isComposingRef:ref(false),lowMemoryMode:false,disableHardwareAcceleration:true,disableWebglForSessionRef:ref(true),linuxGraphicsDisableWebgl:true,isTransparentRef:ref(false),normalizeOutputRef:ref(x=>x),transformOutputRef:ref(x=>x),afterTerminalWriteRef:ref(null),onPtyOutputListenError:err=>{throw err;}});
+ const dimensions=viewport.dimensions??{cols:60,rows:16};
+ const visible=ref(viewport.visible??false);
+ const display=m.useTerminalDisplay({
+  sessionId:'test',minTerminalCols:viewport.minTerminalCols,containerRef:ref(container),terminalRef:ref(t),
+  fitAddonRef:ref({proposeDimensions:()=>dimensions}),isVisibleRef:visible,isComposingRef:ref(false),
+  lowMemoryMode:false,disableHardwareAcceleration:true,disableWebglForSessionRef:ref(true),
+  linuxGraphicsDisableWebgl:true,isTransparentRef:ref(false),normalizeOutputRef:ref(x=>x),
+  transformOutputRef:ref(x=>x),afterTerminalWriteRef:ref(null),onPtyOutputListenError:err=>{throw err;},
+ });
  const input=m.useTerminalInput({sessionId:'test',wrapperRef:ref(null),containerRef:ref(pasteContainer),isActiveRef:ref(true),isVisibleRef:ref(true),fontSize:14,canShowSuggestionAtCurrentInputEnd:()=>false,getTerminalRenderedCellSize:()=>({width:8,height:16}),setSuggestionGhost(){},getOsPlatformForPathQuoting:async()=> 'linux'});
  const selection=input.attachSelection(t,{markAttentionInputHandled(){},reportPtyWriteError(err){throw err;}});
  const forwarding=input.attachInputForwarding(t,{selection,osPlatformRef:ref('linux'),markAttentionInputHandled(){},reportPtyWriteError(err){throw err;},updateSessionCwdIfChanged(){},onInputForwarded(){}});
- return {t,container,display,input,selection,forwarding,parser,close(){forwarding.dispose();selection.dispose();display.resetOutputState();parser.dispose();m.disposeTerminalContinuation(t);t.dispose();frames.clear();}};
+ return {t,container,dimensions,visible,display,input,selection,forwarding,parser,close(){forwarding.dispose();selection.dispose();display.resetOutputState();parser.dispose();m.disposeTerminalContinuation(t);t.dispose();frames.clear();}};
 }
 function frame(sequence,text,kind='output',end=false){return {frame:{sessionId:'test',sequence,kind,data:new TextEncoder().encode(text),cols:80,rows:24,replayBatchEnd:end},commit(){}};}
 async function write(t,text,origin='live'){await new Promise(r=>m.writeTerminalOutput(t,text,origin,r));}
@@ -147,4 +155,46 @@ test('actual async clipboard completion rejects old reconnect/owner and never de
   seams.clipboard.pending('old-generation');await tick();assert.deepEqual(seams.writes,[]);
   paste();await tick();m.disposeTerminalContinuation(f.t);seams.clipboard.pending('old-owner');await tick();assert.deepEqual(seams.writes,[]);
  }finally{detach();f.close();}
+});
+
+test('sidebar narrow fit completes replay barrier and forwards narrow resize using the same minimum',async()=>{
+ const previousDocument=globalThis.document,previousObserver=globalThis.ResizeObserver;
+ globalThis.document={visibilityState:'visible',addEventListener(){},removeEventListener(){}};
+ let observe;
+ globalThis.ResizeObserver=class {constructor(fn){observe=fn;}observe(){}disconnect(){}};
+ const f=fixture(300,400,null,{minTerminalCols:8,visible:true,dimensions:{cols:28,rows:16}});
+ m.markTerminalContinuation(f.t,'hydrated');seams.resizes.length=0;
+ const detach=f.display.attachViewport(f.t);
+ try{
+  const output=f.display.attachPtyOutput({waitForReplay:true});await output.ready;
+  const complete=output.completeReplay([]);
+  seams.callbacks.output(frame(0,'','replay',true));raf();await tick();
+  assert.equal(await complete,true);
+  assert.equal(m.canAcceptTerminalInput(f.t),true);
+  assert.deepEqual(f.display.getPtyViewportSize(),{cols:28,rows:16});
+  assert.deepEqual(seams.resizes.at(-1),{id:'test',cols:28,rows:16});
+  f.dimensions.cols=20;
+  observe([{contentRect:{width:220,height:400}}]);
+  assert.equal(m.canAcceptTerminalInput(f.t),false);
+  raf();assert.equal(f.t.cols,20);assert.equal(m.canAcceptTerminalInput(f.t),true);
+  assert.deepEqual(seams.resizes.at(-1),{id:'test',cols:20,rows:16});
+  f.dimensions.cols=7;f.display.scheduleFit(true);raf();
+  assert.equal(f.t.cols,20);assert.equal(m.canAcceptTerminalInput(f.t),false);
+  const count=seams.resizes.length;f.t.resize(7,16);assert.equal(seams.resizes.length,count);
+  f.dimensions.cols=8;f.display.scheduleFit(true);raf();assert.equal(m.canAcceptTerminalInput(f.t),true);
+  assert.deepEqual(seams.resizes.at(-1),{id:'test',cols:8,rows:16});
+  output.dispose();
+ }finally{detach();f.close();globalThis.document=previousDocument;globalThis.ResizeObserver=previousObserver;}
+});
+
+test('ordinary fit still requires 40 columns and sidebar retains the 8-row guard',()=>{
+ for(const [minTerminalCols,cols,rows] of [[undefined,39,16],[8,28,7]]){
+  const f=fixture(300,400,null,{minTerminalCols,dimensions:{cols,rows}});
+  try{
+   m.markTerminalContinuation(f.t,'hydrated');m.markTerminalContinuation(f.t,'output');
+   f.display.scheduleFit(true);raf();assert.equal(m.canAcceptTerminalInput(f.t),false);assert.equal(f.t.cols,80);
+   Object.assign(f.dimensions,{cols:minTerminalCols??40,rows:8});
+   f.display.scheduleFit(true);raf();assert.equal(m.canAcceptTerminalInput(f.t),true);
+  }finally{f.close();}
+ }
 });

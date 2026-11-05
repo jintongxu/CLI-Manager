@@ -22,7 +22,8 @@ import { useI18n } from "../../../shared/i18n/index";
 import { logError } from "../../../shared/platform/logger";
 import { DND_ACTIVATION_CONSTRAINT, parseCurrentWorkDragId, parseTerminalTabDragId, parseProjectDragId, parseWorkspanDragId, CURRENT_WORK_DROP_TARGET_ID, resolveWorkspanDragHoverTarget, WORKSPAN_DRAG_AUTO_ACTIVATE_MS } from "../../workspace/api/dragInteraction";
 import { collectPaneLeaves, type TerminalPaneSplitDirection } from "../api/terminalPaneTree";
-import { type BackgroundTaskMeta } from "../components/BackgroundTasksPanel";
+import { useTerminalBackgroundTasks } from "./useTerminalBackgroundTasks";
+import { useSidebarShell } from "./useSidebarShell";
 import { type TerminalSidePanelTab } from "../components/TerminalSidePanel";
 import { selectVisibleSidePanelTabs } from "../lib/sidePanelTabs";
 import { useChatPanelStore, toggleChatPanel } from "../store/chatPanelStore";
@@ -280,7 +281,6 @@ export function useTerminalTabsController({
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [splitPicker, setSplitPicker] = useState<SplitPickerState>(null);
   const [closeConfirm, setCloseConfirm] = useState<TerminalCloseConfirmState>(null);
-  const [daemonTasks, setDaemonTasks] = useState<BackgroundTaskMeta[]>([]);
   const [activeDropPreview, setActiveDropPreview] = useState<PaneDropPreview>(null);
   const [workspanDetachPreview, setWorkspanDetachPreview] = useState({
     left: 0,
@@ -403,6 +403,10 @@ export function useTerminalTabsController({
     }
     return activeSession;
   }, [activeSession, sessions]);
+  const shellScope = useMemo(() => scopedProjectId ? ({ projectId: scopedProjectId,
+    worktreeId: terminalScopeValue.kind === "worktree" ? terminalScopeValue.worktreeId : undefined }) : null,
+  [scopedProjectId, terminalScopeValue]);
+  const sidebarShell = useSidebarShell({ activeSession, sessions, projects, worktrees, groups, scope: shellScope });
   const panelSessionId = panelSession?.id ?? null;
   const panelProject = panelSession?.projectId ? projectById.get(panelSession.projectId) ?? null : null;
   const panelProviderAppType: NativeProviderAppType = resolveProviderSwitchAppType(panelSession, panelProject) ?? "claude";
@@ -1667,25 +1671,7 @@ export function useTerminalTabsController({
     setActiveToolbarDragId(null);
   }, []);
 
-  const refreshBackgroundTasks = useCallback(async () => {
-    try {
-      const tasks = await invoke<BackgroundTaskMeta[]>("pty_daemon_sessions");
-      setDaemonTasks(tasks);
-    } catch {
-      setDaemonTasks([]);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refreshBackgroundTasks();
-    const timer = window.setInterval(() => void refreshBackgroundTasks(), 3000);
-    return () => window.clearInterval(timer);
-  }, [refreshBackgroundTasks]);
-
-  const backgroundTasks = useMemo(() => {
-    const openIds = new Set(sessions.map((session) => session.id));
-    return daemonTasks.filter((task) => !openIds.has(task.sessionId));
-  }, [daemonTasks, sessions]);
+  const { backgroundTasks, refreshBackgroundTasks } = useTerminalBackgroundTasks(sessions);
 
   const handleToggleGlobalFullscreen = useCallback(() => {
     if (activeFullscreenPaneId) {
@@ -1715,6 +1701,11 @@ export function useTerminalTabsController({
         if (!opening) setSidePanelOpen(false);
         else { setSidePanelTab("btw"); setSidePanelOpen(true); }
       } else setBtwPanelOpen(opening);
+    },
+    shellPanelActive: sidebarShell.shellOpen,
+    handleToggleShellPanel: () => {
+      if (!sidebarShell.shellOpen) closeHistory();
+      sidebarShell.toggle();
     },
     systemResourcesPanelActive,
     handleNewTab,
@@ -1902,6 +1893,7 @@ export function useTerminalTabsController({
     sidePanelTab,
     setSidePanelTab,
     visibleSidePanelTabs,
+    sidebarShell,
     panelSessionId,
     sidePanelProjectPath,
     panelSession,

@@ -1,3 +1,21 @@
+import { normalizeAuxiliaryTerminalHeight } from "./auxiliaryTerminal";
+import {
+  DEFAULT_TERMINAL_TOOLBAR_VISIBILITY,
+  DEFAULT_SIDEBAR_TOOLBAR_VISIBILITY,
+  DEFAULT_TERMINAL_TOOLBAR_ORDER,
+  migrateTerminalToolbarVisibility,
+  migrateSidebarToolbarVisibility,
+  migrateTerminalToolbarOrder,
+  type TerminalToolbarVisibilitySettings,
+  type SidebarToolbarVisibilitySettings,
+} from "./toolbarVisibility";
+export {
+  migrateTerminalToolbarVisibility,
+  migrateSidebarToolbarVisibility,
+  migrateTerminalToolbarOrder,
+  type TerminalToolbarVisibilitySettings,
+  type SidebarToolbarVisibilitySettings,
+} from "./toolbarVisibility";
 import { DEFAULT_TRANSLATOR_GLOBAL_SHORTCUTS, migrateTranslatorGlobalShortcuts, syncTranslatorGlobalShortcutsToNative, type TranslatorGlobalShortcuts } from "./translatorSettings";
 import { createSettingsPersistence, type SettingsPersistence } from "./settingsPersistence";
 import { createWorktreeRootSaver, loadedWorktreeRoot } from "./worktreeRootPersistence";
@@ -287,27 +305,6 @@ const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
   "toggleTerminalFullscreen",
 ];
 
-export interface TerminalToolbarVisibilitySettings {
-  templates: boolean;
-  fullscreen: boolean;
-  sessionHistory: boolean;
-  replay: boolean;
-  files: boolean;
-  stats: boolean;
-  gitChanges: boolean;
-  systemResources: boolean;
-  providers: boolean;
-  btw: boolean;
-  chat: boolean;
-  backgroundTasks: boolean;
-  showText: boolean;
-}
-
-export interface SidebarToolbarVisibilitySettings {
-  stats: boolean;
-  gitChanges: boolean;
-}
-
 export type TerminalStatsCardVisibilitySettings = Record<TerminalStatsCardKey, boolean>;
 export type TerminalStatsCardOrderSettings = TerminalStatsCardKey[];
 export type SystemResourceCardVisibilitySettings = Record<SystemResourceCardKey, boolean>;
@@ -453,6 +450,7 @@ export interface Settings {
   /** 是否限制终端辅助侧边面板同一时间只打开一个。 */
   terminalSidePanelSingleOpen: boolean;
   terminalSidePanelSkin: TerminalSidePanelSkin;
+  auxiliaryTerminalHeight: number;
   terminalPanelWidths: TerminalPanelWidthSettings;
   workspaceLayout: WorkspaceLayoutSettings;
   terminalStatsCardVisibility: TerminalStatsCardVisibilitySettings;
@@ -624,29 +622,13 @@ const DEFAULTS: Settings = {
   osc52ClipboardEnabled: true,
   osc52ClipboardQueryEnabled: false,
   unsplitBehavior: "merge",
-  terminalToolbarVisibility: {
-    templates: true,
-    fullscreen: true,
-    sessionHistory: true,
-    replay: false,
-    files: true,
-    stats: true,
-    gitChanges: true,
-    systemResources: false,
-    providers: true,
-    btw: true,
-    chat: true,
-    backgroundTasks: true,
-    showText: false,
-  },
-  sidebarToolbarVisibility: {
-    stats: true,
-    gitChanges: true,
-  },
-  terminalToolbarOrder: ["new", "templates", "fullscreen", "sessionHistory", "replay", "files", "gitChanges", "stats", "providers", "btw", "chat", "systemResources", "backgroundTasks"],
+  terminalToolbarVisibility: { ...DEFAULT_TERMINAL_TOOLBAR_VISIBILITY },
+  sidebarToolbarVisibility: { ...DEFAULT_SIDEBAR_TOOLBAR_VISIBILITY },
+  terminalToolbarOrder: [...DEFAULT_TERMINAL_TOOLBAR_ORDER],
   terminalSidePanelMerged: true,
   terminalSidePanelSingleOpen: true,
   terminalSidePanelSkin: "terminal",
+  auxiliaryTerminalHeight: 240,
   terminalPanelWidths: { ...TERMINAL_PANEL_WIDTH_DEFAULTS },
   workspaceLayout: { ...WORKSPACE_LAYOUT_DEFAULTS },
   terminalStatsCardVisibility: {
@@ -969,53 +951,6 @@ function migrateKeyboardShortcuts(value: unknown): KeyboardShortcutMap {
     if (typeof shortcut === "string") next[action] = shortcut.trim();
   }
   return next;
-}
-
-export function migrateTerminalToolbarVisibility(value: unknown): TerminalToolbarVisibilitySettings {
-  const defaults = DEFAULTS.terminalToolbarVisibility;
-  if (typeof value !== "object" || value === null) {
-    return { ...defaults };
-  }
-  const raw = value as Record<string, unknown>;
-
-  return {
-    templates: typeof raw.templates === "boolean" ? raw.templates : defaults.templates,
-    fullscreen: typeof raw.fullscreen === "boolean" ? raw.fullscreen : defaults.fullscreen,
-    sessionHistory: typeof raw.sessionHistory === "boolean" ? raw.sessionHistory : defaults.sessionHistory,
-    replay: typeof raw.replay === "boolean" ? raw.replay : defaults.replay,
-    files: typeof raw.files === "boolean" ? raw.files : defaults.files,
-    stats: typeof raw.stats === "boolean" ? raw.stats : defaults.stats,
-    gitChanges: typeof raw.gitChanges === "boolean" ? raw.gitChanges : defaults.gitChanges,
-    systemResources: typeof raw.systemResources === "boolean" ? raw.systemResources : defaults.systemResources,
-    providers: typeof raw.providers === "boolean" ? raw.providers : defaults.providers,
-    btw: typeof raw.btw === "boolean" ? raw.btw : defaults.btw,
-    chat: typeof raw.chat === "boolean" ? raw.chat : defaults.chat,
-    backgroundTasks: typeof raw.backgroundTasks === "boolean" ? raw.backgroundTasks : defaults.backgroundTasks,
-    showText: typeof raw.showText === "boolean" ? raw.showText : defaults.showText,
-  };
-}
-
-export function migrateSidebarToolbarVisibility(value: unknown): SidebarToolbarVisibilitySettings {
-  const defaults = DEFAULTS.sidebarToolbarVisibility;
-  if (typeof value !== "object" || value === null) {
-    return { ...defaults };
-  }
-  const raw = value as Record<string, unknown>;
-
-  return {
-    stats: typeof raw.stats === "boolean" ? raw.stats : defaults.stats,
-    gitChanges: typeof raw.gitChanges === "boolean" ? raw.gitChanges : defaults.gitChanges,
-  };
-}
-
-export function migrateTerminalToolbarOrder(value: unknown): string[] {
-  const defaults = DEFAULTS.terminalToolbarOrder;
-  if (!Array.isArray(value)) return [...defaults];
-
-  const validKeys = new Set(defaults);
-  const filtered = value.filter((k): k is string => typeof k === "string" && validKeys.has(k));
-  const missing = defaults.filter((k) => !filtered.includes(k));
-  return [...filtered, ...missing];
 }
 
 function migrateTerminalSidePanelSkin(value: unknown): TerminalSidePanelSkin {
@@ -1559,6 +1494,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         ? entries.terminalSidePanelSingleOpen
         : DEFAULTS.terminalSidePanelSingleOpen;
     entries.terminalSidePanelSkin = migrateTerminalSidePanelSkin(entries.terminalSidePanelSkin);
+    entries.auxiliaryTerminalHeight = normalizeAuxiliaryTerminalHeight(entries.auxiliaryTerminalHeight);
     entries.terminalPanelWidths = migrateTerminalPanelWidths(entries.terminalPanelWidths);
     const storedWorkspaceLayout = entries.workspaceLayout;
     const workspaceLayout = migrateWorkspaceLayout(storedWorkspaceLayout);
@@ -1944,7 +1880,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       return;
     }
     const s = await getStore();
-    const normalized = key === "chatDefaultModel"
+    const normalized = key === "auxiliaryTerminalHeight" ? normalizeAuxiliaryTerminalHeight(value)
+      : key === "chatDefaultModel"
       ? normalizeChatDefaultModelPreference(value)
       : key === "chatDefaultReasoningEffort" ? normalizeChatDefaultReasoningEffort(value)
       : key === "exitWithRunningTasksBehavior" ? normalizeExitWithRunningTasksBehavior(value) : value;

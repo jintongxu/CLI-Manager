@@ -122,6 +122,7 @@ const TERMINAL_TOOLBAR_OPTIONS: { key: TerminalToolbarOptionKey; labelKey: Trans
   { key: "sessionHistory", labelKey: "settings.general.toolbar.sessionHistory" },
   { key: "replay", labelKey: "settings.general.toolbar.replay" },
   { key: "files", labelKey: "settings.general.toolbar.files" },
+  { key: "shell", labelKey: "terminal.panel.shell" },
   { key: "stats", labelKey: "settings.general.toolbar.stats" },
   { key: "providers", labelKey: "settings.general.toolbar.providers" },
   { key: "chat", labelKey: "settings.general.toolbar.chat" },

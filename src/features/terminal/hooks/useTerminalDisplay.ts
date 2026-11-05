@@ -199,6 +199,7 @@ type PendingViewportRestore =
 
 interface UseTerminalDisplayOptions {
   sessionId: string;
+  minTerminalCols?: number;
   containerRef: RefObject<HTMLDivElement | null>;
   terminalRef: RefObject<Terminal | null>;
   fitAddonRef: RefObject<FitAddon | null>;
@@ -245,6 +246,7 @@ export interface UseTerminalDisplayResult {
 
 export function useTerminalDisplay({
   sessionId,
+  minTerminalCols = MIN_TERMINAL_COLS,
   containerRef,
   terminalRef,
   fitAddonRef,
@@ -263,6 +265,10 @@ export function useTerminalDisplay({
   onPtyOutputListenError,
   onViewportRefreshNeeded,
 }: UseTerminalDisplayOptions): UseTerminalDisplayResult {
+  // Viewport listeners outlive renders; fit and PTY resize must share the latest policy.
+  const minColsRef = useRef(minTerminalCols);
+  minColsRef.current = Number.isFinite(minTerminalCols)
+    ? Math.max(2, Math.floor(minTerminalCols)) : MIN_TERMINAL_COLS;
   const webglAddonRef = useRef<WebglAddon | null>(null);
   const stopWebglLossWatchRef = useRef<(() => void) | null>(null);
   const hiddenRendererLifecycleRef = useRef<{ lifecycle: HiddenTerminalDisplayLifecycle; delay: number } | null>(null);
@@ -743,7 +749,7 @@ export function useTerminalDisplay({
       markTerminalSnapshotDirty(sessionId);
       if (!forwardPtyResizeRef.current) return;
       if (!isVisibleRef.current || document.visibilityState === "hidden") return;
-      if (cols < MIN_TERMINAL_COLS || rows < MIN_TERMINAL_ROWS) return;
+      if (cols < minColsRef.current || rows < MIN_TERMINAL_ROWS) return;
       const pixelWidth = terminal.dimensions?.css.canvas.width;
       const pixelHeight = terminal.dimensions?.css.canvas.height;
       terminalProcessManager.resize(
@@ -899,7 +905,7 @@ export function useTerminalDisplay({
     if (container.offsetWidth <= 0 || container.offsetHeight <= 0) return;
 
     const dims = fitAddon.proposeDimensions();
-    if (!dims || dims.cols < MIN_TERMINAL_COLS || dims.rows < MIN_TERMINAL_ROWS) return;
+    if (!dims || dims.cols < minColsRef.current || dims.rows < MIN_TERMINAL_ROWS) return;
     requestedFitRef.current = dims;
     getResizeDebouncer().resize(dims.cols, dims.rows, immediateResize);
     if (terminal.cols === dims.cols && terminal.rows === dims.rows) {

@@ -205,7 +205,7 @@ test("side panel tab order registers btw after providers", () => {
   const orderBlock = sidePanelSource.slice(sidePanelSource.indexOf("TERMINAL_SIDE_PANEL_TAB_ORDER"));
   assert.ok(orderBlock.indexOf("\"providers\"") < orderBlock.indexOf("\"btw\""));
   const controller = readFileSync(new URL("../src/features/terminal/hooks/useTerminalTabsController.tsx", import.meta.url), "utf8");
-  assert.match(controller, /if \(tab === "btw"\) return true;/);
+  assert.match(readFileSync(new URL("../src/features/terminal/lib/sidePanelTabs.ts", import.meta.url), "utf8"), /if \(tab === "btw"\) return true;/);
   assert.match(readFileSync(new URL("../src/features/terminal/hooks/useBtwSideQuestion.ts", import.meta.url), "utf8"), /BtwThreadModel/);
   assert.match(controller, /useBtwSideQuestion/);
   const view = readFileSync(new URL("../src/features/terminal/components/TerminalTabsView.tsx", import.meta.url), "utf8");
@@ -215,10 +215,10 @@ test("side panel tab order registers btw after providers", () => {
   assert.match(toolbar, /btw: \(\s*<button/);
   assert.match(toolbar, /handleToggleBtwPanel/);
   assert.match(toolbar, /if \(key === "btw"\) return terminalToolbarVisibility\.btw === true;/);
-  const settings = readFileSync(new URL("../src/shared/preferences/settingsStore.ts", import.meta.url), "utf8");
+  const settings = readFileSync(new URL("../src/shared/preferences/toolbarVisibility.ts", import.meta.url), "utf8");
   assert.match(settings, /btw: boolean;/);
   assert.match(settings, /btw: true,/);
-  assert.match(settings, /"providers", "btw", "systemResources"/);
+  assert.match(settings, /"providers", "btw", "chat", "systemResources"/);
   assert.match(settings, /btw: typeof raw\.btw === "boolean" \? raw\.btw : defaults\.btw,/);
 });
 

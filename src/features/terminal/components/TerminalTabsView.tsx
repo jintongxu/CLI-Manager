@@ -34,6 +34,8 @@ import { BtwTerminalDrawer } from "./BtwTerminalDrawer";
 import { CurrentWorkPaneTarget } from "./CurrentWorkPaneTarget";
 import { SplitProjectPicker, TerminalCloseConfirmBubble } from "./TerminalTabDialogs";
 import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
+import { SidebarShellHost } from "./SidebarShellHost";
+import { BottomShellPanel } from "./BottomShellPanel";
 import { CurrentWorkTabBar } from "./CurrentWorkTabBar";
 
 export function TerminalTabsView({
@@ -82,6 +84,7 @@ export function TerminalTabsView({
   sidePanelOpen,
   sidePanelTab,
   visibleSidePanelTabs,
+  sidebarShell,
   panelSessionId,
   sidePanelProjectPath,
   panelSession,
@@ -203,6 +206,7 @@ export function TerminalTabsView({
       else setSidePanelOpen(false);
     }}
   />;
+  const shellVisible = workspaceVisible && !historyActive && sidebarShell.shellOpen;
   const currentWorkHasSplit = currentWorkPaneTree?.type === "split";
   const currentWorkIdSet = new Set(currentWorkSessionIds);
   const availableSessionCount = visibleSessions.filter((session) => !session.tabHidden && !currentWorkIdSet.has(session.id)).length;
@@ -428,6 +432,7 @@ export function TerminalTabsView({
       data-workspace-view={historyActive ? "history" : "terminal"}
       style={terminalWellStyle}
     >
+      <SidebarShellHost target={sidebarShell.target} contextKey={sidebarShell.context?.key ?? null} visible={shellVisible} />
       {workspaceVisible && <>
       {promptDialog}
       {confirmDialog}
@@ -640,6 +645,7 @@ export function TerminalTabsView({
             ]}
             actions={renderToolbarActions()}
           >
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-terminal-center>
           <div className="btw-terminal-split">
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             {(
@@ -783,6 +789,9 @@ export function TerminalTabsView({
               <BtwTerminalDrawer controller={btwSideQuestion} onClose={closeBtwDrawer} />
             </div>
           ) : null}
+          </div>
+          <BottomShellPanel visible={shellVisible} context={sidebarShell.context} error={sidebarShell.error}
+            registerTarget={sidebarShell.setTarget} onOpen={sidebarShell.open} onCollapse={sidebarShell.collapse} />
           </div>
           </TerminalWorkspaceFrame>
           {chatPanelMode === "float" && chatPanelFloatOpen ? (

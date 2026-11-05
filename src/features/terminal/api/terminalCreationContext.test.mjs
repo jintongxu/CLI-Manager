@@ -90,7 +90,6 @@ test("entrypoint title and startup-policy contracts remain explicit", () => {
   assert.match(tabs, /createAnonymousPiSessionHandler/);
   const sidebar = read("../../projects/hooks/useSidebarController.tsx");
   assert.doesNotMatch(sidebar, /renameOpenProjectTabs|renameSession/);
-  assert.match(sidebar, /worktree\.path,\s*title,\s*startupCmd/);
   assert.match(sidebar, /useWorktreeDepsRunnerStore/);
   for (const file of ["../../workspace/api/CommandPalette.tsx", "../../workspace/api/useKeyboardShortcuts.ts"]) {
     const text = read(file);
@@ -136,6 +135,31 @@ const tabsPath = "../hooks/useTerminalTabsController.tsx";
 const palettePath = "../../workspace/api/CommandPalette.tsx";
 const shortcutsPath = "../../workspace/api/useKeyboardShortcuts.ts";
 
+test("actual worktree opening preserves explicit or inherited title and startup policy", async () => {
+  for (const [title, startupCmd] of [[undefined, undefined], ["Chosen title", ""], ["Chosen title", "custom launch"]]) {
+    const calls = [];
+    const inherited = [];
+    const admitted = [];
+    const options = { projectId: "p", startupCmd: "project launch", envVars: { PROJECT: "yes" }, shell: "bash" };
+    const open = callback("../../projects/hooks/useSidebarController.tsx",
+      node => ts.isArrowFunction(node) && ts.isVariableDeclaration(node.parent)
+        && node.parent.name.getText() === "openWorktreeSession", {
+        rejectMissingWorktree: () => false,
+        projectWithWorktreeProviderOverrides: value => value,
+        buildProjectSplitOptions: () => options,
+        getWorktreeSidebarLabel: () => "Worktree label",
+        createSession: async (...args) => { calls.push(args); return "created"; },
+        useTerminalStore: { getState: () => ({ inheritSessionTitle: (...args) => inherited.push(args) }) },
+        dispatchCurrentWorkSessionCreated: id => admitted.push(id), closeHistory() {},
+      });
+    assert.equal(await open(project, worktree, "pane", startupCmd, title), true);
+    const expectedTitle = title ?? "Worktree label";
+    assert.deepEqual(plain(calls), [["p", "/repo-w", expectedTitle, startupCmd ?? "project launch", { PROJECT: "yes" }, "bash", "pane", "w"]]);
+    assert.deepEqual(plain(inherited), [["created", expectedTitle]]);
+    assert.deepEqual(admitted, ["created"]);
+  }
+});
+
 for (const intent of ["cli", "plain", "default", "unscoped"]) {
   test(`actual ordinary tab/palette/shortcut callbacks use ${intent} launch policy without source resume identity`, async () => {
     const current = intent === "unscoped" ? null : { ...source,
@@ -158,7 +182,8 @@ for (const intent of ["cli", "plain", "default", "unscoped"]) {
     };
     await callback(tabsPath, namedArrow("handleNewTab"), deps)(current?.id);
     callback(palettePath, paletteAction("action:new-terminal"), deps)();
-    const keyboardDeps = { ...deps, shortcutsRef: { current: { newTerminal: "new" } }, viewModeRef: { current: "full" },
+    const keyboardDeps = { ...deps, workspaceVisibleRef: { current: true },
+      shortcutsRef: { current: { newTerminal: "new" } }, viewModeRef: { current: "full" },
       eventToCombo: () => "new", isShortcutMatch: (a, b) => a === b,
       useHistoryStore: { getState: () => ({ isOpen: false }) },
     };

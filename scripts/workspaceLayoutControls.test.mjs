@@ -49,7 +49,7 @@ test("sidebar visibility is reported through the existing local state owner", ()
 });
 
 test("panel actions reveal a hidden auxiliary region before toggling its content", () => {
-  assert.equal((terminalTabsSource.match(/if \(ensureTerminalSidePanelVisible\(\)\) return;/g) ?? []).length, 6);
+  assert.equal((terminalTabsSource.match(/if \(ensureTerminalSidePanelVisible\(\)\) return;/g) ?? []).length, 5);
   assert.match(terminalTabsSource, /openFilesPanelForProject[\s\S]*ensureTerminalSidePanelVisible\(\)/);
 });
 

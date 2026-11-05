@@ -11,7 +11,7 @@ import { SshSidebarPanel } from "../../remote";
 import { BackgroundTasksPanel, type BackgroundTaskMeta } from "../components/BackgroundTasksPanel";
 import {
   Activity, ArrowLeftRight, Plus, ListClockIcon, Maximize2, Minimize2, BarChart3, GitBranch, Folder,
-  Cpu, Globe, MessageSquare, Sparkles,
+  Cpu, Globe, MessageSquare, Sparkles, Terminal,
 } from "../../../shared/ui/icons";
 import type { Project } from "../../../shared/types/index";
 import { SortableToolbarButton, CpuCatIndicator } from "../components/TerminalToolbarControls";
@@ -29,6 +29,8 @@ interface TerminalToolbarContext {
   statsPanelActive: boolean;
   providersPanelActive: boolean;
   systemResourcesPanelActive: boolean;
+  shellPanelActive: boolean;
+  handleToggleShellPanel: () => void;
   btwPanelActive: boolean;
   chatPanelActive: boolean;
   handleToggleChatPanel: () => void;
@@ -79,6 +81,8 @@ export function useTerminalToolbarRenderer({
   statsPanelActive,
   providersPanelActive,
   systemResourcesPanelActive,
+  shellPanelActive,
+  handleToggleShellPanel,
   btwPanelActive,
   chatPanelActive,
   handleToggleChatPanel,
@@ -406,6 +410,12 @@ export function useTerminalToolbarRenderer({
               </Fragment>
             ))}
           </SortableContext>
+          {terminalToolbarVisibility.shell && <div className="ui-terminal-action-fixed-slot" data-tooltip={t("terminal.panel.shell")}>
+            <button type="button" className="ui-focus-ring ui-icon-action" aria-label={t("terminal.panel.shell")}
+              aria-pressed={shellPanelActive} data-active={shellPanelActive ? "true" : "false"} onClick={handleToggleShellPanel}>
+              <Terminal size={14} strokeWidth={1.8} />
+            </button>
+          </div>}
           <div className="ui-terminal-action-cat-slot">
             <CpuCatIndicator
               enabled={systemResourceMonitoringEnabled && cpuResourceCardVisible}
@@ -424,6 +434,8 @@ export function useTerminalToolbarRenderer({
       </DndContext>
     );
   }, [
+    shellPanelActive,
+    handleToggleShellPanel,
     activeToolbarDragId,
     activeProject,
     backgroundTasks,

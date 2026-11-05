@@ -82,6 +82,12 @@ export function useKeyboardShortcuts(options: KeyboardShortcutOptions = {}) {
 
       if (!workspaceVisibleRef.current) return;
 
+      // Sidebar Shell deliberately does not replace the main activeSessionId.
+      // Leave its keys to xterm (including Ctrl+W word deletion), rather than
+      // dispatching main-session close/navigation/current-work actions. Only
+      // the truly global command palette above crosses this focus boundary.
+      if (target?.closest("[data-sidebar-shell-surface]")) return;
+
       if (combo === "Ctrl+Shift+W") {
         e.preventDefault();
         dispatchCurrentWorkAction("toggle-view");

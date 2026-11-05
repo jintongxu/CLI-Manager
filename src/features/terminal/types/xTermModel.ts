@@ -51,6 +51,8 @@ export interface Props extends TerminalContextMenuActions {
   sessionId: string;
   isActive?: boolean;
   isVisible?: boolean;
+  /** Minimum accepted viewport width; ordinary panes default to 40 columns. */
+  minTerminalCols?: number;
   fontSize?: number;
   fontFamily?: string;
   resolvedTheme?: "dark" | "light";
