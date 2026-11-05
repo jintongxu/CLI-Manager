@@ -70,7 +70,8 @@ export function startQuickChatOwner(continueInMain: (source: ChatHistorySource) 
       const settings = useSettingsStore.getState();
       const payload: QuickSnapshot = { epoch, version: ++version, state: { ...selectedSnapshot(owner.getSnapshot(), quickSelected, true), ready: initialized && owner.getSnapshot().ready }, catalog,
         language: settings.language, theme: settings.resolvedTheme,
-        lightPalette: settings.lightThemePalette, darkPalette: settings.darkThemePalette };
+        lightPalette: settings.lightThemePalette, darkPalette: settings.darkThemePalette,
+        defaultReasoningEffort: settings.chatDefaultReasoningEffort };
       void invoke("quick_chat_publish", { kind: "snapshot", payload }).catch(() => {});
     };
     const schedule = () => {

@@ -1,5 +1,10 @@
 # Changelog
 
+## TEMP — 对话默认推理强度 / Default chat reasoning effort
+
+- 设置→对话模型新增默认推理强度，与默认供应商/模型并列，独立确认落盘并提供保存中/失败反馈；当前提供中、高、超高、最大四档，缺失或无效配置回退到中。主对话、侧栏和快捷对话在设置就绪后初始化未保存强度的会话，保留已有会话选择；修改默认值不覆盖已初始化的会话。快捷窗口通过主窗口快照获得最新默认值，配置纳入偏好同步，支持中英文。/ Chat model settings now include an independently persisted default reasoning effort with saving/error feedback. Medium, High, Extra High and Maximum are offered; missing/invalid values fall back to Medium. Workspace, sidebar and Quick Chat initialize conversations after preferences are ready without overwriting stored choices. Quick Chat receives the authoritative default from the main window; preference sync and bilingual copy are included.
+- 默认初始化/权威快照与现有推理映射测试5例、快捷推理测试2例、设置页测试9例通过；类型及严格架构检查通过。真实桌面中英文切换与三个入口模型请求尚待手动验收。/ Five reasoning/default tests, two Quick Chat reasoning tests and nine settings-page tests pass, with clean type and strict architecture checks. Desktop language-switch and live three-surface request verification remain manual.
+
 ## TEMP — 对话阅读区与流式提示 / Chat reading layout and streaming status
 
 - 主对话阅读列与输入框统一加宽至 960px，保持助手通栏排版；调整轮次间距及用户气泡圆角，短代码块按内容收缩、长代码保留块内横向滚动。生成中显示主题色脉动点与现有双语状态文案，并遵循减少动态效果设置。/ Workspace messages and composer use a 960px reading column with flat assistant turns, refined spacing and user bubbles. Short code blocks fit content while long code retains internal horizontal scrolling. Streaming shows a themed status indicator with existing bilingual labels and reduced-motion support.

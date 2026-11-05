@@ -2,6 +2,7 @@ import { DEFAULT_TRANSLATOR_GLOBAL_SHORTCUTS, migrateTranslatorGlobalShortcuts, 
 import { createSettingsPersistence, type SettingsPersistence } from "./settingsPersistence";
 import { createWorktreeRootSaver, loadedWorktreeRoot } from "./worktreeRootPersistence";
 import { normalizeChatDefaultModelPreference, type ChatDefaultModelPreference } from "./chatDefaultModel";
+import { normalizeChatDefaultReasoningEffort, type ChatDefaultReasoningEffort } from "./chatDefaultReasoning";
 import { normalizeExitWithRunningTasksBehavior } from "./exitPolicy";
 export { normalizeExitWithRunningTasksBehavior } from "./exitPolicy";
 import { isAppearanceKey } from "./appearanceTransaction";
@@ -29,14 +30,8 @@ import {
   type TerminalInputSuggestionProvider,
   type TerminalInputSuggestionUsageStats,
 } from "../lib/terminalInputSuggestions";
-import {
-  migrateTerminalShellProfiles,
-  type TerminalShellProfile,
-} from "../lib/terminalShellProfiles";
-import {
-  sanitizeThirdPartyHookTargets,
-  type ThirdPartyHookTarget,
-} from "../lib/thirdPartyNotifications";
+import { migrateTerminalShellProfiles, type TerminalShellProfile } from "../lib/terminalShellProfiles";
+import { sanitizeThirdPartyHookTargets, type ThirdPartyHookTarget } from "../lib/thirdPartyNotifications";
 import {
   DESKTOP_PET_SIZE_DEFAULT_PERCENT,
   normalizeDesktopPetSizePercent,
@@ -418,6 +413,7 @@ export interface Settings {
   uiTextColor: string;
   lastSettingsTab: LastSettingsTab;
   chatDefaultModel: ChatDefaultModelPreference | null;
+  chatDefaultReasoningEffort: ChatDefaultReasoningEffort;
   translatorModelKey: string;
   translatorPrompt: string;
   statuslineEditorSource: StatuslineEditorSource;
@@ -591,6 +587,7 @@ const DEFAULTS: Settings = {
   uiTextColor: "",
   lastSettingsTab: "general",
   chatDefaultModel: null,
+  chatDefaultReasoningEffort: "medium",
   translatorModelKey: "",
   translatorPrompt: "",
   statuslineEditorSource: "claude",
@@ -1501,6 +1498,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     entries.sidebarWidth = clampNumber(entries.sidebarWidth, 64, 500, DEFAULTS.sidebarWidth);
     entries.historySidebarWidth = clampNumber(entries.historySidebarWidth, 180, 520, DEFAULTS.historySidebarWidth);
     entries.chatDefaultModel = normalizeChatDefaultModelPreference(entries.chatDefaultModel);
+    entries.chatDefaultReasoningEffort = normalizeChatDefaultReasoningEffort(entries.chatDefaultReasoningEffort);
     entries.historySmartTitle = migrateHistorySmartTitleSettings(entries.historySmartTitle);
     entries.worktreeOrderByProject = sanitizeWorktreeOrder(entries.worktreeOrderByProject);
     const storedHistoryDetailSortDirections = entries.historyDetailSortDirections;
@@ -1948,8 +1946,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     const s = await getStore();
     const normalized = key === "chatDefaultModel"
       ? normalizeChatDefaultModelPreference(value)
+      : key === "chatDefaultReasoningEffort" ? normalizeChatDefaultReasoningEffort(value)
       : key === "exitWithRunningTasksBehavior" ? normalizeExitWithRunningTasksBehavior(value) : value;
-    await (key === "chatDefaultModel" ? s.setConfirmed(key, normalized) : s.set(key, normalized));
+    // Publish chat defaults only after durable save; failures retain the previous selection.
+    await (key === "chatDefaultModel" || key === "chatDefaultReasoningEffort" ? s.setConfirmed(key, normalized) : s.set(key, normalized));
     set({ [key]: normalized } as Partial<SettingsStore>);
     if (key === "debugMode") {
       void applyDebugMode(value as boolean);

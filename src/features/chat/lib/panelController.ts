@@ -13,7 +13,7 @@ export type QuickCommand =
   | { op: "update"; conversationId: string; providerId: string; model: string }
   | { op: "generate"; conversationId: string; retry: boolean; reasoning: ReasoningEffort; images: readonly string[] };
 export interface CommandEnvelope { id: string; epoch?: string; seq?: number; command: QuickCommand }
-export interface QuickSnapshot { epoch: string; version: number; state: ChatSnapshot; catalog: readonly ChatProvider[]; language: string; theme: string; lightPalette: string; darkPalette: string }
+export interface QuickSnapshot { epoch: string; version: number; state: ChatSnapshot; catalog: readonly ChatProvider[]; language: string; theme: string; lightPalette: string; darkPalette: string; defaultReasoningEffort?: ReasoningEffort }
 export interface QuickAck { id: string; error: string | null }
 
 export function selectedSnapshot(state: ChatSnapshot, selected: string | null = state.selected, quickOnly = false): ChatSnapshot {

@@ -27,12 +27,12 @@ import { chatController } from "./lifecycle";
 import type { ChatController } from "../lib/chatController";
 import { activateChatLink, chatTime, copyChatText, isFollowing, shouldSubmit } from "../lib/interactions";
 import { applyPinnedOrder, applyStoredOrder, moveIndexWithinOrder, moveWithinOrder, persistOrder, persistPinnedIds, readPinnedIds, readStoredOrder } from "../lib/conversationOrder";
-import { DEFAULT_REASONING_EFFORT, persistReasoning, readReasoning } from "../lib/reasoning";
+import { DEFAULT_REASONING_EFFORT, persistReasoning } from "../lib/reasoning";
+import { useConversationReasoning } from "../hooks/useConversationReasoning";
 import { reasoningLevelsFor } from "../lib/reasoningCapabilities";
 import { CHAT_HISTORY_SOURCES, type ChatHistorySource } from "./historySource";
 import { HistorySelection } from "../lib/historySelection";
 import { HistorySelectionControls } from "../components/HistorySelectionControls";
-import type { ReasoningEffort } from "../lib/types";
 import { diagnoseChatError } from "../lib/chatErrors";
 
 interface AttachedFile {
@@ -114,7 +114,6 @@ export function ChatWorkspace({
   // File & image attachment states
   const [attachments, setAttachments] = useState<AttachedFile[]>([]);
   const [preview, setPreview] = useState<{ src: string; name: string } | null>(null);
-  const [reasoning, setReasoning] = useState<ReasoningEffort>("medium");
   const [reasoningMenuOpen, setReasoningMenuOpen] = useState(false);
   const reasoningMenuRef = useRef<HTMLDivElement>(null);
   const reasoningButtonRef = useRef<HTMLButtonElement>(null);
@@ -135,6 +134,7 @@ export function ChatWorkspace({
   }, [preview]);
 
   const selected = state.selected;
+  const [reasoning, setReasoning] = useConversationReasoning(selected);
   const previousSelection = useRef<{ id: string | null; origin: ChatHistorySource } | null>(null);
   const restoringSelection = useRef(false);
   useEffect(() => {
@@ -179,7 +179,6 @@ export function ChatWorkspace({
     })();
   }, [selected, state.conversations, state.details, state.ready, state.suspended, historyLocked, activeSource, controller]);
   useEffect(() => {
-    setReasoning(selected ? readReasoning(selected) : "medium");
     setReasoningMenuOpen(false);
   }, [selected]);
   const detail = selected ? state.details[selected] : undefined;

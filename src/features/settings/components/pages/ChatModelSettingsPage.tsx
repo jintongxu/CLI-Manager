@@ -21,6 +21,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Eye, EyeOff, ListFilter, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { useI18n } from "../../../../shared/i18n/index";
 import { useSettingsStore } from "../../../../shared/preferences/settingsStore";
+import { normalizeChatDefaultReasoningEffort, type ChatDefaultReasoningEffort } from "../../../../shared/preferences/chatDefaultReasoning";
 import { defaultCatalogModel } from "../../../chat/api/chatProviderCatalog";
 
 type Model = { modelId: string; enabled: boolean; isDefault: boolean };
@@ -107,6 +108,9 @@ function deriveId(name: string, fallbackSuffix = ""): string {
 export function ChatModelSettingsPage() {
   const { t } = useI18n();
   const preference = useSettingsStore((state) => state.chatDefaultModel);
+  const reasoningEffort = useSettingsStore((state) => state.chatDefaultReasoningEffort);
+  const [reasoningSaving, setReasoningSaving] = useState(false);
+  const [reasoningSaveError, setReasoningSaveError] = useState(false);
   const settingsLoaded = useSettingsStore((state) => state.loaded);
   const updateSetting = useSettingsStore((state) => state.update);
   const [defaultSaving, setDefaultSaving] = useState(false);
@@ -381,6 +385,23 @@ export function ChatModelSettingsPage() {
       setDefaultSaveError(true);
     } finally {
       setDefaultSaving(false);
+    }
+  };
+
+  const reasoningOptions = (["medium", "high", "xhigh", "max"] satisfies ChatDefaultReasoningEffort[])
+    .map((value) => ({ value, label: t(`chat.reasoning.${value}`) }));
+
+  // Keep the displayed selection unchanged until the durable settings write succeeds.
+  const saveReasoning = async (value: string | null) => {
+    if (!value || reasoningSaving) return;
+    setReasoningSaving(true);
+    setReasoningSaveError(false);
+    try {
+      await updateSetting("chatDefaultReasoningEffort", normalizeChatDefaultReasoningEffort(value));
+    } catch {
+      setReasoningSaveError(true);
+    } finally {
+      setReasoningSaving(false);
     }
   };
 
@@ -749,21 +770,40 @@ export function ChatModelSettingsPage() {
       </Box>
       <Card padding="md" radius="md" className="border border-border/60 bg-surface-container-lowest">
         <Stack gap="xs">
-          <Select
-            label={t("settings.chatModels.conversationDefault")}
-            description={t("settings.chatModels.conversationDefaultHint")}
-            value={savedKey}
-            data={[
-              { value: "catalog", label: t("settings.chatModels.followCatalog") },
-              ...defaultOptions,
-              ...(preferenceUnavailable ? [{ value: savedKey, label: `${preference!.providerId} · ${preference!.model} (${t("settings.chatModels.savedUnavailable")})`, disabled: true }] : []),
-            ]}
-            disabled={!settingsLoaded || defaultSaving || catalogState !== "ready"}
-            allowDeselect={false}
-            searchable
-            comboboxProps={comboboxProps}
-            onChange={(value) => void saveDefault(value)}
-          />
+          <Box style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))", gap: 16, alignItems: "start" }}>
+            <Select
+              label={t("settings.chatModels.conversationDefault")}
+              description={t("settings.chatModels.conversationDefaultHint")}
+              inputWrapperOrder={["label", "input", "description", "error"]}
+              styles={{ root: { minWidth: 0 }, description: { marginTop: 6 } }}
+              value={savedKey}
+              data={[
+                { value: "catalog", label: t("settings.chatModels.followCatalog") },
+                ...defaultOptions,
+                ...(preferenceUnavailable ? [{ value: savedKey, label: `${preference!.providerId} · ${preference!.model} (${t("settings.chatModels.savedUnavailable")})`, disabled: true }] : []),
+              ]}
+              disabled={!settingsLoaded || defaultSaving || catalogState !== "ready"}
+              allowDeselect={false}
+              searchable
+              comboboxProps={comboboxProps}
+              onChange={(value) => void saveDefault(value)}
+            />
+            <Select
+              label={t("chat.defaultReasoning.label")}
+              description={t("chat.defaultReasoning.hint")}
+              inputWrapperOrder={["label", "input", "description", "error"]}
+              styles={{ root: { minWidth: 0 }, description: { marginTop: 6 } }}
+              value={reasoningEffort}
+              data={reasoningOptions}
+              disabled={!settingsLoaded || reasoningSaving}
+              allowDeselect={false}
+              comboboxProps={comboboxProps}
+              rightSection={reasoningSaving ? <Loader size="xs" aria-label={t("chat.defaultReasoning.saving")} /> : undefined}
+              error={reasoningSaveError ? t("chat.defaultReasoning.saveError") : undefined}
+              onChange={(value) => void saveReasoning(value)}
+            />
+          </Box>
+          {reasoningSaving && <Text size="sm" role="status">{t("chat.defaultReasoning.saving")}</Text>}
           <Text size="sm" role="status">
             {catalogState === "loading" ? t("settings.chatModels.catalogLoading")
               : catalogState === "error" ? t("settings.chatModels.loadError")

@@ -1,9 +1,10 @@
 import type { ReasoningEffort } from "./types";
 import { normalizeReasoningFor } from "./reasoningCapabilities";
+import { normalizeChatDefaultReasoningEffort } from "../../../shared/preferences/chatDefaultReasoning";
 
 export const CHAT_REASONING_STORAGE_KEY = "cli-manager.chat.reasoning";
 
-/** Single source of truth: every chat surface starts at medium unless the user picks otherwise. */
+/** Compatibility fallback when no persisted default preference is available. */
 export const DEFAULT_REASONING_EFFORT: ReasoningEffort = "medium";
 
 export const REASONING_LEVELS: ReasoningEffort[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
@@ -18,11 +19,11 @@ function readMap(): Record<string, ReasoningEffort> {
   }
 }
 
-export function readReasoning(conversationId: string): ReasoningEffort {
+export function readReasoning(conversationId: string, defaultEffort: unknown = DEFAULT_REASONING_EFFORT): ReasoningEffort {
   const level = readMap()[conversationId];
   return level && REASONING_LEVELS.includes(level)
     ? normalizeReasoningFor(null, null, level)
-    : DEFAULT_REASONING_EFFORT;
+    : normalizeChatDefaultReasoningEffort(defaultEffort);
 }
 
 export function persistReasoning(conversationId: string, level: ReasoningEffort) {

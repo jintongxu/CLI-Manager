@@ -226,8 +226,10 @@ test('independent creation/detail loads never borrow global selection or its rac
   assert.deepEqual(Object.keys(projected.details), [id]);
 });
 
-test('quick reasoning starts medium and retains explicit off in generated intent', async () => {
-  assert.match(readFileSync('src/features/chat/api/QuickChatWindowApp.tsx', 'utf8'), /useState<ReasoningEffort>\("medium"\)/);
+test('quick reasoning uses authoritative conversation defaults and retains explicit off in generated intent', async () => {
+  const source = readFileSync('src/features/chat/api/QuickChatWindowApp.tsx', 'utf8');
+  assert.match(source, /useConversationReasoning\(state\.selected/);
+  assert.match(source, /remote\.presentation\?\.defaultReasoningEffort/);
   const f = remoteFixture(); await f.remote.start();
   const pending = f.remote.generate('c1', false, 'off'); await tick();
   assert.equal(f.sent.at(-1).command.reasoning, 'off'); f.ack(); await pending;

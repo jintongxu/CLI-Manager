@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { Toaster } from "sonner";
 import { ChatPanelSurface } from "../components/ChatPanelSurface";
 import { QuickChatRemote } from "../lib/quickChatRemote";
-import type { ReasoningEffort } from "./chatReasoning";
+import { useConversationReasoning } from "../hooks/useConversationReasoning";
 import { useSettingsStore, type LanguagePreference } from "../../../shared/preferences/settingsStore";
 import { useI18n } from "../../../shared/i18n/index";
 import "../../../App.css";
@@ -15,7 +15,10 @@ const remote = new QuickChatRemote();
 export default function QuickChatWindowApp() {
   const { t } = useI18n();
   const state = useSyncExternalStore(remote.subscribe, remote.getSnapshot, remote.getSnapshot);
-  const [reasoning, setReasoning] = useState<ReasoningEffort>("medium");
+  const [reasoning, setReasoning] = useConversationReasoning(state.selected, {
+    loaded: state.ready && !!remote.presentation,
+    effort: remote.presentation?.defaultReasoningEffort,
+  });
   const [pinned, setPinned] = useState(false);
   const hide = () => { void invoke("quick_chat_window", { action: "hide" }).catch(remote.report); };
   useEffect(() => {
