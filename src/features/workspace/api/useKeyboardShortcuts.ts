@@ -10,7 +10,6 @@ import { useHistoryStore } from "../../history/index";
 import { copyAiText } from "../../files/api/aiClipboard";
 import { formatAiPathBlock } from "../../files/api/aiPathFormatter";
 import { TERMINAL_TAB_CLOSE_REQUEST_EVENT, type TerminalTabCloseRequestDetail } from "../../terminal/api/terminalCloseConfirm";
-import { dispatchCurrentWorkAction } from "../../terminal/api/currentWorkEvents";
 import { dispatchChatPanelToggle } from "../../terminal/api/chatPanelCommands";
 
 /** Convert a KeyboardEvent to a combo string like "Ctrl+Shift+T" */
@@ -73,6 +72,16 @@ export function useKeyboardShortcuts(options: KeyboardShortcutOptions = {}) {
       const tag = target?.tagName;
       const isFileEditorTarget = !!target?.closest(".ui-file-editor-pane");
 
+      // Editor confirmations are portalled outside the companion DOM tree.
+      // Keep their keys local before any global shortcut (including the palette).
+      if (target?.closest("[data-file-editor-dialog]")) {
+        if (combo === "Ctrl+W" || isShortcutMatch(combo, shortcuts.closeTerminal)) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        return;
+      }
+
       // Command palette toggle works regardless of focus context
       if (isShortcutMatch(combo, shortcuts.commandPalette)) {
         e.preventDefault();
@@ -82,27 +91,20 @@ export function useKeyboardShortcuts(options: KeyboardShortcutOptions = {}) {
 
       if (!workspaceVisibleRef.current) return;
 
+      // File close belongs to the companion controller (including dirty confirmation),
+      // never to the still-active main Pi session behind it.
+      if (target?.closest("[data-file-companion]")
+        && (combo === "Ctrl+W" || isShortcutMatch(combo, shortcuts.closeTerminal))) {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("file-companion-close-file"));
+        return;
+      }
+
       // Sidebar Shell deliberately does not replace the main activeSessionId.
       // Leave its keys to xterm (including Ctrl+W word deletion), rather than
-      // dispatching main-session close/navigation/current-work actions. Only
+      // dispatching main-session close/navigation actions. Only
       // the truly global command palette above crosses this focus boundary.
       if (target?.closest("[data-sidebar-shell-surface]")) return;
-
-      if (combo === "Ctrl+Shift+W") {
-        e.preventDefault();
-        dispatchCurrentWorkAction("toggle-view");
-        return;
-      }
-      if (combo === "Ctrl+Shift+ArrowRight") {
-        e.preventDefault();
-        dispatchCurrentWorkAction("next");
-        return;
-      }
-      if (combo === "Ctrl+Shift+ArrowLeft") {
-        e.preventDefault();
-        dispatchCurrentWorkAction("previous");
-        return;
-      }
 
       if (combo === "Alt+C") {
         e.preventDefault();

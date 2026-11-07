@@ -178,16 +178,9 @@ function fixture(sessions = [], workspans = [], daemon = [], projects = [], work
   const calls = [];
   const persisted = {
     sessions, workspans, activeSessionId: sessions[0]?.id ?? null, activeWorkspanId: workspans[0]?.id ?? null, splits: [],
-    currentWorkSessionIds: [], currentWorkActiveSessionId: null, currentWorkPaneTree: null,
-    replaceCurrentWorkSession(sourceId, replacementId) {
-      const next = currentWork.replaceCurrentWorkSession({ sessionIds: this.currentWorkSessionIds, activeSessionId: this.currentWorkActiveSessionId, paneTree: this.currentWorkPaneTree }, sourceId, replacementId);
-      this.currentWorkSessionIds = next.sessionIds; this.currentWorkActiveSessionId = next.activeSessionId; this.currentWorkPaneTree = next.paneTree;
-      calls.push(["replaceCurrentWork", sourceId, replacementId]);
-    },
     async saveSessions(value) { calls.push(["saveSessions", plain(value)]); this.sessions = value; },
     async saveActiveSessionId(value) { calls.push(["saveActive", value]); this.activeSessionId = value; },
     async saveWorkspans(value, id) { calls.push(["saveWorkspans", plain(value)]); this.workspans = value; this.activeWorkspanId = id; },
-    async saveCurrentWork(ids, activeId) { calls.push(["saveCurrentWork", ids, activeId]); this.currentWorkSessionIds = [...ids]; this.currentWorkActiveSessionId = activeId; },
     async saveSplits(value) { this.splits = value; },
   };
   const dependencies = {
@@ -212,7 +205,7 @@ function fixture(sessions = [], workspans = [], daemon = [], projects = [], work
     async saveRecoverySnapshot(getTerminal) {
       const latest = getTerminal();
       await persisted.saveWorkspans(latest.workspans, latest.activeWorkspanId, latest.sessions);
-      calls.push(["recoverySnapshot", plain({ sessions: latest.sessions, ids: persisted.currentWorkSessionIds, tree: persisted.currentWorkPaneTree })]);
+      calls.push(["recoverySnapshot", plain({ sessions: latest.sessions, workspans: latest.workspans })]);
     },
     useSettingsStore: { getState: () => ({ workspanEnabled: true, unsplitBehavior: "merge" }) },
     TERMINAL_STORE_IN_TAURI: false,
@@ -477,7 +470,8 @@ for (const daemon of [false, true]) {
     assert.equal(f.api.getState().workspans[0].paneTree.sessionIds[0], "a");
 
     // Reopen materializes: daemon alive → attach with the same id; otherwise rebuild.
-    f.api.getState().setActive("a");
+    f.api.getState().reopenSession("a");
+    f.api.getState().setActive("a"); // Sidebar target event in the same turn.
     await f.settled().catch(() => {});
     await new Promise((resolve) => setTimeout(resolve, 0));
     const restored = f.api.getState().sessions[0];
@@ -487,6 +481,8 @@ for (const daemon of [false, true]) {
     assert.equal(f.api.getState().dormantRestoredSessionIds.has("a"), false);
     assert.equal(f.api.getState().activeSessionId, finalId);
     assert.equal(f.api.getState().workspans[0].paneTree.sessionIds[0], finalId);
+    assert.equal(f.calls.filter(([kind]) => kind === "subscribe").length, 1, "one status consumer per materialized owner");
+    assert.equal(f.calls.filter(([kind]) => kind === "create").length, daemon ? 0 : 1, "one PTY per reopen plus target event");
     if (daemon) {
       assert.equal(f.calls.some(([kind]) => kind === "create"), false, "daemon materialize attaches without create");
       assert.equal(f.api.getState().sessionStatuses[finalId], "running");
@@ -497,22 +493,84 @@ for (const daemon of [false, true]) {
   });
 }
 
+for (const daemon of [false, true]) {
+  test(`actual dormant coordinator shares pending ${daemon ? "attach" : "recreate"} through final activation`, async () => {
+    const f = fixture([session("a", { tabHidden: true })], [span("w", "p", "a")]);
+    f.api.setState({ dormantRestoredSessionIds: new Set(["a"]) });
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    let enumerations = 0;
+    const { createDormantRestoreCoordinator } = load("../store/terminalDormantRestore.ts", {
+      ...f.dependencies,
+      listOwnedDaemonSessions: async () => {
+        enumerations++;
+        await gate;
+        return daemon ? [{ sessionId: "a", alive: true }] : [];
+      },
+    });
+    const coordinator = createDormantRestoreCoordinator({
+      get: f.api.getState, set: f.api.setState,
+      queueSshSessionPersistence: async () => {}, persistSshConnectionStateAfterPtyStatus() {},
+    });
+    const first = coordinator.materializeDormantSession("a");
+    await Promise.resolve(); // Enter the native-boundary wait before a second request.
+    const second = coordinator.materializeDormantSession("a");
+    assert.equal(first, second, "all callers await the exact same operation");
+    assert.equal(enumerations, 1);
+    release();
+    assert.deepEqual(await Promise.all([first, second]), [true, true]);
+    assert.equal(f.calls.filter(([kind]) => kind === "create").length, daemon ? 0 : 1);
+    assert.equal(f.calls.filter(([kind]) => kind === "subscribe").length, 1);
+    assert.equal(f.api.getState().activeSessionId, daemon ? "a" : "recreated");
+    assert.equal(f.api.getState().dormantRestoredSessionIds.size, 0);
+    assert.equal(await coordinator.materializeDormantSession("a"), true);
+    assert.equal(enumerations, 1, "settled requests do not repeat native work");
+  });
+}
+
+test("actual dormant coordinator releases failed flight so a later explicit reopen can retry", async () => {
+  const f = fixture([session("a", { tabHidden: true })], [span("w", "p", "a")]);
+  f.api.setState({ dormantRestoredSessionIds: new Set(["a"]) });
+  let attempts = 0;
+  const { createDormantRestoreCoordinator } = load("../store/terminalDormantRestore.ts", {
+    ...f.dependencies,
+    terminalProcessManager: { ...f.dependencies.terminalProcessManager,
+      create: async () => { if (++attempts === 1) throw new Error("launch rejected"); return "retried"; },
+    },
+  });
+  const coordinator = createDormantRestoreCoordinator({
+    get: f.api.getState, set: f.api.setState,
+    queueSshSessionPersistence: async () => {}, persistSshConnectionStateAfterPtyStatus() {},
+  });
+  const first = coordinator.materializeDormantSession("a");
+  assert.equal(first, coordinator.materializeDormantSession("a"));
+  assert.equal(await first, false);
+  assert.equal(f.api.getState().dormantRestoredSessionIds.has("a"), true);
+  assert.equal(await coordinator.materializeDormantSession("a"), true);
+  assert.equal(attempts, 2);
+  assert.equal(f.api.getState().activeSessionId, "retried");
+});
+
 test("render contracts keep backing trees and xterm mounted even after the last visible tab is hidden", () => {
   const view = readFileSync(new URL("../components/TerminalTabsView.tsx", import.meta.url), "utf8");
   const leaf = readFileSync(new URL("../components/PaneLeafView.tsx", import.meta.url), "utf8");
+  const fileFocus = readFileSync(new URL("../api/fileCompanionFocus.ts", import.meta.url), "utf8");
   const controller = readFileSync(new URL("../hooks/useTerminalTabsController.tsx", import.meta.url), "utf8");
   const terminal = readFileSync(new URL("../components/XTermTerminal.tsx", import.meta.url), "utf8");
   const hiddenDisplaySource = readFileSync(new URL("../lib/hiddenTerminalDisplayLifecycle.ts", import.meta.url), "utf8");
   const display = readFileSync(new URL("../hooks/useTerminalDisplay.ts", import.meta.url), "utf8");
-  assert.match(view, /mountedWorkspanLayouts\.length > 0/);
+  assert.match(view, /mountedWorkspanLayouts\.map/);
   assert.match(view, /node=\{layout\.paneTree\}/);
   assert.match(view, /visibleNode=\{layout\.visiblePaneTree\}/);
-  assert.match(view, /visibleSessions\.length === 0/);
-  assert.match(leaf, /paneSessions\.map\(\(session\)/);
+  assert.match(view, /!hasVisibleSessions && !useExternalTerminal/);
+  assert.match(leaf, /paneSessions\.filter\(\(session\) => session\.kind !== "file-editor"\)\.map\(\(session\)/);
   assert.match(leaf, /<XTermTerminal/);
+  assert.match(leaf, /setFileCompanionFocused\(false\)/);
+  assert.match(fileFocus, /export function setFileCompanionFocused/);
   assert.match(controller, /protectedSessionIds: readonly string\[\] = \[\], destroy = false/);
-  assert.match(controller, /closeTerminalSessions\(sessionIds, protectedSessionIds, destroy \? destroySession : hideSession/);
-  assert.match(controller, /visibleSessionIds=\{visibleSessionIds\}/);
+  assert.match(controller, /closeTerminalTab\(sessionId, useTerminalStore.getState, destroy\)/);
+  const adapter = readFileSync(new URL("../hooks/useTerminalPaneAdapter.tsx", import.meta.url), "utf8");
+  assert.match(adapter, /visibleSessionIds=\{state.visibleSessionIds\}/);
   assert.match(controller, /destroy \|\| \(session\.kind \?\? "pty"\) !== "pty"/);
   assert.match(hiddenDisplaySource, /HIDDEN_TERMINAL_DISPOSE_DELAY_MS = 60_000/);
   assert.match(terminal, /Keep the xterm\/parser and PTY output consumer mounted/);
@@ -619,22 +677,29 @@ test("sidebar actions validate partitions, append pin transitions and never chan
 });
 
 
-test("restore remaps and persists current-work sessions when recreated PTYs get new IDs", async () => {
+test("restore remaps canonical workspans without flattening when the feature flag is off", async () => {
   const originalSessions = [session("a"), session("b")];
-  const f = fixture(originalSessions, [span("w", "p", "a")]);
-  f.persisted.currentWorkSessionIds = ["b", "a", "missing"];
-  f.persisted.currentWorkActiveSessionId = "a";
+  const f = fixture(originalSessions, [span("w", "p", "a"), span("other", "q", "b")]);
+  f.dependencies.useSettingsStore.getState = () => ({ workspanEnabled: false });
   let nextId = 0;
   f.dependencies.terminalProcessManager.create = async () => `recreated-${++nextId}`;
-
   await f.api.getState().restoreSessions(new Map(), {});
+  assert.deepEqual(Array.from(f.api.getState().sessions, item => item.id), ["recreated-1", "recreated-2"]);
+  assert.deepEqual(plain(f.api.getState().workspans).map(item => item.paneTree.sessionIds), [["recreated-1"], ["recreated-2"]]);
+  assert.equal(f.calls.some(([kind]) => kind === "saveCurrentWork"), false);
+});
 
-  assert.deepEqual(Array.from(f.api.getState().sessions, (item) => item.id), ["recreated-1", "recreated-2"]);
-  assert.deepEqual([...f.persisted.currentWorkSessionIds], ["recreated-2", "recreated-1"]);
-  assert.equal(f.persisted.currentWorkActiveSessionId, "recreated-1");
-  assert.deepEqual(plain(f.calls.find(([kind]) => kind === "saveCurrentWork")), [
-    "saveCurrentWork", ["recreated-2", "recreated-1"], "recreated-1",
-  ]);
+test("runtime settings toggles preserve canonical topology, focus and hidden metadata without lifecycle calls", () => {
+  const sessions = [session("a"), session("b", { tabHidden: true }), session("c")];
+  const tree = { type: "split", id: "split", direction: "horizontal", ratio: 0.63,
+    first: pane.createPaneLeaf("left", ["a"], "a"), second: pane.createPaneLeaf("right", ["b"], "b") };
+  const f = fixture(sessions, [{ ...span("w", "left", "a"), paneTree: tree }, span("other", "q", "c")]);
+  f.api.setState({ fullscreenPaneId: "left" });
+  const before = f.api.getState();
+  for (const enabled of [false, true, false]) f.api.getState().setWorkspanModeEnabled(enabled);
+  const after = f.api.getState();
+  for (const key of ["sessions", "workspans", "paneTree", "activeWorkspanId", "activePaneId", "activeSessionId", "fullscreenPaneId"]) assert.equal(after[key], before[key], key);
+  assert.deepEqual(f.calls, []);
 });
 
 test("daemon restore and direct attach preserve explicit task states and use none/done fallback independent of alive", async () => {
@@ -642,15 +707,15 @@ test("daemon restore and direct attach preserve explicit task states and use non
     const expected = ["none", "running", "attention", "done", "failed"].includes(taskStatus) ? taskStatus : alive ? "none" : "done";
     assert.equal(status.resolveDaemonAttachTaskStatus({ alive, taskStatus }), expected);
     const meta = { sessionId: "a", alive, taskStatus };
-    const original = session("a", { tabHidden: true });
+    const original = session("a", { tabHidden: false });
     const restored = fixture([original], [span("w", "p", "a")], [meta]);
     await restored.api.getState().restoreSessions(new Map(), {});
-    assert.equal(restored.api.getState().tabNotifications.a, expected);
+    assert.equal(restored.api.getState().tabNotifications.a ?? "none", expected);
     assert.equal(restored.api.getState().sessionStatuses.a, alive ? "running" : "exited");
     assert.ok(!restored.calls.some(([kind]) => kind === "create"));
     const attached = fixture([], [], [meta]);
     await attached.api.getState().attachDaemonSession("a");
-    assert.equal(attached.api.getState().tabNotifications.a, expected);
+    assert.equal(attached.api.getState().tabNotifications.a ?? "none", expected);
     assert.equal(attached.api.getState().sessionStatuses.a, alive ? "running" : "exited");
     assert.ok(!attached.calls.some(([kind]) => kind === "create"));
   }
@@ -924,11 +989,14 @@ for (const action of ["create", "split"]) {
             return { getState: () => state, setState: update => { state = { ...state, ...update }; } };
           },
           Store: { load: async () => ({
+            async get() { return null; },
             async set(key) { f.calls.push(["diskSet", key]); },
             async save() { f.calls.push(["diskFailure", "save"]); throw new Error("disk unavailable"); },
           }) },
           getCliManagerDataPaths: async () => ({ sessionsStorePath: "sessions.dev.json" }),
           singleFlight: fn => fn,
+          ...load("../api/sessionPersistenceBarrier.ts"),
+          ...load("../api/terminalLayoutMigration.ts", { ...pane, ...workspan, ...currentWork }),
         });
         f.persisted.saveSessions = diskStore.getState().saveSessions;
       } else {
@@ -948,7 +1016,7 @@ for (const action of ["create", "split"]) {
       assert.ok(f.calls.some(([kind, target, text]) => kind === "write" && target === id && text.includes("codex")));
       assert.ok(f.calls.some(([kind, key]) => kind === "toastError" && key === "saveSession.failed"));
       assert.ok(f.calls.some(([kind, message, detail]) => kind === "logError" && message === "Failed to persist committed terminal launch"
-        && detail.sessionId === id && String(detail.err).includes("disk unavailable")));
+        && detail.sessionId === id && String(detail.err).includes("disk unavailable")), JSON.stringify(f.calls));
       assert.ok(!f.calls.some(([kind, key]) => kind === "toastError" && /createFailed|splitCreateFailed/.test(key)));
       if (failure !== "saveActiveSessionId") assert.ok(f.calls.some(([kind]) => kind === "saveActive"));
       if (failure !== "saveWorkspans") assert.ok(f.calls.some(([kind]) => kind === "saveWorkspans"));
@@ -1028,19 +1096,9 @@ test("recovery prepares unpublished status subscription, deduplicates, and commi
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(f.calls.some(([kind]) => kind === "close"), false);
   f.api.setState({ sessions: [...f.api.getState().sessions, session("concurrent")], workspans: [...f.api.getState().workspans.map(w => ({ ...w, customTitle: "latest" })), span("new", "new-pane", "concurrent")], activeWorkspanId: "other" });
-  f.persisted.currentWorkSessionIds = ["b", "a", "concurrent"];
-  f.persisted.currentWorkActiveSessionId = "b";
-  f.persisted.currentWorkPaneTree = { type: "split", id: "cw-split", direction: "horizontal", ratio: 0.7,
-    first: {type: "leaf", id: "cw-left", sessionIds: ["b", "concurrent"], activeSessionId: "b"},
-    second: {type: "leaf", id: "cw-right", sessionIds: ["a"], activeSessionId: "a"} };
   release();
   assert.equal(await first, "recreated");
-  assert.deepEqual(plain(f.persisted.currentWorkSessionIds), ["b", "recreated", "concurrent"]);
-  assert.equal(f.persisted.currentWorkActiveSessionId, "b");
-  assert.equal(f.persisted.currentWorkPaneTree.ratio, 0.7);
-  assert.equal(f.persisted.currentWorkPaneTree.second.id, "cw-right");
-  assert.deepEqual(plain(f.persisted.currentWorkPaneTree.second.sessionIds), ["recreated"]);
-  assert.ok(f.calls.findIndex(([kind]) => kind === "replaceCurrentWork") < f.calls.findIndex(([kind]) => kind === "currentWorkReplaced"));
+  assert.deepEqual(plain(f.persisted.workspans).flatMap(w => pane.collectPaneLeaves(w.paneTree).flatMap(p => p.sessionIds)), ["recreated", "b", "concurrent"]);
   assert.deepEqual(f.api.getState().sessions.map(s => s.id), ["recreated", "b", "concurrent"]);
   assert.equal(f.api.getState().workspans.length, 3);
   assert.equal(f.api.getState().workspans[0].customTitle, "latest");
@@ -1166,14 +1224,13 @@ test("recovery emergency uses normal creation, deduplicates and close still targ
 
 test("recovery source removed during close ACK cleans candidate and never resurrects membership", async () => {
  const f = fixture([session("a", {cwd:"/repo",createdAtMs:1}),session("b")],[span("w","p","a"),span("other","q","b")]);
- f.persisted.currentWorkSessionIds=["b"];
  f.dependencies.terminalProcessManager.close=async id=>{
   f.calls.push(["close",id]);
   if(id==="a") f.api.setState({sessions:f.api.getState().sessions.filter(s=>s.id!=="a"),workspans:[span("other","q","b")]});
  };
  await assert.rejects(f.api.getState().rebuildSession("a"),/session_changed/);
  assert.deepEqual(plain(f.api.getState().sessions.map(s=>s.id)),["b"]);
- assert.deepEqual(f.persisted.currentWorkSessionIds,["b"]);
+ assert.deepEqual(plain(f.api.getState().workspans).map(w => w.id), ["other"]);
  assert.ok(f.calls.some(([kind,id])=>kind==="close"&&id==="recreated"));
 });
 
@@ -1205,15 +1262,11 @@ for (const status of ["exited", "error"]) {
   });
 }
 
-test("general presentation after actual local hide rejects global CW SSH fallback and last scope member", async () => {
+test("canonical presentation after local hide retains one backing owner including SSH and respects scope", async () => {
   const presentation = load("../lib/terminalPresentation.ts", visibility);
-  const visibleLayouts = load("../hooks/useTerminalVisibleLayouts.ts", { ...pane, ...workspan, ...visibility, useMemo: (fn) => fn() });
-  const portals = load("../hooks/useCurrentWorkPortalTargets.ts", {
-    ...pane, useMemo: (fn) => fn(), useCallback: (fn) => fn,
-    useState: () => [new Map([["cw-pane", {}]]), () => {}],
-  });
+  const visibleLayouts = load("../hooks/useTerminalVisibleLayouts.ts", { ...pane, ...workspan, ...visibility, useMemo: fn => fn() });
   const { useTerminalPresentation } = load("../hooks/useTerminalPresentation.ts", {
-    ...pane, ...presentation, ...visibleLayouts, ...portals, useMemo: (fn) => fn(),
+    ...presentation, ...visibleLayouts, useMemo: fn => fn(),
   });
   const backing = [span("first", "local-pane", "local-shell"), span("second", "ssh-pane", "remote-member"), span("third", "other-pane", "other-shell")];
   const { api, calls, settled } = fixture([
@@ -1225,14 +1278,17 @@ test("general presentation after actual local hide rejects global CW SSH fallbac
   await api.getState().hideSession("local-shell");
   await settled();
   const state = api.getState();
-  assert.equal(state.activeSessionId, "remote-member", "global durable fallback remains permitted");
-  const cw = pane.createPaneLeaf("cw-pane", ["remote-member"], "remote-member");
-  const render = (scope, mode = false) => useTerminalPresentation(state.workspans, state.sessions, scope, state.activeWorkspanId,
-    state.activeSessionId, null, ["remote-member"], mode, cw, "remote-member");
-  assert.equal(render(null).effectiveActiveSessionId, "other-shell");
+  const render = scope => useTerminalPresentation(state.workspans, state.sessions, scope, state.activeWorkspanId,
+    state.activeSessionId, null);
+  assert.equal(render(null).effectiveActiveSessionId, "remote-member", "SSH uses its canonical owner, not a mode-specific fallback");
   assert.equal(render(new Set(["local-shell"])).effectiveActiveSessionId, null);
-  assert.equal(render(new Set(["local-shell"]), true).currentWorkSessionPortalTargets.size, 0);
-  assert.equal(render(null, true).effectiveActiveSessionId, "remote-member");
+  assert.equal(render(new Set(["other-shell"])).effectiveActiveSessionId, "other-shell");
+  for (const scope of [null, new Set(["local-shell"]), new Set(["remote-member"])]) {
+    const result = render(scope);
+    assert.equal(result.mountedWorkspanLayouts.length, backing.length);
+    for (let i = 0; i < backing.length; i++) assert.equal(result.mountedWorkspanLayouts[i].paneTree, backing[i].paneTree);
+    assert.equal("currentWorkSessionPortalTargets" in result, false);
+  }
   assert.equal(state.workspans, backing);
   assert.equal(state.sessions[0].cliSessionId, "conversation-a");
   assert.equal(state.sessions[1].connectionState, "disconnected");

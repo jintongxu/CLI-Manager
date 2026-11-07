@@ -29,8 +29,8 @@ export function useCurrentWorkTabScroll(enabled: boolean, activeId: string | nul
     }
     let frame: number | null = null;
     const revealActive = () => {
-      const active = Array.from(element.querySelectorAll<HTMLElement>("[data-current-work-session-id]"))
-        .find((node) => node.dataset.currentWorkSessionId === activeId);
+      const active = Array.from(element.querySelectorAll<HTMLElement>("[data-terminal-tab-id]"))
+        .find((node) => node.dataset.terminalTabId === activeId);
       if (!active) return;
       const viewport = element.getBoundingClientRect();
       const rect = active.getBoundingClientRect();
@@ -58,7 +58,7 @@ export function useCurrentWorkTabScroll(enabled: boolean, activeId: string | nul
     element.addEventListener("scroll", scheduleUpdate, { passive: true });
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(handleResize);
     observer?.observe(element);
-    element.querySelectorAll<HTMLElement>("[data-current-work-session-id]").forEach((node) => observer?.observe(node));
+    element.querySelectorAll<HTMLElement>("[data-terminal-tab-id]").forEach((node) => observer?.observe(node));
     return () => {
       wheelScroll.dispose();
       cancelWheelScrollRef.current = null;

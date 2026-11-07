@@ -60,6 +60,7 @@ export const SETTING_BACKUP_POLICY = {
   terminalSidePanelSkin: "preferences",
   terminalPanelWidths: "preferences",
   auxiliaryTerminalHeight: "preferences",
+  fileCompanionPrimaryRatio: "preferences",
   workspaceLayout: "preferences",
   terminalStatsCardVisibility: "preferences",
   terminalStatsCardOrder: "preferences",
@@ -137,7 +138,6 @@ export const SETTING_BACKUP_POLICY = {
   batchLaunchGroupInPane: "preferences",
   batchLaunchPaneDirection: "preferences",
   projectScopedTerminalViewEnabled: "preferences",
-  workspanEnabled: "excluded",
   desktopPet: "excluded",
 } as const satisfies Record<keyof Settings, BackupSettingDomain>;
 

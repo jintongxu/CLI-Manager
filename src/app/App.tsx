@@ -59,13 +59,15 @@ import { translateCurrent, useI18n, type TranslationKey } from "../shared/i18n/i
 import { getOsPlatform } from "../shared/platform/shell";
 import { normalizeFontFamilyStack } from "../shared/platform/systemFonts";
 import { ALL_TERMINALS_SCOPE } from "../features/terminal/api/terminalScope";
-import { dispatchCurrentWorkTarget } from "../features/terminal/api/currentWorkEvents";
+import { dispatchTerminalSessionTarget, TERMINAL_SESSION_TARGET_EVENT } from "../features/terminal/api/terminalNavigationEvents";
+import { TERMINAL_RESOURCE_TARGET_EVENT } from "../features/terminal/lib/terminalResourceNavigation";
+import { isOperableNavigationSession } from "../features/terminal/lib/terminalNavigationModel";
 import { resolveTerminalExitAction } from "../features/terminal/api/terminalExitCleanup";
 import { shouldIncludeDaemonExitTask } from "../features/terminal/api/terminalExitTask";
 import { requestSidebarToggle } from "../features/projects/api/sidebarCommands";
 import { startRuntimeDiagnostics } from "../features/terminal/api/runtimeDiagnostics";
 import { getTerminalTheme, isLightTerminalTheme } from "../shared/lib/terminalThemes";
-import { resolveProjectForSession } from "../features/terminal/api/terminalProject";
+import { findWorktreeForSession, resolveProjectForSession } from "../features/terminal/api/terminalProject";
 import { terminalProcessManager } from "../features/terminal/api/TerminalProcessManager";
 import { listOwnedDaemonSessions } from "../features/terminal/api/ownedDaemonSessions";
 import {
@@ -899,6 +901,40 @@ function App() {
     requestSidebarToggle();
   }, [handleToggleTerminalFullscreen, terminalFullscreen]);
 
+  // Reconcile the outer filter before the terminal listener selects its canonical owner.
+  // Capture + flushSync prevents the scoped controller effect from selecting a fallback.
+  useEffect(() => {
+    const reconcileTerminalTargetScope = (event: Event) => {
+      const sessionId = (event as CustomEvent<{ sessionId?: unknown }>).detail?.sessionId;
+      const state = useTerminalStore.getState();
+      const target = state.sessions.find((session) => session.id === sessionId);
+      if (!target || !isOperableNavigationSession(target, state.sessionStatuses[target.id])) {
+        event.stopImmediatePropagation();
+        return;
+      }
+      if (!useSettingsStore.getState().projectScopedTerminalViewEnabled) return;
+      const projects = useProjectStore.getState().projects;
+      const projectById = new Map(projects.map((project) => [project.id, project]));
+      const worktree = findWorktreeForSession(target, state.sessions, useWorktreeStore.getState().worktrees);
+      const projectId = resolveProjectForSession(target, state.sessions, projects, projectById)?.id
+        ?? worktree?.project_id ?? null;
+      const scope: TerminalScope = projectId && worktree
+        ? { kind: "worktree", projectId, worktreeId: worktree.id }
+        : projectId ? { kind: "project", projectId } : ALL_TERMINALS_SCOPE;
+      const scopeChanged = terminalScope.kind !== scope.kind
+        || (scope.kind === "project" && terminalScope.kind === "project" && terminalScope.projectId !== scope.projectId)
+        || (scope.kind === "worktree" && terminalScope.kind === "worktree"
+          && (terminalScope.projectId !== scope.projectId || terminalScope.worktreeId !== scope.worktreeId));
+      if (scopeChanged) flushSync(() => setTerminalScope(scope));
+    };
+    window.addEventListener(TERMINAL_RESOURCE_TARGET_EVENT, reconcileTerminalTargetScope, true);
+    window.addEventListener(TERMINAL_SESSION_TARGET_EVENT, reconcileTerminalTargetScope, true);
+    return () => {
+      window.removeEventListener(TERMINAL_RESOURCE_TARGET_EVENT, reconcileTerminalTargetScope, true);
+      window.removeEventListener(TERMINAL_SESSION_TARGET_EVENT, reconcileTerminalTargetScope, true);
+    };
+  }, [terminalScope]);
+
   const handleActivateHookNotificationTarget = useCallback(async (tabId: string) => {
     const terminalStore = useTerminalStore.getState();
     const targetSession = terminalStore.sessions.find((session) => session.id === tabId);
@@ -909,27 +945,7 @@ function App() {
 
     flushSync(showProjectSpace);
     useHistoryStore.getState().closeHistory();
-    if (useSettingsStore.getState().projectScopedTerminalViewEnabled) {
-      const projects = useProjectStore.getState().projects;
-      const projectById = new Map(projects.map((project) => [project.id, project]));
-      const targetProjectId = resolveProjectForSession(
-        targetSession,
-        terminalStore.sessions,
-        projects,
-        projectById
-      )?.id ?? null;
-      flushSync(() => {
-        setTerminalScope(
-          targetProjectId && targetSession.worktreeId
-            ? { kind: "worktree", projectId: targetProjectId, worktreeId: targetSession.worktreeId }
-            : targetProjectId
-              ? { kind: "project", projectId: targetProjectId }
-              : ALL_TERMINALS_SCOPE
-        );
-      });
-    }
-    terminalStore.setActive(tabId);
-    dispatchCurrentWorkTarget(tabId);
+    dispatchTerminalSessionTarget(tabId);
 
     // 只在窗口未聚焦时才切换窗口，避免 PermissionRequest 等事件在用户专注其他工作时强制打断
     const isFocused = await isMainWindowFocused();
@@ -1114,9 +1130,8 @@ function App() {
       await runStartupStage("settings", loadSettings);
 
       await runStartupStage("sessions", async () => {
-        await useSessionStore.getState().load().catch((err) => {
-          logWarn("Failed to load persisted sessions during startup", err);
-        });
+        // Failed loading is not an empty snapshot: use initError's reload retry.
+        await useSessionStore.getState().load();
       });
 
       await runStartupStage("database", async () => {

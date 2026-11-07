@@ -3,10 +3,9 @@ import { toast } from "sonner";
 import { useTerminalStore } from "../../terminal/state";
 import { useHistoryStore } from "../../history/index";
 import { useGitWorkspaceStore } from "../../git/api/gitWorkspaceStore";
-import { dispatchCurrentWorkTarget } from "../../terminal/api/currentWorkEvents";
 import { useI18n } from "../../../shared/i18n/index";
 import type { TerminalScope } from "../../../shared/types/index";
-import { deleteSidebarTerminal, getSidebarTerminals, openSidebarTerminal, getSidebarTerminalRenameTarget, renameSidebarTerminal } from "../lib/sidebarTerminals";
+import { dispatchSidebarTerminalTarget, deleteSidebarTerminal, getSidebarTerminals, openSidebarTerminal, getSidebarTerminalRenameTarget, renameSidebarTerminal } from "../lib/sidebarTerminals";
 import { useAppConfirm } from "../../../shared/ui/useAppConfirm";
 
 type Confirm = ReturnType<typeof useAppConfirm>["confirm"];
@@ -24,7 +23,7 @@ export function useSidebarTerminals(selectScope: (scope: TerminalScope) => void,
       closeHistory: useHistoryStore.getState().closeHistory,
       closeGitWorkspace: useGitWorkspaceStore.getState().close,
       reopenSession: store.reopenSession,
-      onOpen: dispatchCurrentWorkTarget,
+      onOpen: dispatchSidebarTerminalTarget,
     });
   }, [selectScope]);
   const onDeleteTerminal = useCallback((id: string) => {

@@ -49,7 +49,7 @@ function setup() {
  const element = {
   scrollWidth: 900, clientWidth: 300, clientLeft: 0, scrollLeft: 0,
   getBoundingClientRect: () => ({ left: 10 }),
-  querySelectorAll: () => [{ dataset: {currentWorkSessionId: "last"}, getBoundingClientRect: () => ({left: 810 - element.scrollLeft, right: 910 - element.scrollLeft, width: 100}) }],
+  querySelectorAll: (selector) => { assert.equal(selector, "[data-terminal-tab-id]"); return [{ dataset: {terminalTabId: "last"}, getBoundingClientRect: () => ({left: 810 - element.scrollLeft, right: 910 - element.scrollLeft, width: 100}) }]; },
   addEventListener: (type, fn) => listeners.set(type, fn),
   removeEventListener: (type) => listeners.delete(type),
   scrollBy({left, behavior}) { assert.equal(behavior, "smooth"); element.scrollLeft = Math.max(0, Math.min(600, element.scrollLeft + left)); listeners.get("scroll")?.(); },
@@ -142,10 +142,11 @@ test("ordinary and current-work bars share wheel controller without render-drive
  assert.match(source, /attachTerminalTabWheelScroll\(element, scheduleUpdate\)/);
 });
 
-test("current work wiring preserves sortable IDs and bilingual navigation labels", () => {
- const component = readFileSync(new URL("../src/features/terminal/components/CurrentWorkTabBar.tsx", import.meta.url), "utf8");
- assert.match(component, /data-current-work-session-id=\{session.id\}/);
+test("canonical tab row preserves sortable IDs and bilingual navigation labels", () => {
+ const component = readFileSync(new URL("../src/features/terminal/components/TerminalTabRow.tsx", import.meta.url), "utf8");
+ assert.match(component, /data-terminal-tab-id=\{entry.id\}/);
  assert.match(component, /ref=\{scrollRef\}/);
- assert.match(component, /!compact && isOverflowing/);
+ assert.match(component, /sortable && scrollState.canScrollLeft/);
  for (const direction of ["Left", "Right"]) assert.ok(component.includes(`t("terminal.tab.scroll${direction}")`));
+ assert.doesNotMatch(component, /CURRENT_WORK_TAB_DRAG_PREFIX|data-current-work-session-id/);
 });

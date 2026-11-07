@@ -1,3 +1,4 @@
+import { isSameProjectFileContext } from "../../terminal/api/terminalProject";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect } from "react";
 import { toast } from "sonner";
@@ -23,6 +24,17 @@ interface NavigationOptions {
 
 export function useFileEditorMarkdownNavigation(options: NavigationOptions) {
   const { t, visibleFile, revealPath, editorRef, markdownNavigationRef, markdownNavigationIdRef, nextMarkdownModeRef, pendingMarkdownNavigation, setPendingMarkdownNavigation, previewMode, setPreviewMode, editorReadyNonce } = options;
+  const project = useFileExplorerStore((state) => state.project);
+  useEffect(() => {
+    // Invalidate even when the user leaves and returns to the same project/root.
+    const unsubscribe = useFileExplorerStore.subscribe((state) => {
+      if (isSameProjectFileContext(state.project, project)) return;
+      markdownNavigationIdRef.current += 1;
+      nextMarkdownModeRef.current = null;
+      setPendingMarkdownNavigation(null);
+    });
+    return () => { unsubscribe(); markdownNavigationIdRef.current += 1; };
+  }, [project]);
   const reportMarkdownNavigationError = useCallback((key: "invalid" | "outside" | "unsupported" | "missing" | "fragment") => {
     const translationKey = {
       invalid: "files.toast.markdownLinkInvalid",
@@ -49,7 +61,7 @@ export function useFileEditorMarkdownNavigation(options: NavigationOptions) {
   }, [reportMarkdownNavigationError]);
 
   const handleMarkdownLinkActivate = useCallback((href: string, mode: MarkdownNavigationMode) => {
-    if (!visibleFile) return;
+    if (!visibleFile || !isSameProjectFileContext(useFileExplorerStore.getState().project, project)) return;
     const target = resolveMarkdownHref(href, visibleFile.path);
     if (target.kind === "invalid") {
       reportMarkdownNavigationError(
@@ -81,7 +93,7 @@ export function useFileEditorMarkdownNavigation(options: NavigationOptions) {
     nextMarkdownModeRef.current = target.path === visibleFile.path ? null : { path: target.path, mode };
     setPendingMarkdownNavigation({ id, path: target.path, fragment: target.fragment, mode });
     void revealPath(target.path).then((opened) => {
-      if (markdownNavigationIdRef.current !== id) return;
+      if (markdownNavigationIdRef.current !== id || !isSameProjectFileContext(useFileExplorerStore.getState().project, project)) return;
       const current = useFileExplorerStore.getState().activeFile;
       if (!opened) {
         nextMarkdownModeRef.current = null;
@@ -94,12 +106,12 @@ export function useFileEditorMarkdownNavigation(options: NavigationOptions) {
         setPendingMarkdownNavigation(null);
       }
     }).catch(() => {
-      if (markdownNavigationIdRef.current !== id) return;
+      if (markdownNavigationIdRef.current !== id || !isSameProjectFileContext(useFileExplorerStore.getState().project, project)) return;
       nextMarkdownModeRef.current = null;
       setPendingMarkdownNavigation(null);
       reportMarkdownNavigationError("missing");
     });
-  }, [reportMarkdownNavigationError, revealPath, revealSourceFragment, visibleFile]);
+  }, [reportMarkdownNavigationError, revealPath, revealSourceFragment, visibleFile, project]);
 
   markdownNavigationRef.current = handleMarkdownLinkActivate;
 
@@ -119,12 +131,13 @@ export function useFileEditorMarkdownNavigation(options: NavigationOptions) {
       nextMarkdownModeRef.current = null;
       setPendingMarkdownNavigation(null);
     }
-  }, [editorReadyNonce, pendingMarkdownNavigation, previewMode, reportMarkdownNavigationError, revealSourceFragment, visibleFile]);
+  }, [editorReadyNonce, pendingMarkdownNavigation, previewMode, reportMarkdownNavigationError, revealSourceFragment, visibleFile, project]);
 
   const handleMarkdownFragmentHandled = useCallback((id: number, found: boolean) => {
+    if (markdownNavigationIdRef.current !== id || !isSameProjectFileContext(useFileExplorerStore.getState().project, project)) return;
     nextMarkdownModeRef.current = null;
     setPendingMarkdownNavigation((pending) => pending?.id === id ? null : pending);
     if (!found) reportMarkdownNavigationError("fragment");
-  }, [reportMarkdownNavigationError]);
+  }, [reportMarkdownNavigationError, project]);
   return { handleMarkdownLinkActivate, handleMarkdownFragmentHandled };
 }

@@ -7,6 +7,8 @@ export const zh = {
   "files.status.renamed": "重命名",
   "files.status.conflict": "冲突",
   "files.status.untracked": "未提交",
+  "files.menu.openCurrent": "在当前窗格打开（占满上方区域）",
+  "files.menu.openBeside": "在终端旁边打开",
   "files.menu.newFile": "新建文件",
   "files.menu.newFolder": "新建文件夹",
   "files.menu.paste": "粘贴",

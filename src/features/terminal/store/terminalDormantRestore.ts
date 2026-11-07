@@ -216,7 +216,6 @@ export function createDormantRestoreCoordinator(deps: DormantRestoreDeps): Dorma
       sessionStatuses: { ...state.sessionStatuses, [newSessionId]: "running" },
       statusListeners: { ...state.statusListeners, [newSessionId]: unlisten },
     });
-    useSessionStore.getState().replaceCurrentWorkSession(ps.id, newSessionId);
     removeFromDormant(ps.id);
     try {
       await deps.queueSshSessionPersistence(get().sessions);
@@ -243,7 +242,7 @@ export function createDormantRestoreCoordinator(deps: DormantRestoreDeps): Dorma
     return newSessionId;
   };
 
-  const materializeDormantSession = async (id: string): Promise<boolean> => {
+  const materialize = async (id: string): Promise<boolean> => {
     if (!isDormant(id)) return true;
     const ps = get().sessions.find((session) => session.id === id);
     if (!ps) {
@@ -264,6 +263,19 @@ export function createDormantRestoreCoordinator(deps: DormantRestoreDeps): Dorma
     const newSessionId = await materializeViaRecreate(ps);
     if (newSessionId) commitActivation(newSessionId);
     return newSessionId !== null;
+  };
+
+  // Sidebar reopen and canonical navigation may request the same dormant owner
+  // in one turn. Share the entire operation, including remap and final activation.
+  const inFlight = new Map<string, Promise<boolean>>();
+  const materializeDormantSession = (id: string): Promise<boolean> => {
+    const pending = inFlight.get(id);
+    if (pending) return pending;
+    const operation = Promise.resolve().then(() => materialize(id)).finally(() => {
+      inFlight.delete(id);
+    });
+    inFlight.set(id, operation);
+    return operation;
   };
 
   return { isDormant, materializeDormantSession, clearDormant: removeFromDormant };

@@ -2,7 +2,6 @@ import type { UnlistenFn } from "@tauri-apps/api/event";
 import { toast } from "sonner";
 import type { TerminalSession } from "../../../shared/types/index";
 import { logError, recordCrashActivity } from "../../../shared/platform/logger";
-import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { useSessionStore } from "../api/sessionStore";
 import { getOsPlatform, normalizeShellKey } from "../../../shared/platform/shell";
 import { useProjectStore } from "../../projects/api/projectStore";
@@ -180,12 +179,8 @@ export function createTerminalSessionCreation(set: (partial: Partial<TerminalSto
           workspans = state.workspans;
           activeWorkspanId = state.activeWorkspanId;
         } else {
-          const workspanEnabled = useSettingsStore.getState().workspanEnabled;
           const explicitTargetWorkspan = paneId ? findWorkspanByPane(state.workspans, paneId) : null;
-          const targetWorkspan = explicitTargetWorkspan
-            ?? (!workspanEnabled
-              ? state.workspans.find((workspan) => workspan.id === state.activeWorkspanId) ?? state.workspans[0] ?? null
-              : null);
+          const targetWorkspan = explicitTargetWorkspan;
           if (targetWorkspan) {
             const paneResult = addSessionToPaneTree(
               targetWorkspan.paneTree,

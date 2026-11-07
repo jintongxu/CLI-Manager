@@ -132,7 +132,22 @@ pub enum Command {
         conversation_id: String,
         retry: bool,
         reasoning: Reasoning,
-        images: Vec<String>,
+        #[serde(rename = "stageIds")]
+        stage_ids: Vec<String>,
+    },
+    ForkEdit {
+        #[serde(rename = "conversationId")]
+        conversation_id: String,
+        #[serde(rename = "targetMessageId")]
+        target_message_id: String,
+        text: Option<String>,
+        reasoning: Reasoning,
+        #[serde(rename = "stageIds")]
+        stage_ids: Vec<String>,
+        #[serde(rename = "operationId")]
+        operation_id: String,
+        #[serde(rename = "requestId")]
+        request_id: String,
     },
 }
 #[derive(Clone, Serialize, Deserialize)]
@@ -161,14 +176,19 @@ pub async fn quick_chat_command(window: WebviewWindow, envelope: Envelope) -> Re
     if envelope.id.is_empty() || envelope.id.len() > 128 {
         return Err("quick_chat_invalid_id".into());
     }
-    if let Command::Generate { images, .. } = &envelope.command {
-        if images.len() > 4
-            || images
-                .iter()
-                .any(|i| i.len() > 9 * 1024 * 1024 || !i.starts_with("data:image/"))
-        {
-            return Err("quick_chat_invalid_images".into());
+    let stage_ids = match &envelope.command {
+        Command::Generate { stage_ids, .. } | Command::ForkEdit { stage_ids, .. } => {
+            Some(stage_ids)
         }
+        _ => None,
+    };
+    if stage_ids.is_some_and(|ids| {
+        ids.len() > 4
+            || ids
+                .iter()
+                .any(|id| !crate::chat::assets::valid_stage_id(id))
+    }) {
+        return Err("chat_invalid_input".into());
     }
     MAIN_CHANNEL
         .lock()
@@ -309,7 +329,11 @@ mod tests {
             let calls = RefCell::new(Vec::new());
             let step = |index| {
                 calls.borrow_mut().push(index);
-                if failed_step == Some(index) { Err("window_failed") } else { Ok(()) }
+                if failed_step == Some(index) {
+                    Err("window_failed")
+                } else {
+                    Ok(())
+                }
             };
             let result = continue_window(|| step(0), || step(1), || step(2), || step(3));
             assert_eq!(result.is_ok(), failed_step.is_none());
@@ -335,5 +359,31 @@ mod tests {
             r#"{"id":"a","command":{"op":"draft","conversationId":"c","text":"hello"}}"#
         )
         .is_ok());
+    }
+    #[test]
+    fn generate_and_fork_edit_match_the_typescript_schema_exactly() {
+        let stage_id = "123e4567-e89b-42d3-a456-426614174000";
+        assert!(serde_json::from_value::<Envelope>(serde_json::json!({
+            "id": "generate", "command": { "op": "generate", "conversationId": "c",
+            "retry": false, "reasoning": "medium", "stageIds": [stage_id] }
+        }))
+        .is_ok());
+        assert!(serde_json::from_value::<Envelope>(serde_json::json!({
+            "id": "fork", "command": { "op": "forkEdit", "conversationId": "c",
+            "targetMessageId": "m", "text": null, "reasoning": "high", "stageIds": [stage_id],
+            "operationId": "operation", "requestId": "request" }
+        }))
+        .is_ok());
+        assert!(serde_json::from_value::<Envelope>(serde_json::json!({
+            "id": "legacy", "command": { "op": "generate", "conversationId": "c",
+            "retry": false, "reasoning": "medium", "images": [] }
+        }))
+        .is_err());
+        assert!(serde_json::from_value::<Envelope>(serde_json::json!({
+            "id": "extra", "command": { "op": "forkEdit", "conversationId": "c",
+            "targetMessageId": "m", "text": "x", "reasoning": "low", "stageIds": [],
+            "operationId": "operation", "requestId": "request", "sourceRevision": 1 }
+        }))
+        .is_err());
     }
 }

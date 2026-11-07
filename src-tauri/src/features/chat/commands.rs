@@ -3,13 +3,44 @@ use super::provider_catalog::{ChatModelInput, ChatProvider, ChatProviderInput};
 use super::{repository::Repository, runtime, types::*};
 use crate::provider::chat_runtime::{self, ProviderOption};
 use serde::Serialize;
-use tauri::{ipc::Channel, WebviewWindow};
+use tauri::{
+    ipc::{Channel, InvokeBody, Request, Response},
+    WebviewWindow,
+};
 fn authorize(window: &WebviewWindow) -> Result<()> {
     if window.label() == "main" {
         Ok(())
     } else {
         Err("main_window_required".into())
     }
+}
+fn authorize_asset(window: &WebviewWindow) -> Result<String> {
+    super::assets::owner_for_label(window.label())
+}
+fn parse_release_ids(value: serde_json::Value) -> Result<Vec<String>> {
+    match value {
+        serde_json::Value::Array(values) => values
+            .into_iter()
+            .map(|value| value.as_str().map(str::to_owned).ok_or_else(invalid))
+            .collect(),
+        serde_json::Value::Object(mut object) if object.len() == 1 => object
+            .remove("stageIds")
+            .and_then(|value| serde_json::from_value(value).ok())
+            .ok_or_else(invalid),
+        _ => Err(invalid()),
+    }
+}
+fn release_ids(request: &Request<'_>) -> Result<Vec<String>> {
+    let value = match request.body() {
+        InvokeBody::Json(value) => value.clone(),
+        InvokeBody::Raw(bytes) => {
+            if bytes.len() > 2048 {
+                return Err(invalid());
+            }
+            serde_json::from_slice(bytes).map_err(|_| invalid())?
+        }
+    };
+    parse_release_ids(value)
 }
 async fn repository() -> Result<Repository> {
     Repository::shared().await
@@ -25,6 +56,7 @@ pub async fn chat_initialize(window: WebviewWindow) -> Result<Initialized> {
     authorize(&window)?;
     let repo = repository().await?;
     repo.recover().await?;
+    super::assets::reconcile(&repo.pool).await?;
     Ok(Initialized {
         conversations: repo
             .list(ListInput {
@@ -34,6 +66,42 @@ pub async fn chat_initialize(window: WebviewWindow) -> Result<Initialized> {
             .await?,
         unsaved: runtime::shared().unsaved().await,
     })
+}
+#[tauri::command]
+pub async fn chat_asset_stage(
+    window: WebviewWindow,
+    request: Request<'_>,
+) -> Result<super::assets::StagedAsset> {
+    let owner = authorize_asset(&window)?;
+    let bytes = super::ipc_bytes::request_bytes(&request)?.to_vec();
+    super::assets::stage(owner, &bytes).await
+}
+#[tauri::command]
+pub async fn chat_asset_release(window: WebviewWindow, request: Request<'_>) -> Result<()> {
+    let owner = authorize_asset(&window)?;
+    super::assets::release(&owner, &release_ids(&request)?).await
+}
+#[tauri::command]
+pub async fn chat_asset_read(
+    window: WebviewWindow,
+    conversation_id: String,
+    message_id: String,
+    ordinal: i64,
+    asset_id: String,
+) -> Result<Response> {
+    authorize_asset(&window)?;
+    let required_origin = (window.label() == "quick-chat").then_some("quick-chat");
+    let repo = repository().await?;
+    let bytes = super::assets::read_exact(
+        &repo.pool,
+        &conversation_id,
+        &message_id,
+        ordinal,
+        &asset_id,
+        required_origin,
+    )
+    .await?;
+    Ok(super::ipc_bytes::response_bytes(bytes))
 }
 #[tauri::command]
 pub async fn chat_list(window: WebviewWindow, input: ListInput) -> Result<Vec<Conversation>> {
@@ -148,6 +216,19 @@ pub fn chat_generate(
     })
 }
 #[tauri::command]
+pub fn chat_fork_edit(
+    window: WebviewWindow,
+    input: ForkEditInput,
+    on_event: Channel<Event>,
+) -> Result<ForkEditReceipt> {
+    authorize(&window)?;
+    tauri::async_runtime::block_on(async {
+        runtime::shared()
+            .fork_edit(repository().await?, input, on_event)
+            .await
+    })
+}
+#[tauri::command]
 pub async fn chat_cancel(window: WebviewWindow, input: CancelInput) -> Result<()> {
     authorize(&window)?;
     runtime::shared().cancel(input).await
@@ -195,4 +276,26 @@ pub(crate) async fn resume() {
 }
 pub(crate) async fn cleanup() {
     runtime::shared().shutdown().await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_release_ids;
+
+    #[test]
+    fn release_accepts_raw_list_or_transport_object_and_rejects_extra_fields() {
+        assert_eq!(
+            parse_release_ids(serde_json::json!(["a", "b"])).unwrap(),
+            vec!["a", "b"]
+        );
+        assert_eq!(
+            parse_release_ids(serde_json::json!({ "stageIds": ["a"] })).unwrap(),
+            vec!["a"]
+        );
+        assert!(
+            parse_release_ids(serde_json::json!({ "stageIds": ["a"], "unexpected": true }))
+                .is_err()
+        );
+        assert!(parse_release_ids(serde_json::json!({ "ids": ["a"] })).is_err());
+    }
 }

@@ -413,9 +413,7 @@
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  /* 60rem (960px)：主流 AI 对话最受欢迎的加宽档位（ChatGPT 默认 768px，
-     Wide 档 960px）；两侧留白是刻意设计，不随窗口宽度变化。 */
-  padding: 24px max(20px, calc((100% - 960px) / 2));
+  padding: 24px 20px;
 }
 .chat-outline-rail {
   position: absolute;
@@ -550,8 +548,7 @@
   line-height: 1.6;
 }
 
-/* Message stream: user turns are right-aligned bubbles, assistant turns are a
-   borderless reading column. Meta is 11px and muted; actions reveal on hover. */
+/* User bubbles use the pane width; assistant prose stays in a centered reading column. */
 .chat-message {
   display: flex;
   flex-direction: column;
@@ -620,6 +617,7 @@
   align-items: flex-end;
   align-self: flex-end;
   max-width: 85%;
+  margin-left: auto;
 }
 .chat-message-user header {
   justify-content: flex-end;
@@ -638,10 +636,10 @@
   line-height: 1.6;
 }
 
-/* Assistant turn: full-width reading column, no container, no border */
+/* Assistant prose stays centered and bounded; user turns can reach the pane edge. */
 .chat-message-assistant {
-  align-self: flex-start;
-  width: 100%;
+  align-self: center;
+  width: min(100%, 960px);
   max-width: 100%;
   padding: 12px 0;
 }
@@ -751,7 +749,8 @@
 
 /* Card Composer */
 .chat-composer-container {
-  margin: 8px max(16px, calc((100% - 960px) / 2)) 16px;
+  width: min(calc(100% - 32px), 960px);
+  margin: 8px auto 16px;
 }
 
 .chat-composer-card {

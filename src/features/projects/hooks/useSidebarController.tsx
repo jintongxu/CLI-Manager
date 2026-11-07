@@ -11,10 +11,9 @@ import { useProjectIdeaStore } from "../api/projectIdeaStore";
 import { collectSidebarCollapseIds, resolveSidebarLocateTarget } from "../lib/sidebarTools";
 import { useProjectLocate } from "./useProjectLocate";
 import { useTerminalStore } from "../../terminal/state";
-import { summarizeProjectTerminalStates, type SidebarTerminalState } from "../lib/sidebarTerminals";
+import { dispatchSidebarTerminalTarget, summarizeProjectTerminalStates, type SidebarTerminalState } from "../lib/sidebarTerminals";
 import { useFileExplorerStore } from "../../files/api/fileExplorerStore";
 import { useHistoryStore } from "../../history/index";
-import { dispatchCurrentWorkSessionCreated, dispatchCurrentWorkTarget } from "../../terminal/api/currentWorkEvents";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { createDefaultWorktreeTaskName, createPendingWorktreeRecord, isWorktreeCreateInProgressError, useWorktreeStore } from "../api/worktreeStore";
 import { useWorktreeDepsRunnerStore } from "../api/worktreeDepsRunner";
@@ -370,12 +369,11 @@ export function useSidebarController({
     (worktreeId: string): string | null => {
       const session = sessions.find((item) => item.worktreeId === worktreeId && (item.kind ?? "pty") === "pty" && item.transientBackground !== true);
       if (!session) return null;
-      if (session.id !== activeSessionId) {
-        setActiveSession(session.id);
-      }
+      // Reopen the retained identity; dormant PTYs resume through normal lifecycle.
+      useTerminalStore.getState().reopenSession(session.id);
       return session.id;
     },
-    [activeSessionId, sessions, setActiveSession]
+    [sessions]
   );
 
   const activateFirstGroupSession = useCallback(
@@ -686,7 +684,6 @@ export function useSidebarController({
       worktree.id,
     );
     useTerminalStore.getState().inheritSessionTitle(sessionId, inheritedTitle);
-    dispatchCurrentWorkSessionCreated(sessionId);
     closeHistory();
     return true;
   };
@@ -748,13 +745,12 @@ export function useSidebarController({
     void worktreeCreationAttempts.current.run(`${project.id}:${taskName}`,
       () => createWorktreeForProject(project, { ...input, placeholderId: placeholder.id }), async worktree => {
         const options = buildProjectSplitOptions(project);
-        const sessionId = await splitTerminal(activeSessionId, direction, {
+        await splitTerminal(activeSessionId, direction, {
           ...withoutTerminalTitle(options),
           cwd: worktree.path,
           title: getWorktreeSidebarLabel(worktree),
           worktreeId: worktree.id,
         });
-        if (sessionId) dispatchCurrentWorkSessionCreated(sessionId);
         closeHistory();
       })
       .then((worktree) => {
@@ -982,7 +978,7 @@ export function useSidebarController({
     const sessionId = activateFirstWorktreeSession(worktree.id);
     if (sessionId) {
       closeHistory();
-      dispatchCurrentWorkTarget(sessionId);
+      dispatchSidebarTerminalTarget(sessionId);
       return;
     }
     const project = projectById.get(worktree.project_id);

@@ -81,16 +81,31 @@ test('remote rejects old snapshots and waits for authoritative draft ack before 
   f.remote.setDraft('c1', 'question');
   f.remote.accept({ epoch: 'owner2', version: 2, state: { ...state, drafts: { c1: 'stale' } }, catalog: [] });
   assert.equal(f.remote.getSnapshot().drafts.c1, 'question');
-  const generating = f.remote.generate('c1', false, 'high', ['data:image/png;base64,a']);
+  const generating = f.remote.generate('c1', false, 'high', ['550e8400-e29b-41d4-a716-446655440000']);
   assert.equal(generating, f.remote.generate('c1'), 'rapid send shares one mutation intent');
   await tick(); assert.equal(f.sent.filter(x => x.command.op === 'generate').length, 0);
   f.ack(); await tick();
   const sent = f.sent.find(x => x.command.op === 'generate');
-  assert.equal(sent.command.reasoning, 'high'); assert.equal(sent.command.images.length, 1);
+  assert.equal(sent.command.reasoning, 'high'); assert.deepEqual(sent.command.stageIds, ['550e8400-e29b-41d4-a716-446655440000']);
+  assert.doesNotMatch(JSON.stringify(sent), /data:image|base64|[A-Za-z]:\\\\|\/Users\//);
   f.ack(); await generating;
   const create = f.remote.create(); assert.equal(create, f.remote.create());
   await tick(); f.ack(); await create;
 });
+test('remote fork edit is JSON-only, carries caller-owned IDs, and remains epoch/ledger fenced', async () => {
+  const f = remoteFixture(); await f.remote.start();
+  const state = { ready: true, selected: 'c1', drafts: {}, details: { c1: {} }, conversations: [{ id: 'c1' }] };
+  f.remote.accept({ epoch: 'owner', version: 1, state, catalog: [] });
+  const editing = f.remote.editAndRegenerate('c1', 'message', 'edited', 'high',
+    ['550e8400-e29b-41d4-a716-446655440000'], { operationId: 'op-id', requestId: 'request-id' });
+  await tick(); const sent = f.sent.find(x => x.command.op === 'forkEdit');
+  assert.equal(sent.command.operationId, 'op-id'); assert.equal(sent.command.requestId, 'request-id');
+  assert.equal(sent.command.targetMessageId, 'message');
+  assert.deepEqual(sent.command.stageIds, ['550e8400-e29b-41d4-a716-446655440000']);
+  assert.doesNotMatch(JSON.stringify(sent), /data:image|base64|byteLength|previewUrl|[A-Za-z]:\\\\|\/Users\//);
+  f.ack(); await editing;
+});
+
 test('remote presentation cannot load real controller/catalog; Rust sender identity fences both channels', () => {
   for (const file of ['src/features/chat/components/ChatPanelSurface.tsx', 'src/features/chat/components/ChatPanelComposer.tsx', 'src/features/chat/lib/quickChatRemote.ts']) {
     const text = readFileSync(file, 'utf8');
@@ -150,7 +165,7 @@ test('main owner executes remote intents once and publishes only projected catal
   const envelope = { id: 'continue', epoch: 'epoch', command: { op: 'continue' } };
   channel.onmessage(envelope); channel.onmessage(envelope); await tick();
   assert.equal(navigations, 1); assert.equal(f.controller.getSnapshot().selected, 'c3');
-  channel.onmessage({ id: 'wrong-selection', epoch: 'epoch', command: { op: 'generate', conversationId: 'c2', retry: false, reasoning: 'off', images: [] } });
+  channel.onmessage({ id: 'wrong-selection', epoch: 'epoch', command: { op: 'generate', conversationId: 'c2', retry: false, reasoning: 'off', stageIds: [] } });
   await tick(); assert.equal(f.calls.filter(c => c[0] === 'generate').length, 0);
   assert.ok(publications.some(p => p.kind === 'ack' && p.payload.id === 'wrong-selection' && p.payload.error));
   channel.onmessage({ id: 'old-owner', epoch: 'retired', command: { op: 'create' } });

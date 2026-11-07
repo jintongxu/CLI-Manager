@@ -13,7 +13,7 @@ export function FileEditorPaneView(props: FileEditorPaneViewProps) {
     diffContext, diffWorkspace, setActiveFilePath, requestCloseFiles, editorProject, language,
     editorTheme, handleEditorMount, setActiveContent, handleMarkdownLinkActivate,
     pendingMarkdownNavigation, handleMarkdownFragmentHandled, pendingAction, setPendingAction,
-    discardAndRun, saveAndRun,
+    discardAndRun, saveAndRun, pendingSaveBusy,
   } = props;
   return (
     <div className="ui-file-editor-pane flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
@@ -62,7 +62,7 @@ export function FileEditorPaneView(props: FileEditorPaneViewProps) {
       />
 
       <Dialog open={pendingAction !== null} onOpenChange={(open) => { if (!open) setPendingAction(null); }}>
-        <DialogContent className="max-w-[420px]">
+        <DialogContent data-file-editor-dialog aria-busy={pendingSaveBusy} className="max-w-[420px]">
           <DialogTitle>{t("files.editor.unsavedTitle")}</DialogTitle>
           <DialogDescription className="mt-2">
             {pendingAction?.dirtyPaths.length === 1
@@ -71,8 +71,8 @@ export function FileEditorPaneView(props: FileEditorPaneViewProps) {
           </DialogDescription>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPendingAction(null)}>{t("common.cancel")}</Button>
-            <Button variant="outline" onClick={discardAndRun}>{t("files.editor.discard")}</Button>
-            <Button onClick={() => void saveAndRun()}>{t("common.save")}</Button>
+            <Button variant="outline" disabled={pendingSaveBusy} onClick={discardAndRun}>{t("files.editor.discard")}</Button>
+            <Button disabled={pendingSaveBusy} onClick={() => void saveAndRun()}>{t("common.save")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

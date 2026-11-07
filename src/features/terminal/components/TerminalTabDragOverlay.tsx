@@ -65,7 +65,7 @@ export function DragOverlayTab({
 }
 
 export interface TerminalDragOverlayData {
-  type: "session" | "workspan" | "project" | "current-work" | "terminal-tab";
+  type: "session" | "workspan" | "project" | "terminal-tab";
   overlay: {
     worktreeBadge?: TerminalWorktreeBadge;
     title: string;

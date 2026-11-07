@@ -1,6 +1,11 @@
 use crate::provider;
 use tauri_plugin_sql::{Migration, MigrationKind};
 
+pub(crate) const MIGRATION_CREATE_CHAT_ASSETS_VERSION: i64 = 59;
+pub(crate) const MIGRATION_CREATE_CHAT_ASSETS_DESCRIPTION: &str = "create_chat_assets_and_branches";
+pub(crate) const MIGRATION_CREATE_CHAT_ASSETS_SQL: &str =
+    include_str!("migrations/chat_assets.sql");
+
 pub(crate) const MIGRATION_CREATE_SESSION_FAVORITE_SNAPSHOTS_VERSION: i64 = 13;
 pub(crate) const MIGRATION_CREATE_SESSION_FAVORITE_SNAPSHOTS_DESCRIPTION: &str =
     "create_session_favorite_snapshots_table";
@@ -1427,6 +1432,12 @@ pub(crate) fn migrations() -> Vec<Migration> {
             version: 58,
             description: "add_chat_conversation_origin",
             sql: crate::chat::ORIGIN_MIGRATION,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: MIGRATION_CREATE_CHAT_ASSETS_VERSION,
+            description: MIGRATION_CREATE_CHAT_ASSETS_DESCRIPTION,
+            sql: MIGRATION_CREATE_CHAT_ASSETS_SQL,
             kind: MigrationKind::Up,
         },
     ]

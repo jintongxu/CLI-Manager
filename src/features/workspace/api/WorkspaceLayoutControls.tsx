@@ -42,7 +42,6 @@ export function WorkspaceLayoutControls() {
   const terminalSidePanelVisible = useSettingsStore((state) => state.workspaceLayout.terminalSidePanelVisible);
   const workspanTabBarPosition = useSettingsStore((state) => state.workspaceLayout.workspanTabBarPosition);
   const workspanTabBarVisible = useSettingsStore((state) => state.workspaceLayout.workspanTabBarVisible);
-  const workspanEnabled = useSettingsStore((state) => state.workspanEnabled);
   const hasWorkspanTabs = useTerminalStore((state) => state.workspans.length > 0);
   const viewMode = useSettingsStore((state) => state.viewMode);
   const updateSettings = useSettingsStore((state) => state.update);
@@ -59,7 +58,7 @@ export function WorkspaceLayoutControls() {
   };
 
   const toggleWorkspanTabBar = () => {
-    if (!workspanEnabled || !hasWorkspanTabs) return;
+    if (!hasWorkspanTabs) return;
     updateLayout({ workspanTabBarVisible: !workspanTabBarVisible });
   };
 
@@ -74,7 +73,7 @@ export function WorkspaceLayoutControls() {
     if (sidebarState.collapsed) requestSidebarExpand();
   };
 
-  const workspanDisabled = !workspanEnabled || !hasWorkspanTabs;
+  const workspanDisabled = !hasWorkspanTabs;
 
   return (
     <div

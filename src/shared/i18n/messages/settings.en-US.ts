@@ -570,11 +570,6 @@ export const en: Record<keyof typeof zh, string> = {
     "Disable project-scoped terminal view",
   "settings.general.enableProjectScopedTerminalView":
     "Enable project-scoped terminal view",
-  "settings.general.workspanDevelopment": "Workspan Development",
-  "settings.general.workspanDevelopmentDescription":
-    "Use top-level Workspan workspaces when enabled. Disable it to restore traditional splits with terminal tabs kept in every Pane.",
-  "settings.general.disableWorkspanDevelopment": "Disable Workspan Development",
-  "settings.general.enableWorkspanDevelopment": "Enable Workspan Development",
   "settings.general.lowMemoryMode": "Low Memory Mode",
   "settings.general.lowMemoryModeDescription":
     "When enabled, hidden terminals release WebGL/GPU renderer resources after 60 seconds and rebuild the renderer when shown. Scrollback and output parsing stay active; PTY and Pi/CLI processes keep running. This does not put processes to sleep.",

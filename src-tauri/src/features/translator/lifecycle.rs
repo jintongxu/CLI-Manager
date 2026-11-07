@@ -35,7 +35,9 @@ fn release(app: &AppHandle) -> Result<(), String> {
             if let Err(destroy) = w.destroy() {
                 // Last input-safety fallback; ownership remains Releasing and watchdog retries.
                 let unblock = w.set_ignore_cursor_events(true);
-                return Err(format!("capture_release_failed: {hide}; {destroy}; unblock: {unblock:?}"));
+                return Err(format!(
+                    "capture_release_failed: {hide}; {destroy}; unblock: {unblock:?}"
+                ));
             }
         }
     }
@@ -242,40 +244,80 @@ pub fn translator_capture_end(
 // Resolve only after the fullscreen input interceptor has been hidden/destroyed.
 #[tauri::command]
 pub fn translator_capture_confirm(
-    app: AppHandle, window: WebviewWindow, session_id: u64, anchor: super::card::Anchor,
+    app: AppHandle,
+    window: WebviewWindow,
+    session_id: u64,
+    anchor: super::card::Anchor,
 ) -> Result<u64, String> {
     authorize(&window)?;
     let mut s = SESSION.lock().map_err(|_| "capture_state_poisoned")?;
-    let frame = s.read().filter(|(id, _)| *id == session_id).map(|(_, frame)| frame)
+    let frame = s
+        .read()
+        .filter(|(id, _)| *id == session_id)
+        .map(|(_, frame)| frame)
         .ok_or("stale_capture_session")?;
     if let Err(error) = anchor.validate(&frame) {
         let _ = cancel_locked(&app, &mut s, session_id);
         return Err(error);
     }
-    s.confirm_card_with(session_id, || release(&app), || {
-        window::show_screenshot_loading(&app,
-            CAPTURE_OPENING.load(std::sync::atomic::Ordering::SeqCst), session_id, &anchor, &frame)
-    })?.ok_or_else(|| "stale_capture_session".into())
+    s.confirm_card_with(
+        session_id,
+        || release(&app),
+        || {
+            window::show_screenshot_loading(
+                &app,
+                CAPTURE_OPENING.load(std::sync::atomic::Ordering::SeqCst),
+                session_id,
+                &anchor,
+                &frame,
+            )
+        },
+    )?
+    .ok_or_else(|| "stale_capture_session".into())
 }
 
 #[tauri::command]
-pub fn translator_update_thumbnail(app: AppHandle, window: WebviewWindow,
-    session_id: u64, generation: u64, image_base64: String) -> Result<(), String> {
+pub fn translator_update_thumbnail(
+    app: AppHandle,
+    window: WebviewWindow,
+    session_id: u64,
+    generation: u64,
+    image_base64: String,
+) -> Result<(), String> {
     authorize(&window)?;
     let s = SESSION.lock().map_err(|_| "capture_state_poisoned")?;
-    if !s.is(session_id, Phase::Translating) { return Err("stale_capture_session".into()); }
+    if !s.is(session_id, Phase::Translating) {
+        return Err("stale_capture_session".into());
+    }
     {
         let state = window::OPENING.lock().map_err(|_| "translator_storage")?;
-        if state.authority.has_started() { return Err("translator_obsolete".into()); }
+        if state.authority.has_started() {
+            return Err("translator_obsolete".into());
+        }
     }
-    window::update_screenshot(&app, generation, session_id, Some(image_base64), None, false)
+    window::update_screenshot(
+        &app,
+        generation,
+        session_id,
+        Some(image_base64),
+        None,
+        false,
+    )
 }
 
 pub(super) fn validate_translation(session_id: u64, generation: u64) -> Result<(), String> {
     let s = SESSION.lock().map_err(|_| "capture_state_poisoned")?;
-    let opening = window::OPENING.lock().map_err(|_| "translator_state_poisoned")?;
-    if !s.is(session_id, Phase::Translating) || opening.opening.generation != generation
-        || !opening.opening.card.as_ref().is_some_and(|c| c.session_id == session_id && c.phase == "loading") {
+    let opening = window::OPENING
+        .lock()
+        .map_err(|_| "translator_state_poisoned")?;
+    if !s.is(session_id, Phase::Translating)
+        || opening.opening.generation != generation
+        || !opening
+            .opening
+            .card
+            .as_ref()
+            .is_some_and(|c| c.session_id == session_id && c.phase == "loading")
+    {
         return Err("stale_capture_session".into());
     }
     Ok(())
@@ -283,16 +325,24 @@ pub(super) fn validate_translation(session_id: u64, generation: u64) -> Result<(
 
 // Retire capture selection ownership after native completion; retry owns only opening+crop.
 pub(super) fn finish_translation(session_id: u64) {
-    if let Ok(mut s) = SESSION.lock() { s.finish(session_id); }
+    if let Ok(mut s) = SESSION.lock() {
+        s.finish(session_id);
+    }
 }
 
 // Pre-submission crop/discovery failures carry no untrusted provider text or success payload.
 #[tauri::command]
-pub fn translator_capture_failed(app: AppHandle, window: WebviewWindow,
-    session_id: u64, generation: u64) -> Result<(), String> {
+pub fn translator_capture_failed(
+    app: AppHandle,
+    window: WebviewWindow,
+    session_id: u64,
+    generation: u64,
+) -> Result<(), String> {
     authorize(&window)?;
     let mut s = SESSION.lock().map_err(|_| "translator_storage")?;
-    if !s.is(session_id, Phase::Translating) { return Err("translator_obsolete".into()); }
+    if !s.is(session_id, Phase::Translating) {
+        return Err("translator_obsolete".into());
+    }
     let updated = window::update_screenshot(&app, generation, session_id, None, None, true);
     s.finish(session_id);
     updated

@@ -18,7 +18,6 @@ import { resolveProjectStartupCommand } from "../../projects/api/projectStartupC
 import { parseProjectEnvVars } from "../../providers/api/providerSwitching";
 import { terminalProcessManager } from "../../terminal/api/TerminalProcessManager";
 import { resolveProjectPath } from "../../projects/api/groupPath";
-import { dispatchCurrentWorkAction } from "../../terminal/api/currentWorkEvents";
 import { useI18n } from "../../../shared/i18n/index";
 import { resolveAgentRuntimeKind } from "../../agents/api/agentCapabilities";
 import { invoke } from "@tauri-apps/api/core";
@@ -111,27 +110,6 @@ export function CommandPalette() {
       });
     }
 
-    result.push({
-      id: "action:current-work",
-      label: t("terminal.currentWork.command.open"),
-      description: t("terminal.currentWork.command.openDescription"),
-      category: "操作",
-      action: () => dispatchCurrentWorkAction("toggle-view"),
-    });
-    result.push({
-      id: "action:add-current-work",
-      label: t("terminal.currentWork.command.add"),
-      description: t("terminal.currentWork.command.addDescription"),
-      category: "操作",
-      action: () => dispatchCurrentWorkAction("add-active"),
-    });
-    result.push({
-      id: "action:clear-current-work",
-      label: t("terminal.currentWork.command.clear"),
-      description: t("terminal.currentWork.command.clearDescription"),
-      category: "操作",
-      action: () => dispatchCurrentWorkAction("clear"),
-    });
     result.push({
       id: "action:open-history",
       label: "打开历史会话",

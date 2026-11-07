@@ -1,3 +1,4 @@
+import { lexicalThemeRules } from "../../../shared/platform/monacoLexical";
 import { monaco } from "../../../shared/platform/monacoSetup";
 
 function normalizeHexColor(color: string, fallback: string): string {
@@ -41,7 +42,7 @@ export function getFileEditorTheme(background: string): string {
       "scrollbarSlider.activeBackground": mixHex(backgroundHex, foreground, 0.48),
       "minimap.background": mixHex(backgroundHex, foreground, 0.025),
     },
-    rules: [],
+    rules: lexicalThemeRules(dark),
   });
   return themeName;
 }

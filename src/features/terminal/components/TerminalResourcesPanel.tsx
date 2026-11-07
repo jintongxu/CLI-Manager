@@ -133,7 +133,7 @@ export function TerminalResourcesPanel({ active }: { active: boolean }) {
             <Trash2 size={12} />
             {t(pendingDeletion === session.id ? "terminal.resources.deleting" : "terminal.resources.delete")}
           </button>
-          <p className="mt-1">{stateText}{hookLabel ? ` · ${hookLabel}` : ""}{session.tabHidden ? ` · ${t("terminal.currentWork.hidden")}` : ""}</p>
+          <p className="mt-1">{stateText}{hookLabel ? ` · ${hookLabel}` : ""}{session.tabHidden ? ` · ${t("terminal.session.hidden")}` : ""}</p>
           <p className="mt-2 font-semibold tabular-nums">
             {t("terminal.resources.workingSet")}: {typeof memory === "number" ? `${(memory / 1048576).toFixed(1)} MiB` : "—"}
           </p>

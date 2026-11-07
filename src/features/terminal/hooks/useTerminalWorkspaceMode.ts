@@ -1,5 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { TerminalSession } from "../../../shared/types/index";
+import { useFileExplorerStore } from "../../files/api/fileExplorerStore";
+import { useFileCompanionStore } from "../api/fileCompanionState";
+import { setFileCompanionFocused } from "../api/fileCompanionFocus";
+import { useTerminalStore } from "../state";
 
 export type TerminalWorkspaceTab = "terminal" | "editor" | "history";
 
@@ -8,7 +12,6 @@ interface UseTerminalWorkspaceModeOptions {
   sessions: TerminalSession[];
   historyOpen: boolean;
   closeHistory: () => void;
-  addCurrentWorkSession: (sessionId: string) => void;
   setActive: (sessionId: string) => void;
 }
 
@@ -17,46 +20,30 @@ export function useTerminalWorkspaceMode({
   sessions,
   historyOpen,
   closeHistory,
-  addCurrentWorkSession,
-  setActive,
 }: UseTerminalWorkspaceModeOptions) {
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<TerminalWorkspaceTab>("terminal");
-  const lastTerminalSessionIdRef = useRef<string | null>(null);
+  const companionOpen = useFileCompanionStore((state) => state.open);
+  const companionMode = useFileCompanionStore((state) => state.mode);
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? null;
   const hasEditorWorkspace = sessions.some((session) => session.kind === "file-editor");
   const historyActive = historyOpen && activeWorkspaceTab === "history";
-  const editorActive = activeWorkspaceTab === "editor";
-
-  useEffect(() => {
-    if (activeSession?.kind === "file-editor") {
-      setActiveWorkspaceTab("editor");
-      return;
-    }
-    if (!activeSession) return;
-    lastTerminalSessionIdRef.current = activeSession.id;
-    if (activeWorkspaceTab === "editor") setActiveWorkspaceTab("terminal");
-  }, [activeSession, activeWorkspaceTab]);
+  const editorActive = companionOpen && companionMode === "current" && !historyActive;
 
   useEffect(() => {
     if (!historyOpen && activeWorkspaceTab === "history") setActiveWorkspaceTab("terminal");
   }, [activeWorkspaceTab, historyOpen]);
 
   useEffect(() => {
-    if (!editorActive || hasEditorWorkspace) return;
-    setActiveWorkspaceTab("terminal");
-  }, [editorActive, hasEditorWorkspace]);
+    if (activeWorkspaceTab === "history") return;
+    setActiveWorkspaceTab(companionOpen && companionMode === "current" ? "editor" : "terminal");
+  }, [activeWorkspaceTab, companionOpen, companionMode]);
 
   const switchToTerminalWorkspace = useCallback(() => {
     closeHistory();
+    useFileCompanionStore.getState().collapse();
+    setFileCompanionFocused(false);
     setActiveWorkspaceTab("terminal");
-    const terminalSession = sessions.find((session) => (
-      session.id === lastTerminalSessionIdRef.current
-      && session.kind !== "file-editor"
-    )) ?? sessions.find((session) => session.kind !== "file-editor");
-    if (!terminalSession) return;
-    addCurrentWorkSession(terminalSession.id);
-    setActive(terminalSession.id);
-  }, [addCurrentWorkSession, closeHistory, sessions, setActive]);
+  }, [closeHistory]);
 
   const switchToEditorWorkspace = useCallback(() => {
     const projectId = activeSession?.projectId ?? null;
@@ -64,11 +51,14 @@ export function useTerminalWorkspaceMode({
       session.kind === "file-editor"
       && (!projectId || session.fileEditor?.projectId === projectId)
     ));
-    if (!editorSession) return;
+    const currentProject = useFileExplorerStore.getState().project;
+    const project = currentProject && (!projectId || currentProject.id === projectId)
+      ? currentProject : editorSession?.fileEditor?.project;
+    if (!project) return;
     closeHistory();
+    useTerminalStore.getState().openFileEditorPane(project, "current");
     setActiveWorkspaceTab("editor");
-    setActive(editorSession.id);
-  }, [activeSession?.projectId, closeHistory, sessions, setActive]);
+  }, [activeSession?.projectId, closeHistory, sessions]);
 
   return {
     activeWorkspaceTab,

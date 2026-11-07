@@ -33,7 +33,9 @@ pub(super) struct ProviderSecretAndConfig {
 }
 
 pub(super) async fn get_pool() -> Result<SqlitePool, String> {
-    crate::chat::repository::shared_pool().await.map_err(|_| "translator_storage".to_string())
+    crate::chat::repository::shared_pool()
+        .await
+        .map_err(|_| "translator_storage".to_string())
 }
 
 /// 与 chat 命令一致：翻译浮窗只接受主窗口调用，不向其它 WebView 开放。
@@ -388,10 +390,33 @@ pub fn translator_resolve_target_lang(text: String) -> String {
 pub fn is_likely_vision_model(model_id: &str) -> bool {
     let lower = model_id.to_ascii_lowercase();
     const HINTS: &[&str] = &[
-        "vision", "-vl", "vl-", "multimodal", "omni", "llava", "pixtral", "internvl", "qvq",
-        "gpt-4o", "gpt-4.1", "gpt-5", "gpt-6", "claude-3", "claude-4", "claude-sonnet",
-        "claude-opus", "gemini", "glm-4", "glm-5", "qwen2.5-vl", "qwen3-vl", "doubao-vision",
-        "step-1v", "yi-vision", "molmo", "minicpm-v",
+        "vision",
+        "-vl",
+        "vl-",
+        "multimodal",
+        "omni",
+        "llava",
+        "pixtral",
+        "internvl",
+        "qvq",
+        "gpt-4o",
+        "gpt-4.1",
+        "gpt-5",
+        "gpt-6",
+        "claude-3",
+        "claude-4",
+        "claude-sonnet",
+        "claude-opus",
+        "gemini",
+        "glm-4",
+        "glm-5",
+        "qwen2.5-vl",
+        "qwen3-vl",
+        "doubao-vision",
+        "step-1v",
+        "yi-vision",
+        "molmo",
+        "minicpm-v",
     ];
     HINTS.iter().any(|hint| lower.contains(hint))
 }
@@ -476,7 +501,9 @@ pub(super) async fn call_vision_model(
     let translated = super::result::response_text(&config.protocol, &json);
 
     let translated = strip_thinking_block(&translated);
-    if translated.trim().is_empty() { return Err("translator_invalid_response".into()); }
+    if translated.trim().is_empty() {
+        return Err("translator_invalid_response".into());
+    }
     Ok(translated)
 }
 
@@ -498,9 +525,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("translator.db");
         std::fs::File::create(&path).unwrap();
-        let options = SqliteConnectOptions::new().filename(&path).foreign_keys(true);
-        let mut c = sqlx::SqliteConnection::connect_with(&options).await.unwrap();
-        sqlx::raw_sql(PROVIDER_SCHEMA).execute(&mut c).await.unwrap();
+        let options = SqliteConnectOptions::new()
+            .filename(&path)
+            .foreign_keys(true);
+        let mut c = sqlx::SqliteConnection::connect_with(&options)
+            .await
+            .unwrap();
+        sqlx::raw_sql(PROVIDER_SCHEMA)
+            .execute(&mut c)
+            .await
+            .unwrap();
         c.close().await.unwrap();
         let pool = SqlitePool::connect(&format!("sqlite://{}", path.display()))
             .await
@@ -547,10 +581,12 @@ mod tests {
             .await
             .unwrap();
         }
-        sqlx::query("INSERT INTO chat_provider_secrets(provider_id,api_key) VALUES('prov-a','key-a')")
-            .execute(pool)
-            .await
-            .unwrap();
+        sqlx::query(
+            "INSERT INTO chat_provider_secrets(provider_id,api_key) VALUES('prov-a','key-a')",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
     }
 
     #[tokio::test]
@@ -705,30 +741,50 @@ mod tests {
     }
 }
 
-pub(super) async fn call_text_model(config: &ProviderSecretAndConfig, prompt: &str) -> Result<String, String> {
+pub(super) async fn call_text_model(
+    config: &ProviderSecretAndConfig,
+    prompt: &str,
+) -> Result<String, String> {
     let endpoint = resolve_endpoint(&config.base_url, &config.protocol)?;
-    let client = reqwest::Client::builder().timeout(Duration::from_secs(30)).build()
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
         .map_err(|_| "translator_config".to_string())?;
     let payload = match config.protocol.as_str() {
         "anthropic_messages" => serde_json::json!({"model":config.model_id,"max_tokens":4096,
             "messages":[{"role":"user","content":prompt}],"temperature":0.2}),
         "openai_responses" => serde_json::json!({"model":config.model_id,"input":prompt}),
-        _ => serde_json::json!({"model":config.model_id,"messages":[{"role":"user","content":prompt}],"temperature":0.2}),
+        _ => {
+            serde_json::json!({"model":config.model_id,"messages":[{"role":"user","content":prompt}],"temperature":0.2})
+        }
     };
     let mut req = client.post(endpoint);
     if let Some(key) = config.api_key.as_deref().filter(|k| !k.trim().is_empty()) {
         if config.protocol == "anthropic_messages" {
-            req = req.header("x-api-key", key.trim()).header("anthropic-version", "2023-06-01");
-        } else { req = req.bearer_auth(key.trim()); }
+            req = req
+                .header("x-api-key", key.trim())
+                .header("anthropic-version", "2023-06-01");
+        } else {
+            req = req.bearer_auth(key.trim());
+        }
     }
-    let response = req.json(&payload).send().await.map_err(super::errors::network)?;
+    let response = req
+        .json(&payload)
+        .send()
+        .await
+        .map_err(super::errors::network)?;
     let status = response.status();
     if !status.is_success() {
         let body = response.text().await.unwrap_or_default();
         return Err(super::errors::http(status.as_u16(), &body));
     }
-    let json = response.json::<serde_json::Value>().await.map_err(|_| "translator_invalid_response".to_owned())?;
+    let json = response
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|_| "translator_invalid_response".to_owned())?;
     let text = strip_thinking_block(&super::result::response_text(&config.protocol, &json));
-    if text.trim().is_empty() { return Err("translator_invalid_response".into()); }
+    if text.trim().is_empty() {
+        return Err("translator_invalid_response".into());
+    }
     Ok(text)
 }

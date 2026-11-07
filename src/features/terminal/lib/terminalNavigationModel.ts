@@ -18,8 +18,6 @@ export interface TerminalNavigationInput {
   groups: Group[];
   scope: TerminalScope;
   currentSessionId: string | null;
-  currentWorkSessionIds: readonly string[];
-  currentWorkMode: boolean;
   query?: string;
   navigationOrder?: readonly string[];
 }
@@ -31,7 +29,6 @@ export interface TerminalNavigationEntry {
   worktree: WorktreeRecord | null;
   pinned: boolean;
   current: boolean;
-  inCurrentWork: boolean;
 }
 
 export interface TerminalNavigationGroup {
@@ -88,21 +85,16 @@ export function buildTerminalNavigationModel(input: TerminalNavigationInput, mem
         ?? projectById.get(worktree?.project_id ?? "") ?? null,
       current: session.id === input.currentSessionId,
       pinned: memory.pinnedIds.includes(session.id),
-      inCurrentWork: input.currentWorkSessionIds.includes(session.id),
     });
   }
   // Reconcile stale project selections against the outer sidebar scope before selection/capping.
   const effectiveRange = range === "all" || range === "independent" || scopeEntries.some((entry) => entry.project?.id === range)
     ? range : "all";
-  const filteredEntries = scopeEntries.filter((entry) => (!input.currentWorkMode || entry.inCurrentWork) &&
-    (effectiveRange === "all" || (effectiveRange === "independent" ? !entry.project : entry.project?.id === effectiveRange)));
-  const currentWorkOrder = new Map(input.currentWorkSessionIds.map((id, index) => [id, index]));
+  const filteredEntries = scopeEntries.filter((entry) =>
+    effectiveRange === "all" || (effectiveRange === "independent" ? !entry.project : entry.project?.id === effectiveRange));
   const navigationOrder = new Map((input.navigationOrder ?? []).map((id, index) => [id, index]));
-  const entries = input.currentWorkMode
-    ? [...filteredEntries].sort((left, right) => (currentWorkOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER)
-      - (currentWorkOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER))
-    : [...filteredEntries].sort((left, right) => (navigationOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER)
-      - (navigationOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER));
+  const entries = [...filteredEntries].sort((left, right) => (navigationOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER)
+    - (navigationOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER));
   const byId = new Map(entries.map((entry) => [entry.id, entry]));
   const select = (ids: readonly string[]) => [...new Set(ids)].flatMap((id) => byId.has(id) ? [byId.get(id)!] : []);
   // Head of the scoped list: current, then stable pins, then MRU, then the remaining
@@ -120,14 +112,15 @@ export function buildTerminalNavigationModel(input: TerminalNavigationInput, mem
   };
   const recent = select(memory.recentIds).filter(matches);
   const grouped = new Set(recent.map((entry) => entry.id));
-  const currentWork = entries.filter((entry) => entry.inCurrentWork && !grouped.has(entry.id) && matches(entry));
-  currentWork.forEach((entry) => grouped.add(entry.id));
   const other = entries.filter((entry) => !grouped.has(entry.id) && matches(entry));
   // Single source of truth for the drawer tree: group the same entries the tab row renders.
   const ambiguousNames = new Set<string>();
   const nameCounts = new Map<string, number>();
+  const countedProjects = new Set<string>();
   for (const entry of entries) {
-    const name = entry.project?.name;
+    if (!entry.project || countedProjects.has(entry.project.id)) continue;
+    countedProjects.add(entry.project.id);
+    const name = entry.project.name;
     if (!name) continue;
     nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
     if ((nameCounts.get(name) ?? 0) > 1) ambiguousNames.add(name);
@@ -154,24 +147,28 @@ export function buildTerminalNavigationModel(input: TerminalNavigationInput, mem
   return {
     range: effectiveRange, entries, quickEntries, projectGroups,
     totalCount: entries.length,
-    groups: { recent, currentWork, other },
-    matchingCount: recent.length + currentWork.length + other.length,
+    groups: { recent, other },
+    matchingCount: recent.length + other.length,
   };
+}
+
+/** Batch close uses the drawer's complete scoped collection, not visible pane rows.
+ * Search, pins, and the quick-list cap do not change the batch's membership. */
+export function collectTerminalNavigationCloseOtherIds(input: TerminalNavigationInput): string[] {
+  return buildTerminalNavigationModel(input, { pinnedIds: [], recentIds: [] }).entries
+    .filter((entry) => entry.id !== input.currentSessionId)
+    .map((entry) => entry.id);
 }
 
 export type TerminalNavigationActivation = {
   sessionId: string;
-  target: "current-work" | "ordinary";
-  /** Unhide before focusing; outsiders are rejected while current-work mode is active. */
+  /** Canonical activation reopens a hidden tab before focusing it. */
   unhide: boolean;
-  exitCurrentWork: boolean;
 };
 
 /** Recompute against current input at click time; null means stale/closed/out-of-scope. */
 export function resolveTerminalNavigationActivation(input: TerminalNavigationInput, sessionId: string): TerminalNavigationActivation | null {
   const entry = buildTerminalNavigationModel(input, { pinnedIds: [], recentIds: [] }).entries.find((item) => item.id === sessionId);
   if (!entry) return null;
-  const member = input.currentWorkMode && entry.inCurrentWork;
-  return { sessionId, target: member ? "current-work" : "ordinary", unhide: Boolean(entry.session.tabHidden),
-    exitCurrentWork: input.currentWorkMode && !member };
+  return { sessionId, unhide: Boolean(entry.session.tabHidden) };
 }

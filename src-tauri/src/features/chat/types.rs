@@ -32,6 +32,17 @@ pub struct Conversation {
 }
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AssetDescriptor {
+    pub asset_id: String,
+    pub media_type: String,
+    pub byte_length: i64,
+    pub width: i64,
+    pub height: i64,
+    pub ordinal: i64,
+    pub display_name: Option<String>,
+}
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Message {
     pub id: String,
     pub conversation_id: String,
@@ -48,12 +59,29 @@ pub struct Message {
     pub model: String,
     pub created_at: i64,
     pub updated_at: i64,
+    pub assets: Vec<AssetDescriptor>,
+}
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchSummary {
+    pub conversation_id: String,
+    pub parent_conversation_id: Option<String>,
+    pub source_message_id: Option<String>,
+    pub source_ordinal: i64,
+    pub created_at: i64,
+}
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchLineage {
+    pub current: Option<BranchSummary>,
+    pub children: Vec<BranchSummary>,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Detail {
     pub conversation: Conversation,
     pub messages: Vec<Message>,
+    pub lineage: BranchLineage,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -73,7 +101,11 @@ pub enum ConversationOrigin {
 }
 impl ConversationOrigin {
     pub fn as_str(&self) -> &'static str {
-        match self { Self::Workspace => "workspace", Self::Sidebar => "sidebar", Self::QuickChat => "quick-chat" }
+        match self {
+            Self::Workspace => "workspace",
+            Self::Sidebar => "sidebar",
+            Self::QuickChat => "quick-chat",
+        }
     }
 }
 #[derive(Deserialize)]
@@ -121,7 +153,35 @@ pub struct GenerateInput {
     #[serde(default)]
     pub reasoning: Option<String>,
     #[serde(default)]
-    pub images: Option<Vec<String>>,
+    pub stage_ids: Vec<String>,
+}
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ForkEditInput {
+    pub source_conversation_id: String,
+    pub source_revision: i64,
+    pub target_message_id: String,
+    pub operation_id: String,
+    pub request_id: String,
+    pub app_type: String,
+    pub provider_id: String,
+    pub model: String,
+    pub text: Option<String>,
+    #[serde(default)]
+    pub reasoning: Option<String>,
+    #[serde(default)]
+    pub stage_ids: Vec<String>,
+}
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForkEditReceipt {
+    pub operation_id: String,
+    pub source_conversation_id: String,
+    pub source_revision: i64,
+    pub target_message_id: String,
+    pub child_conversation_id: String,
+    pub answer: Message,
+    pub replayed: bool,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -140,6 +200,8 @@ pub struct Event {
     pub conversation_id: String,
     pub message_id: String,
     pub request_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub operation_id: Option<String>,
     pub sequence: u64,
     pub content: String,
     pub status: String,

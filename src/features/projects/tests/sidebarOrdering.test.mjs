@@ -77,7 +77,6 @@ function worktreeHarness(dragging=false, disabled=false) {
  const actions={selectedWorktreeIds:new Set(),collapsedIds:new Set(),providerBadges:{},getTerminals:()=>[],
  onSelectWorktree:()=>calls.push(['select']),onOpenWorktree:()=>calls.push(['open']),onContextMenuWorktree:()=>calls.push(['menu'])};
  const deps={...h.deps,React,useState:()=>[null,()=>{}],useEffect:()=>{},useRef:()=>({current:null}),memo:f=>f,
- useSessionStore:selector=>selector({currentWorkSessionIds:[]}),worktreeTerminalMembership:()=>null,
  ...display, useProjectDisplay:()=>({label:"",tooltip:""}), useI18n:()=>({t:k=>k}),useTreeActions:()=>actions,getWorktreeDisplayName:w=>w.name,getWorktreeSidebarLabel:w=>w.name,
  worktreeTerminalsCollapseId:id=>`terminals:${id}`,WorktreeIcon:()=>null,Play:()=>null,AlertTriangle:()=>null,RefreshCw:()=>null,
  useWorktreeDepsRunnerStore:(selector)=>selector({tasks:{}}),

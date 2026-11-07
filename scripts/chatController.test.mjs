@@ -97,6 +97,79 @@ test('retry stopped answer preserves independently saved next-question composer'
   assert.equal(f.calls.filter(c => c[0] === 'generate').at(-1)[1].text, null);
 });
 
+test('image-only generation sends stage IDs with empty text', async () => {
+  const f = fixture(); await f.controller.start();
+  await f.controller.generate('c1', false, 'off', ['550e8400-e29b-41d4-a716-446655440000']);
+  const input = f.calls.find(call => call[0] === 'generate')[1];
+  assert.equal(input.text, ''); assert.deepEqual(input.stageIds, ['550e8400-e29b-41d4-a716-446655440000']);
+});
+
+test('fork edit stops source, waits terminal, flushes unrelated draft, refreshes CAS and routes destination events', async () => {
+  const f = fixture(); await f.controller.start();
+  f.controller.setDraft('c1', 'original'); await f.controller.generate('c1');
+  const sourceTarget = f.rows.get('c1').messages[0].id;
+  f.controller.setDraft('c1', 'unrelated composer');
+  const editing = f.controller.editAndRegenerate('c1', sourceTarget, 'edited');
+  await tick();
+  assert.equal(f.calls.filter(call => call[0] === 'cancel').length, 1);
+  assert.equal(f.calls.filter(call => call[0] === 'forkEdit').length, 0, 'fork waits for source terminal');
+  f.emit('r1', { sequence: 2, status: 'stopped', saved: true }); await tick();
+  const receipt = await editing;
+  const forkInput = f.calls.find(call => call[0] === 'forkEdit')[1];
+  assert.equal(f.rows.get('c1').conversation.draft, 'unrelated composer');
+  assert.equal(forkInput.sourceRevision, f.rows.get('c1').conversation.revision);
+  f.emit(forkInput.requestId, { sequence: 1, operationId: forkInput.operationId, content: 'child answer', status: 'completed', saved: true });
+  await tick();
+  assert.equal(f.controller.getSnapshot().details[receipt.childConversationId].messages.at(-1).content, 'child answer');
+  assert.equal(f.controller.getSnapshot().running.length, 0);
+});
+
+test('fork duplicate guard and conflict preserve caller edit without auto retry', async () => {
+  const f = fixture(); await f.controller.start();
+  f.rows.get('c1').messages.push({ id: 'target', conversationId: 'c1', ordinal: 0, role: 'user', content: 'old', requestId: 'old', status: 'completed', assets: [] });
+  const gate = deferred(); const original = f.api.forkEdit; let calls = 0;
+  f.api.forkEdit = async (...args) => { calls++; await gate.promise; return original(...args); };
+  const first = f.controller.editAndRegenerate('c1', 'target', 'local edit'); await tick();
+  await assert.rejects(f.controller.editAndRegenerate('c1', 'target', 'other'), error => error === 'chat_busy');
+  gate.reject('chat_conflict');
+  await assert.rejects(first, error => error === 'chat_conflict');
+  assert.equal(calls, 1, 'conflict is returned to caller and never auto-replayed');
+});
+
+test('fork owns destination before child refresh and blocks source generation during intent', async () => {
+  const f = fixture(); await f.controller.start();
+  f.rows.get('c1').messages.push({ id: 'target', conversationId: 'c1', ordinal: 0, role: 'user', content: 'old', requestId: 'old', status: 'completed', assets: [] });
+  const forkGate = deferred(), originalFork = f.api.forkEdit;
+  f.api.forkEdit = async (...args) => { const receipt = await originalFork(...args); await forkGate.promise; return receipt; };
+  const editing = f.controller.editAndRegenerate('c1', 'target', 'edited'); await tick();
+  await assert.rejects(f.controller.generate('c1'), error => error === 'chat_busy');
+  const get = f.api.get; f.api.get = async id => id === 'c3' ? Promise.reject('chat_storage') : get(id);
+  forkGate.resolve(); const receipt = await editing;
+  assert.equal(receipt.childConversationId, 'c3'); assert.equal(f.controller.getSnapshot().running.join(','), 'c3');
+  assert.equal(f.controller.getSnapshot().error, 'chat_storage');
+  const input = f.calls.find(call => call[0] === 'forkEdit')[1];
+  f.emit(input.requestId, { status: 'completed', saved: true }); await tick();
+  assert.equal(f.controller.getSnapshot().running.length, 0);
+});
+
+test('fork exact replay loads authoritative child without registering a second model run', async () => {
+  const f = fixture(); await f.controller.start();
+  f.rows.get('c1').messages.push({ id: 'target', conversationId: 'c1', ordinal: 0, role: 'user', content: 'old', requestId: 'old', status: 'completed', assets: [] });
+  const original = f.api.forkEdit;
+  f.api.forkEdit = async (input, cb) => {
+    const receipt = await original(input, cb);
+    const child = f.rows.get(receipt.childConversationId);
+    Object.assign(child.messages.at(-1), { status: 'completed', content: 'already done' });
+    child.conversation.requestId = null;
+    return { ...receipt, replayed: true };
+  };
+  const receipt = await f.controller.editAndRegenerate('c1', 'target', 'same edit', 'off', [], { operationId: 'fixed-op', requestId: 'fixed-request' });
+  assert.equal(receipt.replayed, true);
+  assert.equal(f.controller.getSnapshot().details[receipt.childConversationId].messages.at(-1).content, 'already done');
+  assert.equal(f.controller.getSnapshot().running.length, 0);
+  assert.equal(f.calls.filter(call => call[0] === 'forkEdit').length, 1);
+});
+
 test('selection preserves report-and-swallow callers while strict callers observe errors and stale tokens', async () => {
   const f = fixture(); await f.controller.start();
   const get = f.api.get;

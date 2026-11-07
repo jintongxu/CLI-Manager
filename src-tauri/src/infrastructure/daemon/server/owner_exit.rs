@@ -383,7 +383,10 @@ mod preparation_tests {
         let owner = InstanceId(uuid::Uuid::new_v4().to_string());
         let DaemonFrame::OwnerRegistered { binding, .. } = server.handle_frame(
             1,
-            ClientFrame::RegisterOwner { id: 1, instance_id: owner.clone() },
+            ClientFrame::RegisterOwner {
+                id: 1,
+                instance_id: owner.clone(),
+            },
         ) else {
             panic!()
         };
@@ -404,10 +407,22 @@ mod preparation_tests {
 
         // 同 instance 活连接仍在时，重绑定不得清除进行中的退出栅栏。
         assert!(matches!(
-            server.handle_frame(2, ClientFrame::BindOwner { id: 10, binding: binding.clone() }),
+            server.handle_frame(
+                2,
+                ClientFrame::BindOwner {
+                    id: 10,
+                    binding: binding.clone()
+                }
+            ),
             DaemonFrame::Ok { .. }
         ));
-        assert!(server.host.ownership.lock().unwrap().exits.contains_key(&owner));
+        assert!(server
+            .host
+            .ownership
+            .lock()
+            .unwrap()
+            .exits
+            .contains_key(&owner));
         assert!(
             matches!(server.handle_frame(2, write_frame(13)), DaemonFrame::Err { message, .. } if message == "owner_draining")
         );
@@ -415,7 +430,13 @@ mod preparation_tests {
         // 归属连接死亡后重启（同 token 重绑）→ 陈旧栅栏自愈，写入恢复许可。
         server.host.ownership.lock().unwrap().connections.remove(&1);
         assert!(matches!(
-            server.handle_frame(2, ClientFrame::BindOwner { id: 11, binding: binding.clone() }),
+            server.handle_frame(
+                2,
+                ClientFrame::BindOwner {
+                    id: 11,
+                    binding: binding.clone()
+                }
+            ),
             DaemonFrame::Ok { .. }
         ));
         {
@@ -430,6 +451,10 @@ mod preparation_tests {
     }
 
     fn write_frame(id: u64) -> ClientFrame {
-        ClientFrame::Write { id, session_id: "s1".into(), data: "x".into() }
+        ClientFrame::Write {
+            id,
+            session_id: "s1".into(),
+            data: "x".into(),
+        }
     }
 }

@@ -71,8 +71,6 @@ export interface PaneTabBarProps {
   onInstallWorktreeDeps: (project: Project, worktree: WorktreeRecord) => void;
   onDiscardWorktree: (project: Project, worktree: WorktreeRecord) => void;
   onOpenWorktreeDirectory: (worktree: WorktreeRecord) => void;
-  currentWorkSessionIds?: readonly string[];
-  onToggleCurrentWork?: (sessionId: string) => void;
   variant?: "global" | "pane";
   actionSessionId?: string;
   onToggleNavigationPin?: (id: string) => void;
@@ -119,8 +117,6 @@ export function PaneTabBar({
   onInstallWorktreeDeps,
   onDiscardWorktree,
   onOpenWorktreeDirectory,
-  currentWorkSessionIds = [],
-  onToggleCurrentWork,
   variant = "pane",
   actionSessionId,
   onToggleNavigationPin,
@@ -131,7 +127,6 @@ export function PaneTabBar({
   darkThemePalette,
 }: PaneTabBarProps) {
   const { t } = useI18n();
-  const workspanEnabled = useSettingsStore((s) => s.workspanEnabled);
   const { setNodeRef, isOver } = useDroppable({ id: actionSessionId ? `navigation-menu:${actionSessionId}` : `${PANE_DROP_PREFIX}${pane.id}`, disabled: Boolean(actionSessionId) });
   const tabMenuTheme = getTerminalTheme(terminalThemeName, resolvedTheme, lightThemePalette, darkThemePalette);
   const tabMenuForeground = normalizeTabMenuHex(tabMenuTheme.foreground, resolvedTheme === "dark" ? "#d8dee9" : "#1e293b");
@@ -145,7 +140,7 @@ export function PaneTabBar({
   const tabScrollRef = useRef<HTMLDivElement | null>(null);
   const cancelWheelScrollRef = useRef<(() => void) | null>(null);
   const tabScrollUpdateTimeoutRef = useRef<number | null>(null);
-  const isWorkspanSplit = workspanEnabled && variant === "pane" && allPanes.length > 1;
+  const isWorkspanSplit = variant === "pane" && allPanes.length > 1;
   const [tabListOpen, setTabListOpen] = useState(false);
   const [tabScrollState, setTabScrollState] = useState({
     isOverflowing: false,
@@ -359,13 +354,6 @@ export function PaneTabBar({
                   {onToggleNavigationPin && <ContextMenuItem onSelect={() => onToggleNavigationPin(session.id)}>
                     {t(navigationPinnedIds.includes(session.id) ? "terminal.navigation.unpin" : "terminal.navigation.pin")}
                   </ContextMenuItem>}
-                  {onToggleCurrentWork && (
-                    <ContextMenuItem onSelect={() => onToggleCurrentWork(session.id)}>
-                      {currentWorkSessionIds.includes(session.id)
-                        ? t(session.kind === "ephemeral-pi" ? "terminal.navigation.removeAndClose" : "terminal.currentWork.remove")
-                        : t("terminal.currentWork.add")}
-                    </ContextMenuItem>
-                  )}
                   <ContextMenuItem onSelect={() => closePaneSessions([session.id], getAnchor())}>{t("terminal.tab.closeCurrent")}</ContextMenuItem>
                   <ContextMenuItem
                     onSelect={() => {

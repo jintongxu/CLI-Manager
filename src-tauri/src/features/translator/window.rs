@@ -57,7 +57,10 @@ pub(super) fn ensure_translator_window(app: &AppHandle) -> Result<WebviewWindow,
     .build()
     .map(|window| {
         window.on_window_event(|event| {
-            if matches!(event, tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed) {
+            if matches!(
+                event,
+                tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed
+            ) {
                 if let Ok(mut state) = OPENING.lock() {
                     state.open(super::sizing::Mode::Input, String::new(), None);
                 }
@@ -200,41 +203,79 @@ fn show_opening(app: &AppHandle, opening: &super::sizing::Opening) -> Result<(),
     Ok(())
 }
 
-pub(super) fn show_screenshot_loading(app: &AppHandle, expected: u64, id: u64,
-    anchor: &super::card::Anchor, frame: &super::capture::ScreenCapture) -> Result<u64, String> {
+pub(super) fn show_screenshot_loading(
+    app: &AppHandle,
+    expected: u64,
+    id: u64,
+    anchor: &super::card::Anchor,
+    frame: &super::capture::ScreenCapture,
+) -> Result<u64, String> {
     use tauri::Emitter;
     let mut state = OPENING.lock().map_err(|_| "translator_state_poisoned")?;
     let opening = state.loading(expected, id)?;
     let prepared = (|| -> Result<(), String> {
         let window = ensure_translator_window(app)?;
-        let monitor = app.available_monitors().map_err(|e| e.to_string())?.into_iter()
+        let monitor = app
+            .available_monitors()
+            .map_err(|e| e.to_string())?
+            .into_iter()
             .find(|m| m.position().x == frame.origin_x && m.position().y == frame.origin_y)
             .ok_or("capture_monitor_unavailable")?;
         let scale = monitor.scale_factor();
         let bounds = (monitor.size().width, monitor.size().height);
-        let (w, h) = super::sizing::monitor_dimensions(super::sizing::Mode::Screenshot, 300.0, bounds, scale);
+        let (w, h) = super::sizing::monitor_dimensions(
+            super::sizing::Mode::Screenshot,
+            300.0,
+            bounds,
+            scale,
+        );
         let size = ((w * scale).round() as u32, (h * scale).round() as u32);
-        let (x, y) = super::card::place(anchor, size, (frame.origin_x, frame.origin_y), bounds, scale);
-        window.set_size(tauri::PhysicalSize::new(size.0, size.1)).map_err(|e| e.to_string())?;
-        window.set_position(PhysicalPosition::new(x, y)).map_err(|e| e.to_string())?;
-        window.emit("translator:prefill", &opening).map_err(|e| e.to_string())?;
-        window.show().and_then(|_| window.set_focus()).map_err(|e| e.to_string())
+        let (x, y) = super::card::place(
+            anchor,
+            size,
+            (frame.origin_x, frame.origin_y),
+            bounds,
+            scale,
+        );
+        window
+            .set_size(tauri::PhysicalSize::new(size.0, size.1))
+            .map_err(|e| e.to_string())?;
+        window
+            .set_position(PhysicalPosition::new(x, y))
+            .map_err(|e| e.to_string())?;
+        window
+            .emit("translator:prefill", &opening)
+            .map_err(|e| e.to_string())?;
+        window
+            .show()
+            .and_then(|_| window.set_focus())
+            .map_err(|e| e.to_string())
     })();
     if let Err(error) = prepared {
         state.open(super::sizing::Mode::Input, String::new(), None);
-        if let Some(w) = app.get_webview_window(TRANSLATOR_WINDOW_LABEL) { let _ = w.hide(); }
+        if let Some(w) = app.get_webview_window(TRANSLATOR_WINDOW_LABEL) {
+            let _ = w.hide();
+        }
         return Err(error);
     }
     Ok(opening.generation)
 }
 
-pub(super) fn update_screenshot(app: &AppHandle, generation: u64, id: u64,
-    image: Option<String>, result: Option<super::result::ScreenshotResult>, failed: bool) -> Result<(), String> {
+pub(super) fn update_screenshot(
+    app: &AppHandle,
+    generation: u64,
+    id: u64,
+    image: Option<String>,
+    result: Option<super::result::ScreenshotResult>,
+    failed: bool,
+) -> Result<(), String> {
     use tauri::Emitter;
     let mut state = OPENING.lock().map_err(|_| "translator_state_poisoned")?;
     let retained = image.clone();
     let opening = state.update_card(generation, id, image, result, failed)?;
-    if let Some(image) = retained { state.crop = Some(image); }
+    if let Some(image) = retained {
+        state.crop = Some(image);
+    }
     // Retain even if the event is lost. Never show, focus or reposition on update.
     if let Some(w) = app.get_webview_window(TRANSLATOR_WINDOW_LABEL) {
         let _ = w.emit("translator:prefill", &opening);
@@ -287,8 +328,17 @@ pub(super) fn hide_for_capture(app: &AppHandle) -> Result<u64, String> {
 // Called under SESSION; only a still-loading card from that capture may be hidden.
 pub(super) fn cancel_screenshot(app: &AppHandle, id: u64) {
     use tauri::Emitter;
-    let Ok(mut state) = OPENING.lock() else { return; };
-    if !state.opening.card.as_ref().is_some_and(|c| c.session_id == id && c.phase == "loading") { return; }
+    let Ok(mut state) = OPENING.lock() else {
+        return;
+    };
+    if !state
+        .opening
+        .card
+        .as_ref()
+        .is_some_and(|c| c.session_id == id && c.phase == "loading")
+    {
+        return;
+    }
     let opening = state.open(super::sizing::Mode::Input, String::new(), None);
     if let Some(w) = app.get_webview_window(TRANSLATOR_WINDOW_LABEL) {
         let _ = w.hide();
@@ -355,7 +405,9 @@ pub async fn translator_resize(
     window
         .set_size(tauri::LogicalSize::new(width, height))
         .map_err(|e| format!("translator_resize_failed: {e}"))?;
-    if mode == super::sizing::Mode::Input { clamp_position_to_monitor(&window); }
+    if mode == super::sizing::Mode::Input {
+        clamp_position_to_monitor(&window);
+    }
     Ok(())
 }
 

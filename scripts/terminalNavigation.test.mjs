@@ -24,7 +24,7 @@ function input(sessions = [session("a"), session("b")], extra = {}) {
     projects: [{ id: "p", name: "Project Alpha", path: "C:/repo", group_id: "child" }],
     worktrees: [{ id: "wt", project_id: "p", name: "task-branch", display_name: "Feature tree", short_label: "W2", path: "C:/trees/feature" }],
     groups: [{ id: "root" }, { id: "child", parent_id: "root" }], scope: { kind: "all" },
-    currentSessionId: "a", currentWorkSessionIds: ["a"], currentWorkMode: false, ...extra };
+    currentSessionId: "a", ...extra };
 }
 
 test("scope includes hidden runtime terminals, excludes pseudo/background/remote-owned rows but retains disconnected/exited terminals", () => {
@@ -57,12 +57,12 @@ test("search covers title, project, worktree names/short label and normalized pa
   assert.equal(model.buildTerminalNavigationModel({ ...data, query: "absent" }, empty()).matchingCount, 0);
 });
 
-test("recent/current-work/other are disjoint, including duplicate session and recent IDs", () => {
-  const result = model.buildTerminalNavigationModel(input([session("a"), session("a"), session("b"), session("c")],
-    { currentWorkSessionIds: ["a", "b"] }), { pinnedIds: [], recentIds: ["a", "a"] });
+test("recent and other partition the unified list without duplicates", () => {
+  const result = model.buildTerminalNavigationModel(input([session("a"), session("a"), session("b"), session("c")]),
+    { pinnedIds: [], recentIds: ["a", "a"] });
   assert.deepEqual(ids(result.groups.recent), ["a"]);
-  assert.deepEqual(ids(result.groups.currentWork), ["b"]);
-  assert.deepEqual(ids(result.groups.other), ["c"]);
+  assert.deepEqual(ids(result.groups.other), ["b", "c"]);
+  assert.deepEqual(Object.keys(result.groups), ["recent", "other"]);
 });
 
 test("quick list fills the scoped head so its length plus remainder equals total entries", () => {
@@ -96,13 +96,12 @@ test("quick list is current plus four, stable pins before MRU; status/output can
   assert.equal(model.pruneTerminalNavigationMemory(pruned, new Set(["a", "b", "c"])), pruned);
 });
 
-test("activation preserves members, rejects outsiders and stale targets", () => {
-  const data = input([session("a"), session("b", { tabHidden: true })], { currentWorkMode: true });
-  assert.deepEqual(plain(model.resolveTerminalNavigationActivation(data, "a")), { sessionId: "a", target: "current-work", unhide: false, exitCurrentWork: false });
-  assert.equal(model.resolveTerminalNavigationActivation(data, "b"), null);
-  assert.equal(model.resolveTerminalNavigationActivation(data, "closed"), null);
-  assert.equal(model.resolveTerminalNavigationActivation({ ...data, currentWorkMode: false }, "a").target, "ordinary");
-  assert.deepEqual(data.currentWorkSessionIds, ["a"]);
+test("activation accepts every eligible scoped session and rejects stale or out-of-scope targets", () => {
+  const data = input([session("a"), session("b", { tabHidden: true }), session("outside", { projectId: "q", cwd: "D:/other" })],
+    { scope: { kind: "project", projectId: "p" } });
+  assert.deepEqual(plain(model.resolveTerminalNavigationActivation(data, "a")), { sessionId: "a", unhide: false });
+  assert.deepEqual(plain(model.resolveTerminalNavigationActivation(data, "b")), { sessionId: "b", unhide: true });
+  for (const id of ["closed", "outside"]) assert.equal(model.resolveTerminalNavigationActivation(data, id), null);
 });
 
 // Minimal deterministic hook runner: effects/state are exercised without a DOM dependency.
@@ -174,24 +173,12 @@ test("ordinary entries follow persisted navigation order for drag sorting", () =
   assert.deepEqual(ids(model.buildTerminalNavigationModel(data, empty()).entries), ["c", "a", "b"]);
 });
 
-test("current-work entries follow persisted membership order for drag sorting", () => {
-  const data = input([session("a"), session("b"), session("c")], {
-    currentWorkMode: true, currentWorkSessionIds: ["c", "a", "b"], currentSessionId: "c",
-  });
-  assert.deepEqual(ids(model.buildTerminalNavigationModel(data, empty()).entries), ["c", "a", "b"]);
-});
-
-test("current-work projections exclude pinned/recent/active outsiders including empty membership", () => {
-  const memory = { pinnedIds: ["b"], recentIds: ["b", "a"] };
-  for (const members of [["a"], []]) {
-    const data = input(undefined, { currentWorkMode: true, currentWorkSessionIds: members, currentSessionId: "b" });
-    const result = model.buildTerminalNavigationModel(data, memory);
-    assert.deepEqual(ids(result.entries), members);
-    assert.deepEqual(ids(result.quickEntries), members);
-    assert.deepEqual(ids(Object.values(result.groups).flat()), members);
-    const candidates = model.buildTerminalNavigationModel({ ...data, currentWorkMode: false }, memory).entries.filter(e => !e.inCurrentWork);
-    assert.deepEqual(ids(candidates), members.length ? ["b"] : ["a", "b"]);
-  }
+test("unified navigation retains hidden sessions and uses one canonical order", () => {
+  const data = input([session("a"), session("b", { tabHidden: true }), session("c")], { navigationOrder: ["c", "b", "a"] });
+  const result = model.buildTerminalNavigationModel(data, { pinnedIds: ["a"], recentIds: ["b"] });
+  assert.deepEqual(ids(result.entries), ["c", "b", "a"]);
+  assert.equal(result.totalCount, 3);
+  assert.equal(result.entries.some((entry) => "inCurrentWork" in entry), false);
 });
 
 test("projectGroups and totalCount share one source with the tab-row entries", () => {
@@ -217,13 +204,66 @@ test("same-name projects are disambiguated with the project id and grouped separ
   assert.equal(unique, "Project Alpha");
 });
 
-test("group tree follows range and current-work projections", () => {
+test("group tree follows range and the complete scoped collection", () => {
   const data = input([session("a"), session("b", { projectId: "q", cwd: "D:/other" })], {
     projects: [{ id: "p", name: "Alpha", path: "C:/repo" }, { id: "q", name: "Beta", path: "D:/other" }] });
   const scoped = model.buildTerminalNavigationModel(data, empty(), "q");
   assert.deepEqual(plain(scoped.projectGroups.map((group) => group.label)), ["Beta"]);
   assert.equal(scoped.totalCount, 1);
-  const members = model.buildTerminalNavigationModel({ ...data, currentWorkMode: true, currentWorkSessionIds: ["a"] }, empty());
-  assert.deepEqual(ids(members.projectGroups.flatMap((group) => group.entries)), ["a"]);
-  assert.equal(members.totalCount, 1);
+  const unified = model.buildTerminalNavigationModel(data, empty());
+  assert.deepEqual(ids(unified.projectGroups.flatMap((group) => group.entries)), ["a", "b"]);
+  assert.equal(unified.totalCount, 2);
+});
+
+test("drawer Close others uses exactly eligible scoped entries, including hidden and exited terminals", () => {
+  const sessions = [session("a"), session("hidden", { tabHidden: true }), session("pi", { kind: "ephemeral-pi" }),
+    session("offline", { environmentType: "ssh", connectionState: "disconnected" }), session("exited"),
+    ...["file-editor", "subagent-transcript", "synced-history"].map((kind) => session(kind, { kind })),
+    session("remote", { remoteHandoff: { phase: "active" } }), session("transient", { transientBackground: true }),
+    session("outside", { projectId: "q", cwd: "D:/other" }), session("hidden", { tabHidden: true })];
+  const data = input(sessions, { scope: { kind: "project", projectId: "p" }, query: "no matches" });
+  data.sessionStatuses.exited = "exited";
+  const expected = ["hidden", "pi", "offline", "exited"];
+  assert.deepEqual(Array.from(model.collectTerminalNavigationCloseOtherIds(data)), expected);
+  assert.deepEqual(Array.from(model.collectTerminalNavigationCloseOtherIds({ ...data, scope: { kind: "group", groupId: "root" } })), expected);
+  assert.deepEqual(Array.from(model.collectTerminalNavigationCloseOtherIds({ ...data, currentSessionId: "file-editor" })), ["a", ...expected]);
+  assert.deepEqual(Array.from(model.collectTerminalNavigationCloseOtherIds({ ...data, sessions: [session("a")] })), []);
+});
+
+test("drawer Close others is not capped to quick entries and resolves worktree scope", () => {
+  const sessions = Array.from({ length: 8 }, (_, i) => session(`tree${i}`, { worktreeId: "wt", tabHidden: i > 3 }));
+  const data = input([...sessions, session("main")], {
+    currentSessionId: "tree0", scope: { kind: "worktree", projectId: "p", worktreeId: "wt" },
+  });
+  assert.deepEqual(Array.from(model.collectTerminalNavigationCloseOtherIds(data)), sessions.slice(1).map((s) => s.id));
+  assert.deepEqual(Array.from(model.collectTerminalNavigationCloseOtherIds({ ...data, sessions: sessions.slice(0, 2) })), ["tree1"]);
+});
+
+test("controller drawer batch resolves fresh store sessions and preserves the active terminal through the canonical close guard", () => {
+  const source = readFileSync(resolve("src/features/terminal/hooks/useTerminalTabsController.tsx"), "utf8");
+  const callback = source.slice(source.indexOf("  const handleCloseOtherNavigationSessions ="), source.indexOf("  const confirmCloseSessions ="));
+  assert.match(callback, /useTerminalStore\.getState\(\)/);
+  assert.match(callback, /collectTerminalNavigationCloseOtherIds\(/);
+  assert.match(callback, /sessions: state\.sessions, sessionStatuses: state\.sessionStatuses/);
+  assert.match(callback, /scope: terminalScopeValue/);
+  assert.match(callback, /handleCloseSessions\(sessionIds, undefined, effectiveActiveSessionId \? \[effectiveActiveSessionId\] : \[\]\)/);
+  assert.doesNotMatch(callback, /visibleSessions|destroy|closeSessionIds\(/);
+  const calls = [];
+  const stale = session("stale");
+  let runtimeSessions = [session("a"), stale];
+  const run = new Function("useCallback", "useTerminalStore", "collectTerminalNavigationCloseOtherIds",
+    "projects", "worktrees", "groups", "terminalScopeValue", "effectiveActiveSessionId", "handleCloseSessions",
+    `${callback}; return handleCloseOtherNavigationSessions;`)(
+    (fn) => fn, { getState: () => ({ sessions: runtimeSessions, sessionStatuses: {} }) },
+    model.collectTerminalNavigationCloseOtherIds, [], [], [], { kind: "all" }, "a", (...args) => calls.push(args));
+  runtimeSessions = [session("a"), session("hidden", { tabHidden: true }), session("editor", { kind: "file-editor" }),
+    session("transcript", { kind: "subagent-transcript" }), session("remote", { remoteHandoff: {} }),
+    session("background", { transientBackground: true })];
+  run();
+  assert.deepEqual(plain(calls), [[["hidden"], null, ["a"]]]);
+});
+
+test("multiple sessions in a single project do not make its name ambiguous", () => {
+  const result = model.buildTerminalNavigationModel(input(), empty());
+  assert.equal(result.projectGroups[0].label, "Project Alpha");
 });

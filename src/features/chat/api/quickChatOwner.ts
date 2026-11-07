@@ -1,7 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { chatController as owner } from "./lifecycle";
 import { defaultCatalogModel, loadChatProviderCatalog, type ChatProvider } from "../lib/chatProviderCatalog";
-import { CommandLedger, selectedSnapshot, type CommandEnvelope, type QuickSnapshot } from "../lib/panelController";
+import { CommandLedger, selectedSnapshot, validStageIds, type CommandEnvelope, type QuickSnapshot } from "../lib/panelController";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { useQuickChatSettings } from "../../../shared/preferences/quickChatSettings";
 
@@ -138,11 +138,20 @@ export function startQuickChatOwner(continueInMain: (source: ChatHistorySource) 
             case "update":
               if (!catalog.some(p => p.enabled && p.id === command.providerId && p.models.some(m => m.enabled && m.modelId === command.model))) throw "chat_invalid_input";
               await owner.update(command.conversationId, { appType: "chat", providerId: command.providerId, model: command.model }); break;
-            case "generate": await owner.generate(command.conversationId, command.retry, command.reasoning, command.images); break;
+            case "generate":
+              if (!validStageIds(command.stageIds)) throw "chat_invalid_input";
+              await owner.generate(command.conversationId, command.retry, command.reasoning, command.stageIds); break;
+            case "forkEdit": {
+              if (!validStageIds(command.stageIds)) throw "chat_invalid_input";
+              const receipt = await owner.editAndRegenerate(command.conversationId, command.targetMessageId, command.text,
+                command.reasoning, command.stageIds, { operationId: command.operationId, requestId: command.requestId });
+              quickSelected = receipt.childConversationId;
+              break;
+            }
             case "stop": await owner.stop(command.conversationId); break;
           }
         };
-        return ["hello", "create", "select", "continue"].includes(command.op) ? navigate(execute) : execute();
+        return ["hello", "create", "select", "continue", "forkEdit"].includes(command.op) ? navigate(execute) : execute();
       }).then(async ack => {
         publish();
         await invoke("quick_chat_publish", { kind: "ack", payload: ack });

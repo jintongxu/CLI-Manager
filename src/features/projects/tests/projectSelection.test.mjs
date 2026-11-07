@@ -80,7 +80,7 @@ test("keyboard project selection does not navigate, including pinned-row callers
 
 test("explicit Worktree selection still scopes and opens the selected Worktree", () => {
   const f = fixture();
-  f.env.dispatchCurrentWorkTarget = id => f.calls.push(["current-work", id]);
+  f.env.dispatchSidebarTerminalTarget = id => f.calls.push(["terminal-session-target", id]);
   f.env.visibleWorktreeIds = ["w1"];
   f.env.worktreeSelectionAnchorRef = { current: null };
   f.env.selectedWorktreeIds = new Set();

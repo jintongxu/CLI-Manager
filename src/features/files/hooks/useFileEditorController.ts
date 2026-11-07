@@ -19,7 +19,7 @@ import { getFileEditorTheme } from "../lib/fileEditorTheme";
 import { useFileEditorMarkdownNavigation } from "./useFileEditorMarkdownNavigation";
 configureMonaco();
 
-export function useFileEditorController({ session, isActive, terminalThemeBackground, onClose }: FileEditorPaneProps) {
+export function useFileEditorController({ session, isActive, terminalThemeBackground, onClose, companion = false }: FileEditorPaneProps) {
   const { language: appLanguage, t } = useI18n();
   const editorRef = useRef<MonacoEditor | null>(null);
   const searchDecorationIdsRef = useRef<string[]>([]);
@@ -53,15 +53,44 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
   const saveActiveFile = useFileExplorerStore((s) => s.saveActiveFile);
   const projects = useProjectStore((s) => s.projects);
   const [previewMode, setPreviewMode] = useState<"source" | "preview">("source");
-  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [pendingAction, updatePendingAction] = useState<PendingAction>(null);
+  const pendingActionRef = useRef<PendingAction>(null);
+  const pendingGeneration = useRef(0);
+  const savingGeneration = useRef<number | null>(null);
+  const [pendingSaveBusy, setPendingSaveBusy] = useState(false);
+  // Invalidate synchronously: an awaiting save must not outlive Cancel, dismissal,
+  // a replacement request, or a context transition.
+  const setPendingAction = useCallback((action: PendingAction) => {
+    pendingGeneration.current += 1;
+    pendingActionRef.current = action;
+    savingGeneration.current = null;
+    setPendingSaveBusy(false);
+    updatePendingAction(action);
+  }, []);
+  useEffect(() => {
+    const unsubscribe = useFileExplorerStore.subscribe((state, previous) => {
+      const action = pendingActionRef.current;
+      if (!action) return;
+      if (state.project !== previous.project
+        || action.paths.some((path) => !state.openFiles.some((file) => file.path === path))) {
+        setPendingAction(null);
+      }
+    });
+    return () => {
+      unsubscribe();
+      pendingGeneration.current += 1;
+      pendingActionRef.current = null;
+      savingGeneration.current = null;
+    };
+  }, [setPendingAction]);
   const [pendingMarkdownNavigation, setPendingMarkdownNavigation] = useState<PendingMarkdownNavigation | null>(null);
   const sessionProject = session.fileEditor?.project ?? null;
   const latestProject = sessionProject
     ? projects.find((candidate) => candidate.id === sessionProject.id) ?? null
     : null;
   const editorProject = useMemo(
-    () => sessionProject ? resolveGitDiffProject(sessionProject, latestProject) : null,
-    [latestProject, sessionProject],
+    () => sessionProject ? companion ? sessionProject : resolveGitDiffProject(sessionProject, latestProject) : null,
+    [companion, latestProject, sessionProject],
   );
   const diffContext = useMemo(
     () => editorProject ? createGitDiffWorkspaceContext(editorProject) : null,
@@ -71,6 +100,13 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
     diffContext ? state.workspaces[diffContext.key] ?? EMPTY_GIT_DIFF_WORKSPACE : EMPTY_GIT_DIFF_WORKSPACE
   ));
   const activeDiff = diffWorkspace.tabs.find((tab) => tab.id === diffWorkspace.activeId) ?? null;
+  useEffect(() => {
+    // A parked context must not carry its confirmation or navigation into the next location.
+    setPendingAction(null);
+    setPendingMarkdownNavigation(null);
+    markdownNavigationIdRef.current += 1;
+    nextMarkdownModeRef.current = null;
+  }, [diffContext?.key]);
   const ownsFileState = isSameProjectFileContext(project, editorProject);
   const visibleFiles = ownsFileState ? openFiles : [];
   const visibleFile = ownsFileState && !activeDiff ? activeFile : null;
@@ -82,7 +118,7 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
     [gitChanges, visibleFile?.path]
   );
   const isNewFile = activeGitChange?.status === "U" || activeGitChange?.status === "??" || activeGitChange?.status === "A";
-  const language = useMemo(() => visibleFile ? languageFromPath(visibleFile.path) : "plaintext", [visibleFile]);
+  const language = useMemo(() => visibleFile ? languageFromPath(visibleFile.path, visibleFile.content) : "plaintext", [visibleFile]);
   const editorTheme = useMemo(
     () => getFileEditorTheme(terminalThemeBackground),
     [terminalThemeBackground]
@@ -124,9 +160,9 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
   });
 
   useEffect(() => {
-    if (!isActive || !editorProject || isSameProjectFileContext(useFileExplorerStore.getState().project, editorProject)) return;
+    if (companion || !isActive || !editorProject || isSameProjectFileContext(useFileExplorerStore.getState().project, editorProject)) return;
     void openProject(editorProject);
-  }, [editorProject, isActive, openProject]);
+  }, [companion, editorProject, isActive, openProject]);
 
   useEffect(() => {
     const requestedMode = nextMarkdownModeRef.current;
@@ -207,6 +243,7 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
   });
 
   const requestClose = () => {
+    setPendingAction(null);
     const paths = visibleFiles.map((file) => file.path);
     if (dirtyFiles.length > 0) {
       setPendingAction({ closePane: true, paths, dirtyPaths: dirtyFiles.map((file) => file.path) });
@@ -216,6 +253,7 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
   };
 
   const closeFiles = (paths: string[]) => {
+    if (!isSameProjectFileContext(useFileExplorerStore.getState().project, editorProject)) return false;
     const remainingCount = visibleFiles.filter((file) => !paths.includes(file.path)).length;
     const hasDiffTabs = diffWorkspace.tabs.length > 0;
     paths.forEach(closeFile);
@@ -228,6 +266,7 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
   const requestCloseFiles = (paths: string[]) => {
     const targetFiles = visibleFiles.filter((file) => paths.includes(file.path));
     if (targetFiles.length === 0) return;
+    setPendingAction(null);
     const targetPaths = targetFiles.map((file) => file.path);
     const dirtyPaths = targetFiles.filter((file) => file.content !== file.savedContent).map((file) => file.path);
     if (dirtyPaths.length > 0) {
@@ -237,24 +276,73 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
     closeFiles(targetPaths);
   };
 
+  // Companion close is scoped to this controller, never to the selected Pi session.
+  useEffect(() => {
+    if (!companion || !isActive) return;
+    const handleClose = () => {
+      if (activeDiff && diffContext) {
+        useGitDiffWorkspaceStore.getState().closeTab(diffContext.key, activeDiff.id);
+      } else if (visibleFile) requestCloseFiles([visibleFile.path]);
+      else onClose();
+    };
+    window.addEventListener("file-companion-close-file", handleClose);
+    return () => window.removeEventListener("file-companion-close-file", handleClose);
+  });
+
+  const previousTabs = useRef({ context: diffContext?.key, count: 0 });
+  useEffect(() => {
+    const count = visibleFiles.length + diffWorkspace.tabs.length;
+    const previous = previousTabs.current;
+    if (companion && ownsFileState && previous.context === diffContext?.key && previous.count > 0 && count === 0) onClose();
+    previousTabs.current = { context: diffContext?.key, count };
+  }, [companion, ownsFileState, diffContext?.key, visibleFiles.length, diffWorkspace.tabs.length, onClose]);
+
   const discardAndRun = () => {
-    if (!pendingAction) return;
-    const { closePane, paths } = pendingAction;
+    if (!pendingActionRef.current || savingGeneration.current !== null) return;
+    const { closePane, paths } = pendingActionRef.current;
     setPendingAction(null);
     const closed = closeFiles(paths);
     if (closePane && !closed) onClose();
   };
 
   const saveAndRun = async () => {
-    if (!pendingAction) return;
+    const action = pendingActionRef.current;
+    if (!action || savingGeneration.current !== null) return;
+    const generation = pendingGeneration.current;
+    const capturedProject = useFileExplorerStore.getState().project;
+    const isCurrent = () => pendingGeneration.current === generation
+      && pendingActionRef.current === action
+      && useFileExplorerStore.getState().project === capturedProject
+      && isSameProjectFileContext(capturedProject, editorProject);
+    if (!isCurrent()) return;
+    savingGeneration.current = generation;
+    setPendingSaveBusy(true);
     try {
-      const { closePane, dirtyPaths, paths } = pendingAction;
-      for (const path of dirtyPaths) await saveFile(path);
-      const closed = closeFiles(paths);
+      const { closePane, dirtyPaths, paths } = action;
+      for (const path of dirtyPaths) {
+        if (!isCurrent()) return;
+        await saveFile(path);
+        if (!isCurrent()) return;
+        const saved = useFileExplorerStore.getState().openFiles.find((file) => file.path === path);
+        if (!saved || saved.content !== saved.savedContent) return;
+      }
+      // Recheck the entire captured set, including initially clean files and
+      // earlier saves edited while a later write was pending. No close before this.
+      const files = useFileExplorerStore.getState().openFiles;
+      if (!isCurrent() || !paths.every((path) => {
+        const file = files.find((candidate) => candidate.path === path);
+        return file && file.content === file.savedContent;
+      })) return;
       setPendingAction(null);
+      const closed = closeFiles(paths);
       if (closePane && !closed) onClose();
     } catch {
-      // 保存失败时保持确认框和未保存文件不变。
+      // Store reports the failure; retain this dialog and every target buffer.
+    } finally {
+      if (savingGeneration.current === generation) {
+        savingGeneration.current = null;
+        setPendingSaveBusy(false);
+      }
     }
   };
   return {
@@ -263,6 +351,6 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
     diffContext, diffWorkspace, setActiveFilePath, requestCloseFiles, editorProject, language,
     editorTheme, handleEditorMount, setActiveContent, handleMarkdownLinkActivate,
     pendingMarkdownNavigation, handleMarkdownFragmentHandled, pendingAction, setPendingAction,
-    discardAndRun, saveAndRun,
+    discardAndRun, saveAndRun, pendingSaveBusy,
   };
 }

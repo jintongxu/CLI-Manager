@@ -3,10 +3,9 @@ use super::*;
 #[test]
 fn web_device_blocking_work_runs_off_the_calling_thread() {
     let caller = std::thread::current().id();
-    let worker = tauri::async_runtime::block_on(run_web_device_blocking(|| {
-        Ok(std::thread::current().id())
-    }))
-    .unwrap();
+    let worker =
+        tauri::async_runtime::block_on(run_web_device_blocking(|| Ok(std::thread::current().id())))
+            .unwrap();
     assert_ne!(caller, worker);
 }
 
@@ -200,11 +199,8 @@ fn validates_native_context_boundary() {
     let outside = dir.path().join("outside");
     fs::create_dir_all(&nested).unwrap();
     fs::create_dir_all(&outside).unwrap();
+    assert!(validate_operation_context(&root.to_string_lossy(), &nested.to_string_lossy()).is_ok());
     assert!(
-        validate_operation_context(&root.to_string_lossy(), &nested.to_string_lossy()).is_ok()
-    );
-    assert!(
-        validate_operation_context(&root.to_string_lossy(), &outside.to_string_lossy())
-            .is_err()
+        validate_operation_context(&root.to_string_lossy(), &outside.to_string_lossy()).is_err()
     );
 }

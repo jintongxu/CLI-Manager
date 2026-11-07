@@ -249,9 +249,10 @@ async fn resolve_with(
 pub(crate) async fn resolve(app: &str, id: &str) -> Result<Runtime, String> {
     if app == "chat" {
         let path = crate::app_paths::db_path().map_err(|_| error("provider_storage"))?;
-        let mut c = sqlx::SqliteConnection::connect(&format!("sqlite://{}", path.to_string_lossy()))
-            .await
-            .map_err(|_| error("provider_storage"))?;
+        let mut c =
+            sqlx::SqliteConnection::connect(&format!("sqlite://{}", path.to_string_lossy()))
+                .await
+                .map_err(|_| error("provider_storage"))?;
         return resolve_chat_catalog(&mut c, id).await;
     }
     let mut c = open_connection()
@@ -496,9 +497,7 @@ mod tests {
                 "chat_provider_protocol"
             );
         }
-        assert!(
-            endpoint_mode("http://external.example/custom", Protocol::Messages, true).is_ok()
-        );
+        assert!(endpoint_mode("http://external.example/custom", Protocol::Messages, true).is_ok());
         assert_eq!(
             endpoint_mode("https://example.com/v1/responses", Protocol::Messages, true)
                 .unwrap_err(),

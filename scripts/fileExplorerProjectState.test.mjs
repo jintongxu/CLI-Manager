@@ -35,7 +35,7 @@ test("project switches snapshot and restore editor files by file location", () =
 
 test("closing a file panel snapshots state while closing the project editor clears all its locations", () => {
   const closeProject = sliceBetween(fileStore, "  closeProject: () => {", "  getProjectEditorWorkspaces:");
-  const openEditor = sliceBetween(terminalStore, "  openFileEditorPane: (project) => {", "  openSyncedHistoryPane:");
+  const openEditor = sliceBetween(terminalStore, '  openFileEditorPane: (project, mode = "beside") => {', "  openSyncedHistoryPane:");
   assert.match(closeProject, /upsertEditorWorkspace/);
   assert.match(fileStore, /clearProjectEditorWorkspaces: \(projectId\)/);
   assert.match(terminalStore, /clearProjectEditorWorkspacesIfUnused\(project, remaining\)/);
@@ -65,16 +65,17 @@ test("project synchronization effects read the latest store without subscribing 
   assert.doesNotMatch(syncPanel, /\[fileProject,/);
   assert.match(
     fileEditorPane,
-    /isSameProjectFileContext\(useFileExplorerStore\.getState\(\)\.project, editorProject\)[\s\S]*?void openProject\(editorProject\);[\s\S]*?\[editorProject, isActive, openProject\]/,
+    /isSameProjectFileContext\(useFileExplorerStore\.getState\(\)\.project, editorProject\)[\s\S]*?void openProject\(editorProject\);[\s\S]*?\[companion, editorProject, isActive, openProject\]/,
   );
 });
 
-test("hidden Workspans do not activate their file editors", () => {
+test("canonical leaves never mount a second editor controller", () => {
   const paneLeaf = sliceBetween(paneLeafSource, "function PaneLeafView", "const MemoPaneLeafView");
-  assert.match(
-    paneLeaf,
-    /<FileEditorPane[\s\S]*?isActive=\{!historyActive && isLayoutVisible && session\.id === activeSessionId\}/,
-  );
+  assert.doesNotMatch(paneLeaf, /<FileEditorPane/);
+  assert.match(paneLeaf, /session.kind !== "file-editor"/);
+  const companion = read("../src/features/terminal/components/FileCompanionSurface.tsx");
+  assert.match(companion, /<FileEditorPane session=\{session\} companion/);
+  assert.match(companion, /isActive=\{visible && shown && focused\}/);
 });
 
 test("closing editor tabs checks dirty files in every location owned by each project", () => {

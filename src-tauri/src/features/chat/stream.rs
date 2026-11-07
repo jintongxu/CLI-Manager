@@ -2,7 +2,7 @@ use super::types::{Message, Result};
 use crate::provider::chat_runtime::{Protocol, Runtime};
 use futures_util::StreamExt;
 use serde_json::{json, Value};
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 use tokio::sync::{mpsc, watch};
 pub const MAX_FRAME: usize = 1024 * 1024;
 pub const MAX_ANSWER: usize = 2 * 1024 * 1024;
@@ -320,7 +320,7 @@ fn sse_mime(value: Option<&str>) -> bool {
 pub struct Request {
     pub model: String,
     pub reasoning: Option<String>,
-    pub images: Option<Vec<String>>,
+    pub images: HashMap<String, Vec<String>>,
 }
 
 /// Anthropic budgets thinking tokens instead of naming an effort level.
@@ -375,21 +375,27 @@ fn anthropic_image(uri: &str) -> Value {
     json!({"type":"image","source":{"type":"base64","media_type":media_type,"data":data}})
 }
 
-/// Only the newest user turn carries images; history stays plain strings.
-fn messages_with_images(protocol: Protocol, history: &[Message], images: &[String]) -> Vec<Value> {
-    let last_user = history.iter().rposition(|m| m.role == "user");
+/// Each historical user turn owns its durable images; retry must preserve that ownership.
+fn messages_with_images(
+    protocol: Protocol,
+    history: &[Message],
+    images: &HashMap<String, Vec<String>>,
+) -> Vec<Value> {
     history
         .iter()
-        .enumerate()
-        .map(|(index, m)| {
-            if Some(index) != last_user || images.is_empty() {
+        .map(|m| {
+            let owned = images.get(&m.id).map(Vec::as_slice).unwrap_or_default();
+            if owned.is_empty() {
                 return json!({"role":m.role,"content":m.content});
             }
-            let mut parts: Vec<Value> = vec![match protocol {
-                Protocol::Responses => json!({"type":"input_text","text":m.content}),
-                _ => json!({"type":"text","text":m.content}),
-            }];
-            for uri in images {
+            let mut parts: Vec<Value> = Vec::new();
+            if !m.content.is_empty() {
+                parts.push(match protocol {
+                    Protocol::Responses => json!({"type":"input_text","text":m.content}),
+                    _ => json!({"type":"text","text":m.content}),
+                });
+            }
+            for uri in owned {
                 parts.push(match protocol {
                     Protocol::Messages => anthropic_image(uri),
                     Protocol::Responses => json!({"type":"input_image","image_url":uri}),
@@ -406,12 +412,15 @@ pub fn body(
     model: &str,
     history: &[Message],
     reasoning: Option<&str>,
-    images: &[String],
+    images: &HashMap<String, Vec<String>>,
 ) -> Value {
     let messages: Vec<Value> = messages_with_images(protocol, history, images);
-    let effort = reasoning
-        .map(str::trim)
-        .filter(|level| matches!(*level, "minimal" | "low" | "medium" | "high" | "xhigh" | "max"));
+    let effort = reasoning.map(str::trim).filter(|level| {
+        matches!(
+            *level,
+            "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
+        )
+    });
     let mut payload = match protocol {
         Protocol::Messages => {
             json!({"model":model,"messages":messages,"stream":true,"max_tokens":8192})
@@ -457,13 +466,15 @@ pub async fn run(
     tx: mpsc::Sender<Result<Part>>,
 ) {
     let job = async {
-        let attachments = normalize_images(request.images.as_deref())?;
+        for images in request.images.values() {
+            normalize_images(Some(images))?;
+        }
         let mut http_req = client.post(&runtime.endpoint).json(&body(
             runtime.protocol,
             &request.model,
             &history,
             request.reasoning.as_deref(),
-            &attachments,
+            &request.images,
         ));
         http_req = match runtime.protocol {
             Protocol::Messages => http_req

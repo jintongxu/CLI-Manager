@@ -1,11 +1,9 @@
 import type { TerminalSession } from "../../../shared/types/index";
 import { visibleTerminalSessionIds } from "./terminalTabVisibility";
 
-/** Presentation membership only: never mutate the durable session/layout/PTY owners. */
+/** Presentation eligibility never mutates durable session/layout/PTY owners. */
 export function terminalPresentationAllowedIds(
-  sessions: TerminalSession[], scope: Set<string> | null, currentWorkIds: readonly string[], currentWorkMode: boolean,
+  sessions: TerminalSession[], scope: Set<string> | null,
 ): Set<string> {
-  const members = new Set(currentWorkIds);
-  return new Set([...visibleTerminalSessionIds(sessions, scope)]
-    .filter((id) => members.has(id) === currentWorkMode));
+  return visibleTerminalSessionIds(sessions.filter((session) => !session.transientBackground && session.kind !== "file-editor"), scope);
 }

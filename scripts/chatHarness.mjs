@@ -38,9 +38,10 @@ export function fixture(count = 2) {
     const id = `c${++serial}`;
     const c = { id, origin, title: '', draft: '', appType: 'claude', providerId: 'p', model: 'm',
       createdAt: 1, updatedAt: 1, revision: 0, requestId: null, leaseUntil: null };
-    rows.set(id, { conversation: c, messages: [] }); return structuredClone(rows.get(id));
+    rows.set(id, { conversation: c, messages: [], lineage: { current: null, children: [] } }); return structuredClone(rows.get(id));
   }
   for (let n = 0; n < count; n++) add();
+  const staged = new Map();
   const api = {
     initialize: async () => { calls.push(['initialize']); return { conversations: [...rows.values()].map(d => structuredClone(d.conversation)), unsaved: [] }; },
     providers: async () => [provider],
@@ -56,6 +57,13 @@ export function fixture(count = 2) {
       Object.assign(d.conversation, values, { revision: revision + 1 }); return structuredClone(d);
     },
     delete: async (id, revision) => { calls.push(['delete', id, revision]); rows.delete(id); },
+    stage: async bytes => {
+      const stageId = `s${staged.size + 1}`;
+      const descriptor = { stageId, mediaType: 'image/png', byteLength: bytes.byteLength, width: 1, height: 1 };
+      staged.set(stageId, descriptor); calls.push(['stage', bytes]); return structuredClone(descriptor);
+    },
+    releaseAssets: async stageIds => { calls.push(['releaseAssets', [...stageIds]]); stageIds.forEach(id => staged.delete(id)); },
+    readAsset: async input => { calls.push(['readAsset', structuredClone(input)]); return new ArrayBuffer(1); },
     generate: async (input, cb) => {
       calls.push(['generate', structuredClone(input)]);
       const d = rows.get(input.conversationId);
@@ -66,15 +74,38 @@ export function fixture(count = 2) {
         const last = d.messages.at(-1);
         if (last?.role === 'assistant' && !['completed', 'stopped'].includes(last.status)) throw 'chat_retry_required';
         d.messages.push({ id: `u${input.requestId}`, conversationId: input.conversationId, ordinal: d.messages.length,
-          role: 'user', content: input.text, requestId: input.requestId, status: 'completed', createdAt: 1, updatedAt: 1 });
+          role: 'user', content: input.text ?? '', requestId: input.requestId, status: 'completed', createdAt: 1, updatedAt: 1,
+          assets: (input.stageIds ?? []).map((stageId, ordinal) => ({ assetId: `asset-${stageId}`, mediaType: 'image/png', byteLength: 1, width: 1, height: 1, ordinal, displayName: null })) });
         answer = { id: `a${input.requestId}`, conversationId: input.conversationId, ordinal: d.messages.length,
-          role: 'assistant', content: '', replyTo: d.messages.at(-1).id, createdAt: 1, updatedAt: 1 };
+          role: 'assistant', content: '', replyTo: d.messages.at(-1).id, createdAt: 1, updatedAt: 1, assets: [] };
         d.messages.push(answer);
       }
       Object.assign(answer, { requestId: input.requestId, status: 'pending', content: '', errorCode: null,
         finishReason: null, appType: input.appType, providerId: input.providerId, model: input.model });
       Object.assign(d.conversation, { revision: input.revision + 1, draft: input.retry ? d.conversation.draft : '', requestId: input.requestId });
       channels.set(input.requestId, { cb, answer, d }); return structuredClone(answer);
+    },
+    forkEdit: async (input, cb) => {
+      calls.push(['forkEdit', structuredClone(input)]);
+      const replay = [...rows.values()].find(d => d.lineage.current?.operationId === input.operationId);
+      if (replay) return structuredClone(replay.receipt);
+      const source = rows.get(input.sourceConversationId);
+      if (source.conversation.revision !== input.sourceRevision) throw 'chat_conflict';
+      const targetIndex = source.messages.findIndex(message => message.id === input.targetMessageId && message.role === 'user');
+      if (targetIndex < 0) throw 'chat_invalid_input';
+      const child = add(source.conversation.origin); const childId = child.conversation.id; const d = rows.get(childId);
+      d.messages = structuredClone(source.messages.slice(0, targetIndex));
+      const user = { id: `fu${input.requestId}`, conversationId: childId, ordinal: d.messages.length, role: 'user', content: input.text ?? '',
+        requestId: input.requestId, status: 'completed', createdAt: 1, updatedAt: 1, assets: [] };
+      const answer = { id: `fa${input.requestId}`, conversationId: childId, ordinal: d.messages.length + 1, role: 'assistant', content: '', replyTo: user.id,
+        requestId: input.requestId, status: 'pending', errorCode: null, finishReason: null, appType: input.appType, providerId: input.providerId, model: input.model,
+        createdAt: 1, updatedAt: 1, assets: [] };
+      d.messages.push(user, answer); d.conversation.revision = 1; d.conversation.requestId = input.requestId;
+      d.lineage.current = { conversationId: childId, parentConversationId: input.sourceConversationId, sourceMessageId: input.targetMessageId,
+        sourceOrdinal: targetIndex, createdAt: 1, operationId: input.operationId };
+      const receipt = { operationId: input.operationId, sourceConversationId: input.sourceConversationId, sourceRevision: input.sourceRevision,
+        targetMessageId: input.targetMessageId, childConversationId: childId, answer, replayed: false };
+      d.receipt = receipt; channels.set(input.requestId, { cb, answer, d, operationId: input.operationId }); return structuredClone(receipt);
     },
     cancel: async (id, requestId) => { calls.push(['cancel', id, requestId]); },
     flush: async drafts => {
@@ -93,7 +124,7 @@ export function fixture(count = 2) {
   };
   function emit(requestId, values = {}) {
     const { cb, answer, d } = channels.get(requestId);
-    const event = { conversationId: d.conversation.id, messageId: answer.id, requestId, sequence: 1,
+    const event = { conversationId: d.conversation.id, messageId: answer.id, requestId, operationId: channels.get(requestId).operationId, sequence: 1,
       content: 'partial', status: 'pending', errorCode: null, finishReason: null, saved: false, ...values };
     if (event.status !== 'pending' && event.saved) {
       Object.assign(answer, { content: event.content, status: event.status });
@@ -103,7 +134,7 @@ export function fixture(count = 2) {
   }
   let request = 0;
   const controller = new ChatController(api, () => `r${++request}`);
-  return { api, rows, calls, channels, controller, emit, add,
+  return { api, rows, staged, calls, channels, controller, emit, add,
     failUpdate: value => { failUpdate = value; }, failFlush: value => { failFlush = value; } };
 }
 export function elements(tree) {

@@ -13,7 +13,7 @@ const load = (path, require) => {
   return exports;
 };
 const terminalProject = load("./terminalProject.ts", () => ({ getWorktreeDisplayName: (worktree) => worktree.name }));
-const { shouldAddSessionToCurrentWork } = load("./anonymousPiSession.ts", () => ({}));
+const { createAnonymousPiSessionHandler } = load("./anonymousPiSession.ts", () => ({}));
 const { resolveTerminalCreationContext: resolve, withoutTerminalTitle } = load("./terminalCreationContext.ts", (id) => {
   if (id === "./terminalProject") return terminalProject;
   if (id.endsWith("groupPath")) return { resolveProjectPath: (project) => project.remote_path || project.path };
@@ -25,11 +25,15 @@ const worktree = { id: "w", project_id: "p", path: "/repo-w", status: "active" }
 const source = { id: "s", projectId: "p", worktreeId: "w", cwd: "/repo-w", title: "Custom", titleNaming: { kind: "custom" }, startupCmd: "codex resume old", cliSessionId: "old", shell: "zsh", envVars: { LOCAL: "yes" }, sshHostId: "host" };
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
-test("current-work admission includes anonymous Pi but excludes background sessions", () => {
-  assert.equal(shouldAddSessionToCurrentWork({ sessionKind: "ephemeral-pi" }, false), false);
-  assert.equal(shouldAddSessionToCurrentWork({ sessionKind: "ephemeral-pi" }, true), true);
-  assert.equal(shouldAddSessionToCurrentWork(undefined, true), true);
-  assert.equal(shouldAddSessionToCurrentWork({ transientBackground: true }, true), false);
+test("anonymous Pi creation uses canonical lifecycle options without a membership gate", async () => {
+  const calls = [];
+  const create = createAnonymousPiSessionHandler(async (...args) => calls.push(args),
+    () => calls.push("history"), tab => calls.push(tab));
+  await create();
+  assert.equal(calls[0][3], "pi --no-session");
+  assert.deepEqual(plain(calls[0][12]), { sessionKind: "ephemeral-pi" });
+  assert.equal(calls[0][12].transientBackground, undefined);
+  assert.deepEqual(calls.slice(1), ["history", "terminal"]);
 });
 
 test("ordinary creation inherits environment, not title, naming or startup identity", () => {
@@ -63,20 +67,20 @@ test("pane edge parsing preserves current-work pane IDs containing colons", () =
   });
 });
 
-test("worktree split creation dispatches its session into current work", () => {
+test("worktree split creation uses canonical split without membership dispatch", () => {
   const sidebar = readFileSync(new URL("../../projects/hooks/useSidebarController.tsx", import.meta.url), "utf8");
   const createSplit = sidebar.slice(sidebar.indexOf("const createAndSplitWorktree"), sidebar.indexOf("const openProjectInternal"));
-  assert.match(createSplit, /const sessionId = await splitTerminal/);
-  assert.match(createSplit, /if \(sessionId\) dispatchCurrentWorkSessionCreated\(sessionId\)/);
+  assert.match(createSplit, /await splitTerminal\(activeSessionId, direction/);
+  assert.doesNotMatch(createSplit, /dispatchCurrentWork|addCurrentWork|toggleCurrentWork/);
 });
 
-test("current-work drag keeps tab sorting and supports pane edge splitting", () => {
+test("canonical drag keeps tab sorting and pane edge splitting without join/remove authority", () => {
   const tabs = readFileSync(new URL("../hooks/useTerminalTabsController.tsx", import.meta.url), "utf8");
-  const dragOver = tabs.slice(tabs.indexOf("const handleDragOver ="), tabs.indexOf("const handleDragEnd ="));
   const dragEnd = tabs.slice(tabs.indexOf("const handleDragEnd ="), tabs.indexOf("const handleToolbarDragStart ="));
-  assert.match(dragOver, /currentWorkActiveId[\s\S]*dropTarget\?\.type === "edge"[\s\S]*updateActiveDropPreview/);
-  assert.match(dragEnd, /currentWorkOverId[\s\S]*reorderCurrentWork/);
-  assert.match(dragEnd, /currentWorkActiveId[\s\S]*splitCurrentWorkSessionToPaneEdge\(currentWorkActiveId, dropTarget\.paneId, dropTarget\.edge\)/);
+  assert.match(dragEnd, /reorderSessions\(sourceSessionId, targetSessionId\)/);
+  assert.match(dragEnd, /moveSessionToPane\(sourceSessionId, targetPane.id, targetSessionId\)/);
+  assert.match(dragEnd, /splitSessionToPaneEdge\(sourceSessionId, dropTarget.paneId, dropTarget.edge\)/);
+  assert.doesNotMatch(tabs, /reorderCurrentWork|splitCurrentWork|toggleCurrentWork|removeCurrentWork/);
 });
 
 test("entrypoint title and startup-policy contracts remain explicit", () => {
@@ -156,7 +160,7 @@ test("actual worktree opening preserves explicit or inherited title and startup 
     const expectedTitle = title ?? "Worktree label";
     assert.deepEqual(plain(calls), [["p", "/repo-w", expectedTitle, startupCmd ?? "project launch", { PROJECT: "yes" }, "bash", "pane", "w"]]);
     assert.deepEqual(plain(inherited), [["created", expectedTitle]]);
-    assert.deepEqual(admitted, ["created"]);
+    assert.deepEqual(admitted, [], "canonical creation needs no parallel membership event");
   }
 });
 

@@ -508,11 +508,6 @@ export const zh = {
     "开启后，左侧点击项目只显示该项目的终端；顶部会出现“全部终端”入口用于回到完整列表。",
   "settings.general.disableProjectScopedTerminalView": "关闭按项目聚焦终端",
   "settings.general.enableProjectScopedTerminalView": "开启按项目聚焦终端",
-  "settings.general.workspanDevelopment": "Workspan开发",
-  "settings.general.workspanDevelopmentDescription":
-    "开启后使用 Workspan 顶层工作区；关闭后恢复传统分屏，并在每个 Pane 保留终端 Tab。",
-  "settings.general.disableWorkspanDevelopment": "关闭 Workspan开发",
-  "settings.general.enableWorkspanDevelopment": "开启 Workspan开发",
   "settings.general.lowMemoryMode": "低内存模式",
   "settings.general.lowMemoryModeDescription":
     "开启后，后台终端隐藏超过 60 秒会释放 WebGL/GPU 渲染资源，切回时重建渲染器。滚动缓冲区与输出解析保持运行，PTY 与 Pi/CLI 进程继续运行，不会进入进程休眠。",

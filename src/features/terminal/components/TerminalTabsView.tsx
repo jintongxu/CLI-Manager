@@ -13,17 +13,13 @@ import { WorktreeFinishDialog } from "../../projects/api/WorktreeFinishDialog";
 import { FileExplorerSidebar } from "../../files/api/FileExplorerSidebar";
 import { Terminal } from "../../../shared/ui/icons";
 import { EmptyState } from "../../../shared/ui/EmptyState";
-import { canSaveSessionToSidebar } from "../../projects/api/saveSessionToSidebar";
-import { ContextMenuItem } from "../../../shared/ui/context-menu";
 import { ConfirmDialog } from "../../../shared/ui/ConfirmDialog";
-import { WorkspanTabBar } from "../../workspace/api/WorkspanTabBar";
 import { WorkspanTerminalLayout } from "../../workspace/api/WorkspanTerminalLayout";
 import {
   HistoryWorkspace, GitChangesPanel, GitWorkspace, TerminalStatsPanel, SessionReplayPanel,
 } from "./lazyTerminalPanels";
-import { buildTerminalTabHoverInfo, terminalTabCollisionDetection } from "../lib/terminalTabsModel";
+import { terminalTabCollisionDetection } from "../lib/terminalTabsModel";
 import { TerminalNavigationAdapter } from "./TerminalNavigationAdapter";
-import { SortableWorkspanTab } from "./SortableTerminalTabs";
 import { TerminalTabDragOverlay } from "./TerminalTabDragOverlay";
 import { BtwSideQuestionPanel } from "./BtwSideQuestionPanel";
 import { ChatPanel } from "../../chat/api/ChatPanel";
@@ -31,12 +27,11 @@ import { useChatPanelStore } from "../store/chatPanelStore";
 import { useChatPanelDrag } from "../hooks/useChatPanelDrag";
 import { usePrimarySpaceStore } from "../../workspace/api/primarySpaceState";
 import { BtwTerminalDrawer } from "./BtwTerminalDrawer";
-import { CurrentWorkPaneTarget } from "./CurrentWorkPaneTarget";
 import { SplitProjectPicker, TerminalCloseConfirmBubble } from "./TerminalTabDialogs";
 import { getWorktreeDisplayName } from "../../projects/api/worktreeMetadata";
 import { SidebarShellHost } from "./SidebarShellHost";
+import { FileCompanionSurface } from "./FileCompanionSurface";
 import { BottomShellPanel } from "./BottomShellPanel";
-import { CurrentWorkTabBar } from "./CurrentWorkTabBar";
 
 export function TerminalTabsView({
   workspaceVisible,
@@ -116,33 +111,14 @@ export function TerminalTabsView({
   handleDragEnd,
   workspanTabBarPosition,
   workspanTabBarVisible,
-  workspanEnabled,
-  workspanTabModels,
-  workspanContextOptions,
-  selectedProjectKey, activateProject, onWorkspanRowChange,
-  workspanTabOverflow,
-  workspanTabListOpen,
-  effectiveActiveWorkspanId,
-  hasScopedTerminalFilter,
-  workspanTabBarRef,
-  workspanTabScrollRef,
-  workspanDetachPreview,
-  setWorkspanTabListOpen,
-  activateWorkspanTab,
-  handleHideProjectTerminals,
   handleCloseSessions,
-  closeOtherTerminals,
-  canCloseOtherTerminals,
-  projectById,
+  handleCloseOtherNavigationSessions,
   projects,
   worktrees,
   handleSubmitTabEdit,
   prompt,
-  renameWorkspan,
-  scopedSessionIds,
-  handleRestoreWorkspanToSinglePane,
-  handleSaveSessionToSidebar,
   mountedWorkspanLayouts,
+  effectiveActiveWorkspanId,
   groups, terminalScopeValue, handleActivateSession, paneNavigationProps,
   effectiveActiveSessionId,
   renderWorkspanLeaf,
@@ -150,28 +126,8 @@ export function TerminalTabsView({
   visibleSessions,
   useExternalTerminal,
   scopedEmptyState,
-  tabNotifications,
   handleNewTab,
   sessions,
-  currentWorkMode,
-  currentWorkSessionIds,
-  currentWorkActiveSessionId,
-  currentWorkPaneTree,
-  currentWorkFullscreenPaneId,
-  currentWorkSessionPortalTargets,
-  activeDropPreview,
-  currentWorkVisibleSessionIds,
-  registerCurrentWorkPaneTarget,
-  unsplitCurrentWorkPane,
-  toggleCurrentWorkPaneFullscreen,
-  setCurrentWorkSplitRatio,
-  selectedCurrentWorkSessionIds,
-  toggleCurrentWorkSelection,
-  removeCurrentWorkSessions,
-  clearCurrentWork,
-  activateCurrentWork,
-  leaveCurrentWork,
-  toggleCurrentWork,
 }: ReturnType<typeof useTerminalTabsController>) {
   const chatPanelMode = useChatPanelStore((s) => s.mode);
   const chatPanelFloatOpen = useChatPanelStore((s) => s.floatOpen);
@@ -207,224 +163,7 @@ export function TerminalTabsView({
     }}
   />;
   const shellVisible = workspaceVisible && !historyActive && sidebarShell.shellOpen;
-  const currentWorkHasSplit = currentWorkPaneTree?.type === "split";
-  const currentWorkIdSet = new Set(currentWorkSessionIds);
-  const availableSessionCount = visibleSessions.filter((session) => !session.tabHidden && !currentWorkIdSet.has(session.id)).length;
-  const currentWorkSessionCount = visibleSessions.filter((session) => !session.tabHidden && currentWorkIdSet.has(session.id)).length;
-  const activeModeHasSessions = currentWorkMode ? currentWorkSessionCount > 0 : availableSessionCount > 0;
-  const legacyOrdering = currentWorkMode ? (
-                    <CurrentWorkTabBar orderingOnly
-                      sessions={currentWorkSessionIds.map((id) => sessions.find((session) => session.id === id)).filter((session): session is typeof sessions[number] => Boolean(session))}
-                      activeSessionId={currentWorkActiveSessionId}
-                      notifications={tabNotifications}
-                      projects={projects}
-                      worktrees={worktrees}
-                      selectedSessionIds={selectedCurrentWorkSessionIds}
-                      onActivate={activateCurrentWork}
-                      onToggleSelected={toggleCurrentWorkSelection}
-                      onRemove={toggleCurrentWork}
-                      onRename={(session) => window.setTimeout(() => {
-                        void prompt({ title: t("terminal.tab.rename"), initialValue: session.title }).then((title) => {
-                          if (title !== null) void handleSubmitTabEdit(session.id, title);
-                        });
-                      }, 0)}
-                      onClear={clearCurrentWork}
-                      onCloseOtherTerminals={closeOtherTerminals}
-                      canCloseOtherTerminals={canCloseOtherTerminals}
-                      onExit={leaveCurrentWork}
-                      label={t("terminal.currentWork.title")}
-                      exitLabel={t("terminal.currentWork.exit")}
-                      clearLabel={t("terminal.currentWork.clear")}
-                      closeOtherLabel={t("terminal.currentWork.closeOtherTerminals")}
-                      selectedLabel={(count) => t("terminal.currentWork.selected", { count })}
-                      statusLabels={{ hidden: t("terminal.currentWork.hidden"), sshDisconnected: t("terminal.currentWork.sshDisconnected"), worktreeMissing: t("terminal.currentWork.worktreeMissing") }}
-                      contextLabels={{ unboundProject: t("terminal.context.unboundProject"), anonymousPi: t("terminal.context.anonymousPi"), missingWorktree: t("terminal.context.worktreeMissing"), defaultShell: t("terminal.context.defaultShell") }}
-                      removeLabel={(title) => t("terminal.currentWork.removeNamed", { title })}
-                      renameLabel={t("terminal.tab.rename")}
-                      compact={false}
-                    />
-                  ) : workspanEnabled ? (
-                    <WorkspanTabBar
-                    position={workspanTabBarPosition}
-                    models={workspanTabModels}
-                    overflow={workspanTabOverflow}
-                    listOpen={workspanTabListOpen}
-                    activeWorkspanId={effectiveActiveWorkspanId}
-                    hasScopedTerminalFilter={hasScopedTerminalFilter}
-                    contextOptions={workspanContextOptions}
-                    selectedProjectKey={selectedProjectKey}
-                    onActivateProject={activateProject}
-                    onRowChange={onWorkspanRowChange}
-                    currentWorkCount={currentWorkSessionIds.length}
-                    onActivateCurrentWork={() => activateCurrentWork()}
-                    menuStyle={splitPickerMenuStyle}
-                    tabBarRef={workspanTabBarRef}
-                    tabScrollRef={workspanTabScrollRef}
-                    detachPreview={workspanDetachPreview}
-                    onToggleList={setWorkspanTabListOpen}
-                    onActivate={activateWorkspanTab}
-                    notifications={tabNotifications}
-                    onHideProjectTerminals={handleHideProjectTerminals}
-                    onClose={(model, anchor) => handleCloseSessions(model.closeSessionIds, anchor)}
-                    renderTab={(model, closeTargets, badge, activate) => (
-                      <div key={model.workspan.id} className="flex h-full shrink-0"
-                        title={[...model.members.map((member) => [member.project,
-                          member.worktreeName ?? t("terminal.context.rootDirectory"), member.branch,
-                          member.worktreePath, member.environmentType, member.sshHostId].filter(Boolean).join(" / ")),
-                          model.mixedProject ? t("terminal.context.mixedCloseHint") : null].filter(Boolean).join("\n")}>
-                      <SortableWorkspanTab
-                        workspan={model.workspan}
-                        worktreeBadge={badge}
-                        showWorktreeBadge={true}
-                        title={model.title}
-                        notification={model.notification}
-                        vendor={model.vendor}
-                        cliToolIcon={model.cliToolIcon}
-                        hoverInfo={model.singleSession ? buildTerminalTabHoverInfo(
-                          model.singleSession,
-                          model.singleSession.projectId ? projectById.get(model.singleSession.projectId) : undefined,
-                          model.singleSession.worktreeId ? worktrees.find((worktree) => worktree.id === model.singleSession?.worktreeId) : null,
-                          {
-                            unboundProject: t("terminal.context.unboundProject"),
-                            missingWorktree: t("terminal.context.worktreeMissing"),
-                            defaultShell: t("terminal.context.defaultShell"),
-                          },
-                        ) : undefined}
-                        isActive={model.workspan.id === effectiveActiveWorkspanId}
-                        dragDisabled={hasScopedTerminalFilter}
-                        renameDisabled={!model.singleSession}
-                        onActivate={activate}
-                        onClose={(anchor) => handleCloseSessions(model.closeSessionIds, anchor)}
-                        onRename={(title) => {
-                          if (model.singleSession) void handleSubmitTabEdit(model.singleSession.id, title);
-                        }}
-                        menuStyle={splitPickerMenuStyle}
-                        menuContent={(getAnchor, startRename) => (
-                          <>
-                            {model.singleSession && (
-                              <>
-                                <ContextMenuItem onSelect={() => toggleCurrentWork(model.singleSession!.id)}>
-                                  {currentWorkSessionIds.includes(model.singleSession.id)
-                                    ? t("terminal.currentWork.remove")
-                                    : t("terminal.currentWork.add")}
-                                </ContextMenuItem>
-                                <ContextMenuItem onSelect={() => window.setTimeout(startRename, 0)}>
-                                  {t("terminal.tab.rename")}
-                                </ContextMenuItem>
-                              </>
-                            )}
-                            <ContextMenuItem onSelect={() => handleCloseSessions(model.closeSessionIds, getAnchor())}>
-                              {t("terminal.workspan.closeCurrent")}
-                            </ContextMenuItem>
-                            <ContextMenuItem onSelect={() => window.setTimeout(() => {
-                              void prompt({
-                                title: t("terminal.workspan.renamePrompt"),
-                                initialValue: model.workspan.customTitle ?? "",
-                                placeholder: t("terminal.workspan.renamePlaceholder"),
-                                allowEmpty: true,
-                              }).then((title) => {
-                                if (title !== null) renameWorkspan(model.workspan.id, title);
-                              });
-                            }, 0)}>
-                              {t("terminal.workspan.rename")}
-                            </ContextMenuItem>
-                            <ContextMenuItem
-                              disabled={model.sessionIds.length <= 1 || Boolean(scopedSessionIds)}
-                              title={scopedSessionIds ? t("terminal.workspan.restoreSinglePaneScopedDisabled") : undefined}
-                              onSelect={() => handleRestoreWorkspanToSinglePane(model.workspan.id)}
-                            >
-                              {t("terminal.workspan.restoreSinglePane")}
-                            </ContextMenuItem>
-                            {/*
-                              Reachability: in the default single-pane layout the pane-level tab bar
-                              is hidden (hideTabBar when the workspan carries a single visible session),
-                              so the pane-tab context menu that hosts the primary "Save session to
-                              sidebar" item is unreachable. Mirror the item on the workspan-tab context
-                              menu whenever the workspan carries a single session, so the feature stays
-                              reachable from the visible tab in the default layout. Disabled with the
-                              same tooltip semantics as the pane-menu twin.
-                            */}
-                            {(() => {
-                              const singleSession = model.singleSession;
-                              if (!singleSession) return null;
-                              const saveProject = singleSession.projectId ? projectById.get(singleSession.projectId) ?? null : null;
-                              const canSave = canSaveSessionToSidebar(singleSession, saveProject);
-                              return (
-                                <ContextMenuItem
-                                  disabled={!canSave}
-                                  onSelect={() => {
-                                    // Same setTimeout(0) deferral as the pane-menu twin at
-                                    // TerminalTabs.tsx ~line 1402 — avoids the Radix focus-restore
-                                    // race that would blur the useAppPrompt Modal's autofocused input.
-                                    window.setTimeout(() => handleSaveSessionToSidebar(singleSession), 0);
-                                  }}
-                                  title={!canSave ? t("saveSession.noSessionId") : undefined}
-                                >
-                                  {t("terminal.tab.saveSession")}
-                                </ContextMenuItem>
-                              );
-                            })()}
-                            <ContextMenuItem
-                              disabled={closeTargets.otherSessionIds.length === 0}
-                              onSelect={() => handleCloseSessions(
-                                closeTargets.otherSessionIds,
-                                getAnchor()
-                              )}
-                            >
-                              {t("terminal.workspan.closeOthers")}
-                            </ContextMenuItem>
-                            <ContextMenuItem
-                              disabled={closeTargets.leftSessionIds.length === 0}
-                              onSelect={() => handleCloseSessions(
-                                closeTargets.leftSessionIds,
-                                getAnchor()
-                              )}
-                            >
-                              {t("terminal.workspan.closeLeft")}
-                            </ContextMenuItem>
-                            <ContextMenuItem
-                              disabled={closeTargets.rightSessionIds.length === 0}
-                              onSelect={() => handleCloseSessions(
-                                closeTargets.rightSessionIds,
-                                getAnchor()
-                              )}
-                            >
-                              {t("terminal.workspan.closeRight")}
-                            </ContextMenuItem>
-                          </>
-                        )}
-                      />
-                      </div>
-                    )}
-                    />
-                  ) : (
-                    <CurrentWorkTabBar
-                      sessions={[]}
-                      activeSessionId={null}
-                      notifications={tabNotifications}
-                      projects={projects}
-                      worktrees={worktrees}
-                      selectedSessionIds={new Set()}
-                      onActivate={() => activateCurrentWork()}
-                      onToggleSelected={() => undefined}
-                      onRemove={() => undefined}
-                      onRename={() => undefined}
-                      onClear={() => undefined}
-                      onCloseOtherTerminals={() => undefined}
-                      canCloseOtherTerminals={false}
-                      onExit={() => activateCurrentWork()}
-                      label={t("terminal.currentWork.title")}
-                      exitLabel={t("terminal.currentWork.open")}
-                      clearLabel={t("terminal.currentWork.clear")}
-                      closeOtherLabel={t("terminal.currentWork.closeOtherTerminals")}
-                      selectedLabel={(count) => t("terminal.currentWork.selected", { count })}
-                      statusLabels={{ hidden: t("terminal.currentWork.hidden"), sshDisconnected: t("terminal.currentWork.sshDisconnected"), worktreeMissing: t("terminal.currentWork.worktreeMissing") }}
-                      contextLabels={{ unboundProject: t("terminal.context.unboundProject"), anonymousPi: t("terminal.context.anonymousPi"), missingWorktree: t("terminal.context.worktreeMissing"), defaultShell: t("terminal.context.defaultShell") }}
-                      removeLabel={() => ""}
-                      renameLabel={t("terminal.tab.rename")}
-                      compact
-                    />
-                  );
+  const hasVisibleSessions = visibleSessions.length > 0;
   return (
     <div
       className="ui-terminal-tabs-shell flex h-full min-h-0 flex-col"
@@ -662,25 +401,21 @@ export function TerminalTabsView({
                   tabBarVisible={workspanTabBarVisible}
                   tabBar={<TerminalNavigationAdapter
                     sessions={sessions} projects={projects} worktrees={worktrees} groups={groups}
-                    scope={terminalScopeValue} currentSessionId={currentWorkMode ? currentWorkActiveSessionId : effectiveActiveSessionId}
-                    currentWorkMode={currentWorkMode} currentWorkSessionIds={currentWorkSessionIds}
-                    position={workspanTabBarPosition} tabBarVisible={workspanTabBarVisible} activateCurrentWork={activateCurrentWork} leaveCurrentWork={leaveCurrentWork}
-                    onActivate={handleActivateSession} onAdd={(id) => { if (!currentWorkSessionIds.includes(id)) toggleCurrentWork(id); }} onNewTab={() => { void handleNewTab(); }} onRemove={(id) => removeCurrentWorkSessions([id])}
+                    scope={terminalScopeValue} currentSessionId={effectiveActiveSessionId}
+                    position={workspanTabBarPosition} tabBarVisible={workspanTabBarVisible}
+                    onActivateSession={handleActivateSession} onNewTab={() => { void handleNewTab(); }}
                     onCloseSession={(id) => {
                       handleCloseSessions([id]);
                     }}
-                    selectedIds={[...selectedCurrentWorkSessionIds]} onToggleSelection={toggleCurrentWorkSelection}
-                    onRemoveSelected={removeCurrentWorkSessions} onCloseOthers={closeOtherTerminals} legacyOrdering={legacyOrdering}
+                    onCloseOthers={handleCloseOtherNavigationSessions}
                     onRename={(session) => { void prompt({ title: t("terminal.tab.rename"), initialValue: session.title }).then((title) => {
                       if (title !== null) void handleSubmitTabEdit(session.id, title);
-                    }); }} paneProps={paneNavigationProps} layouts={mountedWorkspanLayouts} onToggleCurrentWork={toggleCurrentWork}
+                    }); }} paneProps={paneNavigationProps} layouts={mountedWorkspanLayouts}
                   />}
                 >
-                <div
-                  className="relative min-h-0 flex-1 overflow-hidden"
-                  style={{ visibility: activeModeHasSessions ? "visible" : "hidden" }}
-                  aria-hidden={activeModeHasSessions ? undefined : "true"}
-                >
+                <FileCompanionSurface hasTerminal={hasVisibleSessions} visible={workspaceVisible && !historyActive}
+                  background={paneNavigationProps?.terminalThemeBackground ?? "transparent"}>
+                <div className="relative h-full min-h-0 flex-1 overflow-hidden">
                   {mountedWorkspanLayouts.map((layout) => {
                     const layoutVisible = Boolean(layout.visiblePaneTree)
                       && layout.workspan.id === effectiveActiveWorkspanId;
@@ -693,8 +428,8 @@ export function TerminalTabsView({
                       <div
                         key={layout.workspan.id}
                         className="absolute inset-0 min-h-0 min-w-0 overflow-hidden"
-                        style={{ display: layoutVisible && !currentWorkMode ? "block" : "none" }}
-                        aria-hidden={layoutVisible && !currentWorkMode ? undefined : "true"}
+                        style={{ display: layoutVisible ? "block" : "none" }}
+                        aria-hidden={layoutVisible ? undefined : "true"}
                       >
                         <SplitTerminalView
                           node={layout.paneTree}
@@ -703,85 +438,29 @@ export function TerminalTabsView({
                             pane,
                             layout.visiblePanes,
                             layoutActiveSessionId,
-                            !currentWorkMode && activeModeHasSessions && layoutVisible && layout.visiblePaneIds.has(pane.id),
-                            { currentWorkSessionIds, onToggleCurrentWork: toggleCurrentWork, onActivate: currentWorkMode ? activateCurrentWork : undefined, activeSessionId: currentWorkMode ? currentWorkActiveSessionId : undefined, currentWorkPortalTargets: currentWorkMode && currentWorkSessionIds.length > 0 ? currentWorkSessionPortalTargets : undefined, currentWorkVisibleSessionIds: currentWorkMode && currentWorkSessionIds.length > 0 ? currentWorkVisibleSessionIds : undefined },
+                            hasVisibleSessions && layoutVisible && layout.visiblePaneIds.has(pane.id),
                           )}
                           fullscreenLeafId={layoutVisible ? activeFullscreenPaneId : null}
                         />
                       </div>
                     );
                   })}
-                  {currentWorkMode && activeModeHasSessions && currentWorkPaneTree && (
-                    <SplitTerminalView
-                      node={currentWorkPaneTree}
-                      visibleNode={currentWorkPaneTree}
-                      fullscreenLeafId={currentWorkFullscreenPaneId}
-                      onSplitRatioChange={setCurrentWorkSplitRatio}
-                      renderLeaf={(pane) => {
-                        const paneSession = pane.activeSessionId
-                          ? sessions.find((session) => session.id === pane.activeSessionId)
-                          : undefined;
-                        if (!paneSession || paneSession.tabHidden) return null;
-                        return (
-                          <CurrentWorkPaneTarget
-                            workspaceVisible={workspaceVisible}
-                            paneId={pane.id}
-                            activeDropPreview={activeDropPreview}
-                            session={paneSession}
-                            project={paneSession.projectId ? projectById.get(paneSession.projectId) : undefined}
-                            worktree={paneSession.worktreeId ? worktrees.find((worktree) => worktree.id === paneSession.worktreeId) ?? null : null}
-                            active={paneSession.id === currentWorkActiveSessionId}
-                            showHeader={Boolean(currentWorkHasSplit)}
-                            fullscreen={currentWorkFullscreenPaneId === pane.id}
-                            onActivate={activateCurrentWork}
-                            onRestoreSinglePane={() => unsplitCurrentWorkPane(pane.id)}
-                            onToggleFullscreen={() => toggleCurrentWorkPaneFullscreen(pane.id)}
-                            onRemove={(sessionId) => removeCurrentWorkSessions([sessionId])}
-                            registerTarget={registerCurrentWorkPaneTarget}
-                          />
-                        );
-                      }}
+                {!hasVisibleSessions && !useExternalTerminal && (
+                  <div className="absolute inset-0 flex items-center justify-center px-6">
+                    <EmptyState
+                      icon={<Terminal size={40} strokeWidth={1} />}
+                      title={scopedEmptyState?.title ?? t("terminal.empty.title")}
+                      description={scopedEmptyState?.description ?? t("terminal.empty.description")}
+                      tone="inverse"
+                      action={scopedEmptyState?.action ?? { label: t("terminal.empty.action"), onClick: handleNewTab }}
                     />
-                  )}
-                </div>
-                </WorkspanTerminalLayout>
-                {!activeModeHasSessions && (
-                  <div
-                    className="absolute inset-x-0 z-40 flex items-center justify-center bg-[var(--terminal-theme-background,#111827)] px-6 text-center"
-                    style={workspanTabBarVisible
-                      ? workspanTabBarPosition === "top" ? { top: 42, bottom: 0 } : { top: 0, bottom: 42 }
-                      : { insetBlock: 0 }}
-                  >
-                    <div className="max-w-md rounded-xl border border-white/10 bg-white/[0.03] px-8 py-7 shadow-sm">
-                      <div className="text-sm font-medium">{currentWorkMode ? t("terminal.currentWork.emptyTitle") : t("terminal.navigation.availableEmptyTitle")}</div>
-                      <div className="mt-2 text-xs opacity-60">{currentWorkMode ? t("terminal.currentWork.empty") : t("terminal.navigation.availableEmptyDescription")}</div>
-                    </div>
                   </div>
                 )}
+                </div>
+                </FileCompanionSurface>
+                </WorkspanTerminalLayout>
                 <TerminalTabDragOverlay style={terminalWellStyle} themeTone={terminalThemeTone} />
               </DndContext>
-            )}
-            {activeModeHasSessions && hasScopedTerminalFilter && visibleSessions.length === 0 && !useExternalTerminal && scopedEmptyState && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <EmptyState
-                  icon={<Terminal size={40} strokeWidth={1} />}
-                  title={scopedEmptyState.title}
-                  description={scopedEmptyState.description}
-                  tone="inverse"
-                  action={scopedEmptyState.action}
-                />
-              </div>
-            )}
-            {activeModeHasSessions && visibleSessions.length === 0 && !useExternalTerminal && !hasScopedTerminalFilter && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <EmptyState
-                  icon={<Terminal size={40} strokeWidth={1} />}
-                  title={t("terminal.empty.title")}
-                  description={t("terminal.empty.description")}
-                  tone="inverse"
-                  action={{ label: t("terminal.empty.action"), onClick: handleNewTab }}
-                />
-              </div>
             )}
           </div>
           {btwDrawerOpen ? (

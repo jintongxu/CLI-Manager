@@ -88,7 +88,7 @@ async fn rewrites_old_worktree_lineage_rows_to_current_versions() {
                 worktree_isolation: SchemaState::Complete,
                 ssh_hosts: SchemaState::Absent,
                 ssh_host_groups: SchemaState::Absent,
-        btw_threads: SchemaState::Absent,
+                btw_threads: SchemaState::Absent,
             })
             .unwrap()
         )

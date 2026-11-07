@@ -8,8 +8,6 @@ import { CSS } from "@dnd-kit/utilities";
 import type { TreeNode as TNode } from "../../../shared/types/index";
 import { countProjectsInNode, type ProviderBadge } from "../api/projectStore";
 import { getWorktreeDisplayName, getWorktreeSidebarLabel } from "../api/worktreeMetadata";
-import { worktreeTerminalMembership } from "../lib/sidebarTerminals";
-import { useSessionStore } from "../../terminal/api/sessionStore";
 import { useTreeActions, worktreeListCollapseId } from "./TreeContext";
 import { ChevronRight, AlertTriangle, Link2, Pin, Play, RefreshCw, Sparkles } from "../../../shared/ui/icons";
 import { VendorIcon, inferVendor } from "../../../shared/ui/VendorIcon";
@@ -155,9 +153,6 @@ function TreeNodeItemImpl({
     const isSelected = actions.selectedId === worktree.id;
     const isMultiSelected = actions.selectedWorktreeIds.has(worktree.id);
     const providerBadge = actions.providerBadges[`wt:${worktree.id}`];
-    const currentWorkSessionIds = useSessionStore((store) => store.currentWorkSessionIds);
-    const currentWorkIds = new Set(currentWorkSessionIds);
-    const worktreeMembership = worktreeTerminalMembership(actions.getTerminals(project.id, worktree.id), currentWorkIds);
     return (
       <div
         ref={setNodeRef}
@@ -214,16 +209,7 @@ function TreeNodeItemImpl({
             <span className="worktree-terminal-title-line">
               <span className="worktree-terminal-title truncate font-medium">{getWorktreeSidebarLabel(worktree)}</span>
               {providerBadge && <ProviderBadgeChip badge={providerBadge} />}
-              {worktreeMembership && (
-                <span className="worktree-terminal-membership" data-membership={worktreeMembership.kind}
-                  title={worktreeMembership.kind === "current"
-                    ? t("sidebar.terminals.currentWork")
-                    : worktreeMembership.kind === "pending"
-                      ? t("sidebar.terminals.pendingWork")
-                      : t("sidebar.terminals.hiddenWork")} aria-hidden="true">
-                  {worktreeMembership.kind === "current" ? "C" : worktreeMembership.kind === "hidden" ? "H" : "P"}
-                </span>
-              )}
+
             </span>
           </span>
           {worktree.status !== "active" && !worktree.creation_pending && (

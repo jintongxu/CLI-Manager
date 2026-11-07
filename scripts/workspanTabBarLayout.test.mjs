@@ -25,8 +25,9 @@ const stylesSource = readFileSync(new URL("../src/styles/workspace-layout.css", 
 const i18nSource = readFileSync(new URL("../src/shared/i18n/index.ts", import.meta.url), "utf8");
 const layoutSource = readFileSync(new URL("../src/shared/lib/workspaceLayout.ts", import.meta.url), "utf8");
 
-test("top-level Workspan tabs use one direction-aware document-flow slot", () => {
-  assert.equal((tabsSource.match(/<WorkspanTabBar/g) ?? []).length, 1);
+test("unified terminal tabs use one direction-aware document-flow slot", () => {
+  assert.equal((tabsSource.match(/<WorkspanTabBar/g) ?? []).length, 0);
+  assert.equal((tabsSource.match(/<TerminalNavigationAdapter/g) ?? []).length, 1);
   assert.match(tabsSource, /<WorkspanTerminalLayout/);
   assert.match(layoutComponentSource, /key="workspan-tabbar"/);
   assert.match(layoutComponentSource, /key="terminal-body"/);
@@ -65,7 +66,7 @@ test("pane-level terminal tab ownership remains outside the top-level docking sl
   assert.doesNotMatch(tabBarSource, /SplitTerminalView|PaneTabBar/);
 });
 
-test("current context is on demand; legacy ordering stays inside navigation management", () => {
+test("current context is on demand without a second legacy ordering tier", () => {
   const css = readFileSync(new URL("../src/styles/components/focus-controls.css", import.meta.url), "utf8");
   const context = css.match(/\.ui-terminal-current-context\s*\{([^}]+)\}/)?.[1];
   assert.ok(context);
@@ -77,10 +78,9 @@ test("current context is on demand; legacy ordering stays inside navigation mana
   assert.match(css, /\.ui-workspan-groups-row\s*\{[^}]*height: 36px;[^}]*flex: 0 0 36px/);
   assert.match(css, /\.ui-workspan-overflow-control\s*\{[^}]*flex: 0 0 28px/);
   assert.match(tabBarSource, /ui-workspan-group-tabs/);
-  assert.match(tabsSource, /showWorktreeBadge=\{true\}/);
   assert.equal((tabsSource.match(/<TerminalCurrentContext/g) ?? []).length, 0);
   assert.match(tabsSource, /tabBar=\{<TerminalNavigationAdapter/);
-  assert.match(tabsSource, /legacyOrdering=\{legacyOrdering\}/);
+  assert.doesNotMatch(tabsSource, /legacyOrdering|canonicalOrdering|SortableWorkspanTab/);
 });
 
 test("bar, document-flow slot and aurora override have natural height; insertion line anchors to purpose row", () => {

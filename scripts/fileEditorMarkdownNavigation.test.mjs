@@ -22,6 +22,12 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
 function fixture() {
   const errors = [], urls = [], reveals = [], editorCalls = [];
   let effects = [], activeFile = file();
+  let project = { id: "one", path: "C:/one" };
+  const listeners = new Set();
+  const store = Object.assign(selector => selector({ project }), {
+    getState: () => ({ activeFile, project }),
+    subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); },
+  });
   const options = {
     t: key => key,
     visibleFile: activeFile,
@@ -48,10 +54,12 @@ function fixture() {
     useEffect: callback => effects.push(callback),
     toast: { error: value => errors.push(value) },
     openUrl: async url => { urls.push(url); },
-    useFileExplorerStore: { getState: () => ({ activeFile }) },
+    useFileExplorerStore: store,
+    isSameProjectFileContext: (left, right) => left?.id === right?.id && left?.path === right?.path,
   });
   return {
     options, errors, urls, reveals, editorCalls,
+    setProject: value => { project = value; for (const listener of listeners) listener({ project }); },
     setActiveFile: value => { activeFile = value; },
     render() { effects = []; return useFileEditorMarkdownNavigation({ ...options }); },
     flushEffects() { for (const effect of effects) effect(); },
@@ -116,4 +124,17 @@ test("matching source navigation changes mode before revealing the fragment", ()
   f.render(); f.flushEffects();
   assert.deepEqual(f.editorCalls, [["position", 1], ["reveal", 1], ["focus"]]);
   assert.equal(f.options.pendingMarkdownNavigation, null);
+});
+
+test("project/root departure invalidates pending markdown even when returning before completion", async () => {
+  const f = fixture();
+  f.render().handleMarkdownLinkActivate("target.md#heading", "preview");
+  f.flushEffects();
+  f.setProject({ id: "one", path: "C:/other-root" });
+  f.setProject({ id: "one", path: "C:/one" });
+  f.reveals[0].reject(new Error("stale"));
+  await settle();
+  assert.equal(f.options.pendingMarkdownNavigation, null);
+  assert.equal(f.options.nextMarkdownModeRef.current, null);
+  assert.deepEqual(f.errors, []);
 });

@@ -9,7 +9,7 @@ test("real tab row renders the passed collection without quick-list or more-coun
   assert.match(source, /entries: readonly TerminalNavigationEntry\[\]/);
   assert.match(source, /entries\.map\(\(entry\)/);
   assert.doesNotMatch(source, /hiddenCount|quickEntries/);
-  assert.match(source, /data-current-work-session-id=\{entry\.id\}/);
+  assert.match(source, /data-terminal-tab-id=\{entry\.id\}/);
   assert.match(source, /data-sortable=\{sortable \? "true" : "false"\}/);
   assert.match(source, /role="tab"/);
   assert.match(source, /aria-selected=\{active\}/);
@@ -57,7 +57,7 @@ test("tab row keeps activation and drag on the tab body without inline action bu
 test("sortable mode uses the existing dnd sortable context and disables listeners in ordinary mode", () => {
   assert.match(source, /useSortable\(\{[\s\S]*disabled: !sortable/);
   assert.match(source, /SortableContext/);
-  assert.match(source, /items=\{sortable \? entries\.map\(\(entry\) => `\$\{mode === "current-work" \? CURRENT_WORK_TAB_DRAG_PREFIX : TERMINAL_TAB_DRAG_PREFIX\}\$\{entry\.id\}`\) : \[\]\}/);
+  assert.match(source, /items=\{sortable \? entries\.map\(\(entry\) => `\$\{TERMINAL_TAB_DRAG_PREFIX\}\$\{entry\.id\}`\) : \[\]\}/);
   assert.match(source, /DND_SORTABLE_TRANSITION/);
 });
 

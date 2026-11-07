@@ -22,11 +22,7 @@ struct Unsaved {
 }
 /// Persistence backlog is bounded: retry first, then keep the newest entries.
 const UNSAVED_LIMIT: usize = 64;
-fn evict_oldest<K, V>(
-    map: &mut HashMap<K, V>,
-    limit: usize,
-    at: impl Fn(&V) -> Instant,
-) -> usize
+fn evict_oldest<K, V>(map: &mut HashMap<K, V>, limit: usize, at: impl Fn(&V) -> Instant) -> usize
 where
     K: Clone + std::hash::Hash + Eq,
 {
@@ -160,10 +156,21 @@ impl Runtime {
             }
             repo.recover().await?;
             let (answer, history) = repo.begin(&i, &self.owner).await?;
-            Ok::<_, String>((resolved, client, answer, history))
+            let images = match super::assets::provider_images(&repo.pool, &history).await {
+                Ok(images) => images,
+                Err(error) => {
+                    // The turn is already durable; never leave a pending lease if a post-commit
+                    // filesystem fault occurs between validation and provider payload creation.
+                    let _ = repo
+                        .checkpoint(&answer, &self.owner, "", "failed", Some(&error), None)
+                        .await;
+                    return Err(error);
+                }
+            };
+            Ok::<_, String>((resolved, client, answer, history, images))
         }
         .await;
-        let (resolved, client, answer, history) = match setup {
+        let (resolved, client, answer, history, images) = match setup {
             Ok(v) => v,
             Err(e) => {
                 self.release(&i.request_id).await;
@@ -178,12 +185,146 @@ impl Runtime {
                 history,
                 resolved,
                 client,
-                stream::Request { model: i.model, reasoning: i.reasoning, images: i.images },
+                stream::Request {
+                    model: i.model,
+                    reasoning: i.reasoning,
+                    images,
+                },
                 cancel,
                 channel,
+                None,
             )
             .await;
             self.release(&i.request_id).await;
+        });
+        Ok(receipt)
+    }
+
+    pub async fn fork_edit(
+        self: Arc<Self>,
+        repo: Repository,
+        i: ForkEditInput,
+        channel: Channel<Event>,
+    ) -> Result<ForkEditReceipt> {
+        uuid(&i.operation_id)?;
+        uuid(&i.request_id)?;
+        uuid(&i.source_conversation_id)?;
+        uuid(&i.target_message_id)?;
+        if let Some(receipt) = repo.fork_edit_existing(&i).await? {
+            return Ok(receipt);
+        }
+        // Resolve all fallible provider configuration before durable branch mutation.
+        let resolved = chat_runtime::resolve(&i.app_type, &i.provider_id).await?;
+        let client = chat_runtime::client().await?;
+        let synthetic = GenerateInput {
+            conversation_id: i.source_conversation_id.clone(),
+            revision: i.source_revision,
+            request_id: i.request_id.clone(),
+            app_type: i.app_type.clone(),
+            provider_id: i.provider_id.clone(),
+            model: i.model.clone(),
+            text: i.text.clone(),
+            retry: false,
+            reasoning: i.reasoning.clone(),
+            stage_ids: i.stage_ids.clone(),
+        };
+        let cancel = match self.reserve(&synthetic).await {
+            Ok(cancel) => cancel,
+            Err(error) if error == "chat_cancelled_or_replayed" => {
+                // A concurrent identical submit may have reserved before its transaction commit.
+                // Wait only for that local atomic setup, never for the model stream.
+                for _ in 0..100 {
+                    if let Some(receipt) = repo.fork_edit_existing(&i).await? {
+                        return Ok(receipt);
+                    }
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+                return Err(error);
+            }
+            Err(error) => return Err(error),
+        };
+        if *cancel.borrow() {
+            self.release(&i.request_id).await;
+            return Err("chat_cancelled".into());
+        }
+        let (receipt, history) = match repo.fork_edit_begin(&i, &self.owner).await {
+            Ok(value) => value,
+            Err(error) => {
+                self.release(&i.request_id).await;
+                return Err(error);
+            }
+        };
+        if receipt.replayed {
+            self.release(&i.request_id).await;
+            return Ok(receipt);
+        }
+        if let Some(active) = self.state.lock().await.active.get_mut(&i.request_id) {
+            active.conversation = receipt.child_conversation_id.clone();
+        }
+        let images = match super::assets::provider_images(&repo.pool, &history).await {
+            Ok(images) => images,
+            Err(error) => {
+                let save = repo
+                    .checkpoint(
+                        &receipt.answer,
+                        &self.owner,
+                        "",
+                        "failed",
+                        Some(&error),
+                        None,
+                    )
+                    .await;
+                if matches!(&save, Err(value) if value == "chat_storage") {
+                    self.state.lock().await.unsaved.insert(
+                        receipt.answer.request_id.clone(),
+                        Unsaved {
+                            message: receipt.answer.clone(),
+                            event: Event {
+                                conversation_id: receipt.child_conversation_id.clone(),
+                                message_id: receipt.answer.id.clone(),
+                                request_id: receipt.answer.request_id.clone(),
+                                operation_id: Some(i.operation_id.clone()),
+                                sequence: 0,
+                                content: String::new(),
+                                status: "failed".into(),
+                                error_code: Some(error.clone()),
+                                finish_reason: None,
+                                saved: false,
+                            },
+                            at: Instant::now(),
+                        },
+                    );
+                }
+                self.release(&i.request_id).await;
+                return match save {
+                    Ok(()) => Err(error),
+                    Err(save_error) => Err(save_error),
+                };
+            }
+        };
+        let answer = receipt.answer.clone();
+        let operation = i.operation_id.clone();
+        let request_id = i.request_id.clone();
+        let runtime = self.clone();
+        tokio::spawn(async move {
+            runtime
+                .drive(
+                    repo,
+                    answer,
+                    history,
+                    resolved,
+                    client,
+                    stream::Request {
+                        model: i.model,
+                        reasoning: i.reasoning,
+                        images,
+                    },
+                    cancel,
+                    channel,
+                    Some(operation),
+                )
+                .await;
+            runtime.release(&request_id).await;
         });
         Ok(receipt)
     }
@@ -197,6 +338,7 @@ impl Runtime {
         request: stream::Request,
         mut cancel: watch::Receiver<bool>,
         channel: Channel<Event>,
+        operation_id: Option<String>,
     ) {
         let (tx, mut rx) = mpsc::channel(8);
         let network = tokio::spawn(stream::run(
@@ -211,6 +353,7 @@ impl Runtime {
             conversation_id: message.conversation_id.clone(),
             message_id: message.id.clone(),
             request_id: message.request_id.clone(),
+            operation_id,
             sequence: 0,
             content: String::new(),
             status: "pending".into(),
@@ -412,7 +555,7 @@ mod tests {
             text: Some("test".into()),
             retry: false,
             reasoning: None,
-            images: None,
+            stage_ids: Vec::new(),
         }
     }
     #[tokio::test]
@@ -451,7 +594,10 @@ mod tests {
         use super::super::tests::{database, generation};
         let (_dir, repo) = database().await;
         let conversation = repo
-            .create(CreateInput { title: None, origin: ConversationOrigin::Workspace })
+            .create(CreateInput {
+                title: None,
+                origin: ConversationOrigin::Workspace,
+            })
             .await
             .unwrap()
             .conversation;
@@ -488,9 +634,14 @@ mod tests {
                     model: None,
                 },
                 reqwest::Client::new(),
-                stream::Request { model: "mock".into(), reasoning: None, images: None },
+                stream::Request {
+                    model: "mock".into(),
+                    reasoning: None,
+                    images: std::collections::HashMap::new(),
+                },
                 cancel,
                 Channel::new(|_| Ok(())),
+                None,
             )
             .await;
         runtime.release(&input.request_id).await;
@@ -512,7 +663,10 @@ mod tests {
         for fail_save in [false, true] {
             let (_dir, repo) = database().await;
             let c = repo
-                .create(CreateInput { title: None, origin: ConversationOrigin::Workspace })
+                .create(CreateInput {
+                    title: None,
+                    origin: ConversationOrigin::Workspace,
+                })
                 .await
                 .unwrap()
                 .conversation;
@@ -544,9 +698,14 @@ mod tests {
                 h,
                 runtime,
                 reqwest::Client::builder().no_proxy().build().unwrap(),
-                stream::Request { model: "mock".into(), reasoning: None, images: None },
+                stream::Request {
+                    model: "mock".into(),
+                    reasoning: None,
+                    images: std::collections::HashMap::new(),
+                },
                 cancel,
                 channel,
+                None,
             )
             .await;
             r.release(&i.request_id).await;
@@ -581,7 +740,10 @@ mod tests {
         }
         let (_dir, repo) = database().await;
         let c = repo
-            .create(CreateInput { title: None, origin: ConversationOrigin::Workspace })
+            .create(CreateInput {
+                title: None,
+                origin: ConversationOrigin::Workspace,
+            })
             .await
             .unwrap()
             .conversation;
@@ -602,9 +764,14 @@ mod tests {
             h,
             runtime,
             reqwest::Client::new(),
-            stream::Request { model: "mock".into(), reasoning: None, images: None },
+            stream::Request {
+                model: "mock".into(),
+                reasoning: None,
+                images: std::collections::HashMap::new(),
+            },
             cancel,
             Channel::new(|_| Ok(())),
+            None,
         )
         .await;
         r.release(&i.request_id).await;

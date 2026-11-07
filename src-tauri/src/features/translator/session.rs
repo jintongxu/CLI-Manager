@@ -97,17 +97,29 @@ impl<T: Clone> Session<T> {
         Ok(true)
     }
     // Small-card preparation is permitted only after native release succeeds.
-    pub fn confirm_card_with<E, G>(&mut self, id: u64,
-        release: impl FnOnce() -> Result<(), E>, loading: impl FnOnce() -> Result<G, E>,
+    pub fn confirm_card_with<E, G>(
+        &mut self,
+        id: u64,
+        release: impl FnOnce() -> Result<(), E>,
+        loading: impl FnOnce() -> Result<G, E>,
     ) -> Result<Option<G>, E> {
-        if !self.confirm_with(id, release)? { return Ok(None); }
+        if !self.confirm_with(id, release)? {
+            return Ok(None);
+        }
         match loading() {
             Ok(opening) => Ok(Some(opening)),
-            Err(error) => { self.finish(id); Err(error) }
+            Err(error) => {
+                self.finish(id);
+                Err(error)
+            }
         }
     }
     // Failed native release retains ownership so the watchdog retries rather than abandoning input.
-    pub fn release_with<E>(&mut self, id: u64, release: impl FnOnce() -> Result<(), E>) -> Result<bool, E> {
+    pub fn release_with<E>(
+        &mut self,
+        id: u64,
+        release: impl FnOnce() -> Result<(), E>,
+    ) -> Result<bool, E> {
         if !self.active.as_ref().is_some_and(|s| s.0 == id) {
             return Ok(false);
         }
@@ -237,7 +249,10 @@ mod tests {
         s.publish(id, "frame");
         assert_eq!(s.ready_with(id, || Ok::<_, &str>(())), Ok(true));
         assert_eq!(s.read(), Some((id, "frame")));
-        assert_eq!(s.ready_with(id, || -> Result<(), &str> { panic!("already shown") }), Ok(true));
+        assert_eq!(
+            s.ready_with(id, || -> Result<(), &str> { panic!("already shown") }),
+            Ok(true)
+        );
         assert!(s.confirm(id));
         assert_eq!(s.read(), None);
     }
@@ -247,18 +262,33 @@ mod tests {
         let id = s.trigger().unwrap();
         s.publish(id, "frame");
         s.ready(id);
-        assert_eq!(s.confirm_with(id, || Err("hide and destroy failed")), Err("hide and destroy failed"));
-        assert!(s.active.is_some(), "release failure must not abandon native watchdog");
-        assert!(s.should_abort(id, 0, false), "failed release must retry immediately");
+        assert_eq!(
+            s.confirm_with(id, || Err("hide and destroy failed")),
+            Err("hide and destroy failed")
+        );
+        assert!(
+            s.active.is_some(),
+            "release failure must not abandon native watchdog"
+        );
+        assert!(
+            s.should_abort(id, 0, false),
+            "failed release must retry immediately"
+        );
         assert!(!s.finish(id));
         assert!(!s.ready(id));
         assert_eq!(s.read(), None);
-        assert_eq!(s.release_with(id, || Err("retry failed")), Err("retry failed"));
+        assert_eq!(
+            s.release_with(id, || Err("retry failed")),
+            Err("retry failed")
+        );
         assert!(s.should_abort(id, 0, false));
         assert_eq!(s.release_with(id, || Ok::<_, &str>(())), Ok(true));
         assert!(s.active.is_none());
         let next = s.trigger().unwrap();
-        assert_eq!(s.release_with(id, || -> Result<(), &str> { panic!("stale release") }), Ok(false));
+        assert_eq!(
+            s.release_with(id, || -> Result<(), &str> { panic!("stale release") }),
+            Ok(false)
+        );
         assert!(s.is(next, Phase::Preparing));
     }
     #[test]
@@ -289,24 +319,60 @@ mod card_order_tests {
         for fail in ["none", "release", "loading"] {
             let mut s = Session::default();
             let id = s.trigger().unwrap();
-            s.publish(id, "frame"); s.ready(id);
+            s.publish(id, "frame");
+            s.ready(id);
             let events = RefCell::new(Vec::new());
-            let outcome = s.confirm_card_with(id, || {
-                events.borrow_mut().push("release");
-                if fail == "release" { Err("release") } else { Ok(()) }
-            }, || {
-                events.borrow_mut().push("loading");
-                if fail == "loading" { Err("loading") } else { Ok(9) }
-            });
-            assert_eq!(*events.borrow(), if fail == "release" { vec!["release"] } else { vec!["release", "loading"] });
+            let outcome = s.confirm_card_with(
+                id,
+                || {
+                    events.borrow_mut().push("release");
+                    if fail == "release" {
+                        Err("release")
+                    } else {
+                        Ok(())
+                    }
+                },
+                || {
+                    events.borrow_mut().push("loading");
+                    if fail == "loading" {
+                        Err("loading")
+                    } else {
+                        Ok(9)
+                    }
+                },
+            );
+            assert_eq!(
+                *events.borrow(),
+                if fail == "release" {
+                    vec!["release"]
+                } else {
+                    vec!["release", "loading"]
+                }
+            );
             match fail {
-                "release" => { assert!(outcome.is_err()); assert!(s.is(id, Phase::Releasing)); assert!(s.should_abort(id, 0, false)); },
-                "loading" => { assert!(outcome.is_err()); assert!(s.active.is_none()); },
-                _ => { assert_eq!(outcome, Ok(Some(9))); assert!(s.is(id, Phase::Translating)); }
+                "release" => {
+                    assert!(outcome.is_err());
+                    assert!(s.is(id, Phase::Releasing));
+                    assert!(s.should_abort(id, 0, false));
+                }
+                "loading" => {
+                    assert!(outcome.is_err());
+                    assert!(s.active.is_none());
+                }
+                _ => {
+                    assert_eq!(outcome, Ok(Some(9)));
+                    assert!(s.is(id, Phase::Translating));
+                }
             }
             assert!(!s.is(id, Phase::Selecting));
-            assert_eq!(s.confirm_card_with(id, || -> Result<(), &str> { panic!("duplicate release") },
-                || -> Result<u64, &str> { panic!("duplicate loading") }), Ok(None));
+            assert_eq!(
+                s.confirm_card_with(
+                    id,
+                    || -> Result<(), &str> { panic!("duplicate release") },
+                    || -> Result<u64, &str> { panic!("duplicate loading") }
+                ),
+                Ok(None)
+            );
         }
     }
 }

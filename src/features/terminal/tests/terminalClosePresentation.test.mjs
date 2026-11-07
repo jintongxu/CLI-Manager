@@ -4,7 +4,16 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 const controller = readFileSync(new URL('../hooks/useTerminalTabsController.tsx', import.meta.url), 'utf8');
-const source = controller.slice(controller.indexOf('  const handleCloseSessions = useCallback('), controller.indexOf('  const otherTerminalIds =', controller.indexOf('  const handleCloseSessions = useCallback(')));
+const parsed = ts.createSourceFile('useTerminalTabsController.tsx', controller, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+let source;
+function findCloseHandler(node) {
+  if (ts.isVariableDeclaration(node) && node.name.getText(parsed) === 'handleCloseSessions') {
+    source = `const ${node.getText(parsed)};`;
+  }
+  ts.forEachChild(node, findCloseHandler);
+}
+findCloseHandler(parsed);
+assert.ok(source, 'controller exposes the canonical close handler');
 function fixture() {
   const calls = [], counts = [];
   const context = {
@@ -38,4 +47,15 @@ test('navigation close does not force destructive mode', () => {
   const callback = view.match(/onCloseSession=\{\(id\) => \{([\s\S]*?)\}\}/)?.[1];
   assert.match(callback, /handleCloseSessions\(\[id\]\)/);
   assert.doesNotMatch(callback, /true/);
+});
+
+test('canonical close deduplicates live IDs and preserves protected owners', () => {
+  const f = fixture();
+  f.close(['pty', 'missing', 'pty', 'ssh'], undefined, ['ssh']);
+  assert.equal(f.calls.length, 1);
+  assert.deepEqual(Array.from(f.calls[0][0]), ['pty', 'ssh']);
+  assert.deepEqual(Array.from(f.calls[0][1]), ['ssh']);
+  assert.equal(f.calls[0][2], false);
+  f.close(['missing']);
+  assert.equal(f.calls.length, 1);
 });

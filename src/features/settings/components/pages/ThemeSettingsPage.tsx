@@ -53,7 +53,6 @@ import {
   type TerminalSettingsSectionKey,
   type UnsplitBehavior,
 } from "../../../../shared/preferences/settingsStore";
-import { useTerminalStore } from "../../../terminal/state";
 import { TerminalBackgroundSection } from "./TerminalBackgroundSection";
 import { SWATCH_KEYS, TerminalThemePresetGrid } from "./TerminalThemePresetGrid";
 import {
@@ -428,8 +427,6 @@ export function ThemeSettingsPage() {
   const batchLaunchGroupInPane = useSettingsStore((s) => s.batchLaunchGroupInPane);
   const batchLaunchPaneDirection = useSettingsStore((s) => s.batchLaunchPaneDirection);
   const projectScopedTerminalViewEnabled = useSettingsStore((s) => s.projectScopedTerminalViewEnabled);
-  const workspanEnabled = useSettingsStore((s) => s.workspanEnabled);
-  const setWorkspanModeEnabled = useTerminalStore((s) => s.setWorkspanModeEnabled);
   const terminalShellProfiles = useSettingsStore((s) => s.terminalShellProfiles);
   const terminalSettingsSectionsExpanded = useSettingsStore((s) => s.terminalSettingsSectionsExpanded);
   const terminalPaneMarker = useSettingsStore((s) => s.terminalPaneMarker);
@@ -1325,31 +1322,6 @@ export function ThemeSettingsPage() {
                     projectScopedTerminalViewEnabled
                       ? t("settings.general.disableProjectScopedTerminalView")
                       : t("settings.general.enableProjectScopedTerminalView")
-                  }
-                />
-              </Group>
-            </Card>
-            <Card className="border border-border bg-surface-container-lowest" p="sm" radius="lg">
-              <Group justify="space-between" align="center" gap="md" wrap="nowrap">
-                <Box>
-                  <Text size="xs" c="var(--on-surface-variant)">
-                    {t("settings.general.workspanDevelopment")}
-                  </Text>
-                  <Text mt={4} size="xs" c="var(--text-muted)">
-                    {t("settings.general.workspanDevelopmentDescription")}
-                  </Text>
-                </Box>
-                <Switch
-                  color="cliPrimary"
-                  checked={workspanEnabled}
-                  onChange={(event) => {
-                    const enabled = event.currentTarget.checked;
-                    void update("workspanEnabled", enabled).then(() => setWorkspanModeEnabled(enabled));
-                  }}
-                  aria-label={
-                    workspanEnabled
-                      ? t("settings.general.disableWorkspanDevelopment")
-                      : t("settings.general.enableWorkspanDevelopment")
                   }
                 />
               </Group>

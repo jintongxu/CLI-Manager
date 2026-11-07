@@ -1,3 +1,4 @@
+import { useFileNavigationRequest } from "../../files/api/fileNavigationRequest";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useGitTransportLease } from "./useGitTransportLease";
@@ -34,6 +35,7 @@ export function GitDiffEditorHost({
   workspace,
 }: GitDiffEditorHostProps) {
   const { t } = useI18n();
+  const beginNavigation = useFileNavigationRequest();
   const activeIndex = workspace.tabs.findIndex((tab) => tab.id === workspace.activeId);
   const activeTab = activeIndex >= 0 ? workspace.tabs[activeIndex] : null;
   const { lease, loading, error } = useGitTransportLease(project, Boolean(activeTab));
@@ -175,15 +177,20 @@ export function GitDiffEditorHost({
 
   const openSource = useCallback(async (lineNumber?: number) => {
     if (!activeTab || activeTab.status === "D") return;
+    const opening = openProject(project);
+    const request = beginNavigation(project);
     try {
-      await openProject(project);
+      await opening;
+      if (!request.current()) return;
       const revealed = await revealPath(activeTab.sourcePath, { lineNumber });
+      if (!request.current()) return;
       if (!revealed) throw new Error("git_diff_source_not_found");
       activateTab(context.key, null);
     } catch (openError) {
+      if (!request.current()) return;
       toast.error(t("files.toast.openFileFailed"), { description: String(openError) });
-    }
-  }, [activateTab, activeTab, context.key, openProject, project, revealPath, t]);
+    } finally { request.finish(); }
+  }, [beginNavigation, activateTab, activeTab, context.key, openProject, project, revealPath, t]);
 
   const confirmDiscard = useCallback(async () => {
     const tab = workspace.tabs.find((candidate) => candidate.id === discardTabId) ?? null;

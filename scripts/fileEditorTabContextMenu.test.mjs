@@ -43,7 +43,7 @@ test("batch file closes wait for selected dirty files before mutating tabs", () 
   assert.match(pane, /const requestCloseFiles = \(paths: string\[\]\) => \{[\s\S]*?const targetFiles = visibleFiles\.filter/);
   assert.match(pane, /const dirtyPaths = targetFiles\.filter\(\(file\) => file\.content !== file\.savedContent\)/);
   assert.match(pane, /setPendingAction\(\{ closePane: false, paths: targetPaths, dirtyPaths \}\)/);
-  assert.match(pane, /for \(const path of dirtyPaths\) await saveFile\(path\);[\s\S]*?closeFiles\(paths\);/);
+  assert.match(pane, /for \(const path of dirtyPaths\) \{[\s\S]*?await saveFile\(path\);[\s\S]*?closeFiles\(paths\);/);
   assert.match(view, /onCloseFiles=\{requestCloseFiles\}/);
 });
 

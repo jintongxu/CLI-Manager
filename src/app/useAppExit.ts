@@ -36,9 +36,6 @@ export function useAppExit(show: () => Promise<void>, backup: () => Promise<void
         activeSessionId: terminal.activeSessionId,
         workspans: terminal.workspans,
         activeWorkspanId: terminal.activeWorkspanId,
-        currentWorkSessionIds: persisted.currentWorkSessionIds,
-        currentWorkActiveSessionId: persisted.currentWorkActiveSessionId,
-        currentWorkPaneTree: persisted.currentWorkPaneTree,
       });
       await callbacks.current.backup();
     },

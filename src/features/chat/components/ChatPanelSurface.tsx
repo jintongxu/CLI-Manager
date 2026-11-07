@@ -12,6 +12,8 @@ import { diagnoseChatError } from "../lib/chatErrors";
 import { ChatPanelComposer } from "./ChatPanelComposer";
 import { ChatPanelMessages } from "./ChatPanelMessages";
 import { ChatPanelModelPicker } from "./ChatPanelModelPicker";
+import { AttachmentDraftOwner } from "../lib/chatImageAttachments";
+import { ChatBranchNavigation } from "./ChatBranchNavigation";
 
 export interface ChatPanelSurfaceProps {
   mode: "dock" | "float";
@@ -47,7 +49,10 @@ export function ChatPanelSurface({
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   const { t } = useI18n();
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [images, setImages] = useState<string[]>([]);
+  const [, refreshAttachments] = useState(0);
+  const [attachmentOwner] = useState(() => new AttachmentDraftOwner({
+    stage: bytes => controller.stageAttachment(bytes), releaseAssets: ids => controller.releaseAssets(ids),
+  }, undefined, undefined, error => controller.report(error)));
 
   const selected = state.selected;
   const detail = selected ? state.details[selected] : undefined;
@@ -71,7 +76,12 @@ export function ChatPanelSurface({
       .catch((error) => controller.report(error));
   }, [catalog, controller, conversation, defaultBindingManaged]);
 
-  useEffect(() => { setCopiedId(null); setImages([]); }, [selected]);
+  useEffect(() => {
+    setCopiedId(null);
+    attachmentOwner.switchConversation();
+    refreshAttachments(value => value + 1);
+  }, [selected]);
+  useEffect(() => () => attachmentOwner.dispose(), [attachmentOwner]);
 
   const report = (error: unknown) => controller.report(error);
 
@@ -171,6 +181,11 @@ export function ChatPanelSurface({
     </div>
 
     {state.ready && !selected && <p className="chat-panel-hint" role="status">{t("chat.panel.noSelection")}</p>}
+    {detail && <ChatBranchNavigation lineage={detail.lineage}
+      parentAvailable={detail.lineage.current?.parentConversationId !== null}
+      labels={{ navigation: t("chat.branchNavigation"), parent: t("chat.branchParent"), parentDeleted: t("chat.branchParentDeleted"),
+        children: t("chat.branchChildren"), child: (_branch, index) => t("chat.branchChild", { index: index + 1 }) }}
+      onSelectConversation={id => controller.select(id)} disabled={busy || running} />}
 
     <ChatPanelMessages
       messages={detail?.messages ?? []}
@@ -179,6 +194,9 @@ export function ChatPanelSurface({
       onCopied={setCopiedId}
       onRetry={() => { if (selected) act(() => controller.generate(selected, true, effectiveReasoning)); }}
       report={report}
+      controller={controller}
+      settled={!running && !busy && !state.suspended && !state.unsaved?.[selected ?? ""]}
+      reasoning={effectiveReasoning}
     />
 
     {state.error && (() => {
@@ -231,8 +249,16 @@ export function ChatPanelSurface({
       suspended={state.suspended}
       reasoningControl={reasoningControl}
       reasoningEffort={effectiveReasoning}
-      images={images}
-      onImagesChange={setImages}
+      attachments={attachmentOwner.value}
+      onStageImages={async files => {
+        const pending = files.map(file => attachmentOwner.stage(file, file.name).catch(error => { report(error); }));
+        refreshAttachments(value => value + 1);
+        await Promise.all(pending);
+        refreshAttachments(value => value + 1);
+      }}
+      onRemoveImage={id => { attachmentOwner.remove(id); refreshAttachments(value => value + 1); }}
+      onRetryImage={async id => { try { await attachmentOwner.retry(id); } finally { refreshAttachments(value => value + 1); } }}
+      onImagesConsumed={stageIds => { attachmentOwner.consumed(stageIds); refreshAttachments(value => value + 1); }}
       onAttachSelection={onAttachSelectionChange}
       onDetachSelection={() => onAttachSelectionChange("")}
       report={report}

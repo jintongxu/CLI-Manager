@@ -66,24 +66,48 @@ impl Sizing {
         self.opening.clone()
     }
     pub fn loading(&mut self, expected: u64, id: u64) -> Result<Opening, String> {
-        if !self.can_deliver(expected) { return Err("stale_translator_opening".into()); }
+        if !self.can_deliver(expected) {
+            return Err("stale_translator_opening".into());
+        }
         self.open(Mode::Screenshot, String::new(), None);
         self.started = Some(std::time::Instant::now());
-        self.opening.card = Some(super::card::Card { attempt: 0, error_code: None, session_id: id, phase: "loading",
-            image_base64: String::new(), started_at: super::card::now(), elapsed_ms: 0 });
+        self.opening.card = Some(super::card::Card {
+            attempt: 0,
+            error_code: None,
+            session_id: id,
+            phase: "loading",
+            image_base64: String::new(),
+            started_at: super::card::now(),
+            elapsed_ms: 0,
+        });
         Ok(self.opening.clone())
     }
-    pub fn update_card(&mut self, generation: u64, id: u64, image: Option<String>,
-        result: Option<ScreenshotResult>, failed: bool) -> Result<Opening, String> {
+    pub fn update_card(
+        &mut self,
+        generation: u64,
+        id: u64,
+        image: Option<String>,
+        result: Option<ScreenshotResult>,
+        failed: bool,
+    ) -> Result<Opening, String> {
         if self.opening.generation != generation || self.opening.mode != Mode::Screenshot {
             return Err("stale_translator_opening".into());
         }
-        let card = self.opening.card.as_mut().filter(|c| c.session_id == id && c.phase == "loading")
+        let card = self
+            .opening
+            .card
+            .as_mut()
+            .filter(|c| c.session_id == id && c.phase == "loading")
             .ok_or("stale_translator_card")?;
-        if let Some(image) = image { card.image_base64 = image; }
+        if let Some(image) = image {
+            card.image_base64 = image;
+        }
         if failed || result.is_some() {
             card.phase = if failed { "error" } else { "success" };
-            card.elapsed_ms = self.started.map(|s| s.elapsed().as_millis() as u64).unwrap_or(0);
+            card.elapsed_ms = self
+                .started
+                .map(|s| s.elapsed().as_millis() as u64)
+                .unwrap_or(0);
         }
         if let Some(mut result) = result {
             result.elapsed_ms = card.elapsed_ms;
@@ -187,30 +211,55 @@ mod card_tests {
             let g = loading.generation;
             assert_eq!(loading.card.unwrap().phase, "loading");
             assert!(state.accept(g, 1, Mode::Screenshot));
-            assert!(state.update_card(g, 8, Some("bad".into()), None, false).is_err());
-            let thumb = state.update_card(g, 7, Some("crop".into()), None, false).unwrap();
+            assert!(state
+                .update_card(g, 8, Some("bad".into()), None, false)
+                .is_err());
+            let thumb = state
+                .update_card(g, 7, Some("crop".into()), None, false)
+                .unwrap();
             assert_eq!(thumb.generation, g);
             assert_eq!(thumb.revision, 1);
             assert_eq!(thumb.card.unwrap().image_base64, "crop");
-            assert!(!state.accept(g, 1, Mode::Screenshot), "update cannot reset resize sequence");
-            let result = (!failed).then(|| ScreenshotResult { translated: "translation".into(),
-                original: None, image_base64: "crop".into(), elapsed_ms: 999999 });
+            assert!(
+                !state.accept(g, 1, Mode::Screenshot),
+                "update cannot reset resize sequence"
+            );
+            let result = (!failed).then(|| ScreenshotResult {
+                translated: "translation".into(),
+                original: None,
+                image_base64: "crop".into(),
+                elapsed_ms: 999999,
+            });
             let terminal = state.update_card(g, 7, None, result, failed).unwrap();
             assert_eq!(terminal.generation, g);
             assert_eq!(terminal.revision, 2);
-            assert_eq!(terminal.card.as_ref().unwrap().phase, if failed { "error" } else { "success" });
-            if let Some(result) = terminal.result { assert_ne!(result.elapsed_ms, 999999); }
-            assert!(state.update_card(g, 7, None, None, true).is_err(), "terminal cannot regress");
+            assert_eq!(
+                terminal.card.as_ref().unwrap().phase,
+                if failed { "error" } else { "success" }
+            );
+            if let Some(result) = terminal.result {
+                assert_ne!(result.elapsed_ms, 999999);
+            }
+            assert!(
+                state.update_card(g, 7, None, None, true).is_err(),
+                "terminal cannot regress"
+            );
         }
         for _reason in ["AltT", "close", "newcapture"] {
             let mut state = Sizing::new();
             let old = state.loading(0, 1).unwrap();
             let next = state.open(Mode::Input, String::new(), None);
-            assert!(state.update_card(old.generation, 1, Some("late".into()), None, false).is_err());
-            assert!(state.update_card(old.generation, 1, None, None, true).is_err());
+            assert!(state
+                .update_card(old.generation, 1, Some("late".into()), None, false)
+                .is_err());
+            assert!(state
+                .update_card(old.generation, 1, None, None, true)
+                .is_err());
             assert!(state.loading(old.generation, 1).is_err());
             let fresh = state.loading(next.generation, 2).unwrap();
-            assert!(state.update_card(fresh.generation, 1, None, None, true).is_err());
+            assert!(state
+                .update_card(fresh.generation, 1, None, None, true)
+                .is_err());
             assert_eq!(state.opening.card.as_ref().unwrap().session_id, 2);
         }
     }

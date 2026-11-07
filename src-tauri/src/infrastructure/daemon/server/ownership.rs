@@ -176,11 +176,15 @@ impl DaemonServer {
                 // draining (a live in-flight exit keeps its own connection bound).
                 let stale_exit = state.exits.contains_key(&binding.instance_id)
                     && !state.draining
+                    && state.connections.iter().all(|(client_id, owner)| {
+                        *client_id == client || owner != &binding.instance_id
+                    })
                     && state
-                        .connections
-                        .iter()
-                        .all(|(client_id, owner)| *client_id == client || owner != &binding.instance_id)
-                    && state.inflight.get(&binding.instance_id).copied().unwrap_or(0) == 0;
+                        .inflight
+                        .get(&binding.instance_id)
+                        .copied()
+                        .unwrap_or(0)
+                        == 0;
                 if stale_exit {
                     if let Some(exit) = state.exits.remove(&binding.instance_id) {
                         state.retired.insert(exit.transaction);

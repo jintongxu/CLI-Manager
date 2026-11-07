@@ -60,7 +60,8 @@ test("settings no longer owns a duplicate workspace layout entry", () => {
 });
 
 test("unavailable Workspan tabs cannot trigger a no-op visibility write", () => {
-  assert.match(controlsSource, /if \(!workspanEnabled \|\| !hasWorkspanTabs\) return;/);
+  assert.match(controlsSource, /if \(!hasWorkspanTabs\) return;/);
+  assert.doesNotMatch(controlsSource, /workspanEnabled/);
   assert.match(menuSource, /workspanUnavailable/);
   assert.match(i18nSource, /"workspaceLayout\.controls\.workspanUnavailable": "当前没有可用的 Workspan Tab"/);
   assert.match(i18nSource, /"workspaceLayout\.controls\.workspanUnavailable": "No Workspan tabs are currently available"/);

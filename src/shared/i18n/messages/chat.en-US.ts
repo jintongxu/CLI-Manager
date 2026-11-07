@@ -217,6 +217,23 @@ export const en = {
 
   "chat.error.chat_copy": "Copy failed. Please retry.",
 
+  "chat.edit": "Edit and regenerate",
+  "chat.editText": "Edit message text",
+  "chat.editSubmit": "Create branch",
+  "chat.preserveImages": "Keep existing images",
+  "chat.replaceImages": "Replace with selected images",
+  "chat.imageAttachments": "Message images",
+  "chat.imageLoading": "Loading image…",
+  "chat.imageReadFailed": "Image unavailable",
+  "chat.imageStaging": "Preparing image…",
+  "chat.imageStageFailed": "Image preparation failed",
+  "chat.attachLocalDisclosure": "Attach local images (sent only to the selected provider when you submit)",
+  "chat.branchNavigation": "Conversation branches",
+  "chat.branchParent": "Parent conversation",
+  "chat.branchParentDeleted": "Parent conversation was deleted",
+  "chat.branchChildren": "Direct branches",
+  "chat.branchChild": "Branch {index}",
+
   "chat.panel.title": "Sidebar chat",
   "chat.panel.close": "Close chat panel",
   "chat.panel.new": "New chat",

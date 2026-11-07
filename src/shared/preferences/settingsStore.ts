@@ -1,4 +1,5 @@
 import { normalizeAuxiliaryTerminalHeight } from "./auxiliaryTerminal";
+import { clampFileCompanionRatio, FILE_COMPANION_PRIMARY_RATIO_DEFAULT } from "./fileCompanion";
 import {
   DEFAULT_TERMINAL_TOOLBAR_VISIBILITY,
   DEFAULT_SIDEBAR_TOOLBAR_VISIBILITY,
@@ -451,6 +452,8 @@ export interface Settings {
   terminalSidePanelSingleOpen: boolean;
   terminalSidePanelSkin: TerminalSidePanelSkin;
   auxiliaryTerminalHeight: number;
+  /** Logical primary-pane share; viewport constraints and maximization are transient. */
+  fileCompanionPrimaryRatio: number;
   terminalPanelWidths: TerminalPanelWidthSettings;
   workspaceLayout: WorkspaceLayoutSettings;
   terminalStatsCardVisibility: TerminalStatsCardVisibilitySettings;
@@ -541,7 +544,6 @@ export interface Settings {
   /** 批量启动分屏方向：vertical（上下分屏） / horizontal（左右分屏）。默认 horizontal。 */
   batchLaunchPaneDirection: BatchLaunchPaneDirection;
   projectScopedTerminalViewEnabled: boolean;
-  workspanEnabled: boolean;
   desktopPet: DesktopPetSettings;
 }
 
@@ -629,6 +631,7 @@ const DEFAULTS: Settings = {
   terminalSidePanelSingleOpen: true,
   terminalSidePanelSkin: "terminal",
   auxiliaryTerminalHeight: 240,
+  fileCompanionPrimaryRatio: FILE_COMPANION_PRIMARY_RATIO_DEFAULT,
   terminalPanelWidths: { ...TERMINAL_PANEL_WIDTH_DEFAULTS },
   workspaceLayout: { ...WORKSPACE_LAYOUT_DEFAULTS },
   terminalStatsCardVisibility: {
@@ -741,7 +744,6 @@ const DEFAULTS: Settings = {
   batchLaunchGroupInPane: false,
   batchLaunchPaneDirection: "horizontal",
   projectScopedTerminalViewEnabled: false,
-  workspanEnabled: true,
   desktopPet: {
     enabled: false,
     petId: BUILTIN_DESKTOP_PET_ID,
@@ -1317,7 +1319,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     const s = await getStore();
     const rawEntries = await s.entries();
     const entries = Object.fromEntries(
-      rawEntries.filter(([, value]) => value !== null && value !== undefined)
+      rawEntries.filter(([key, value]) => key !== "workspanEnabled" && value !== null && value !== undefined)
     ) as Partial<SettingsStore>;
     entries.worktreeDefaultRoot = loadedWorktreeRoot(entries.worktreeDefaultRoot);
     const pendingStoreWrites: Promise<void>[] = [];
@@ -1495,6 +1497,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         : DEFAULTS.terminalSidePanelSingleOpen;
     entries.terminalSidePanelSkin = migrateTerminalSidePanelSkin(entries.terminalSidePanelSkin);
     entries.auxiliaryTerminalHeight = normalizeAuxiliaryTerminalHeight(entries.auxiliaryTerminalHeight);
+    const storedFileCompanionRatio = entries.fileCompanionPrimaryRatio;
+    entries.fileCompanionPrimaryRatio = clampFileCompanionRatio(storedFileCompanionRatio);
+    if (storedFileCompanionRatio !== undefined && storedFileCompanionRatio !== entries.fileCompanionPrimaryRatio) {
+      persistSetting("fileCompanionPrimaryRatio", entries.fileCompanionPrimaryRatio);
+    }
     entries.terminalPanelWidths = migrateTerminalPanelWidths(entries.terminalPanelWidths);
     const storedWorkspaceLayout = entries.workspaceLayout;
     const workspaceLayout = migrateWorkspaceLayout(storedWorkspaceLayout);
@@ -1821,10 +1828,6 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       typeof entries.projectScopedTerminalViewEnabled === "boolean"
         ? entries.projectScopedTerminalViewEnabled
         : DEFAULTS.projectScopedTerminalViewEnabled;
-    entries.workspanEnabled =
-      typeof entries.workspanEnabled === "boolean"
-        ? entries.workspanEnabled
-        : DEFAULTS.workspanEnabled;
 
     if (pendingStoreWrites.length > 0) {
       await Promise.all(pendingStoreWrites);
@@ -1881,6 +1884,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     }
     const s = await getStore();
     const normalized = key === "auxiliaryTerminalHeight" ? normalizeAuxiliaryTerminalHeight(value)
+      : key === "fileCompanionPrimaryRatio" ? clampFileCompanionRatio(value)
       : key === "chatDefaultModel"
       ? normalizeChatDefaultModelPreference(value)
       : key === "chatDefaultReasoningEffort" ? normalizeChatDefaultReasoningEffort(value)

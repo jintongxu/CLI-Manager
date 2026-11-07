@@ -175,11 +175,12 @@ pub async fn test_connection(id: String) -> Result<String, String> {
     if !valid_protocol(&protocol) {
         return Err(String::from("chat_provider_invalid"));
     }
-    let key: Option<String> = sqlx::query_scalar("SELECT api_key FROM chat_provider_secrets WHERE provider_id=?")
-        .bind(&id)
-        .fetch_optional(&p)
-        .await
-        .unwrap_or(None);
+    let key: Option<String> =
+        sqlx::query_scalar("SELECT api_key FROM chat_provider_secrets WHERE provider_id=?")
+            .bind(&id)
+            .fetch_optional(&p)
+            .await
+            .unwrap_or(None);
     probe_endpoint(&url, &protocol, key.as_deref()).await
 }
 
@@ -190,7 +191,11 @@ pub async fn test_probe(input: ChatProviderProbeInput) -> Result<String, String>
     probe_endpoint(&input.base_url, &input.protocol, input.api_key.as_deref()).await
 }
 
-async fn probe_endpoint(base_url: &str, protocol: &str, api_key: Option<&str>) -> Result<String, String> {
+async fn probe_endpoint(
+    base_url: &str,
+    protocol: &str,
+    api_key: Option<&str>,
+) -> Result<String, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(8))
         .build()
@@ -205,7 +210,9 @@ async fn probe_endpoint(base_url: &str, protocol: &str, api_key: Option<&str>) -
     let mut req = client.get(&target);
     if let Some(key) = api_key.filter(|k| !k.trim().is_empty()) {
         if protocol == "anthropic_messages" {
-            req = req.header("x-api-key", key.trim()).header("anthropic-version", "2023-06-01");
+            req = req
+                .header("x-api-key", key.trim())
+                .header("anthropic-version", "2023-06-01");
         } else {
             req = req.header("authorization", format!("Bearer {}", key.trim()));
         }
@@ -216,7 +223,9 @@ async fn probe_endpoint(base_url: &str, protocol: &str, api_key: Option<&str>) -
             let status = resp.status();
             if status.is_success() {
                 Ok("connected".into())
-            } else if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+            } else if status == reqwest::StatusCode::UNAUTHORIZED
+                || status == reqwest::StatusCode::FORBIDDEN
+            {
                 Err("chat_provider_auth_failed".into())
             } else if status == reqwest::StatusCode::NOT_FOUND {
                 // If /models returns 404, fallback to base url check or accept if reachable
@@ -242,11 +251,12 @@ pub async fn fetch_remote_models(
             .fetch_one(&p)
             .await
             .map_err(|_| String::from("chat_provider_not_found"))?;
-        let key: Option<String> = sqlx::query_scalar("SELECT api_key FROM chat_provider_secrets WHERE provider_id=?")
-            .bind(&provider_id)
-            .fetch_optional(&p)
-            .await
-            .unwrap_or(None);
+        let key: Option<String> =
+            sqlx::query_scalar("SELECT api_key FROM chat_provider_secrets WHERE provider_id=?")
+                .bind(&provider_id)
+                .fetch_optional(&p)
+                .await
+                .unwrap_or(None);
         (r.get("base_url"), r.get("protocol"), key)
     } else {
         return Err("chat_provider_invalid".into());
@@ -270,15 +280,23 @@ pub async fn fetch_remote_models(
     let mut req = client.get(&target);
     if let Some(ref k) = key.filter(|k| !k.trim().is_empty()) {
         if protocol == "anthropic_messages" {
-            req = req.header("x-api-key", k.trim()).header("anthropic-version", "2023-06-01");
+            req = req
+                .header("x-api-key", k.trim())
+                .header("anthropic-version", "2023-06-01");
         } else {
             req = req.header("authorization", format!("Bearer {}", k.trim()));
         }
     }
 
-    let resp = req.send().await.map_err(|e| format!("chat_provider_network_error: {e}"))?;
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("chat_provider_network_error: {e}"))?;
     if !resp.status().is_success() {
-        return Err(format!("chat_provider_http_error: {}", resp.status().as_u16()));
+        return Err(format!(
+            "chat_provider_http_error: {}",
+            resp.status().as_u16()
+        ));
     }
 
     let parsed: OpenAiModelsResponse = resp
@@ -306,7 +324,10 @@ pub async fn batch_sync_models(
         return Err(String::from("chat_provider_not_found"));
     }
 
-    let mut tx = p.begin().await.map_err(|_| String::from("chat_provider_storage"))?;
+    let mut tx = p
+        .begin()
+        .await
+        .map_err(|_| String::from("chat_provider_storage"))?;
     sqlx::query("DELETE FROM chat_provider_models WHERE provider_id=?")
         .bind(&provider_id)
         .execute(&mut *tx)
@@ -329,7 +350,9 @@ pub async fn batch_sync_models(
         .await
         .map_err(|_| String::from("chat_provider_storage"))?;
     }
-    tx.commit().await.map_err(|_| String::from("chat_provider_storage"))?;
+    tx.commit()
+        .await
+        .map_err(|_| String::from("chat_provider_storage"))?;
 
     load(&p, &provider_id).await
 }

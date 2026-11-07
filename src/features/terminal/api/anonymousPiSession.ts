@@ -3,13 +3,6 @@ import type { TerminalStore } from "../types/terminalStoreTypes";
 type CreateSession = TerminalStore["createSession"];
 export type SessionCreationOptions = Parameters<CreateSession>[12];
 
-export function shouldAddSessionToCurrentWork(
-  options: SessionCreationOptions | undefined,
-  currentWorkMode: boolean,
-): boolean {
-  return !options?.transientBackground && (!options?.sessionKind || currentWorkMode);
-}
-
 export function createAnonymousPiSessionHandler(
   createSession: CreateSession,
   closeHistory: () => void,

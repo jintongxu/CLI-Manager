@@ -6,7 +6,7 @@ import { clearWorkspaceSelection, readWorkspaceSelection } from "../../../shared
 import type { ChatPanelController } from "../lib/panelController";
 import { buildSendText, canSubmit } from "../lib/chatPanelActions";
 import { shouldSubmit } from "../lib/interactions";
-import { filterAcceptedImages, readClipboardImages, readImageFileAsDataUri } from "../lib/chatImageAttachments";
+import { filterAcceptedImages, readClipboardImages, type AttachmentDraft } from "../lib/chatImageAttachments";
 import type { ReasoningEffort } from "../api/chatReasoning";
 import { reasoningPayload } from "../api/chatReasoning";
 import { ChatPanelImagePreview, ChatPanelImageTray } from "./ChatPanelImageTray";
@@ -23,8 +23,11 @@ interface ChatPanelComposerProps {
   suspended: boolean;
   reasoningControl?: ReactNode;
   reasoningEffort: ReasoningEffort;
-  images: readonly string[];
-  onImagesChange: (next: string[]) => void;
+  attachments: readonly AttachmentDraft[];
+  onStageImages: (files: readonly File[]) => Promise<void>;
+  onRemoveImage: (id: string) => void;
+  onRetryImage: (id: string) => Promise<void>;
+  onImagesConsumed: (stageIds: readonly string[]) => void;
   onAttachSelection: (text: string) => void;
   onDetachSelection: () => void;
   report: (error: unknown) => void;
@@ -32,10 +35,12 @@ interface ChatPanelComposerProps {
 
 export function ChatPanelComposer({
   controller, conversationId, draft, attachedSelection, busy, running, suspended,
-  reasoningControl, reasoningEffort, images, onImagesChange, onAttachSelection, onDetachSelection, report,
+  reasoningControl, reasoningEffort, attachments, onStageImages, onRemoveImage, onRetryImage, onImagesConsumed,
+  onAttachSelection, onDetachSelection, report,
 }: ChatPanelComposerProps) {
   const { t } = useI18n();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const submitting = useRef(false);
   const [sending, setSending] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
@@ -51,33 +56,28 @@ export function ChatPanelComposer({
   const submit = () => {
     if (!conversationId || submitting.current) return;
     const text = buildSendText(draft, attachedSelection);
-    if (!text && !images.length) return;
+    const stageIds = attachments.flatMap(item => item.descriptor ? [item.descriptor.stageId] : []);
+    if ((!text && !stageIds.length) || attachments.some(item => item.status !== "staged")) return;
     submitting.current = true;
     setSending(true);
     onDetachSelection();
     clearWorkspaceSelection();
-    const attached = [...images];
-    onImagesChange([]);
     void (async () => {
-      controller.setDraft(conversationId, text || t("chat.panel.imageOnlyPrompt"));
-      await controller.generate(conversationId, false, reasoningPayload(reasoningEffort) ?? "off", attached);
-    })().catch((error) => {
-      onImagesChange(attached);
-      report(error);
-    }).finally(() => { submitting.current = false; setSending(false); });
+      controller.setDraft(conversationId, text);
+      await controller.generate(conversationId, false, reasoningPayload(reasoningEffort) ?? "off", stageIds);
+      onImagesConsumed(stageIds);
+    })().catch(report).finally(() => { submitting.current = false; setSending(false); });
   };
 
   const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const files = readClipboardImages(event.clipboardData);
     if (!files.length) return;
     event.preventDefault();
-    const { accepted, rejection } = filterAcceptedImages(files, images.length);
+    const { accepted, rejection } = filterAcceptedImages(files, attachments.length);
     if (rejection === "limit") toast.info(t("chat.panel.imageLimit"));
     if (rejection === "too_large") toast.info(t("chat.panel.imageTooLarge"));
     if (!accepted.length) return;
-    void Promise.all(accepted.map(readImageFileAsDataUri))
-      .then((uris) => onImagesChange([...images, ...uris.filter(Boolean)]))
-      .catch(report);
+    void onStageImages(accepted).catch(report);
   };
 
   const handleAttachClick = () => {
@@ -90,12 +90,33 @@ export function ChatPanelComposer({
   };
 
   const submitDisabled = running || sending || busy || suspended
-    || !conversationId
-    || (!images.length && !canSubmit(buildSendText(draft, attachedSelection), busy, suspended));
+    || !conversationId || attachments.some(item => item.status !== "staged")
+    || (!attachments.length && !canSubmit(buildSendText(draft, attachedSelection), busy, suspended));
 
   return <div className="chat-panel-composer">
-    <div className="chat-panel-input-card">
-      <ChatPanelImageTray images={images} onRemove={(index) => onImagesChange(images.filter((_, i) => i !== index))} onPreview={setPreview} />
+    <input ref={imageInputRef} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden
+      aria-label={t("chat.attachLocalDisclosure")}
+      onChange={event => {
+        const files = Array.from(event.currentTarget.files ?? []);
+        event.currentTarget.value = "";
+        const { accepted, rejection } = filterAcceptedImages(files, attachments.length);
+        if (rejection === "limit") toast.info(t("chat.panel.imageLimit"));
+        if (rejection === "too_large") toast.info(t("chat.panel.imageTooLarge"));
+        void onStageImages(accepted).catch(report);
+      }} />
+    <div className="chat-panel-input-card"
+      onDragOver={event => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }}
+      onDrop={event => {
+        const files = Array.from(event.dataTransfer.files).filter(file => file.type.startsWith("image/"));
+        if (!files.length) return;
+        event.preventDefault();
+        const { accepted, rejection } = filterAcceptedImages(files, attachments.length);
+        if (rejection === "limit") toast.info(t("chat.panel.imageLimit"));
+        if (rejection === "too_large") toast.info(t("chat.panel.imageTooLarge"));
+        void onStageImages(accepted).catch(report);
+      }}>
+      <ChatPanelImageTray images={attachments} onRemove={onRemoveImage}
+        onRetry={id => { void onRetryImage(id).catch(report); }} onPreview={setPreview} />
       {attachedSelection ? (
         <div className="chat-panel-chip is-attached" data-chat-panel-chip="attached">
           <Paperclip size={10} aria-hidden="true" />
@@ -133,6 +154,11 @@ export function ChatPanelComposer({
             aria-label={t("chat.panel.attachTooltip")}
             onClick={handleAttachClick}
           >
+            <Paperclip size={12} />
+          </button>
+          <button type="button" className="chat-panel-tool-button"
+            title={t("chat.attachLocalDisclosure")} aria-label={t("chat.attachLocalDisclosure")}
+            onClick={() => imageInputRef.current?.click()}>
             <Paperclip size={12} />
           </button>
         </div>

@@ -3,6 +3,7 @@ import type { TerminalSession } from "../../../shared/types/index";
 
 export interface FileEditorPaneProps {
   session: TerminalSession;
+  companion?: boolean;
   isActive: boolean;
   terminalThemeBackground: string;
   onClose: () => void;

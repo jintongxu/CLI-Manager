@@ -14,7 +14,14 @@ pub(super) async fn database() -> (tempfile::TempDir, Repository) {
         .foreign_keys(true);
     let mut c = SqliteConnection::connect_with(&options).await.unwrap();
     sqlx::raw_sql(super::SCHEMA).execute(&mut c).await.unwrap();
-    sqlx::raw_sql(super::ORIGIN_MIGRATION).execute(&mut c).await.unwrap();
+    sqlx::raw_sql(super::ORIGIN_MIGRATION)
+        .execute(&mut c)
+        .await
+        .unwrap();
+    sqlx::raw_sql(crate::MIGRATION_CREATE_CHAT_ASSETS_SQL)
+        .execute(&mut c)
+        .await
+        .unwrap();
     c.close().await.unwrap();
     let repo = Repository::open(&path).await.unwrap();
     (dir, repo)
@@ -30,7 +37,7 @@ pub(super) fn generation(c: &Conversation) -> GenerateInput {
         text: Some("你好\nsecond line".into()),
         retry: false,
         reasoning: None,
-        images: None,
+        stage_ids: Vec::new(),
     }
 }
 fn update(c: &Conversation, draft: &str) -> UpdateInput {
@@ -48,7 +55,10 @@ fn update(c: &Conversation, draft: &str) -> UpdateInput {
 async fn chat_real_sqlite_reopen_rollback_revision_lease_retry_delete() {
     let (dir, repo) = database().await;
     let c = repo
-        .create(CreateInput { title: None, origin: ConversationOrigin::Workspace })
+        .create(CreateInput {
+            title: None,
+            origin: ConversationOrigin::Workspace,
+        })
         .await
         .unwrap()
         .conversation;
@@ -329,7 +339,11 @@ async fn chat_three_protocols_mock_http_chunked_safety_and_status() {
         super::stream::run(
             client,
             runtime,
-            super::stream::Request { model: "mock-model".into(), reasoning: None, images: None },
+            super::stream::Request {
+                model: "mock-model".into(),
+                reasoning: None,
+                images: std::collections::HashMap::new(),
+            },
             vec![],
             rx,
             tx,
@@ -373,7 +387,11 @@ async fn chat_three_protocols_mock_http_chunked_safety_and_status() {
         super::stream::run(
             client,
             runtime,
-            super::stream::Request { model: "mock-model".into(), reasoning: None, images: None },
+            super::stream::Request {
+                model: "mock-model".into(),
+                reasoning: None,
+                images: std::collections::HashMap::new(),
+            },
             vec![],
             rx,
             tx,
@@ -399,7 +417,11 @@ async fn chat_mock_http_cancel_connect_wait_and_before_start() {
         let job = tokio::spawn(super::stream::run(
             reqwest::Client::builder().no_proxy().build().unwrap(),
             runtime,
-            super::stream::Request { model: "mock".into(), reasoning: None, images: None },
+            super::stream::Request {
+                model: "mock".into(),
+                reasoning: None,
+                images: std::collections::HashMap::new(),
+            },
             vec![],
             rx,
             tx,
@@ -421,7 +443,10 @@ async fn chat_mock_http_cancel_connect_wait_and_before_start() {
 async fn chat_transaction_failure_rolls_back_messages_and_lease() {
     let (_dir, repo) = database().await;
     let c = repo
-        .create(CreateInput { title: None, origin: ConversationOrigin::Workspace })
+        .create(CreateInput {
+            title: None,
+            origin: ConversationOrigin::Workspace,
+        })
         .await
         .unwrap()
         .conversation;
@@ -459,7 +484,10 @@ async fn chat_context_message_count_and_byte_limits_rollback() {
     let (_dir, repo) = database().await;
     for (count, bytes) in [(200, 1), (2, 512 * 1024)] {
         let c = repo
-            .create(CreateInput { title: None, origin: ConversationOrigin::Workspace })
+            .create(CreateInput {
+                title: None,
+                origin: ConversationOrigin::Workspace,
+            })
             .await
             .unwrap()
             .conversation;
@@ -491,7 +519,10 @@ fn chat_ipc_unknown_fields_rejected() {
 async fn chat_explicit_snapshot_retry_expired_lease_cannot_overwrite_recovery() {
     let (_dir, repo) = database().await;
     let c = repo
-        .create(CreateInput { title: None, origin: ConversationOrigin::QuickChat })
+        .create(CreateInput {
+            title: None,
+            origin: ConversationOrigin::QuickChat,
+        })
         .await
         .unwrap()
         .conversation;
@@ -581,7 +612,14 @@ async fn chat_additive_migration_preserves_existing_tables_and_rolls_back_failur
         .execute(&mut *tx)
         .await
         .unwrap();
-    sqlx::raw_sql(super::ORIGIN_MIGRATION).execute(&mut *tx).await.unwrap();
+    sqlx::raw_sql(super::ORIGIN_MIGRATION)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::raw_sql(crate::MIGRATION_CREATE_CHAT_ASSETS_SQL)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
     tx.commit().await.unwrap();
     let marker: String = sqlx::query_scalar("SELECT value FROM legacy_marker")
         .fetch_one(&mut connection)
@@ -625,7 +663,11 @@ async fn chat_mock_http_cancel_stalled_body_read() {
     let task = tokio::spawn(super::stream::run(
         reqwest::Client::builder().no_proxy().build().unwrap(),
         runtime,
-        super::stream::Request { model: "mock".into(), reasoning: None, images: None },
+        super::stream::Request {
+            model: "mock".into(),
+            reasoning: None,
+            images: std::collections::HashMap::new(),
+        },
         vec![],
         rx,
         tx,
@@ -645,10 +687,18 @@ async fn chat_mock_http_cancel_stalled_body_read() {
 async fn chat_stopped_answer_allows_new_question_but_failed_answers_require_retry() {
     for status in ["stopped", "failed", "interrupted"] {
         let (_dir, repo) = database().await;
-        let c = repo.create(CreateInput { title: None, origin: ConversationOrigin::Workspace })
-            .await.unwrap().conversation;
+        let c = repo
+            .create(CreateInput {
+                title: None,
+                origin: ConversationOrigin::Workspace,
+            })
+            .await
+            .unwrap()
+            .conversation;
         let (m, _) = repo.begin(&generation(&c), "owner").await.unwrap();
-        repo.checkpoint(&m, "owner", "partial answer", status, None, None).await.unwrap();
+        repo.checkpoint(&m, "owner", "partial answer", status, None, None)
+            .await
+            .unwrap();
         let detail = repo.get(&c.id).await.unwrap();
         let mut next = generation(&detail.conversation);
         next.text = Some("a different question".into());
@@ -671,7 +721,10 @@ async fn chat_stopped_answer_allows_new_question_but_failed_answers_require_retr
 async fn chat_retry_preserves_independent_saved_draft() {
     let (_dir, repo) = database().await;
     let c = repo
-        .create(CreateInput { title: None, origin: ConversationOrigin::Workspace })
+        .create(CreateInput {
+            title: None,
+            origin: ConversationOrigin::Workspace,
+        })
         .await
         .unwrap()
         .conversation;
@@ -699,7 +752,10 @@ async fn chat_retry_preserves_independent_saved_draft() {
 async fn chat_early_restart_refresh_and_exact_expiry_boundary() {
     let (dir, repo) = database().await;
     let c = repo
-        .create(CreateInput { title: None, origin: ConversationOrigin::Workspace })
+        .create(CreateInput {
+            title: None,
+            origin: ConversationOrigin::Workspace,
+        })
         .await
         .unwrap()
         .conversation;
@@ -732,6 +788,7 @@ async fn chat_early_restart_refresh_and_exact_expiry_boundary() {
             &{
                 let mut i = generation(&d.conversation);
                 i.retry = true;
+                i.text = None;
                 i
             },
             "crashed-again",
@@ -761,43 +818,109 @@ async fn chat_early_restart_refresh_and_exact_expiry_boundary() {
 
 #[test]
 fn chat_reasoning_effort_maps_per_protocol_and_defaults_to_absent() {
-    use crate::provider::chat_runtime::Protocol;
     use super::stream::body;
+    use crate::provider::chat_runtime::Protocol;
     let history: Vec<Message> = vec![];
     // No reasoning keeps every protocol payload unchanged.
     for protocol in [Protocol::Chat, Protocol::Messages, Protocol::Responses] {
-        let plain = body(protocol, "m", &history, None, &[]);
+        let plain = body(
+            protocol,
+            "m",
+            &history,
+            None,
+            &std::collections::HashMap::new(),
+        );
         assert!(plain.get("reasoning_effort").is_none());
         assert!(plain.get("reasoning").is_none());
         assert!(plain.get("thinking").is_none());
         assert_eq!(plain["stream"], true);
     }
-    let chat = body(Protocol::Chat, "m", &history, Some("high"), &[]);
+    let chat = body(
+        Protocol::Chat,
+        "m",
+        &history,
+        Some("high"),
+        &std::collections::HashMap::new(),
+    );
     assert_eq!(chat["reasoning_effort"], "high");
-    let responses = body(Protocol::Responses, "m", &history, Some("medium"), &[]);
+    let responses = body(
+        Protocol::Responses,
+        "m",
+        &history,
+        Some("medium"),
+        &std::collections::HashMap::new(),
+    );
     assert_eq!(responses["reasoning"]["effort"], "medium");
-    let messages = body(Protocol::Messages, "m", &history, Some("low"), &[]);
+    let messages = body(
+        Protocol::Messages,
+        "m",
+        &history,
+        Some("low"),
+        &std::collections::HashMap::new(),
+    );
     assert_eq!(messages["thinking"]["type"], "enabled");
     assert_eq!(messages["thinking"]["budget_tokens"], 1024);
     assert_eq!(messages["max_tokens"], 8192 + 1024);
     // Extended scale: minimal collapses onto the API minimum, xhigh/max scale the budget.
-    let minimal = body(Protocol::Messages, "m", &history, Some("minimal"), &[]);
+    let minimal = body(
+        Protocol::Messages,
+        "m",
+        &history,
+        Some("minimal"),
+        &std::collections::HashMap::new(),
+    );
     assert_eq!(minimal["thinking"]["budget_tokens"], 1024);
-    let xhigh = body(Protocol::Messages, "m", &history, Some("xhigh"), &[]);
+    let xhigh = body(
+        Protocol::Messages,
+        "m",
+        &history,
+        Some("xhigh"),
+        &std::collections::HashMap::new(),
+    );
     assert_eq!(xhigh["thinking"]["budget_tokens"], 8192);
     assert_eq!(xhigh["max_tokens"], 8192 + 8192);
-    let max = body(Protocol::Messages, "m", &history, Some("max"), &[]);
+    let max = body(
+        Protocol::Messages,
+        "m",
+        &history,
+        Some("max"),
+        &std::collections::HashMap::new(),
+    );
     assert_eq!(max["thinking"]["budget_tokens"], 16384);
     assert!(max["max_tokens"].as_u64().unwrap() > 16384);
     // OpenAI-style enums forward the extended values verbatim.
-    assert_eq!(body(Protocol::Chat, "m", &history, Some("xhigh"), &[])["reasoning_effort"], "xhigh");
-    assert_eq!(body(Protocol::Responses, "m", &history, Some("minimal"), &[])["reasoning"]["effort"], "minimal");
-    let off = body(Protocol::Chat, "m", &history, Some("off"), &[]);
+    assert_eq!(
+        body(
+            Protocol::Chat,
+            "m",
+            &history,
+            Some("xhigh"),
+            &std::collections::HashMap::new()
+        )["reasoning_effort"],
+        "xhigh"
+    );
+    assert_eq!(
+        body(
+            Protocol::Responses,
+            "m",
+            &history,
+            Some("minimal"),
+            &std::collections::HashMap::new()
+        )["reasoning"]["effort"],
+        "minimal"
+    );
+    let off = body(
+        Protocol::Chat,
+        "m",
+        &history,
+        Some("off"),
+        &std::collections::HashMap::new(),
+    );
     assert!(off.get("reasoning_effort").is_none());
 }
 
 #[test]
-fn chat_stream_body_attaches_images_only_to_last_user_turn() {
+fn chat_stream_body_preserves_each_user_turn_images_for_all_protocols() {
     use super::stream::{body, normalize_images};
     use super::types::Message;
     use crate::provider::chat_runtime::Protocol;
@@ -821,6 +944,7 @@ fn chat_stream_body_attaches_images_only_to_last_user_turn() {
             model: "m".into(),
             created_at: 0,
             updated_at: 0,
+            assets: Vec::new(),
         },
         Message {
             id: "2".into(),
@@ -838,6 +962,7 @@ fn chat_stream_body_attaches_images_only_to_last_user_turn() {
             model: "m".into(),
             created_at: 0,
             updated_at: 0,
+            assets: Vec::new(),
         },
         Message {
             id: "3".into(),
@@ -855,35 +980,62 @@ fn chat_stream_body_attaches_images_only_to_last_user_turn() {
             model: "m".into(),
             created_at: 0,
             updated_at: 0,
+            assets: Vec::new(),
         },
     ];
-    let images = vec![png.to_string(), jpeg.to_string()];
+    let images = std::collections::HashMap::from([
+        ("1".to_string(), vec![jpeg.to_string()]),
+        ("3".to_string(), vec![png.to_string(), jpeg.to_string()]),
+    ]);
 
     let chat = body(Protocol::Chat, "m", &history, None, &images);
-    assert_eq!(chat["messages"][0]["content"], "first");
+    assert_eq!(chat["messages"][0]["content"][0]["text"], "first");
+    assert_eq!(chat["messages"][0]["content"][1]["image_url"]["url"], jpeg);
     assert_eq!(chat["messages"][1]["content"], "reply");
     assert_eq!(chat["messages"][2]["content"][0]["type"], "text");
     assert_eq!(chat["messages"][2]["content"][1]["type"], "image_url");
     assert_eq!(chat["messages"][2]["content"][1]["image_url"]["url"], png);
 
     let responses = body(Protocol::Responses, "m", &history, None, &images);
+    assert_eq!(responses["input"][0]["content"][1]["image_url"], jpeg);
     assert_eq!(responses["input"][2]["content"][0]["type"], "input_text");
     assert_eq!(responses["input"][2]["content"][1]["type"], "input_image");
 
     let anthropic = body(Protocol::Messages, "m", &history, None, &images);
+    assert_eq!(
+        anthropic["messages"][0]["content"][1]["source"]["media_type"],
+        "image/jpeg"
+    );
     assert_eq!(anthropic["messages"][2]["content"][1]["type"], "image");
-    assert_eq!(anthropic["messages"][2]["content"][1]["source"]["media_type"], "image/png");
-    assert_eq!(anthropic["messages"][2]["content"][1]["source"]["data"], "AAAA");
-    assert_eq!(anthropic["messages"][2]["content"][2]["source"]["media_type"], "image/jpeg");
+    assert_eq!(
+        anthropic["messages"][2]["content"][1]["source"]["media_type"],
+        "image/png"
+    );
+    assert_eq!(
+        anthropic["messages"][2]["content"][1]["source"]["data"],
+        "AAAA"
+    );
+    assert_eq!(
+        anthropic["messages"][2]["content"][2]["source"]["media_type"],
+        "image/jpeg"
+    );
 
     assert!(normalize_images(None).unwrap().is_empty());
-    assert_eq!(normalize_images(Some(&images)).unwrap().len(), 2);
+    assert_eq!(
+        normalize_images(Some(images.get("3").unwrap()))
+            .unwrap()
+            .len(),
+        2
+    );
     assert_eq!(
         normalize_images(Some(&["data:image/svg+xml;base64,AA".to_string()])).unwrap_err(),
         "chat_invalid_input"
     );
     let too_many = vec![png.to_string(); super::stream::MAX_IMAGES + 1];
-    assert_eq!(normalize_images(Some(&too_many)).unwrap_err(), "chat_invalid_input");
+    assert_eq!(
+        normalize_images(Some(&too_many)).unwrap_err(),
+        "chat_invalid_input"
+    );
 }
 
 #[tokio::test]
@@ -895,29 +1047,66 @@ async fn chat_origin_migration_new_upgrade_reopen_and_contract() {
         std::fs::File::create(&path).unwrap();
         let options = sqlx::sqlite::SqliteConnectOptions::new().filename(&path);
         let mut connection = SqliteConnection::connect_with(&options).await.unwrap();
-        sqlx::raw_sql(super::SCHEMA).execute(&mut connection).await.unwrap();
+        sqlx::raw_sql(super::SCHEMA)
+            .execute(&mut connection)
+            .await
+            .unwrap();
         let old_id = uuid::Uuid::new_v4().to_string();
         if legacy {
             sqlx::query("INSERT INTO chat_conversations(id,title,created_at,updated_at) VALUES(?,'old',1,1)")
                 .bind(&old_id).execute(&mut connection).await.unwrap();
         }
-        sqlx::raw_sql(super::ORIGIN_MIGRATION).execute(&mut connection).await.unwrap();
+        sqlx::raw_sql(super::ORIGIN_MIGRATION)
+            .execute(&mut connection)
+            .await
+            .unwrap();
+        sqlx::raw_sql(crate::MIGRATION_CREATE_CHAT_ASSETS_SQL)
+            .execute(&mut connection)
+            .await
+            .unwrap();
         connection.close().await.unwrap();
         let repo = Repository::open(&path).await.unwrap();
         if legacy {
-            assert_eq!(repo.get(&old_id).await.unwrap().conversation.origin, ConversationOrigin::Workspace);
+            assert_eq!(
+                repo.get(&old_id).await.unwrap().conversation.origin,
+                ConversationOrigin::Workspace
+            );
         }
-        let default: CreateInput = serde_json::from_value(serde_json::json!({"title":null})).unwrap();
+        let default: CreateInput =
+            serde_json::from_value(serde_json::json!({"title":null})).unwrap();
         assert_eq!(default.origin, ConversationOrigin::Workspace);
-        assert!(serde_json::from_value::<CreateInput>(serde_json::json!({"origin":"invalid"})).is_err());
-        let c = repo.create(CreateInput { title: None, origin: ConversationOrigin::QuickChat }).await.unwrap().conversation;
-        let mut raw = serde_json::json!({"conversationId":c.id,"revision":c.revision,"origin":"workspace"});
+        assert!(
+            serde_json::from_value::<CreateInput>(serde_json::json!({"origin":"invalid"})).is_err()
+        );
+        let c = repo
+            .create(CreateInput {
+                title: None,
+                origin: ConversationOrigin::QuickChat,
+            })
+            .await
+            .unwrap()
+            .conversation;
+        let mut raw =
+            serde_json::json!({"conversationId":c.id,"revision":c.revision,"origin":"workspace"});
         assert!(serde_json::from_value::<UpdateInput>(raw.take()).is_err());
-        let sidebar = repo.create(CreateInput { title: None, origin: ConversationOrigin::Sidebar }).await.unwrap().conversation;
+        let sidebar = repo
+            .create(CreateInput {
+                title: None,
+                origin: ConversationOrigin::Sidebar,
+            })
+            .await
+            .unwrap()
+            .conversation;
         repo.pool.close().await;
         let repo = Repository::open(&path).await.unwrap();
-        assert_eq!(repo.get(&c.id).await.unwrap().conversation.origin, ConversationOrigin::QuickChat);
-        assert_eq!(repo.get(&sidebar.id).await.unwrap().conversation.origin, ConversationOrigin::Sidebar);
+        assert_eq!(
+            repo.get(&c.id).await.unwrap().conversation.origin,
+            ConversationOrigin::QuickChat
+        );
+        assert_eq!(
+            repo.get(&sidebar.id).await.unwrap().conversation.origin,
+            ConversationOrigin::Sidebar
+        );
         assert!(sqlx::query("INSERT INTO chat_conversations(id,title,origin,created_at,updated_at) VALUES(?,'','invalid',0,0)")
             .bind(uuid::Uuid::new_v4().to_string()).execute(&repo.pool).await.is_err());
     }

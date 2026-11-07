@@ -1,6 +1,6 @@
 import type { TerminalNavigationEntry } from "../lib/terminalNavigationModel";
 
-export type TerminalNavigationGroups = Record<"recent" | "currentWork" | "other", readonly TerminalNavigationEntry[]>;
+export type TerminalNavigationGroups = Record<"recent" | "other", readonly TerminalNavigationEntry[]>;
 
 /** Search is popup-local; never changes quick entries or the window's MRU. */
 export function filterNavigationGroups(groups: TerminalNavigationGroups, query: string): TerminalNavigationGroups {
@@ -14,7 +14,7 @@ export function filterNavigationGroups(groups: TerminalNavigationGroups, query: 
       entry.worktree?.branch, entry.worktree?.path].filter(Boolean).join(" ").toLowerCase().replace(/\\/g, "/");
     return terms.every((term) => text.includes(term));
   });
-  return { recent: filter(groups.recent), currentWork: filter(groups.currentWork), other: filter(groups.other) };
+  return { recent: filter(groups.recent), other: filter(groups.other) };
 }
 
 export function navigationResultIndex(index: number, key: string, length: number): number {
@@ -22,10 +22,4 @@ export function navigationResultIndex(index: number, key: string, length: number
   if (key === "Home") return 0;
   if (key === "End") return length - 1;
   return (Math.max(-1, Math.min(index, length - 1)) + (key === "ArrowUp" ? -1 : 1) + length) % length;
-}
-
-/** Only visible members may participate; stale/outside selection never becomes clear-all. */
-export function selectedNavigationMembers(entries: readonly TerminalNavigationEntry[], selectedIds: readonly string[]): string[] {
-  const selected = new Set(selectedIds);
-  return entries.filter((entry) => entry.inCurrentWork && selected.has(entry.id)).map((entry) => entry.id);
 }

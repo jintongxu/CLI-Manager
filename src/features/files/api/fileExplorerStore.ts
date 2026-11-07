@@ -14,7 +14,7 @@ import type {
 } from "../../../shared/types/index";
 import { logError, recordCrashActivity } from "../../../shared/platform/logger";
 import { translateCurrent } from "../../../shared/i18n/index";
-import { isSameProjectFileContext, isSameProjectFileLocation } from "../../terminal/api/terminalProject";
+import { isSameProjectFileContext } from "../../terminal/api/terminalProject";
 import { projectSupportsCapability } from "../../projects/api/projectCapabilities";
 import { activateProjectFileSurface } from "../../git/api/gitDiffWorkspaceStore";
 import { isFileExplorerIgnoreCaseInsensitive } from "../lib/fileExplorerIgnore";
@@ -36,6 +36,9 @@ import {
   type SshRemoteFileContext,
   type SshRemoteFileOperationOptions,
 } from "../../remote/api/sshRemoteFiles";
+
+import { createFileOpenIntents, openPreviewBuffer, isSameEditorFileLocation as isSameProjectFileLocation, type FileOpenOptions } from "../lib/fileEditorPreview";
+export type { FileOpenOptions } from "../lib/fileEditorPreview";
 
 type ClipboardMode = "copy" | "move";
 type FileEntryKind = "file" | "directory";
@@ -62,6 +65,8 @@ interface NativeClipboardSnapshot {
 }
 
 export interface ActiveProjectFile {
+  /** Transient editor tab; undefined/false means pinned (legacy default). */
+  isPreview?: boolean;
   path: string;
   name: string;
   previewKind: ProjectFilePreviewKind;
@@ -117,7 +122,7 @@ interface FileSearchNavigationTarget {
   source: "search" | "terminal";
 }
 
-interface ProjectFileEditorWorkspace {
+export interface ProjectFileEditorWorkspace {
   project: Project;
   openFiles: ActiveProjectFile[];
   activeFilePath: string | null;
@@ -165,8 +170,9 @@ interface FileExplorerStore {
   collapseDir: (path: string) => void;
   setSearchMode: (mode: ProjectFileSearchMode) => void;
   setSearchQuery: (query: string) => Promise<void>;
-  openFile: (entry: ProjectFileEntry) => Promise<void>;
-  openFileAtSearchMatch: (match: ProjectFileContentMatch) => Promise<void>;
+  openFile: (entry: ProjectFileEntry, options?: FileOpenOptions) => Promise<void>;
+  pinFile: (path: string) => void;
+  openFileAtSearchMatch: (match: ProjectFileContentMatch, options?: FileOpenOptions) => Promise<void>;
   revealPath: (path: string, options?: { lineNumber?: number; columnNumber?: number }) => Promise<boolean>;
   clearSearchNavigationTarget: () => void;
   setActiveFilePath: (path: string) => void;
@@ -882,7 +888,10 @@ async function performFileBatch(
   }
 }
 
-export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
+export const useFileExplorerStore = create<FileExplorerStore>((set, get) => {
+  const fileOpenIntents = createFileOpenIntents();
+  let navigationRevision = 0;
+  return ({
   project: null,
   remoteFileContext: null,
   tree: [],
@@ -924,6 +933,7 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
       return;
     }
 
+    fileOpenIntents.invalidate();
     const requestSeq = ++openProjectRequestSeq;
     const previousState = get();
     const previousRemoteFileContext = previousState.remoteFileContext;
@@ -992,6 +1002,7 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
   },
 
   closeProject: () => {
+    fileOpenIntents.invalidate();
     openProjectRequestSeq += 1;
     const currentState = get();
     const remoteFileContext = currentState.remoteFileContext;
@@ -1040,6 +1051,7 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
   },
 
   clearProjectEditorWorkspaces: (projectId) => {
+    fileOpenIntents.clearProject(projectId);
     set((state) => ({
       editorWorkspaces: removeProjectEditorWorkspaces(state.editorWorkspaces, projectId),
       ...(state.project?.id === projectId ? {
@@ -1047,6 +1059,7 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
         activeFilePath: null,
         activeFile: null,
         searchNavigationTarget: null,
+        loading: false,
       } : {}),
     }));
   },
@@ -1171,7 +1184,7 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
         }
 
         const { file: refreshedFile } = await loadProjectFile(project, latestEntry, remoteFileContext, options);
-        nextOpenFiles.push(refreshedFile);
+        nextOpenFiles.push({ ...refreshedFile, isPreview: file.isPreview });
       }
 
       const currentState = get();
@@ -1371,9 +1384,12 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
     }, SEARCH_DEBOUNCE_MS);
   },
 
-  openFile: async (entry) => {
+  openFile: async (entry, options) => {
+    navigationRevision += 1;
     const project = get().project;
     if (!project || entry.kind !== "file") return;
+    const request = fileOpenIntents.begin(project, entry.path, options);
+    const projectRevision = openProjectRequestSeq;
     activateProjectFileSurface(project);
     recordCrashActivity("file.preview_open", {
       projectId: project.id,
@@ -1385,49 +1401,71 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
     });
     const existing = get().openFiles.find((file) => file.path === entry.path);
     if (existing) {
-      set({ activeFilePath: existing.path, activeFile: existing });
+      if (request.pinned) get().pinFile(entry.path);
+      const activeFile = get().openFiles.find((file) => file.path === entry.path)!;
+      set({ loading: false, activeFilePath: activeFile.path, activeFile, searchNavigationTarget: null });
       return;
     }
 
     const remoteFileContext = get().remoteFileContext;
-    set({ loading: true });
+    if (project.environment_type === "ssh" && !remoteFileContext) return;
+    set({ loading: true, searchNavigationTarget: null });
+    const isCurrent = () => fileOpenIntents.isCurrent(request) && projectRevision === openProjectRequestSeq;
     try {
       const { file, errorMessage } = await loadProjectFile(project, entry, remoteFileContext);
       set((state) => {
+        if (!request.isValid()) return state;
+        const current = isCurrent();
+        // Superseded previews have no durable tab intent. Pinned opens may still be parked.
+        if (!current && !request.pinned) return state;
         if (isSameProjectFileLocation(state.project, project)) {
-          const openFiles = state.openFiles.some((item) => item.path === file.path)
-            ? state.openFiles
-            : [...state.openFiles, file];
-          const activeFile = openFiles.find((item) => item.path === file.path) ?? file;
-          return { loading: false, openFiles, activeFilePath: activeFile.path, activeFile };
+          const openFiles = openPreviewBuffer(state.openFiles, file, current && !request.pinned);
+          const activeFile = current
+            ? openFiles.find((item) => item.path === file.path) ?? null
+            : openFiles.find((item) => item.path === state.activeFilePath) ?? null;
+          return {
+            openFiles, activeFile, activeFilePath: activeFile?.path ?? null,
+            ...(current ? { loading: false } : {}),
+          };
         }
         const workspace = findEditorWorkspace(state.editorWorkspaces, project);
         if (!workspace) return state;
-        const openFiles = workspace.openFiles.some((item) => item.path === file.path)
-          ? workspace.openFiles
-          : [...workspace.openFiles, file];
+        const openFiles = openPreviewBuffer(workspace.openFiles, file, false);
         return {
-          editorWorkspaces: upsertEditorWorkspace(state.editorWorkspaces, project, openFiles, file.path),
+          editorWorkspaces: upsertEditorWorkspace(state.editorWorkspaces, project, openFiles, workspace.activeFilePath),
         };
       });
-      if (errorMessage) {
+      if (errorMessage && isCurrent()) {
         toast.warning(translateCurrent("files.toast.previewFailed"), { description: errorMessage });
       }
     } catch (err) {
-      if (isSameProjectFileLocation(get().project, project)) set({ loading: false });
+      if (!isCurrent()) return;
+      set({ loading: false });
       throw err;
     }
   },
 
-  openFileAtSearchMatch: async (match) => {
+  pinFile: (path) => {
+    fileOpenIntents.pin(get().project, path);
+    set((state) => {
+      const openFiles = state.openFiles.map((file) => file.path === path && file.isPreview
+        ? { ...file, isPreview: false } : file);
+      return {
+        openFiles, activeFile: openFiles.find((file) => file.path === state.activeFilePath) ?? null,
+        ...(openFiles.some((file) => file.path === path) ? { loading: false } : {}),
+      };
+    });
+  },
+
+  openFileAtSearchMatch: async (match, options) => {
     const project = get().project;
     await get().openFile({
       name: match.name,
       path: match.path,
       kind: "file",
       sizeBytes: 0,
-    });
-    if (!isSameProjectFileLocation(get().project, project)) return;
+    }, options);
+    if (!isSameProjectFileLocation(get().project, project) || get().activeFilePath !== match.path) return;
     set({
       searchNavigationTarget: {
         path: match.path,
@@ -1439,6 +1477,9 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
   },
 
   revealPath: async (path, options) => {
+    const revision = ++navigationRevision;
+    const projectRevision = openProjectRequestSeq;
+    const isCurrent = () => revision === navigationRevision && projectRevision === openProjectRequestSeq;
     const project = get().project;
     if (!project) return false;
     const normalizedPath = path.replace(/\\/g, "/").replace(/^\/+|\/+$/gu, "");
@@ -1470,6 +1511,7 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
     for (const segment of normalizedPath.split("/")) {
       directoryPathsToExpand.add(parentPath);
       const children = await resolveChildren(parentPath);
+      if (!isCurrent()) return false;
       const currentPath = parentPath ? `${parentPath}/${segment}` : segment;
       target = children.find((entry) => entry.path === currentPath) ?? null;
       if (!target) return false;
@@ -1482,7 +1524,7 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
       await resolveChildren(target.path);
     }
 
-    if (!isSameProjectFileLocation(get().project, project)) return false;
+    if (!isCurrent() || !isSameProjectFileLocation(get().project, project)) return false;
 
     set((state) => ({
       tree: loadedDirs.reduce(
@@ -1503,7 +1545,8 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
 
     if (target.kind === "directory") return true;
     await get().openFile(target);
-    if (options?.lineNumber && isSameProjectFileLocation(get().project, project)) {
+    if (projectRevision !== openProjectRequestSeq || get().activeFilePath !== target.path) return false;
+    if (options?.lineNumber && isSameProjectFileLocation(get().project, project) && get().activeFilePath === target.path) {
       set({
         searchNavigationTarget: {
           path: target.path,
@@ -1521,16 +1564,21 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
   },
 
   setActiveFilePath: (path) => {
+    navigationRevision += 1;
     const file = get().openFiles.find((item) => item.path === path) ?? null;
     if (!file) return;
-    set({ activeFilePath: file.path, activeFile: file });
+    fileOpenIntents.invalidate();
+    set({ loading: false, activeFilePath: file.path, activeFile: file });
   },
 
   closeFile: (path) => {
+    navigationRevision += 1;
+    fileOpenIntents.close(get().project, path);
     const files = get().openFiles;
     const remaining = files.filter((file) => file.path !== path);
     const fallback = get().activeFilePath === path ? selectFallbackFile(remaining, path) : get().activeFile;
     set({
+      loading: false,
       openFiles: remaining,
       activeFilePath: fallback?.path ?? null,
       activeFile: fallback,
@@ -1540,11 +1588,12 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
   setActiveContent: (content) => {
     const activePath = get().activeFilePath;
     if (!activePath) return;
+    if (get().activeFile?.content !== content) fileOpenIntents.pin(get().project, activePath);
     const files = get().openFiles.map((file) => (
-      file.path === activePath ? { ...file, content } : file
+      file.path === activePath ? { ...file, content, isPreview: file.content !== content ? false : file.isPreview } : file
     ));
     const activeFile = files.find((file) => file.path === activePath) ?? null;
-    set({ openFiles: files, activeFile });
+    set({ openFiles: files, activeFile, ...(get().activeFile?.content !== content ? { loading: false } : {}) });
   },
 
   saveFile: async (path) => {
@@ -1554,17 +1603,36 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
     const content = file.content.length > 0 && !file.content.endsWith("\n")
       ? `${file.content}\n`
       : file.content;
+    const markSaved = (files: ActiveProjectFile[]) => files.map((candidate) => (
+      candidate.path === file.path ? {
+        ...candidate,
+        content: candidate.content === file.content ? content : candidate.content,
+        savedContent: content,
+      } : candidate
+    ));
+    const applySaved = () => set((state) => {
+      if (isSameProjectFileLocation(state.project, project)) {
+        const openFiles = markSaved(state.openFiles);
+        const activeFile = openFiles.find((candidate) => candidate.path === state.activeFilePath) ?? null;
+        return { openFiles, activeFile };
+      }
+      const workspace = findEditorWorkspace(state.editorWorkspaces, project);
+      if (!workspace) return state;
+      return {
+        editorWorkspaces: upsertEditorWorkspace(
+          state.editorWorkspaces,
+          project,
+          markSaved(workspace.openFiles),
+          workspace.activeFilePath
+        ),
+      };
+    });
     if (project.environment_type === "ssh") {
       const context = get().remoteFileContext;
       if (!context || !file.encoding) return;
       try {
         await sshRemoteWriteFile(context, file.path, content);
-        set((state) => {
-          const openFiles = state.openFiles.map((candidate) => candidate.path === file.path
-            ? { ...candidate, content, savedContent: content, sizeBytes: new TextEncoder().encode(content).byteLength }
-            : candidate);
-          return { openFiles, activeFile: openFiles.find((candidate) => candidate.path === state.activeFilePath) ?? null };
-        });
+        applySaved();
         toast.success(translateCurrent("files.toast.saved"));
       } catch (err) {
         logError("Failed to save remote file", err);
@@ -1589,26 +1657,7 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
       });
       throw err;
     }
-    const markSaved = (files: ActiveProjectFile[]) => files.map((candidate) => (
-      candidate.path === file.path ? { ...candidate, content, savedContent: content } : candidate
-    ));
-    set((state) => {
-      if (isSameProjectFileLocation(state.project, project)) {
-        const openFiles = markSaved(state.openFiles);
-        const activeFile = openFiles.find((candidate) => candidate.path === state.activeFilePath) ?? null;
-        return { openFiles, activeFile };
-      }
-      const workspace = findEditorWorkspace(state.editorWorkspaces, project);
-      if (!workspace) return state;
-      return {
-        editorWorkspaces: upsertEditorWorkspace(
-          state.editorWorkspaces,
-          project,
-          markSaved(workspace.openFiles),
-          workspace.activeFilePath
-        ),
-      };
-    });
+    applySaved();
     if (isSameProjectFileLocation(get().project, project)) {
       try {
         await get().refreshGitChanges();
@@ -1678,6 +1727,7 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
 
   deleteEntries: async (entries, project) => {
     if (project.environment_type !== "ssh") return performFileBatch(project, entries, "delete");
+    if (!isSameProjectFileContext(get().project, project)) throw new Error("file_operation_context_changed");
     const context = get().remoteFileContext;
     if (!context) throw new Error("remote_file_context_missing");
     if (get().mutationBusy) throw new Error("file_operation_busy");
@@ -1779,7 +1829,7 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
   },
   readPasteClipboard: async () => {
     const project = get().project;
-    if (!project) return null;
+    if (!project || project.environment_type === "ssh") return null;
     if (clipboardReadBusy || get().mutationBusy) throw new Error("file_operation_busy");
     const generation = openProjectRequestSeq;
     const internal = get().clipboard;
@@ -1803,15 +1853,13 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => ({
         native.entries.map((entry) => [entry.path, entry.dataBase64 === null
           ? { sourcePath: entry.path } : { dataBase64: entry.dataBase64 }]),
       );
-      if (project.environment_type === "ssh" && native.entries.some((entry) => entry.dataBase64 !== null)) {
-        throw new Error("remote_project_paste_unsupported");
-      }
       return { id: ++fileClipboardSequence, mode: "copy", project: { ...project }, generation, entries, importSources };
     } finally {
       clipboardReadBusy = false;
     }
   },
-}));
+});
+});
 
 export function isProjectFileDirty(): boolean {
   return useFileExplorerStore.getState().openFiles.some((file) => file.content !== file.savedContent);

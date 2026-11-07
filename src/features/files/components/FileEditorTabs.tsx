@@ -1,5 +1,5 @@
 import { useI18n } from "../../../shared/i18n/index";
-import type { ActiveProjectFile } from "../api/fileExplorerStore";
+import { useFileExplorerStore, type ActiveProjectFile } from "../api/fileExplorerStore";
 import {
   useGitDiffWorkspaceStore,
   type GitDiffWorkspaceContext,
@@ -30,6 +30,7 @@ export function FileEditorTabs({
   onCloseFiles,
 }: FileEditorTabsProps) {
   const { t } = useI18n();
+  const pinFile = useFileExplorerStore((state) => state.pinFile);
   const activateDiffTab = useGitDiffWorkspaceStore((state) => state.activateTab);
   if (files.length === 0 && diffWorkspace.tabs.length === 0) return null;
 
@@ -46,13 +47,15 @@ export function FileEditorTabs({
             <ContextMenuTrigger asChild>
               <div
                 className="ui-file-editor-tab group flex h-7 max-w-[180px] shrink-0 items-center rounded-t text-[11px] text-on-surface-variant hover:bg-surface-container-high"
+                data-preview={file.isPreview ? "true" : "false"}
+                onDoubleClick={() => pinFile(file.path)}
                 data-active={active ? "true" : "false"}
                 style={active ? { background: "var(--surface-container)", color: "var(--on-surface)" } : undefined}
                 title={file.path}
               >
                 <button
                   type="button"
-                  className="min-w-0 flex-1 truncate px-2 text-left"
+                  className={`min-w-0 flex-1 truncate px-2 text-left${file.isPreview ? " italic" : ""}`}
                   onClick={() => {
                     if (diffContext) activateDiffTab(diffContext.key, null);
                     onActivateFile(file.path);

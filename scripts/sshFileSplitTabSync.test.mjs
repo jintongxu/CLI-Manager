@@ -25,23 +25,27 @@ test('ChatReasoningPill component structure, labels, and icon', () => {
   assert.match(en, /"chat\.panel\.reasoningPrefix": "Think"/);
 });
 
-test('useCurrentWorkSessionController splits SSH file editor to the right of active SSH terminal', () => {
-  const source = readFileSync('src/features/terminal/hooks/useCurrentWorkSessionController.ts', 'utf8');
-  assert.match(source, /CURRENT_WORK_SESSION_CREATED_EVENT/);
-  assert.match(source, /isSshFileEditor/);
-  assert.match(source, /isCurrentActiveSsh/);
-  assert.match(source, /splitSessionToEdge\(sessionId, targetPaneId, "right"\)/);
+test('SSH file opening ensures companion identity without replacing main ownership', () => {
+  const source = readFileSync('src/features/terminal/store/terminalStore.ts', 'utf8');
+  const editor = source.slice(source.indexOf('openFileEditorPane:'), source.indexOf('openSyncedHistoryPane:'));
+  assert.match(editor, /kind: "file-editor"/);
+  assert.doesNotMatch(editor, /createTerminalWorkspan|buildWorkspanMirror|setActive/);
+  assert.match(editor, /\.show\(editorSessionId, project, mode\)/);
+  assert.doesNotMatch(editor, /dispatchCurrentWork|splitSessionToEdge/);
+  const controller = readFileSync('src/features/terminal/hooks/useTerminalTabsController.tsx', 'utf8');
+  assert.match(controller, /useTerminalFileNavigation/);
+  assert.doesNotMatch(controller, /useSshFileEditorCurrentWork|useCurrentWorkSessionController/);
 });
 
-test('CurrentWorkTabBar renders file icon, active file title, dirty marker and SSH host context', () => {
-  const source = readFileSync('src/features/terminal/components/CurrentWorkTabBar.tsx', 'utf8');
-  assert.match(source, /FileText/);
-  assert.match(source, /useFileExplorerStore/);
-  assert.match(source, /useSshHostStore/);
-  assert.match(source, /state\.project\?\.id === session\.projectId/);
-  assert.match(source, /return file \? `\$\{file\.name\}\$\{file\.content !== file\.savedContent \? " \*" : ""\}` : null;/);
-  assert.match(source, /`SSH: \$\{sshHostLabel\}`/);
-  assert.match(source, /<FileText size=\{12\}/);
+test('canonical split panes exclude companion renderer and terminal tab identity', () => {
+  const tabs = readFileSync('src/features/terminal/components/PaneTabBar.tsx', 'utf8');
+  assert.match(tabs, /session.kind !== "file-editor"/);
+  const leaf = readFileSync('src/features/terminal/components/PaneLeafView.tsx', 'utf8');
+  assert.match(leaf, /session.kind !== "file-editor"/);
+  assert.doesNotMatch(leaf, /<FileEditorPane/);
+  assert.match(leaf, /session.kind === "subagent-transcript"/);
+  assert.match(leaf, /<XTermTerminal/);
+  assert.doesNotMatch(leaf, /currentWorkPortalTargets|createPortal/);
 });
 
 test('useFileEditorController triggers onClose when remaining files count is 0 and no diff tabs exist', () => {

@@ -1,3 +1,4 @@
+import { isFileCompanionFocused } from "../api/fileCompanionFocus";
 import { useTerminalSelectionActions } from "./useTerminalSelectionActions";
 import { beginTerminalContinuation, canAcceptTerminalInput, captureTerminalInputPermission, disposeTerminalContinuation, invalidateTerminalFit, isTerminalContinuationHydrated, markTerminalContinuation } from "../../../shared/lib/terminalContinuation";
 import { createTerminalSnapshotLifecycle } from "../lib/terminalSnapshotLifecycle";
@@ -165,6 +166,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
   const hiddenForThisSession = useTerminalStore((s) => s.hiddenBackgroundSessionIds.has(sessionId));
   const terminalSession = useTerminalStore((state) => state.sessions.find((item) => item.id === sessionId) ?? null);
   const terminalSessionStatus = useTerminalStore((state) => state.sessionStatuses[sessionId] ?? null);
+  const isDormantSession = useTerminalStore((state) => state.dormantRestoredSessionIds.has(sessionId));
   const terminalProject = useProjectStore((state) => (
     terminalSession?.projectId
       ? state.projects.find((item) => item.id === terminalSession.projectId) ?? null
@@ -668,6 +670,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
     terminal.write(shouldHideCodexCursor(terminal) ? "\x1b[?25l" : "\x1b[?25h");
   };
   const focusTerminalWithCodexCursorPolicy = (terminal: Terminal) => {
+    if (isFileCompanionFocused()) return;
     terminal.focus();
     if (shouldHideCodexCursor(terminal)) terminal.write("\x1b[?25l");
   };
@@ -940,7 +943,8 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
   }, [terminalSessionStatus]);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    // Dormant metadata has no attach-ready PTY; materialization publishes it first.
+    if (isDormantSession || !containerRef.current) return;
     codexSessionDetectedRef.current = isCodexTerminalContext(getSessionToolContext());
     grokSessionDetectedRef.current = false;
     tuiColorSync.reset();
@@ -1834,7 +1838,7 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
       searchAddonRef.current = null;
       setIsScrolledAwayFromBottom(false);
     };
-  }, [sessionId, tuiColorSync]);
+  }, [sessionId, tuiColorSync, isDormantSession]);
 
   const backgroundOverlayColor = getTerminalBackgroundOverlayColor(terminalTheme);
   const showLocalBackgroundImage = isTransparent && !workspaceBackground.requested && assetUrl !== null;
@@ -1843,7 +1847,6 @@ export function useXTermController({ sessionId, isActive = true, isVisible = tru
   const terminalForegroundColor = normalizeHexColor(terminalTheme.foreground, "#d8dee9");
   const terminalBackgroundColor = normalizeHexColor(terminalTheme.background, backgroundColor);
   // 休眠会话尚无 PTY，颜色写入必然失败；实体化后依赖翻转自动补发。
-  const isDormantSession = useTerminalStore((state) => state.dormantRestoredSessionIds.has(sessionId));
   useEffect(() => {
     if (isDormantSession) return;
     terminalProcessManager.setTerminalColors(sessionId, {

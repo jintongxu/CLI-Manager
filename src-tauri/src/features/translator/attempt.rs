@@ -2,30 +2,67 @@
 use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Identity { pub generation: u64, pub revision: u64, pub attempt: u64 }
+pub struct Identity {
+    pub generation: u64,
+    pub revision: u64,
+    pub attempt: u64,
+}
 #[derive(Default)]
-pub struct Authority { revision: u64, next: u64, active: Option<Identity>, accepted: bool }
+pub struct Authority {
+    revision: u64,
+    next: u64,
+    active: Option<Identity>,
+    accepted: bool,
+}
 impl Authority {
-    pub const fn new() -> Self { Self { revision: 0, next: 0, active: None, accepted: false } }
-    pub fn has_started(&self) -> bool { self.next > 0 }
+    pub const fn new() -> Self {
+        Self {
+            revision: 0,
+            next: 0,
+            active: None,
+            accepted: false,
+        }
+    }
+    pub fn has_started(&self) -> bool {
+        self.next > 0
+    }
     pub fn invalidate(&mut self, revision: u64) -> Result<(), String> {
-        if revision < self.revision { return Err("translator_obsolete".into()); }
-        if revision > self.revision { self.revision = revision; self.active = None; self.accepted = false; }
+        if revision < self.revision {
+            return Err("translator_obsolete".into());
+        }
+        if revision > self.revision {
+            self.revision = revision;
+            self.active = None;
+            self.accepted = false;
+        }
         Ok(())
     }
     pub fn begin(&mut self, generation: u64, revision: u64) -> Result<Identity, String> {
         self.invalidate(revision)?;
-        if self.active.is_some() && !self.accepted { return Err("translator_busy".into()); }
+        if self.active.is_some() && !self.accepted {
+            return Err("translator_busy".into());
+        }
         self.next += 1;
-        let id = Identity { generation, revision, attempt: self.next };
-        self.active = Some(id); self.accepted = false;
+        let id = Identity {
+            generation,
+            revision,
+            attempt: self.next,
+        };
+        self.active = Some(id);
+        self.accepted = false;
         Ok(id)
     }
     pub fn validate(&self, id: Identity) -> Result<(), String> {
-        if self.active == Some(id) && !self.accepted { Ok(()) } else { Err("translator_obsolete".into()) }
+        if self.active == Some(id) && !self.accepted {
+            Ok(())
+        } else {
+            Err("translator_obsolete".into())
+        }
     }
     pub fn accept(&mut self, id: Identity) -> Result<(), String> {
-        self.validate(id)?; self.accepted = true; Ok(())
+        self.validate(id)?;
+        self.accepted = true;
+        Ok(())
     }
 }
 /// Latest accepted text result; attempt identity remains native-owned.

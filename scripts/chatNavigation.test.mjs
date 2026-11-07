@@ -73,23 +73,20 @@ test('primary navigation has explicit accessible selection and independent globa
   assert.deepEqual(calls, ['projects', 'settings']);
 });
 
-test('ordinary and Current Work portal terminal/file/transcript bodies are inactive and hidden in chat', () => {
+test('canonical terminal/file/transcript owners stay inactive and hidden in chat without portals', () => {
   const portals = [];
   const { PaneLeafView } = load('src/features/terminal/components/PaneLeafView.tsx', {
     'react-dom': { createPortal: (node, target) => { portals.push(target); return node; } },
     '../../../shared/lib/terminalPaneMarker': { resolveTerminalPaneMarker: () => null },
     '../browser/TerminalCliContext': { createTerminalCliContext: () => ({}), isPiTerminalContext: () => false },
   });
-  for (const kind of ['pty', 'file-editor', 'subagent-transcript']) for (const portal of [false, true]) {
+  for (const kind of ['pty', 'file-editor', 'subagent-transcript']) {
     const calls = [];
     const session = { id: 'a', kind };
-    const target = {};
     const props = {
       workspaceVisible: false, pane: { id: 'p', sessionIds: ['a'], activeSessionId: 'a' },
       sessions: [session], projects: [], worktrees: [], allPanes: [], activeSessionId: 'a',
       paneMarkerSettings: {}, hookNotifications: {}, isLayoutVisible: true, historyActive: false,
-      currentWorkSessionIds: ['a'], currentWorkPortalTargets: portal ? new Map([['a', target]]) : undefined,
-      currentWorkVisibleSessionIds: new Set(['a']), currentWorkActiveSessionId: 'a',
       onActivateSession: id => calls.push(id),
     };
     const tree = PaneLeafView(props);
@@ -101,7 +98,8 @@ test('ordinary and Current Work portal terminal/file/transcript bodies are inact
     for (const n of all) { n.props.onFocusCapture?.(); n.props.onPointerDownCapture?.(); }
     assert.equal(calls.length, 0);
     assert.ok(all.some(n => n.props.style?.display === 'none'));
-    if (portal) assert.equal(portals.at(-1), target, 'keep portal target identity while hidden');
+    assert.equal(portals.length, 0, 'canonical pane owns each body directly');
+    assert.equal(all.filter(n => 'isActive' in n.props || 'isVisible' in n.props).length, 1);
   }
 });
 
@@ -117,7 +115,7 @@ test('chat blocks terminal keyboard/current-work/sidebar/fullscreen/history and 
     './CommandPalette': { useCommandPaletteStore: { getState: () => ({ toggle: () => palette++ }) } },
     '../../terminal/state': { useTerminalStore: { getState: () => ({ sessions: [{ id: 'a' }, { id: 'b' }],
       getNextSessionIdForShortcut: () => 'b', setActive: () => switched++ }) } },
-    '../../terminal/api/currentWorkEvents': { dispatchCurrentWorkAction: () => writes++ },
+    '../../terminal/api/currentWorkEvents': { dispatchCurrentWorkAction: () => assert.fail('legacy authority must not be called') },
     '../../history/index': { useHistoryStore: { getState: () => { writes++; return {}; } } },
   }, { window });
   const render = visible => { refIndex = 0; useKeyboardShortcuts({ workspaceVisible: visible,
@@ -135,23 +133,28 @@ test('chat blocks terminal keyboard/current-work/sidebar/fullscreen/history and 
   assert.equal(switched, 1, 'latest visibility ref re-enables existing listener');
 });
 
-test('explicit resource/current-work navigation returns projects, passive store changes do not', () => {
-  const listeners = new Map(); let projectRoutes = 0; let terminalRoutes = 0;
+test('explicit canonical resource navigation returns projects without legacy action listeners', () => {
+  const listeners = new Map(); let projectRoutes = 0; let terminalRoutes = 0; const activated = [];
+  const TERMINAL_SESSION_TARGET_EVENT = 'cli-manager:terminal-session-target';
   const { useTerminalNavigationListeners } = load('src/features/terminal/hooks/useTerminalNavigationListeners.ts', {
     react: { useEffect: fn => fn() },
+    '../api/terminalNavigationEvents': { TERMINAL_SESSION_TARGET_EVENT },
     '../../workspace/api/primarySpaceState': { showProjectSpace: () => projectRoutes++ },
-    '../api/currentWorkEvents': { CURRENT_WORK_ACTION_EVENT: 'action', CURRENT_WORK_TARGET_EVENT: 'target' },
     '../../history/index': { useHistoryStore: { getState: () => ({ closeHistory() {} }) } },
     '../state': { useTerminalStore: { getState: () => ({ sessions: [{ id: 'a' }] }) } },
-    '../lib/terminalResourceNavigation': { TERMINAL_RESOURCE_TARGET_EVENT: 'resource', navigateTerminalResource: (_, o) => o.showTerminal() },
+    '../lib/terminalResourceNavigation': { ...load('src/features/terminal/lib/terminalResourceNavigation.ts'), TERMINAL_RESOURCE_TARGET_EVENT: 'resource' },
   }, { window: { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener() {} } });
-  useTerminalNavigationListeners({ currentWorkMode: false, currentWorkSessionIds: [], setActive() {},
-    setActiveWorkspaceTab: () => terminalRoutes++, activateCurrentWork() {}, leaveCurrentWork() {} });
+  useTerminalNavigationListeners({ setActive: id => activated.push(id), setActiveWorkspaceTab: () => terminalRoutes++ });
   assert.equal(projectRoutes, 0);
-  listeners.get('target')({ detail: { sessionId: 'a' } });
+  assert.deepEqual([...listeners.keys()], [TERMINAL_SESSION_TARGET_EVENT, 'resource']);
+  for (const event of listeners.values()) {
+    event({ detail: { sessionId: 'missing' } }); event({ detail: {} });
+  }
+  assert.equal(projectRoutes, 0);
+  listeners.get(TERMINAL_SESSION_TARGET_EVENT)({ detail: { sessionId: 'a' } });
   listeners.get('resource')({ detail: { sessionId: 'a' } });
-  listeners.get('action')({ detail: 'toggle-view' });
-  assert.equal(projectRoutes, 3); assert.equal(terminalRoutes, 2);
+  assert.deepEqual(activated, ['a', 'a']);
+  assert.equal(projectRoutes, 2); assert.equal(terminalRoutes, 2);
 });
 
 test('notification target activation routes only after validating target; arrival registration has no route', async () => {
@@ -165,12 +168,12 @@ test('notification target activation routes only after validating target; arriva
     useHistoryStore: { getState: () => ({ closeHistory() {} }) },
     useSettingsStore: { getState: () => ({ projectScopedTerminalViewEnabled: false }) },
     toast: { warning: () => warning++ }, translateCurrent: key => key,
-    dispatchCurrentWorkTarget: () => dispatched++, isMainWindowFocused: async () => true,
+    dispatchTerminalSessionTarget: () => dispatched++, isMainWindowFocused: async () => true,
   };
   const code = ts.transpileModule(`const activate = ${callback};`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   const activate = vm.runInNewContext(`${code}\nactivate`, globals);
   await activate('missing'); assert.equal(space, 'chat'); assert.equal(warning, 1);
-  await activate('a'); assert.equal(space, 'projects'); assert.equal(active, 'a'); assert.equal(dispatched, 1);
+  await activate('a'); assert.equal(space, 'projects'); assert.equal(active, null); assert.equal(dispatched, 1);
   const passive = source.slice(source.indexOf('const unlistenHook ='), source.indexOf('const unlistenSystemNotification ='));
   assert.doesNotMatch(passive, /showProjectSpace\(|setSpace\(/);
 });
@@ -224,21 +227,11 @@ test('App composition keeps TerminalTabs at the same sibling identity across com
   assert.equal(paths.size, 1);
 });
 
-test('visibility invalidates memoized panes and Current Work targets retain registration while inert', () => {
+test('visibility invalidates memoized canonical panes without parallel target registration', () => {
   const { arePaneLeafViewPropsEqual } = load('src/features/terminal/components/PaneLeafView.tsx');
   assert.equal(arePaneLeafViewPropsEqual({ workspaceVisible: true }, { workspaceVisible: false }), false);
-  const targets = load('src/features/terminal/components/CurrentWorkPaneTarget.tsx', {
-    '../lib/currentWorkPresentation': { formatTerminalTabContext: () => '' },
-  });
-  const registered = [];
-  const tree = targets.CurrentWorkPaneTarget({ workspaceVisible: false, paneId: 'p', session: { id: 'a' },
-    showHeader: false, active: true, registerTarget: (...args) => registered.push(args) });
-  assert.equal(tree.props.inert, true);
-  assert.equal(tree.props['data-active'], 'false');
-  const all = nodes(tree);
-  assert.equal(all.find(n => 'enabled' in n.props).props.enabled, false);
-  const target = {}; all.find(n => n.props.ref).props.ref(target);
-  assert.deepEqual(registered, [['p', target]]);
+  const source = readFileSync('src/features/terminal/components/PaneLeafView.tsx', 'utf8');
+  assert.doesNotMatch(source, /currentWorkPortalTargets|createPortal|registerTarget/);
 });
 
 test('explicit navigation source resets normally and never follows controller selection', () => {

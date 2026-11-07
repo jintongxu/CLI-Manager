@@ -6,227 +6,136 @@ import { createRequire } from 'node:module';
 import vm from 'node:vm';
 import ts from 'typescript';
 const require = createRequire(import.meta.url);
-const states = [];
-let focusCount = 0;
-let managementMode = "normal";
+const root = 'src/features/terminal/components/';
+const calls = [];
+let inputQuery = '';
 function load(path) {
   const filename = resolve(path); const exports = {};
   const code = ts.transpileModule(readFileSync(filename, 'utf8'), { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX,
   } }).outputText;
-  vm.runInNewContext(code, { exports, getComputedStyle: () => ({ getPropertyValue: name => ({ "--terminal-theme-background": "#111111", "--terminal-theme-foreground": "#eeeeee", "--terminal-theme-accent": "#6688ff" })[name] }), require: (name) => {
-    if (name === 'react') return { useId: () => 'test', useRef: () => ({ current: { focus: () => focusCount++, querySelectorAll: () => [] } }),
-      useState: (initial) => [initial === "normal" ? managementMode : initial, (value) => states.push(value)],
-      useCallback: (fn) => fn, useEffect: () => {} };
+  vm.runInNewContext(code, { exports, require: (name) => {
+    if (name === 'react') return { useId: () => 'test', useRef: () => ({ current: null }),
+      useMemo: fn => fn(), useState: initial => [typeof initial === 'string' ? inputQuery : initial, () => {}] };
     if (name === 'react/jsx-runtime') return require(name);
-    if (name.endsWith('/lib/terminalTabsModel')) return { buildTerminalTabContext: () => ({ projectColor: '#6688ff' }) };
-    if (name.endsWith('/lib/currentWorkPresentation')) return { formatTerminalTabContext: () => 'ctx' };
-    if (name.endsWith('/hooks/useCurrentWorkTabScroll')) return { useCurrentWorkTabScroll: () => ({ scrollRef: { current: null }, scrollState: { canScrollLeft: false, canScrollRight: false }, scrollTabs() {} }) };
-    if (name === '@dnd-kit/core') return { useDroppable: () => ({ setNodeRef() {}, isOver: false }) };
-    if (name === '@dnd-kit/sortable') return { useSortable: ({ id }) => ({ attributes: { 'data-sortable-id': id }, listeners: {}, setNodeRef() {}, transform: null, transition: null, isDragging: false }), SortableContext: 'SortableContext', horizontalListSortingStrategy: 'horizontal' };
-    if (name === '@dnd-kit/utilities') return { CSS: { Transform: { toString: () => undefined } } };
     if (name.includes('i18n')) return { useI18n: () => ({ t: (key) => key }) };
-    if (name.includes('/ui/')) return Object.fromEntries(['Button', 'Input', 'Select', 'Popover', 'PopoverTrigger', 'PopoverContent'].map(key => [key, key]));
+    if (name.endsWith('/state')) return { useTerminalStore: select => select({ sessionStatuses: {} }) };
+    if (name.endsWith('/hooks/useTerminalNavigation')) return { useTerminalNavigation: () => ({ entries: [], memory: { pinnedIds: [] },
+      resolveActivation: id => id === 'valid' ? { sessionId: id, unhide: true } : null,
+      recordVisit: id => calls.push(['visit', id]) }) };
+    if (name.endsWith('/api/terminalPaneTree')) return { collectPaneLeaves: () => [] };
+    if (name.endsWith('/hooks/useTerminalDrawerIntent')) return { useTerminalDrawerIntent: () => ({ anchorRef: {}, anchorProps: {}, contentProps: {}, open: false }) };
+    if (name.includes('/ui/')) return Object.fromEntries(['Button', 'Input', 'Popover', 'PopoverAnchor', 'PopoverContent'].map(key => [key, key]));
+    if (name.endsWith('/TerminalTabRow')) return { TerminalTabRow: 'TerminalTabRow' };
+    if (name.endsWith('/PaneTabBar')) return { PaneTabBar: 'PaneTabBar' };
     if (name.endsWith('.css')) return {};
-    const extension = name.includes('Panels') || name.includes('Bar') || name.includes('TabRow') || name.includes('NavigationDrawer') ? '.tsx' : '.ts';
-    return load(resolve(dirname(filename), `${name}${extension}`));
+    return load(resolve(dirname(filename), `${name}${name.includes('NavigationDrawer') || name.includes('NavigationBar') ? '.tsx' : '.ts'}`));
   } });
   return exports;
 }
-const root = 'src/features/terminal/components/';
-const model = load(`${root}terminalNavigationUiModel.ts`);
-const panels = load(`${root}TerminalNavigationPanels.tsx`);
-const bar = load(`${root}TerminalNavigationBar.tsx`);
 function nodes(tree) { return !tree || typeof tree !== 'object' ? [] : [tree, ...[tree.props?.children].flat(Infinity).flatMap(nodes)]; }
-const entry = (id, extra = {}) => ({ id, session: { id, title: id, cwd: 'C:/repo' }, project: { name: 'Alpha', path: 'C:/repo' }, worktree: { branch: 'feature', display_name: 'Tree' }, ...extra });
-const a = entry('a', { current: true, pinned: true, inCurrentWork: true }); const b = entry('b');
-const groups = { recent: [a], currentWork: [a], other: [b] };
-function callbacks() { const calls = []; return { calls, onActivate: id => calls.push(['activate', id]), onTogglePin: id => calls.push(['pin', id]), onAddToCurrentWork: id => calls.push(['add', id]), renderSessionActions: e => `menu:${e.id}` }; }
+const entry = (id, extra = {}) => ({ id, session: { id, title: id, cwd: 'C:/repo' }, current: id === 'a', ...extra });
+const entries = [entry('a'), entry('hidden', { session: { id: 'hidden', title: 'Hidden terminal', cwd: 'D:/other', tabHidden: true } })];
+const projectGroups = [{ key: 'independent', label: '', entries }];
+const drawer = load(`${root}TerminalNavigationDrawer.tsx`);
+const bar = load(`${root}TerminalNavigationBar.tsx`);
+const adapter = load(`${root}TerminalNavigationAdapter.tsx`);
+function drawerProps() { return { open: true, pinned: true, anchor: null, contentProps: {}, projectGroups, totalCount: 2,
+  onActivate: id => calls.push(['activate', id]), onClose: id => calls.push(['close', id]),
+  onCloseOthers: () => calls.push(['closeOthers']), onTogglePin: id => calls.push(['pin', id]), onOpenChange() {} }; }
 
-test('popup filtering searches metadata and deduplicates without mutating source', () => {
-  for (const query of ['alpha', 'tree', 'feature', 'c:\\repo']) assert.equal(Object.values(model.filterNavigationGroups(groups, query)).flat().length, 2);
-  assert.equal(Object.values(model.filterNavigationGroups(groups, 'missing')).flat().length, 0);
-  assert.equal(groups.currentWork.length, 1);
-});
-test('keyboard index wraps and handles empty lists', () => {
-  assert.equal(model.navigationResultIndex(0, 'ArrowUp', 2), 1);
-  assert.equal(model.navigationResultIndex(1, 'ArrowDown', 2), 0);
-  assert.equal(model.navigationResultIndex(0, 'End', 2), 1);
-  assert.equal(model.navigationResultIndex(1, 'Home', 2), 0);
-  assert.equal(model.navigationResultIndex(0, 'ArrowDown', 0), -1);
-});
-test('switcher autofocus, keyboard activation and explicit pin do not implicitly add membership', () => {
-  const cb = callbacks(); const tree = panels.TerminalNavigationSwitcher({ ...cb, groups, side: 'top' });
-  const all = nodes(tree); const popup = all.find(n => n.type === 'PopoverContent');
-  popup.props.onOpenAutoFocus({ preventDefault() {} }); assert.equal(focusCount, 1);
-  assert.equal(popup.props.side, 'top');
-  const input = all.find(n => n.type === 'Input');
-  input.props.onKeyDown({ key: 'Enter', nativeEvent: {}, preventDefault() {} });
-  assert.deepEqual(cb.calls, [['activate', 'a']]); assert.equal(states.at(-1), false);
-  all.find(n => n.type === 'Button' && n.props['aria-pressed']).props.onClick();
-  assert.deepEqual(cb.calls.at(-1), ['pin', 'a']);
+test('drawer exposes every terminal including hidden rows through activation, close and pin only', () => {
+  calls.length = 0;
+  const all = nodes(drawer.TerminalNavigationDrawer(drawerProps()));
   assert.equal(all.filter(n => n.props.role === 'option').length, 2);
-  // Radix owns Escape and close autofocus; no preventDefault override that steals trigger restoration.
-  assert.equal(popup.props.onCloseAutoFocus, undefined);
-});
-test('management has one list, explicit selection and mutually exclusive ordering', () => {
-  const cb = callbacks(); const pi = entry('pi', { inCurrentWork: true, session: { id: 'pi', title: 'Pi', kind: 'ephemeral-pi' } });
-  let orderingCalls = 0;
-  const props = { ...cb, entries: [a, b, pi], selectedIds: ['a', 'pi', 'outside', 'b'], side: 'bottom',
-    onToggleSelection: id => cb.calls.push(['select', id]), onRemoveFromCurrentWork: id => cb.calls.push(['remove', id]),
-    onRemoveSelected: ids => cb.calls.push(['batch', Array.from(ids)]), onCloseOthers() {},
-    renderOrderingSurface: () => { orderingCalls++; return 'legacy-ordering'; } };
-  let all = nodes(panels.TerminalNavigationManagement(props));
-  assert.equal(orderingCalls, 0);
-  assert.equal(all.filter(n => n.props.className === 'ui-terminal-navigation-management-row').length, 3);
+  all.filter(n => n.props.className === 'ui-terminal-navigation-drawer-main')[1].props.onClick();
+  all.find(n => n.type === 'Button' && n.props['aria-label'] === 'terminal.tab.close').props.onClick();
+  all.find(n => n.type === 'Button' && n.props.children === 'terminal.navigation.pin').props.onClick();
+  assert.deepEqual(calls, [['activate', 'hidden'], ['close', 'a'], ['pin', 'a']]);
   assert.equal(all.filter(n => n.type === 'input').length, 0);
-  assert.ok(all.some(n => n.props.children === 'terminal.navigation.removeAndClose'));
-  managementMode = 'select';
-  all = nodes(panels.TerminalNavigationManagement(props));
-  assert.equal(all.filter(n => n.type === 'input').length, 2);
-  all.find(n => n.props.children === 'terminal.navigation.removeSelected').props.onClick();
-  assert.deepEqual(cb.calls, [['batch', ['a', 'pi']]]);
-  const zero = nodes(panels.TerminalNavigationManagement({ ...props, selectedIds: ['b', 'outside'] })).find(n => n.props.children === 'terminal.navigation.removeSelected');
-  assert.equal(zero.props.disabled, true); zero.props.onClick(); assert.equal(cb.calls.length, 1);
-  managementMode = 'order';
-  all = nodes(panels.TerminalNavigationManagement(props));
-  assert.equal(orderingCalls, 1); assert.equal(all.filter(n => n.props.className === 'ui-terminal-navigation-management-row').length, 0);
-  managementMode = 'normal';
+  assert.doesNotMatch(JSON.stringify(all), /currentWork|removeSelected|addTerminal/);
 });
-test('explicit add picker adds outsider without activating or exiting', () => {
-  const cb = callbacks();
-  const tree = panels.TerminalNavigationSwitcher({ ...cb, picker: true, groups: { recent: [], currentWork: [], other: [b] }, side: 'bottom' });
-  nodes(tree).find(n => n.props.role === 'option').props.onClick();
-  assert.deepEqual(cb.calls, [['add', 'b']]);
+
+test('drawer search Enter uses the same activation as clicking a row and respects IME', () => {
+  calls.length = 0; inputQuery = 'hidden';
+  const all = nodes(drawer.TerminalNavigationDrawer(drawerProps()));
+  assert.equal(all.filter(n => n.props.role === 'option').length, 1);
+  const input = all.find(n => n.type === 'Input');
+  input.props.onKeyDown({ key: 'Enter', nativeEvent: { isComposing: true } });
+  assert.deepEqual(calls, []);
+  input.props.onKeyDown({ key: 'Enter', nativeEvent: {}, preventDefault() {} });
+  assert.deepEqual(calls, [['activate', 'hidden']]);
+  inputQuery = '';
 });
-test('empty current-work renders a real tab row and a single drawer entry point', () => {
-  const source = readFileSync(`${root}TerminalNavigationBar.tsx`, 'utf8');
-  assert.match(source, /TerminalTabRow/);
-  assert.match(source, /TerminalNavigationDrawer/);
-  assert.doesNotMatch(source, /<TerminalNavigationSwitcher(?:\s|\/|>)/);
-  assert.doesNotMatch(source, /<TerminalNavigationManagement(?:\s|\/|>)/);
-  assert.doesNotMatch(source, /<Select(?:\s|\/|>)/);
+
+test('bar row and drawer receive the same complete collection and count', () => {
+  const tree = bar.TerminalNavigationBar({ navigation: { entries, projectGroups, totalCount: 2 }, position: 'top', ...drawerProps() });
+  const row = nodes(tree).find(n => n.type === 'TerminalTabRow');
+  const popup = nodes(tree).find(n => n.type === drawer.TerminalNavigationDrawer || n.props.projectGroups);
+  assert.equal(row.props.entries, entries);
+  assert.equal(popup.props.projectGroups, projectGroups);
+  assert.equal(popup.props.totalCount, 2);
 });
-test('single row renders the complete passed collection without quick caps or more-count', () => {
+
+test('adapter delegates hidden reopening and focusing to canonical activation without a second path', () => {
+  calls.length = 0;
+  const tree = adapter.TerminalNavigationAdapter({ sessions: [], projects: [], groups: [], worktrees: [], layouts: [],
+    scope: { kind: 'all' }, onActivateSession: id => calls.push(['canonical', id]) });
+  tree.props.onActivate('closed');
+  tree.props.onActivate('valid');
+  assert.deepEqual(calls, [['canonical', 'valid'], ['visit', 'valid']]);
+});
+
+test('owned navigation surfaces contain no mode, membership or drop-target controls', () => {
+  for (const file of ['TerminalNavigationAdapter.tsx', 'TerminalNavigationBar.tsx', 'TerminalNavigationDrawer.tsx', 'TerminalNavigationPanels.tsx', 'TerminalTabRow.tsx', 'PaneTabBar.tsx']) {
+    assert.doesNotMatch(readFileSync(`${root}${file}`, 'utf8'), /currentWorkMode|inCurrentWork|currentWorkSessionIds|onToggleCurrentWork|onAddToCurrentWork|onRemoveFromCurrentWork|onRemoveSelected|CURRENT_WORK_DROP_TARGET_ID|CURRENT_WORK_TAB_DRAG_PREFIX/);
+  }
   const source = readFileSync(`${root}TerminalTabRow.tsx`, 'utf8');
+  assert.match(source, /TERMINAL_TAB_DRAG_PREFIX/);
   assert.match(source, /entries\.map/);
-  assert.doesNotMatch(source, /quickEntries|hiddenCount|moreCount/);
-  assert.match(source, /useCurrentWorkTabScroll/);
-  assert.match(source, /data-current-work-session-id/);
-  const css = readFileSync(`${root}terminalNavigation.css`, 'utf8');
-  assert.match(css, /ui-terminal-tab-row-list/); assert.match(css, /:focus-visible/);
-  assert.doesNotMatch(css, /nth-of-type/);
-});
-test('context contains disambiguating project identity, path and missing worktree state', () => {
-  const tree = panels.TerminalNavigationContext({ entry: { ...a, project: { id: 'unique', name: 'Same', path: '/full/path' }, worktree: null, session: { ...a.session, worktreeId: 'gone' } }, side: 'bottom' });
-  const text = JSON.stringify(tree); assert.match(text, /unique/); assert.match(text, /full\/path/); assert.match(text, /worktreeMissing/);
+  assert.doesNotMatch(source, /quickEntries|moreCount/);
 });
 
-test('integration mounts one navigation for empty/ordinary/current-work modes and keeps terminal bodies stable', () => {
-  const view = readFileSync(`${root}TerminalTabsView.tsx`, 'utf8');
-  const adapter = readFileSync(`${root}TerminalNavigationAdapter.tsx`, 'utf8');
-  const pane = readFileSync('src/features/terminal/hooks/useTerminalPaneAdapter.tsx', 'utf8');
-  const controller = readFileSync('src/features/terminal/hooks/useTerminalTabsController.tsx', 'utf8');
-  assert.equal((view.match(/<TerminalNavigationAdapter/g) ?? []).length, 1);
-  assert.doesNotMatch(view, /<TerminalCurrentContext|mountedWorkspanLayouts.length > 0/);
-  assert.match(view, /key=\{layout.workspan.id\}/);
-  assert.match(view, /currentWorkSessionPortalTargets/);
-  assert.match(pane, /hideTabBar=\{!options\?\.forceTabBar && state\.workspanEnabled && allPanes\.length <= 1/);
-  assert.doesNotMatch(adapter, /DndContext|orderingDnd/);
-  assert.equal((view.match(/<DndContext/g) ?? []).length, 1);
-  assert.match(adapter, /layout.visiblePanes.length <= 1/);
-  assert.match(view, /onAdd=\{\(id\) => \{ if \(!currentWorkSessionIds.includes\(id\)\) toggleCurrentWork\(id\); \}\}/);
-  assert.match(adapter, /props.legacyOrdering/);
-  assert.match(adapter, /actionSessionId=\{actionSessionId\}/);
-  const activation = adapter.slice(adapter.indexOf('const activate ='), adapter.indexOf('const panes ='));
-  assert.match(activation, /useTerminalStore.getState\(\)\.showSessions/);
-  assert.match(activation, /exitCurrentWork\) props.leaveCurrentWork/);
-  assert.doesNotMatch(activation, /onAdd|addCurrentWork/);
-  const ordinary = controller.slice(controller.indexOf('const handleActivateSession ='), controller.indexOf('const handleTogglePaneFullscreen ='));
-  assert.doesNotMatch(ordinary, /addCurrentWork/);
-  assert.ok(controller.split('\n').length <= 2000);
-});
-
-
-test('ordinary navigation is the not-in-current-work candidate set and current-work is member-only', () => {
-  const adapter = readFileSync(`${root}TerminalNavigationAdapter.tsx`, 'utf8');
-  assert.match(adapter, /props\.currentWorkMode \? entry\.inCurrentWork : !entry\.inCurrentWork/);
-  assert.match(adapter, /totalCount: visibleEntries\.length/);
-  const messages = readFileSync('src/shared/i18n/messages/terminal.zh-CN.ts', 'utf8');
-  assert.match(messages, /terminal\.navigation\.available/);
-});
-
-test('ordinary navigation order is supplied by the navigation hook and passed to the row', () => {
-  const hook = readFileSync(`${root}../hooks/useTerminalNavigation.ts`, 'utf8');
-  const adapter = readFileSync(`${root}TerminalNavigationAdapter.tsx`, 'utf8');
-  assert.match(hook, /terminal-navigation-order/);
-  assert.match(hook, /reorderNavigation/);
-  assert.match(adapter, /onReorder=\{navigation\.reorderNavigation\}/);
-});
-
-test('terminal tab drag end uses sortable data session IDs before DOM IDs', () => {
-  const controller = readFileSync(`${root}../hooks/useTerminalTabsController.tsx`, 'utf8');
-  assert.match(controller, /const terminalTabActive = active\.data\.current\?\.type === "terminal-tab"/);
-  assert.match(controller, /const sourceSessionId = terminalTabSourceId \?\? String\(active\.data\.current\?\.sessionId/);
-  assert.match(controller, /if \(sourcePane\.id === targetPane\.id\) reorderSessions\(sourceSessionId, targetSessionId\)/);
-});
-
-test('terminal tab collision excludes the active tab so drag end can reach a sibling target', () => {
-  const tabsModel = readFileSync(`${root}../lib/terminalTabsModel.ts`, 'utf8');
-  assert.match(tabsModel, /const id = String\(collision\.id\);[\s\S]*?return id !== activeId/);
-});
-
-test('drag source lookup uses complete mounted pane trees, including hidden sessions', () => {
-  const controller = readFileSync(`${root}../hooks/useTerminalTabsController.tsx`, 'utf8');
-  assert.match(controller, /const allMountedPanes = mountedWorkspanLayouts\.flatMap\(\(layout\) => collectPaneLeaves\(layout\.paneTree\)\)/);
-  assert.match(controller, /allMountedPanes\.find\(\(pane\) => pane\.sessionIds\.includes\(sessionId\)\)/);
-});
-
-test('empty navigation omits the special top-right action while preserving global new-terminal wiring', () => {
-  const bar = readFileSync(`${root}TerminalNavigationBar.tsx`, 'utf8');
-  const css = readFileSync(`${root}terminalNavigation.css`, 'utf8');
-  const adapter = readFileSync(`${root}TerminalNavigationAdapter.tsx`, 'utf8');
-  assert.doesNotMatch(bar, /navigation\.totalCount === 0/);
-  assert.doesNotMatch(bar, /ui-terminal-navigation-empty-add/);
-  assert.doesNotMatch(css, /ui-terminal-navigation-empty-add/);
-  assert.match(adapter, /onNewTab=\{props\.onNewTab\}/);
-});
-
-test('drawer close hides project terminals but destroys independent terminals', () => {
-  const view = readFileSync(`${root}TerminalTabsView.tsx`, 'utf8');
-  assert.match(view, /const session = sessions\.find\(\(item\) => item\.id === id\)/);
-  assert.match(view, /handleCloseSessions\(\[id\], undefined, \[\], !session\?\.projectId\)/);
-});
-
-test('current-work drop target accepts pending terminal tabs without opening the drawer', () => {
-  const barSource = readFileSync(`${root}TerminalNavigationBar.tsx`, 'utf8');
-  const controller = readFileSync('src/features/terminal/hooks/useTerminalTabsController.tsx', 'utf8');
-  assert.match(barSource, /CURRENT_WORK_DROP_TARGET_ID/);
-  assert.match(barSource, /useDroppable/);
-  assert.match(controller, /overId === CURRENT_WORK_DROP_TARGET_ID/);
-  assert.match(controller, /toggleCurrentWork\(droppedSessionId\)/);
-});
-
-test('single drawer replaces range, quick, finder and management entry points', () => {
-  const source = readFileSync(`${root}TerminalNavigationBar.tsx`, 'utf8');
-  assert.match(source, /TerminalNavigationDrawer/);
-  assert.match(source, /TerminalTabRow/);
-  for (const legacy of ['<TerminalNavigationSwitcher(?:\\s|\\/|>)', '<TerminalNavigationManagement(?:\\s|\\/|>)', '<Select(?:\\s|\\/|>)', 'quickEntries', 'moreCount']) {
-    assert.doesNotMatch(source, new RegExp(legacy));
+test('main view renders only the original navigation tier and retains every canonical split layout', () => {
+  const filename = resolve(`${root}TerminalTabsView.tsx`);
+  const exports = {};
+  const code = ts.transpileModule(readFileSync(filename, 'utf8'), { compilerOptions: {
+    module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX,
+  } }).outputText;
+  vm.runInNewContext(code, { exports, require: name => {
+    if (name === 'react/jsx-runtime') return require(name);
+    if (name === 'react') return { useRef: () => ({ current: null }), Suspense: 'Suspense' };
+    if (name.endsWith('/chatPanelStore')) return { useChatPanelStore: select => select({ mode: 'dock' }) };
+    if (name.endsWith('/useChatPanelDrag')) return { useChatPanelDrag: () => ({}) };
+    return new Proxy({}, { get: (_, key) => key });
+  } });
+  const sessions = [entry('a').session, entry('b').session, entry('hidden').session];
+  const first = { type: 'leaf', id: 'one', sessionIds: ['a'], activeSessionId: 'a' };
+  const second = { type: 'leaf', id: 'two', sessionIds: ['b'], activeSessionId: 'b' };
+  const split = { type: 'split', id: 'split', direction: 'horizontal', ratio: .37, first, second };
+  const layouts = [{ workspan: { id: 'w1' }, paneTree: split, visiblePaneTree: split },
+    { workspan: { id: 'w2' }, paneTree: second, visiblePaneTree: second }];
+  for (const position of ['top', 'bottom']) for (const visible of [true, false]) {
+    const activate = () => {};
+    const all = nodes(exports.TerminalTabsView({ sessions, mountedWorkspanLayouts: layouts,
+      visibleSessions: sessions, effectiveActiveWorkspanId: 'w1', effectiveActiveSessionId: 'a',
+      sidebarShell: {}, renderToolbarActions: () => null, workspanTabBarPosition: position,
+      workspanTabBarVisible: visible, handleActivateSession: activate,
+      terminalScopeValue: { kind: 'all' } }));
+    assert.equal(all.filter(n => n.type === 'WorkspanTabBar').length, 0);
+    const frame = all.find(n => n.type === 'WorkspanTerminalLayout');
+    assert.equal(frame.props.position, position);
+    assert.equal(frame.props.tabBarVisible, visible);
+    const nav = frame.props.tabBar;
+    assert.equal(nav.type, 'TerminalNavigationAdapter');
+    assert.equal(nav.props.sessions, sessions); // not restricted to the active workspan
+    assert.equal(nav.props.layouts, layouts);
+    assert.equal(nav.props.onActivateSession, activate);
+    assert.equal(nav.props.legacyOrdering, undefined);
+    const splits = all.filter(n => n.type === 'SplitTerminalView');
+    assert.equal(splits.length, 2);
+    assert.equal(splits[0].props.node, split);
+    assert.equal(splits[0].props.node.ratio, .37);
+    assert.equal(splits[1].props.node, second);
   }
-  for (const locale of ['zh-CN', 'en-US']) {
-    const messages = readFileSync(`src/shared/i18n/messages/terminal.${locale}.ts`, 'utf8');
-    for (const key of ['drawerTitle', 'pinned', 'hoverOpen']) assert.ok(messages.includes(`"terminal.navigation.${key}"`));
-  }
-});
-
-test('navigation theme uses project accents and floating drawer affordances', () => {
-  const css = readFileSync(`${root}terminalNavigation.css`, 'utf8');
-  assert.match(css, /ui-terminal-tab-row-item\[data-active="true"\]/);
-  assert.match(css, /var\(--tab-accent/);
-  assert.match(css, /ui-terminal-navigation-drawer/);
-  assert.match(css, /ui-terminal-navigation-drawer-row/);
-  assert.match(css, /overflow: auto/);
-  assert.match(css, /:focus-visible/);
-  assert.match(css, /pointer: coarse/);
 });

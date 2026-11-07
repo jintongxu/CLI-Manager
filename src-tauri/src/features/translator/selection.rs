@@ -26,7 +26,7 @@ pub fn selection_from_capture(snapshot: Option<&str>, captured: Option<&str>) ->
 #[cfg(target_os = "windows")]
 fn send_copy_shortcut() {
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-        SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_CONTROL, VK_C,
+        SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_C, VK_CONTROL,
     };
 
     fn key(vk: u16, up: bool) -> INPUT {
@@ -59,7 +59,10 @@ fn send_copy_shortcut() {
         )
     };
     if sent != inputs.len() as u32 {
-        log::warn!("translator selection: SendInput injected {sent}/{} events", inputs.len());
+        log::warn!(
+            "translator selection: SendInput injected {sent}/{} events",
+            inputs.len()
+        );
     }
 }
 

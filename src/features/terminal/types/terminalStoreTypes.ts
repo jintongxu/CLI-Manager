@@ -298,7 +298,7 @@ export interface TerminalStore {
   renameSession: (id: string, title: string) => void;
   inheritSessionTitle: (id: string, title: string) => void;
   splitTerminal: (sessionId: string, direction: TerminalPaneSplitDirection, options?: SplitTerminalOptions) => Promise<string | null>;
-  openFileEditorPane: (project: Project) => string;
+  openFileEditorPane: (project: Project, mode?: "beside" | "current") => string;
   openSyncedHistoryPane: (group: SyncedHistoryGroup, project?: Project) => Promise<string>;
   /** Split the current pane into two, creating a new empty leaf (no sessions). Used by batch launch to create panes for different root groups. */
   splitPaneEmpty: (paneId: string, direction: TerminalPaneSplitDirection) => void;

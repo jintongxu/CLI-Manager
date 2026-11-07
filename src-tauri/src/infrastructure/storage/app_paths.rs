@@ -919,6 +919,11 @@ pub fn claude_providers_dir() -> Result<PathBuf, String> {
     Ok(providers_dir()?.join("claude"))
 }
 
+// 定位当前数据根的持久聊天图片目录；调用方负责建立所需子目录。
+pub fn chat_assets_dir() -> Result<PathBuf, String> {
+    Ok(cli_manager_data_dir()?.join("chat-assets"))
+}
+
 // 定位当前数据根的主 SQLite 文件，不打开或初始化数据库。
 pub fn db_path() -> Result<PathBuf, String> {
     Ok(cli_manager_data_dir()?.join(DB_FILE_NAME))
@@ -1281,6 +1286,19 @@ mod tests {
         let url = sqlite_url_for_path(&db_path);
         let options = url.parse::<sqlx::sqlite::SqliteConnectOptions>().unwrap();
         assert_eq!(options.get_filename(), db_path);
+    }
+
+    #[test]
+    fn chat_assets_directory_is_managed_under_the_active_data_root() {
+        let assets = chat_assets_dir().unwrap();
+        assert_eq!(
+            assets.parent(),
+            Some(cli_manager_data_dir().unwrap().as_path())
+        );
+        assert_eq!(
+            assets.file_name().and_then(|name| name.to_str()),
+            Some("chat-assets")
+        );
     }
 
     #[test]

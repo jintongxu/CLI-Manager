@@ -2,7 +2,8 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import type { ChatSnapshot } from "./chatController";
 import type { ChatPanelController, QuickCommand, QuickSnapshot, QuickAck } from "./panelController";
 import type { ChatProvider } from "./chatProviderCatalog";
-import { errorCode, type ReasoningEffort, type UpdateInput } from "./types";
+import { errorCode, type AssetReadInput, type ReasoningEffort, type UpdateInput } from "./types";
+import { chatTransport } from "./transport";
 import { resolveSnapshotError } from "./chatErrors";
 
 const empty: ChatSnapshot = { ready: false, selected: null, conversations: [], details: {}, providers: [], drafts: {},
@@ -146,15 +147,26 @@ export class QuickChatRemote implements ChatPanelController {
     }
   };
 
+  stageAttachment = (bytes: ArrayBuffer | Uint8Array) => chatTransport.stage(bytes);
+  releaseAssets = (stageIds: readonly string[]) => chatTransport.releaseAssets(stageIds);
+  readAsset = (input: AssetReadInput) => chatTransport.readAsset(input);
+
   update = (conversationId: string, values: Omit<UpdateInput, "conversationId" | "revision" | "draft">) =>
     this.command({ op: "update", conversationId, providerId: values.providerId ?? "", model: values.model ?? "" });
-  generate = (conversationId: string, retry = false, reasoning: ReasoningEffort = "medium", images: readonly string[] = []) => {
+  generate = (conversationId: string, retry = false, reasoning: ReasoningEffort = "medium", stageIds: readonly string[] = []) => {
     const pending = this.generating.get(conversationId);
     if (pending) return pending;
-    const generation = this.afterDraft({ op: "generate", conversationId, retry, reasoning, images })
+    const generation = this.afterDraft({ op: "generate", conversationId, retry, reasoning, stageIds })
       .finally(() => { this.generating.delete(conversationId); });
     this.generating.set(conversationId, generation);
     return generation;
+  };
+  editAndRegenerate = (conversationId: string, targetMessageId: string, text: string | null,
+    reasoning: ReasoningEffort = "medium", stageIds: readonly string[] = [],
+    ids: { operationId?: string; requestId?: string } = {}) => {
+    const operationId = ids.operationId ?? crypto.randomUUID();
+    const requestId = ids.requestId ?? crypto.randomUUID();
+    return this.afterDraft({ op: "forkEdit", conversationId, targetMessageId, text, reasoning, stageIds, operationId, requestId });
   };
   stop = (conversationId: string) => this.command({ op: "stop", conversationId });
 }

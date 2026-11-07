@@ -24,7 +24,7 @@ const plain = (value) => JSON.parse(JSON.stringify(value));
 // Execute the real setActive implementation, with only persistence/native boundaries mocked.
 const storeText = readFileSync(new URL("../store/terminalStore.ts", import.meta.url), "utf8");
 const activeText = storeText.slice(storeText.indexOf("    setActive: (id) => {"), storeText.indexOf("    setWorkspanModeEnabled:"));
-function fixture(member = false, hidden = true, secondWorkspan = true) {
+function fixture(hidden = true, secondWorkspan = true) {
   const first = workspan.createTerminalWorkspan("w1", "p1", "a");
   const second = workspan.createTerminalWorkspan("w2", "p2", "b");
   const deep = { type: "split", id: "outer", direction: "horizontal", ratio: 0.5,
@@ -36,8 +36,7 @@ function fixture(member = false, hidden = true, secondWorkspan = true) {
   let state = { sessions: [{ id: "a", title: "A" }, { id: "b", title: "B", tabHidden: hidden }, { id: "c", title: "C" }],
     dormantRestoredSessionIds: new Set(),
     ...layout.buildWorkspanMirror(spans, "w1"), fullscreenPaneId: "p1" };
-  const calls = [], currentWorkIds = member ? ["a", "b"] : ["a"];
-  let mode = true;
+  const calls = [];
   const deps = { ...pane, ...workspan, ...layout,
     get: () => state, set: (update) => { state = { ...state, ...update }; },
     scheduleSaveActiveId: (id) => calls.push(["persistActive", id]),
@@ -50,31 +49,24 @@ function fixture(member = false, hidden = true, secondWorkspan = true) {
   vm.runInNewContext(output, deps);
   const options = {
     exists: (id) => state.sessions.some((session) => session.id === id),
-    currentWorkMode: mode, currentWorkSessionIds: currentWorkIds,
-    activateCurrentWork: (id) => { assert.ok(currentWorkIds.includes(id)); calls.push(["activateMember", id]); },
-    leaveCurrentWork: () => { mode = false; calls.push(["leave"]); },
     showTerminal: () => calls.push(["showTerminal"]),
     setActive: (id) => { calls.push(["setActive", id]); deps.action(id); },
   };
-  return { options, calls, currentWorkIds, get state() { return state; }, get mode() { return mode; },
+  return { options, calls, get state() { return state; },
     delete(id) { state.sessions = state.sessions.filter((session) => session.id !== id); } };
 }
 
-for (const member of [true, false]) for (const hidden of [true, false]) for (const otherSpan of [true, false]) {
-  test(`inspection ${member ? "member" : "nonmember"}, ${hidden ? "hidden" : "visible"}, ${otherSpan ? "other workspan" : "deep split"} uses source IDs without enrollment or process operations`, () => {
-    const f = fixture(member, hidden, otherSpan);
-    const beforeIds = [...f.currentWorkIds];
+for (const hidden of [true, false]) for (const otherSpan of [true, false]) {
+  test(`canonical inspection ${hidden ? "hidden" : "visible"}, ${otherSpan ? "other workspan" : "deep split"} uses source IDs without enrollment or process operations`, () => {
+    const f = fixture(hidden, otherSpan);
     const beforeTree = plain(f.state.workspans.map((span) => span.paneTree));
     assert.equal(navigation.navigateTerminalResource("b", f.options), true);
-    assert.deepEqual(f.currentWorkIds, beforeIds);
     assert.equal(f.state.activeSessionId, "b");
     assert.equal(f.state.activeWorkspanId, otherSpan ? "w2" : "w1");
     assert.equal(f.state.activePaneId, otherSpan ? "p2" : "deep");
     assert.equal(f.state.sessions.find((session) => session.id === "b").tabHidden, hidden ? false : hidden);
     assert.equal(f.state.fullscreenPaneId, null);
-    assert.equal(f.mode, member);
-    if (member) assert.deepEqual(f.calls[0], ["activateMember", "b"]);
-    else assert.deepEqual(f.calls.slice(0, 3), [["leave"], ["showTerminal"], ["setActive", "b"]]);
+    assert.deepEqual(f.calls.slice(0, 2), [["showTerminal"], ["setActive", "b"]]);
     assert.deepEqual(f.state.workspans.flatMap((span) => [...workspan.collectWorkspanSessionIds(span)]).sort(),
       otherSpan ? ["a", "b"] : ["a", "b", "c"]);
     // Same topology and memberships; only source active tabs can change.
@@ -84,62 +76,40 @@ for (const member of [true, false]) for (const hidden of [true, false]) for (con
   });
 }
 
-test("deleted target does nothing, including no view change or membership mutation", () => {
-  const f = fixture(false);
+test("deleted target does nothing, including no view change or process operation", () => {
+  const f = fixture();
   f.delete("b");
+  const before = plain(f.state);
   assert.equal(navigation.navigateTerminalResource("b", f.options), false);
-  assert.deepEqual(f.calls, []); assert.deepEqual(f.currentWorkIds, ["a"]); assert.equal(f.mode, true);
+  assert.deepEqual(f.calls, []);
+  assert.deepEqual(plain(f.state), before);
 });
 
-test("ordinary mode source target does not enter current work", () => {
-  const f = fixture(false);
-  f.options.currentWorkMode = false;
-  navigation.navigateTerminalResource("b", f.options);
-  assert.deepEqual(f.calls.slice(0, 2), [["showTerminal"], ["setActive", "b"]]);
-});
-
-test("actual extracted listener validates event and live sessions before resource navigation", () => {
-  const listeners = new Map(), calls = [];
-  const effects = [];
-  const { useTerminalNavigationListeners } = load("../hooks/useTerminalNavigationListeners.ts", {
-    ...navigation, useEffect: (fn) => effects.push(fn),
-    CURRENT_WORK_ACTION_EVENT: "action", CURRENT_WORK_TARGET_EVENT: "target",
-    window: { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: (name) => listeners.delete(name) },
-    useTerminalStore: { getState: () => ({ sessions: [{ id: "live" }] }) },
-    useHistoryStore: { getState: () => ({ closeHistory: () => calls.push("history") }) },
+for (const eventName of ["cli-manager:terminal-session-target", navigation.TERMINAL_RESOURCE_TARGET_EVENT]) {
+  test(`canonical listener validates live targets and cleans up: ${eventName}`, () => {
+    const listeners = new Map(), calls = [], effects = [];
+    let sessions = [{ id: "live" }];
+    const { useTerminalNavigationListeners } = load("../hooks/useTerminalNavigationListeners.ts", {
+      ...navigation, TERMINAL_SESSION_TARGET_EVENT: "cli-manager:terminal-session-target", useEffect: (fn) => effects.push(fn),
+      showProjectSpace: () => calls.push("project"),
+      window: { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: (name, fn) => {
+        assert.equal(listeners.get(name), fn); listeners.delete(name);
+      } },
+      useTerminalStore: { getState: () => ({ sessions }) },
+      useHistoryStore: { getState: () => ({ closeHistory: () => calls.push("history") }) },
+    });
+    useTerminalNavigationListeners({ setActive: (id) => calls.push(id), setActiveWorkspaceTab: (tab) => calls.push(tab) });
+    const cleanups = effects.map((fn) => fn());
+    assert.deepEqual([...listeners.keys()].sort(), ["cli-manager:terminal-session-target", navigation.TERMINAL_RESOURCE_TARGET_EVENT].sort());
+    const target = listeners.get(eventName);
+    for (const event of [{}, { detail: {} }, { detail: { sessionId: 4 } }, { detail: { sessionId: "deleted" } }]) target(event);
+    assert.deepEqual(calls, []);
+    target({ detail: { sessionId: "live" } });
+    assert.deepEqual(calls, ["project", "history", "terminal", "live"]);
+    sessions = [];
+    target({ detail: { sessionId: "live" } });
+    assert.equal(calls.length, 4, "listener rechecks live state instead of restoring a deleted owner");
+    cleanups.forEach((fn) => fn());
+    assert.equal(listeners.size, 0);
   });
-  useTerminalNavigationListeners({ currentWorkMode: true, currentWorkSessionIds: ["member"],
-    currentWorkActiveSessionId: "member", activeSessionId: "member",
-    activateCurrentWork: () => calls.push("member"), activateCurrentWorkSession: () => { assert.fail("inspection cannot use add-capable action"); },
-    leaveCurrentWork: () => calls.push("leave"), clearCurrentWork() {}, toggleCurrentWork() {}, removeCurrentWorkSessions() {},
-    setActive: (id) => calls.push(id), setActiveWorkspaceTab: (tab) => calls.push(tab),
-  });
-  const cleanups = effects.map((fn) => fn());
-  const target = listeners.get(navigation.TERMINAL_RESOURCE_TARGET_EVENT);
-  target({ detail: { sessionId: "deleted" } }); target({ detail: {} }); assert.deepEqual(calls, []);
-  target({ detail: { sessionId: "live" } });
-  assert.deepEqual(calls, ["leave", "history", "terminal", "live"]);
-  cleanups.forEach((fn) => fn()); assert.equal(listeners.size, 0);
-});
-
-test("current-work member in deep split exits incompatible current-work fullscreen without changing members", () => {
-  const calls = [], listeners = new Map();
-  const tree = { type: "split", id: "s", direction: "horizontal", ratio: 0.5,
-    first: pane.createPaneLeaf("focus", ["a"], "a"), second: pane.createPaneLeaf("deep", ["b"], "b") };
-  const { useTerminalNavigationListeners } = load("../hooks/useTerminalNavigationListeners.ts", {
-    ...navigation, ...pane, useEffect: (fn) => fn(),
-    CURRENT_WORK_ACTION_EVENT: "action", CURRENT_WORK_TARGET_EVENT: "target",
-    window: { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener() {} },
-    useTerminalStore: { getState: () => ({ sessions: [{ id: "a" }, { id: "b" }] }) },
-  });
-  const ids = ["a", "b"];
-  useTerminalNavigationListeners({ currentWorkMode: true, currentWorkSessionIds: ids,
-    currentWorkPaneTree: tree, currentWorkFullscreenPaneId: "focus",
-    toggleCurrentWorkPaneFullscreen: (id) => calls.push(["unfocus", id]),
-    activateCurrentWork: (id) => calls.push(["activate", id]),
-    setActive: (id) => calls.push(["source", id]),
-  });
-  listeners.get(navigation.TERMINAL_RESOURCE_TARGET_EVENT)({ detail: { sessionId: "b" } });
-  assert.deepEqual(calls, [["unfocus", "focus"], ["activate", "b"], ["source", "b"]]);
-  assert.deepEqual(ids, ["a", "b"]);
-});
+}

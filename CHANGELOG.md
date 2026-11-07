@@ -1,5 +1,48 @@
 # Changelog
 
+## TEMP — SSH 文件操作边界与提交验证修复 / SSH file-operation guards and validation fixes
+
+- SSH 文件删除校验当前项目上下文及远端文件上下文；SSH 项目不再读取本机系统剪贴板。补齐终端生命周期测试对文件伴随面板、会话持久化队列和布局迁移依赖的夹具。/ SSH file deletion validates active project and remote context, and SSH projects no longer read the local OS clipboard. Terminal lifecycle test fixtures now provide the companion-focus, persistence-queue, and layout-migration dependencies.
+
+## TEMP — 对话正文布局居中 / Center chat reading layout
+
+- 对话消息阅读列和输入框统一为 960px 并在主区域居中；助手正文与输入区对齐，用户消息仍保持右侧气泡排布，避免宽窗口下聊天内容贴左。/ Centers the chat reading column and composer at a shared 960px width; assistant content aligns with the composer while user bubbles remain right-aligned.
+
+## TEMP — 对话暂停与编辑框视觉修复 / Chat stop and editor visual fixes
+
+- 修复点击暂停时取消请求与后端终态竞争导致显示“输入无效”的问题；已停止/已结束的取消竞态不再污染聊天错误状态。编辑消息输入框改为柔和主题焦点边框，避免突兀的亮蓝双层描边。/ Fixes benign cancel-vs-terminal races showing “Invalid input” after stopping a chat, and softens the editor focus border to avoid the harsh double-blue outline.
+
+## TEMP — 对话图片与分支编辑 / Chat images and branch editing
+
+- 修复编辑历史问题时暂存图片被同选择器后置的100%尺寸规则撑满消息气泡：编辑卡片改为响应式紧凑布局、72px固定缩略图、语义图片选择组、截断文件名、简洁可访问移除按钮及右对齐操作，适配工作区/侧栏/快聊。/ Fixes staged edit images expanding to the full message bubble due to an overriding 100% image rule; the shared editor now uses a compact responsive card, fixed 72px thumbnails and accessible grouped controls.
+
+- 新增 migration 59 与数据根 `chat-assets`：PNG/JPEG/静态 WebP 由 Rust 校验真实格式、完整解码、6MiB/8192/12MP 限制，按 SHA-256 去重并用有序消息引用持久化；重启、历史和失败/停止重试复用原图，三种 Provider 协议按所属历史轮次重建多模态请求。废弃暂存支持显式释放、TTL/配额，引用清理和启动恢复避免悬空记录。/ Migration 59 and data-root chat assets add validated, content-addressed PNG/JPEG/static-WebP storage with ordered message references, durable history/retry and per-turn multimodal provider payloads, plus staged release, quota/TTL and recoverable cleanup.
+- 编辑已提交问题采用 copy-on-write 子会话：原会话不变，复制稳定前缀并重建消息/请求/reply关系，图片可保留或替换；CAS、idle lease 与独立 operation ledger 防止冲突、重试或子会话删除触发重复模型请求。Quick Chat 命令只传 stage UUID/descriptor，图片读取受来源和精确引用授权。/ Editing committed questions creates an immutable child branch with copied/remapped settled prefix and preserved/replaced images. CAS, lease and a durable operation ledger prevent duplicate model calls; Quick JSON carries IDs/descriptors only and reads are origin/reference authorized.
+
+- 工作区、侧栏/浮层与全局快聊统一使用原始二进制暂存图片，不再在请求界面保存或传输 data URI；支持选择、粘贴、拖放、纯图片提交，失败保留草稿，成功后确定性释放预览 URL。历史用户消息按精确授权读取图片，缩略图与大图分别管理 Blob URL，并提供键盘可达的 Esc 预览。/ Workspace, dock/float panel and Quick Chat now share raw-binary staged images instead of request-side data URIs, including picker/paste/drop, image-only submit, failure retention and deterministic Blob URL cleanup. Historical user messages use exact authorized reads with separate thumbnail/large URLs and an accessible Escape-dismissable preview.
+- 已完成的用户消息可编辑文字并保留原图，或用有序暂存图片完整替换，成功创建并切换到子对话；冲突/失败保留编辑草稿。分支导航仅显示父对话与直接子分支，父对话删除时明确提示，不展开树。真实 WebView 拖放、焦点与供应商图片能力仍需手工验证。/ Settled user turns can edit text while preserving committed images or replacing them with an ordered staged set, then select the generated child; conflicts/failures retain the draft. Navigation is bounded to parent/direct children with deleted-parent indication and no tree. Live WebView drag/drop, focus and provider image capability remain manual checks.
+
+## TEMP — 四语言词法高亮 / Four-language lexical highlighting
+
+- 完善Java、Python、Dockerfile和Shell的词法高亮，区分可识别的类型声明、函数/调用、注解/装饰器、Docker镜像/阶段/变量及Shell命令/函数/参数；深浅主题使用语言限定token配色，保留原字符串和注释状态。支持Dockerfile.*及未知扩展的常见shebang识别。/ Enriches bounded lexical highlighting for Java, Python, Dockerfile and shell with language-scoped light/dark colors, Dockerfile variants and common shebang fallback, preserving strings/comments.
+- 修复词内#误识别Shell注释、heredoc引入行尾误作正文、FROM平台参数吞掉引号字符串等边界；实际Monarch及主题引擎测试通过。不包含语义分析、LSP或定义跳转，真实WebView视觉仍待验收。/ Real Monarch/theme tests cover word-internal hashes, heredoc command tails and quoted Docker platform values. This is lexical highlighting, not semantic analysis, LSP or definition navigation; live visual validation remains manual.
+
+## TEMP — 文件与终端并排预览 / Companion file editor
+
+- 未保存确认弹窗显式隔离 portal 快捷键，Ctrl+W 不再误关后台 Pi；批量保存关闭支持取消失效、上下文代次校验及关闭前全量 dirty 复检，保存失败保留弹窗和缓冲区。/ Portalled dirty confirmations isolate shortcuts from Pi; batch save-and-close supports cancellation/context invalidation and rechecks every target before closing, retaining the dialog and buffers on save failure.
+
+- 文件默认在主终端右侧打开，初始55%/45%比例可拖动、键盘调整并记忆；支持文件独立放大/还原和收起，保留单层终端导航、原Pi进程及底部辅助Shell。当前/旁边两种打开模式复用唯一编辑器，不通过切换主会话显示文件。/ Files open beside the terminal at a persisted 55/45 ratio with drag/keyboard resizing, editor maximize/restore and collapse. Current/beside modes share one editor while preserving Pi, single terminal navigation and the auxiliary shell.
+- 单击预览、双击固定、编辑自动固定，预览仅替换干净未固定标签；重复打开复用，跨上下文与异步请求防串写，关闭沿用保存/丢弃/取消确认。未保存buffer仅内存保留，真实Monaco焦点、IME及远程环境仍需手工验收。/ Single-click previews, double-click pins and editing pins automatically; only clean previews are replaced. Opens are context/race-safe and closing retains save/discard/cancel guards. Unsaved buffers remain memory-only; live Monaco/IME and remote validation remain manual.
+
+## TEMP — 统一终端工作区 / Unified terminal workspace
+
+- 按用户纠正保留原单层终端标签导航，移除主视图上方重复的 Workspan 标签栏；跨 workspan 会话仍从统一导航切换，分屏几何与 pane-local 标签不变，不调整迁移或会话生命周期。/ Restores the original single terminal-navigation tier by removing the redundant main Workspan bar; cross-workspan navigation, split geometry and pane-local tabs remain intact without migration or lifecycle changes.
+
+- 资源面板与会话定位先同步项目/Worktree作用域，再由统一监听器激活；失效或不可操作目标不切换，休眠恢复保留最终 canonical ID，底部辅助终端独立。/ Resource/session navigation reconciles project/worktree scope before canonical activation; stale or inoperable targets are ignored, dormant restoration retains its final canonical ID, and the bottom shell remains independent.
+
+- 取消“当前工作 / 待加入”双界面以及加入、移出、清空成员操作，标签、导航抽屉、侧栏定位与分屏统一使用 canonical workspans；保留项目/分组/Worktree筛选、已有进程、隐藏/休眠恢复及底部辅助终端。/ Removes the Current Work / Available split and enrollment controls, unifying tabs, navigation, sidebar activation and split layouts while preserving scoped filtering, processes, hidden/dormant restoration and the bottom auxiliary shell.
+- 旧当前工作分屏优先迁入统一布局，重复会话只保留一个布局归属，普通残余分屏保留；保存原始快照并版本化迁移，不通过关闭会话完成布局转换。真实旧快照重启、焦点和双语界面仍需手工验收。/ Legacy current-work geometry takes precedence for overlapping sessions while residual ordinary splits remain. The original snapshot is backed up and migration is versioned without closing sessions. Live restart, focus and bilingual validation remain manual.
+
 ## TEMP — 当前项目底部辅助终端 / Project bottom terminal
 
 - 本地侧栏使用干净模式 PowerShell 7（`pwsh -NoLogo -NoProfile`），跳过用户 profile、运行监控及快速 prompt 脚本，不继承主会话或项目的其他 Shell 选择；仅侧栏本地创建启用，普通终端及 WSL/SSH 行为不变。/ Local sidebar shells use clean PowerShell 7 (`pwsh -NoLogo -NoProfile`), skipping user profiles, runtime monitoring and fast-prompt scripts independently of main-session shell selection; ordinary terminals and WSL/SSH are unchanged.

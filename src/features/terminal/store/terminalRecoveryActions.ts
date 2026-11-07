@@ -5,8 +5,7 @@ import { toast } from "sonner";
 import type { TerminalSession } from "../../../shared/types/index";
 import { translateCurrent } from "../../../shared/i18n/index";
 import { useProjectStore } from "../../projects/api/projectStore";
-import { dispatchCurrentWorkSessionCreated, dispatchCurrentWorkSessionReplaced } from "../api/currentWorkEvents";
-import { saveRecoverySnapshot, useSessionStore } from "../api/sessionStore";
+import { saveRecoverySnapshot } from "../api/sessionStore";
 import { terminalProcessManager, type TerminalAttachResult } from "../api/TerminalProcessManager";
 import { buildWorkspanMirror } from "../lib/terminalStoreLayout";
 import { replaceRecoveryLayoutSession } from "../lib/terminalRecoveryLayout";
@@ -46,7 +45,6 @@ export function createTerminalRecoveryActions(
       const environment = resolveRecoveryEnvironment(session, useProjectStore.getState());
       if (cancelled()) throw new Error("terminal_recovery_session_changed");
       const newId = await get().createSession(environment.projectId, environment.cwd, translateCurrent("terminal.recovery.emergencyTitle"), "", environment.envVars, environment.shell, undefined, environment.worktreeId, undefined, undefined, undefined, undefined, { allowDuplicateWorktree: true, recoveryShell: true });
-      dispatchCurrentWorkSessionCreated(newId, true);
       return newId;
     }, false, get().sessions.find(item => item.id === id)?.createdAtMs),
     rebuildSession: (id) => coordination.run(id, async (cancelled) => {
@@ -85,9 +83,7 @@ export function createTerminalRecoveryActions(
       delete sessionStatuses[id]; delete statusListeners[id]; delete tabNotifications[id];
       delete tabStatuses[id]; delete tabStatusDetails[id]; delete ptyOutputActivityAt[id];
       sessionStatuses[newId] = candidate.activate(); statusListeners[newId] = candidate.unlisten;
-      useSessionStore.getState().replaceCurrentWorkSession(id, newId);
       set({ sessions, ...mirror, sessionStatuses, statusListeners, tabNotifications, tabStatuses, tabStatusDetails, ptyOutputActivityAt });
-      dispatchCurrentWorkSessionReplaced();
       candidate.releaseReservation();
       releaseTerminalSource(session, current.statusListeners[id]);
       try {

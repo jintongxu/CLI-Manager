@@ -1,6 +1,6 @@
+use crate::daemon::protocol::DaemonFrame;
 use std::io::{BufRead, BufReader, Read};
 use std::net::TcpStream;
-use crate::daemon::protocol::DaemonFrame;
 
 const MAX_FRAME_BYTES: usize = 512 * 1024;
 

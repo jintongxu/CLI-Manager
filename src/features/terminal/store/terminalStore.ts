@@ -1,3 +1,4 @@
+import { useFileCompanionStore } from "../api/fileCompanionState";
 import { invoke } from "@tauri-apps/api/core";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { toast } from "sonner";
@@ -24,7 +25,7 @@ import {
   splitExistingSessionToPaneEdge, unsplitPaneLeaf,
 } from "../api/terminalPaneTree";
 import {
-  collapseTerminalWorkspansToLegacy, collectWorkspanSessionIds, createTerminalWorkspan,
+  collectWorkspanSessionIds, createTerminalWorkspan,
   detachTerminalSessionToWorkspan, detachTerminalWorkspanSessions, findWorkspanByPane,
   findWorkspanBySession, getAdjacentWorkspanSessionId, mergeTerminalWorkspansAtPaneEdge,
   removeSessionFromTerminalWorkspans, reorderTerminalWorkspans, restoreTerminalWorkspans,
@@ -37,8 +38,8 @@ import {
 } from "../types/terminalStoreTypes";
 import {
   buildWorkspanMirror, persistWorkspanState, persistCommittedLaunch, createFileEditorSessionId,
-  clearProjectEditorWorkspacesIfUnused, isPersistableSession, hasBackendPty, remapCurrentWorkSessionIds,
-  persistRestoredCurrentWork, releaseRemoteHistoryConsumer,
+  clearProjectEditorWorkspacesIfUnused, isPersistableSession, hasBackendPty,
+  releaseRemoteHistoryConsumer,
 } from "../lib/terminalStoreLayout";
 import { normalizeRemotePathForCompare } from "../lib/subagentTranscriptModel";
 import {
@@ -589,7 +590,6 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
         const nextActiveSession = mirror.activeSessionId ? remaining.find((session) => session.id === mirror.activeSessionId) : undefined;
         await useSessionStore.getState().saveActiveSessionId(isPersistableSession(nextActiveSession) ? mirror.activeSessionId : null);
         await useSessionStore.getState().saveWorkspans(workspans, mirror.activeWorkspanId, remaining);
-        const currentWork = useSessionStore.getState(); if (typeof currentWork.saveCurrentWork === "function") await currentWork.saveCurrentWork(currentWork.currentWorkSessionIds, currentWork.currentWorkActiveSessionId, remaining);
         // 更新 splits（移除已关闭主会话对应的 split），使用关闭前记录的索引
         if (closedIndex >= 0) {
           const persistedSplits = useSessionStore.getState().splits.filter(
@@ -655,19 +655,8 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       persistWorkspanState(workspans, owner.id, sessions);
     },
 
-    setWorkspanModeEnabled: (enabled) => {
-      const state = get();
-      const workspans = enabled
-        ? state.workspans
-        : collapseTerminalWorkspansToLegacy(state.workspans, state.activeWorkspanId, createPaneId);
-      const activeWorkspanId = enabled
-        ? state.activeWorkspanId
-        : workspans[0]?.id ?? null;
-      const mirror = buildWorkspanMirror(workspans, activeWorkspanId, get().sessions);
-      set({ ...mirror, splits: {} });
-      scheduleSaveActiveId(mirror.activeSessionId);
-      persistWorkspanState(workspans, mirror.activeWorkspanId, state.sessions);
-    },
+    // Retained for settings callers only: presentation flags cannot rewrite topology.
+    setWorkspanModeEnabled: (_enabled) => {},
 
     setActiveWorkspan: (id) => {
       const state = get();
@@ -968,73 +957,25 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       return splitSessionId;
     },
 
-    openFileEditorPane: (project) => {
+    // Ensure lifecycle identity without changing main selection, topology, or PTY ownership.
+    openFileEditorPane: (project, mode = "beside") => {
       const editorSessionId = createFileEditorSessionId(project.id);
-      const existing = get().sessions.find((session) => session.id === editorSessionId);
-      if (existing) {
-        const previousProject = existing.fileEditor?.project;
-        if (previousProject) {
-          const previousContext = createGitDiffWorkspaceContext(previousProject);
-          const nextContext = createGitDiffWorkspaceContext(project);
-          if (previousContext.key !== nextContext.key) {
-            useGitDiffWorkspaceStore.getState().clearWorkspace(previousContext.key);
-          }
-        }
-        const sessions = get().sessions.map((session) => session.id === editorSessionId ? {
-          ...session,
-          projectId: project.id,
-          title: `文件：${project.name}`,
-          fileEditor: {
-            projectId: project.id,
-            projectPath: project.path,
-            projectName: project.name,
-            project,
-          },
-        } : session);
-        set({ sessions });
-        get().setActive(editorSessionId);
-        return editorSessionId;
-      }
-
+      const state = get();
+      const existing = state.sessions.find((session) => session.id === editorSessionId);
       const editorSession: TerminalSession = {
+        ...existing,
         id: editorSessionId,
         projectId: project.id,
         title: `文件：${project.name}`,
         kind: "file-editor",
         fileEditor: {
-          projectId: project.id,
-          projectPath: project.path,
-          projectName: project.name,
-          project,
+          projectId: project.id, projectPath: project.path, projectName: project.name, project,
         },
       };
-      const state = get();
-      const sessions = [...state.sessions, editorSession];
-      const workspanEnabled = useSettingsStore.getState().workspanEnabled;
-      const targetWorkspan = !workspanEnabled
-        ? state.workspans.find((workspan) => workspan.id === state.activeWorkspanId) ?? state.workspans[0] ?? null
-        : null;
-      let workspans: TerminalWorkspan[];
-      let activeWorkspanId: string;
-      if (targetWorkspan) {
-        const paneResult = addSessionToPaneTree(targetWorkspan.paneTree, targetWorkspan.activePaneId, editorSessionId, createPaneId);
-        workspans = updateTerminalWorkspan(state.workspans, targetWorkspan.id, (workspan) => (
-          syncTerminalWorkspanLayout(workspan, paneResult.tree, paneResult.activePaneId, editorSessionId)
-        ));
-        activeWorkspanId = targetWorkspan.id;
-      } else {
-        const workspan = createTerminalWorkspan(createWorkspanId(), createPaneId(), editorSessionId);
-        workspans = [...state.workspans, workspan];
-        activeWorkspanId = workspan.id;
-      }
-
-      set({
-        sessions,
-        ...buildWorkspanMirror(workspans, activeWorkspanId, sessions),
-        splits: {},
-      });
-      void queueSshSessionPersistence(sessions).catch(() => { });
-      persistWorkspanState(workspans, activeWorkspanId, sessions);
+      set({ sessions: existing
+        ? state.sessions.map((session) => session.id === editorSessionId ? editorSession : session)
+        : [...state.sessions, editorSession] });
+      useFileCompanionStore.getState().show(editorSessionId, project, mode);
       return editorSessionId;
     },
 
@@ -1240,7 +1181,6 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       );
       await useSessionStore.getState().saveSplits([]);
       await useSessionStore.getState().saveWorkspans(workspans, mirror.activeWorkspanId, remaining);
-      const currentWork = useSessionStore.getState(); if (typeof currentWork.saveCurrentWork === "function") await currentWork.saveCurrentWork(currentWork.currentWorkSessionIds, currentWork.currentWorkActiveSessionId, remaining);
       for (const closedSessionId of closedSessionIds) {
         if (fileEditorClosedIds.has(closedSessionId)) {
           continue;
@@ -1630,10 +1570,7 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
           : newActiveId
             ? findWorkspanBySession(workspans, newActiveId)?.id ?? workspans[workspans.length - 1]?.id ?? null
             : workspans[workspans.length - 1]?.id ?? null;
-        if (!useSettingsStore.getState().workspanEnabled) {
-          workspans = collapseTerminalWorkspansToLegacy(workspans, activeWorkspanId, createPaneId);
-          activeWorkspanId = workspans[0]?.id ?? null;
-        }
+        // Canonical restored topology is independent of the retired feature flag.
         const mirror = buildWorkspanMirror(workspans, activeWorkspanId, restoredSessions);
 
         set({
@@ -1649,13 +1586,9 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
 
         // 更新 sessionStore 的持久化数据（使用新 ID）
         const updatedPersistedSessions = restoredSessions.map((s) => ({ ...s, id: s.id }));
-        const currentWork = remapCurrentWorkSessionIds(sessionStore.currentWorkSessionIds, sessionStore.currentWorkActiveSessionId, newIdMap, restoredSessionIds);
 
-        await sessionStore.saveSessions(updatedPersistedSessions);
-        await sessionStore.saveSplits([]);
         await sessionStore.saveActiveSessionId(mirror.activeSessionId);
         await sessionStore.saveWorkspans(workspans, mirror.activeWorkspanId, updatedPersistedSessions);
-        await persistRestoredCurrentWork(currentWork.sessionIds, currentWork.activeSessionId, updatedPersistedSessions, newIdMap);
 
         // 显示恢复结果提示：仅统计实体化（可见）会话；休眠会话单独说明。
         if (skippedSessions.length > 0) {

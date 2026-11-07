@@ -1,20 +1,28 @@
 import type { ChatController, ChatSnapshot } from "./chatController";
 import type { ChatProvider } from "./chatProviderCatalog";
-import type { ReasoningEffort } from "./types";
+import { validStageIds, type ReasoningEffort } from "./types";
 
 /** Presentation contract: no transport or window-local request ownership. */
 export type ChatPanelController = Pick<ChatController,
   "getSnapshot" | "subscribe" | "start" | "create" | "select" | "setDraft" |
-  "update" | "generate" | "stop" | "report">;
+  "update" | "generate" | "stop" | "report" | "stageAttachment" | "releaseAssets" | "readAsset"> & {
+    editAndRegenerate(sourceId: string, targetMessageId: string, text: string | null,
+      reasoning?: ReasoningEffort, stageIds?: readonly string[],
+      ids?: { operationId?: string; requestId?: string }): Promise<unknown>;
+  };
 export type QuickCommand =
   | { op: "hello" | "create" | "continue" }
   | { op: "select" | "stop"; conversationId: string }
   | { op: "draft"; conversationId: string; text: string }
   | { op: "update"; conversationId: string; providerId: string; model: string }
-  | { op: "generate"; conversationId: string; retry: boolean; reasoning: ReasoningEffort; images: readonly string[] };
+  | { op: "generate"; conversationId: string; retry: boolean; reasoning: ReasoningEffort; stageIds: readonly string[] }
+  | { op: "forkEdit"; conversationId: string; targetMessageId: string; text: string | null; reasoning: ReasoningEffort;
+      stageIds: readonly string[]; operationId: string; requestId: string };
 export interface CommandEnvelope { id: string; epoch?: string; seq?: number; command: QuickCommand }
 export interface QuickSnapshot { epoch: string; version: number; state: ChatSnapshot; catalog: readonly ChatProvider[]; language: string; theme: string; lightPalette: string; darkPalette: string; defaultReasoningEffort?: ReasoningEffort }
 export interface QuickAck { id: string; error: string | null }
+
+export { validStageIds };
 
 export function selectedSnapshot(state: ChatSnapshot, selected: string | null = state.selected, quickOnly = false): ChatSnapshot {
   const id = selected;

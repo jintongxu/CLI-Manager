@@ -40,7 +40,9 @@ pub(crate) use app::migrations::{
 pub(crate) use app::migrations::{
     MIGRATION_ADD_NODE_APPEARANCE_VERSION, MIGRATION_ADD_SSH_CONFIG_FILE_SQL,
     MIGRATION_ADD_WORKTREE_METADATA_DESCRIPTION, MIGRATION_ADD_WORKTREE_METADATA_SQL,
-    MIGRATION_ADD_WORKTREE_METADATA_VERSION, MIGRATION_CREATE_EXTENSION_MCP_RESOURCES_VERSION,
+    MIGRATION_ADD_WORKTREE_METADATA_VERSION, MIGRATION_CREATE_CHAT_ASSETS_DESCRIPTION,
+    MIGRATION_CREATE_CHAT_ASSETS_SQL, MIGRATION_CREATE_CHAT_ASSETS_VERSION,
+    MIGRATION_CREATE_EXTENSION_MCP_RESOURCES_VERSION,
     MIGRATION_CREATE_EXTENSION_SCOPE_POLICIES_VERSION,
     MIGRATION_CREATE_EXTENSION_SKILLS_DESCRIPTION, MIGRATION_CREATE_EXTENSION_SKILLS_SQL,
     MIGRATION_CREATE_EXTENSION_SKILLS_VERSION, MIGRATION_CREATE_HISTORY_GENERATED_TITLES_VERSION,
@@ -595,6 +597,9 @@ pub fn run() {
             let handler: Box<dyn Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync> =
                 Box::new(tauri::generate_handler![
             chat::commands::chat_initialize,
+            chat::commands::chat_asset_stage,
+            chat::commands::chat_asset_release,
+            chat::commands::chat_asset_read,
             chat::commands::chat_list,
             chat::commands::chat_get,
             chat::commands::chat_create,
@@ -611,6 +616,7 @@ pub fn run() {
             chat::commands::chat_provider_fetch_remote_models,
             chat::commands::chat_provider_batch_sync_models,
             chat::commands::chat_generate,
+            chat::commands::chat_fork_edit,
             chat::commands::chat_cancel,
             chat::commands::chat_flush_drafts,
             quick_chat::quick_chat_configure,
@@ -1483,13 +1489,47 @@ mod provider_migration_tests {
         MIGRATION_ADD_USAGE_ERROR_DETAIL_VERSION, MIGRATION_ADD_WORKTREE_METADATA_DESCRIPTION,
         MIGRATION_ADD_WORKTREE_METADATA_SQL, MIGRATION_ADD_WORKTREE_METADATA_VERSION,
         MIGRATION_BACKFILL_REQUEST_LOG_PROJECT_PATH_VERSION,
-        MIGRATION_CREATE_EXTENSION_MCP_RESOURCES_VERSION,
+        MIGRATION_CREATE_CHAT_ASSETS_DESCRIPTION, MIGRATION_CREATE_CHAT_ASSETS_SQL,
+        MIGRATION_CREATE_CHAT_ASSETS_VERSION, MIGRATION_CREATE_EXTENSION_MCP_RESOURCES_VERSION,
         MIGRATION_CREATE_EXTENSION_SCOPE_POLICIES_VERSION,
         MIGRATION_CREATE_EXTENSION_SKILLS_DESCRIPTION, MIGRATION_CREATE_EXTENSION_SKILLS_SQL,
         MIGRATION_CREATE_EXTENSION_SKILLS_VERSION,
         MIGRATION_CREATE_HISTORY_GENERATED_TITLES_VERSION, MIGRATION_CREATE_MESSAGE_STARS_VERSION,
         MIGRATION_MATERIALIZE_REQUEST_LOG_PROJECT_PATH_VERSION,
     };
+
+    #[tokio::test]
+    async fn chat_asset_migration_applies_after_the_frozen_chat_schema() {
+        use sqlx::{Connection, Executor};
+        let mut connection = sqlx::SqliteConnection::connect("sqlite::memory:")
+            .await
+            .unwrap();
+        connection.execute(crate::chat::SCHEMA).await.unwrap();
+        connection
+            .execute(crate::chat::ORIGIN_MIGRATION)
+            .await
+            .unwrap();
+        connection
+            .execute(MIGRATION_CREATE_CHAT_ASSETS_SQL)
+            .await
+            .unwrap();
+        let names: Vec<String> = sqlx::query_scalar(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'chat_%' ORDER BY name",
+        )
+        .fetch_all(&mut connection)
+        .await
+        .unwrap();
+        for required in [
+            "chat_assets",
+            "chat_conversation_branches",
+            "chat_message_assets",
+        ] {
+            assert!(
+                names.iter().any(|name| name == required),
+                "missing {required}"
+            );
+        }
+    }
 
     #[test]
     // 验证旧供应商迁移与原生供应商迁移仍登记且版本顺序正确。
@@ -1671,7 +1711,32 @@ mod provider_migration_tests {
             .sql
             .contains("UPDATE worktrees SET display_name = name"));
         assert!(message_star_migration.version < worktree_metadata_migration.version);
-        assert!(registry.iter().all(|migration| migration.version <= 53));
+        let chat_assets = registry
+            .iter()
+            .find(|migration| migration.version == MIGRATION_CREATE_CHAT_ASSETS_VERSION)
+            .expect("chat asset migration must be registered");
+        assert_eq!(
+            chat_assets.description,
+            MIGRATION_CREATE_CHAT_ASSETS_DESCRIPTION
+        );
+        assert_eq!(chat_assets.sql, MIGRATION_CREATE_CHAT_ASSETS_SQL);
+        for required in [
+            "CREATE TABLE chat_assets",
+            "byte_length <= 6291456",
+            "width <= 8192",
+            "height <= 8192",
+            "width * height <= 12000000",
+            "CREATE TABLE chat_message_assets",
+            "ordinal < 4",
+            "CREATE TABLE chat_conversation_branches",
+            "ON DELETE SET NULL",
+        ] {
+            assert!(chat_assets.sql.contains(required), "missing {required}");
+        }
+        assert_eq!(
+            registry.iter().map(|migration| migration.version).max(),
+            Some(MIGRATION_CREATE_CHAT_ASSETS_VERSION)
+        );
         assert!(registry.iter().any(|migration| migration.version == 29
             && migration.description == "optimize_unified_usage_record_queries"));
     }

@@ -9,6 +9,8 @@ export const en: Record<keyof typeof zh, string> = {
   "files.status.renamed": "Renamed",
   "files.status.conflict": "Conflict",
   "files.status.untracked": "Untracked",
+  "files.menu.openCurrent": "Open in Current Pane (Full Upper Area)",
+  "files.menu.openBeside": "Open Beside Terminal",
   "files.menu.newFile": "New File",
   "files.menu.newFolder": "New Folder",
   "files.menu.paste": "Paste",

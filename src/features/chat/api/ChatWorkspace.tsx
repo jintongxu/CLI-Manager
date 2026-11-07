@@ -34,14 +34,18 @@ import { CHAT_HISTORY_SOURCES, type ChatHistorySource } from "./historySource";
 import { HistorySelection } from "../lib/historySelection";
 import { HistorySelectionControls } from "../components/HistorySelectionControls";
 import { diagnoseChatError } from "../lib/chatErrors";
+import { AttachmentDraftOwner, filterAcceptedImages, readClipboardImages } from "../lib/chatImageAttachments";
+import { ChatMessageAttachments } from "../components/ChatMessageAttachments";
+import { ChatMessageEditor } from "../components/ChatMessageEditor";
+import { ChatBranchNavigation } from "../components/ChatBranchNavigation";
+import { ChatImageLightbox } from "../components/ChatImageLightbox";
 
 interface AttachedFile {
   id: string;
   name: string;
   size: number;
   content: string;
-  type: "text" | "image";
-  dataUrl?: string;
+  type: "text";
 }
 
 export function ChatWorkspace({
@@ -86,6 +90,12 @@ export function ChatWorkspace({
   const [title, setTitle] = useState("");
   const [modelInput, setModelInput] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
+  const [editingMessage, setEditingMessage] = useState<string | null>(null);
+  const [, refreshEditDrafts] = useState(0);
+  const editDraftOwner = useRef<AttachmentDraftOwner | null>(null);
+  if (!editDraftOwner.current) editDraftOwner.current = new AttachmentDraftOwner({
+    stage: bytes => controller.stageAttachment(bytes), releaseAssets: ids => controller.releaseAssets(ids),
+  }, undefined, undefined, error => controller.report(error));
   const [following, setFollowing] = useState(true);
   const [historyVisible, setHistoryVisible] = useState(true);
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
@@ -113,6 +123,12 @@ export function ChatWorkspace({
 
   // File & image attachment states
   const [attachments, setAttachments] = useState<AttachedFile[]>([]);
+  const [, refreshImageDrafts] = useState(0);
+  const imageDraftOwner = useRef<AttachmentDraftOwner | null>(null);
+  if (!imageDraftOwner.current) imageDraftOwner.current = new AttachmentDraftOwner({
+    stage: bytes => controller.stageAttachment(bytes), releaseAssets: ids => controller.releaseAssets(ids),
+  }, undefined, undefined, error => controller.report(error));
+  const imageDrafts = imageDraftOwner.current.value;
   const [preview, setPreview] = useState<{ src: string; name: string } | null>(null);
   const [reasoningMenuOpen, setReasoningMenuOpen] = useState(false);
   const reasoningMenuRef = useRef<HTMLDivElement>(null);
@@ -124,16 +140,19 @@ export function ChatWorkspace({
   const follow = useRef(true);
   const modelMenuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!preview) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setPreview(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [preview]);
+  useEffect(() => () => { imageDraftOwner.current?.dispose(); editDraftOwner.current?.dispose(); }, []);
 
   const selected = state.selected;
+  const previousAttachmentConversation = useRef(selected);
+  useEffect(() => {
+    if (previousAttachmentConversation.current === selected) return;
+    previousAttachmentConversation.current = selected;
+    imageDraftOwner.current?.switchConversation();
+    editDraftOwner.current?.switchConversation();
+    setEditingMessage(null);
+    refreshImageDrafts(value => value + 1);
+    refreshEditDrafts(value => value + 1);
+  }, [selected]);
   const [reasoning, setReasoning] = useConversationReasoning(selected);
   const previousSelection = useRef<{ id: string | null; origin: ChatHistorySource } | null>(null);
   const restoringSelection = useRef(false);
@@ -544,31 +563,24 @@ export function ChatWorkspace({
     });
   };
 
+  const stageComposerImages = (files: readonly File[]) => {
+    const pending = files.map(file => imageDraftOwner.current!.stage(file, file.name).catch(error => controller.report(error)));
+    refreshImageDrafts(value => value + 1);
+    void Promise.all(pending).finally(() => refreshImageDrafts(value => value + 1));
+  };
+
   // File upload handler
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || !files.length) return;
 
-    Array.from(files).forEach((file) => {
-      const isImg = file.type.startsWith("image/");
+    const allFiles = Array.from(files);
+    const images = allFiles.filter(file => file.type.startsWith("image/"));
+    const { accepted } = filterAcceptedImages(images, imageDraftOwner.current!.value.length);
+    stageComposerImages(accepted);
+    allFiles.filter(file => !file.type.startsWith("image/")).forEach((file) => {
       const reader = new FileReader();
-
-      if (isImg) {
-        reader.onload = () => {
-          setAttachments((curr) => [
-            ...curr,
-            {
-              id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-              name: file.name,
-              size: file.size,
-              content: "",
-              type: "image",
-              dataUrl: reader.result as string,
-            },
-          ]);
-        };
-        reader.readAsDataURL(file);
-      } else {
+      {
         reader.onload = () => {
           setAttachments((curr) => [
             ...curr,
@@ -590,36 +602,17 @@ export function ChatWorkspace({
 
   // Paste image handler in textarea
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.startsWith("image/")) {
-        const file = items[i].getAsFile();
-        if (file) {
-          e.preventDefault();
-          const reader = new FileReader();
-          reader.onload = () => {
-            setAttachments((curr) => [
-              ...curr,
-              {
-                id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                name: file.name || "Pasted image",
-                size: file.size,
-                content: "",
-                type: "image",
-                dataUrl: reader.result as string,
-              },
-            ]);
-          };
-          reader.readAsDataURL(file);
-        }
-      }
-    }
+    const files = readClipboardImages(e.clipboardData);
+    if (!files.length) return;
+    e.preventDefault();
+    const { accepted } = filterAcceptedImages(files, imageDraftOwner.current!.value.length);
+    stageComposerImages(accepted);
   };
 
   const removeAttachment = (id: string) => {
     setAttachments((curr) => curr.filter((a) => a.id !== id));
+    imageDraftOwner.current?.remove(id);
+    refreshImageDrafts(value => value + 1);
   };
 
   // Submit message with optional attachments
@@ -635,12 +628,15 @@ export function ChatWorkspace({
       finalPrompt += textAttachments;
     }
 
-    if (!finalPrompt.trim()) return;
+    const stageIds = imageDraftOwner.current?.stageIds ?? [];
+    if ((!finalPrompt.trim() && !stageIds.length) || imageDrafts.some(item => item.status !== "staged")) return;
 
     act(async () => {
       controller.setDraft(c.id, finalPrompt);
+      await controller.generate(c.id, false, reasoning, stageIds);
       setAttachments([]);
-      await controller.generate(c.id, false, reasoning);
+      imageDraftOwner.current?.consumed(stageIds);
+      refreshImageDrafts(value => value + 1);
     });
   };
 
@@ -661,6 +657,8 @@ export function ChatWorkspace({
       <input
         type="file"
         multiple
+        accept="image/png,image/jpeg,image/webp,text/*"
+        aria-label={t("chat.attachLocalDisclosure")}
         ref={fileInputRef}
         style={{ display: "none" }}
         onChange={handleFileUpload}
@@ -1089,6 +1087,12 @@ export function ChatWorkspace({
             {foreign && <p role="status">{t("chat.readonly")}</p>}
             {state.suspended && <p role="status">{t("chat.suspended")}</p>}
 
+            <ChatBranchNavigation lineage={detail.lineage}
+              parentAvailable={detail.lineage.current?.parentConversationId !== null}
+              labels={{ navigation: t("chat.branchNavigation"), parent: t("chat.branchParent"), parentDeleted: t("chat.branchParentDeleted"),
+                children: t("chat.branchChildren"), child: (_branch, index) => t("chat.branchChild", { index: index + 1 }) }}
+              onSelectConversation={id => controller.select(id)} disabled={running || busy} />
+
             {/* Message Stream and current-conversation question outline */}
             <div className="chat-reading-layout">
             <div
@@ -1141,9 +1145,30 @@ export function ChatWorkspace({
                         act(() => activateChatLink(href, openUrl))
                       }
                     />
+                  ) : editingMessage === message.id ? (
+                    <ChatMessageEditor message={message} staged={editDraftOwner.current!.value}
+                      labels={{ edit: t("chat.edit"), text: t("chat.editText"), preserveImages: t("chat.preserveImages"),
+                        replaceImages: t("chat.replaceImages"), addImages: t("chat.panel.attachImage"), removeImage: () => t("chat.panel.removeImage"),
+                        staging: t("chat.imageStaging"), stageFailed: t("chat.imageStageFailed"), retry: t("chat.retry"),
+                        cancel: t("chat.cancel"), submit: t("chat.editSubmit") }}
+                      onStageImages={async files => { const pending = files.map(file => editDraftOwner.current!.stage(file, file.name).catch(error => controller.report(error))); refreshEditDrafts(value => value + 1); await Promise.all(pending); refreshEditDrafts(value => value + 1); }}
+                      onRemoveStaged={id => { editDraftOwner.current?.remove(id); refreshEditDrafts(value => value + 1); }}
+                      onRetryStaged={async id => { await editDraftOwner.current?.retry(id); refreshEditDrafts(value => value + 1); }}
+                      onCancel={() => { editDraftOwner.current?.switchConversation(); setEditingMessage(null); refreshEditDrafts(value => value + 1); }}
+                      onSubmit={async submission => {
+                        try {
+                          const receipt = await controller.editAndRegenerate(c.id, message.id, submission.text, reasoning, submission.images.stageIds);
+                          editDraftOwner.current?.consumed(submission.images.stageIds); setEditingMessage(null); refreshEditDrafts(value => value + 1);
+                          await controller.select(receipt.childConversationId);
+                        } catch (error) { controller.report(error); throw error; }
+                      }} />
                   ) : (
                     <div className="chat-user-bubble">
                       <p className="chat-user-text">{message.content}</p>
+                      <ChatMessageAttachments message={message} readAsset={controller.readAsset}
+                        labels={{ list: t("chat.imageAttachments"), open: () => t("chat.imagePreview"), preview: () => t("chat.imagePreview"),
+                          close: t("chat.cancel"), loading: t("chat.imageLoading"), failed: t("chat.imageReadFailed") }}
+                        onReadError={error => controller.report(error)} />
                     </div>
                   )}
 
@@ -1159,6 +1184,9 @@ export function ChatWorkspace({
                     >
                       {t(copied === message.id ? "chat.copied" : "chat.copy")}
                     </button>
+                    {message.role === "user" && message.status === "completed" && !running && !busy && !state.unsaved[c.id] && editingMessage !== message.id && (
+                      <button type="button" onClick={() => setEditingMessage(message.id)}>{t("chat.edit")}</button>
+                    )}
                     {message.role === "assistant" && isLast && retryable && !running && (
                       <button
                         type="button"
@@ -1272,6 +1300,14 @@ export function ChatWorkspace({
             {/* Kivio / Claude Card Composer */}
             <form
               className="chat-composer-container chat-composer"
+              onDragOver={event => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }}
+              onDrop={event => {
+                const images = Array.from(event.dataTransfer.files).filter(file => file.type.startsWith("image/"));
+                if (!images.length) return;
+                event.preventDefault();
+                const { accepted } = filterAcceptedImages(images, imageDraftOwner.current!.value.length);
+                stageComposerImages(accepted);
+              }}
               onSubmit={(event) => {
                 event.preventDefault();
                 handleSendMessage();
@@ -1279,51 +1315,27 @@ export function ChatWorkspace({
             >
               <div className="chat-composer-card">
                 {/* Attachments preview bar */}
-                {attachments.length > 0 && (
+                {(attachments.length > 0 || imageDrafts.length > 0) && (
                   <div className="chat-attachments-bar">
-                    {attachments.map((att) => (
-                      <div key={att.id}>
-                        {att.type === "image" && att.dataUrl ? (
-                          <div className="chat-attachment-image-preview">
-                            <button
-                              type="button"
-                              className="chat-attachment-thumb"
-                              title={t("chat.imagePreview")}
-                              aria-label={t("chat.imagePreview")}
-                              onClick={() => setPreview({ src: att.dataUrl!, name: att.name })}
-                            >
-                              <img src={att.dataUrl} alt={att.name} />
-                            </button>
-                            <button
-                              type="button"
-                              className="chat-attachment-remove"
-                              style={{
-                                position: "absolute",
-                                top: 2,
-                                right: 2,
-                                background: "rgba(0,0,0,0.6)",
-                                borderRadius: 4,
-                              }}
-                              onClick={() => removeAttachment(att.id)}
-                            >
-                              <X size={12} />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="chat-attachment-chip">
-                            <FileText size={13} />
-                            <span>{att.name}</span>
-                            <button
-                              type="button"
-                              className="chat-attachment-remove"
-                              onClick={() => removeAttachment(att.id)}
-                            >
-                              <X size={12} />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                    {imageDrafts.map(att => <div key={att.localId} className="chat-attachment-image-preview" data-status={att.status}>
+                      <button type="button" className="chat-attachment-thumb" title={t("chat.imagePreview")}
+                        aria-label={t("chat.imagePreview")}
+                        onClick={() => setPreview({ src: att.previewUrl, name: att.name ?? t("chat.imagePreview") })}>
+                        <img src={att.previewUrl} alt={att.name ?? t("chat.imagePreview")} />
+                      </button>
+                      {att.status === "failed" && <span role="alert">{t("chat.imageStageFailed")}</span>}
+                      {att.status === "failed" && <button type="button" onClick={() => {
+                        void imageDraftOwner.current?.retry(att.localId).catch(error => controller.report(error))
+                          .finally(() => refreshImageDrafts(value => value + 1));
+                      }}>{t("chat.retry")}</button>}
+                      {att.status === "staging" && <span role="status">{t("chat.imageStaging")}</span>}
+                      <button type="button" className="chat-attachment-remove" aria-label={t("chat.panel.removeImage")}
+                        onClick={() => removeAttachment(att.localId)}><X size={12} /></button>
+                    </div>)}
+                    {attachments.map((att) => <div key={att.id} className="chat-attachment-chip">
+                      <FileText size={13} /><span>{att.name}</span>
+                      <button type="button" className="chat-attachment-remove" onClick={() => removeAttachment(att.id)}><X size={12} /></button>
+                    </div>)}
                   </div>
                 )}
 
@@ -1372,7 +1384,8 @@ export function ChatWorkspace({
                     <button
                       type="button"
                       className="chat-attachment-btn"
-                      title="上传文件"
+                      title={t("chat.attachLocalDisclosure")}
+                      aria-label={t("chat.attachLocalDisclosure")}
                       onClick={() => fileInputRef.current?.click()}
                     >
                       <Paperclip size={15} />
@@ -1486,7 +1499,8 @@ export function ChatWorkspace({
                             busy ||
                             !c.model?.trim() ||
                             !!state.unsaved[c.id] ||
-                            (!(state.drafts[c.id] ?? c.draft).trim() && attachments.length === 0)
+                            imageDrafts.some(item => item.status !== "staged") ||
+                            (!(state.drafts[c.id] ?? c.draft).trim() && attachments.length === 0 && imageDrafts.length === 0)
                           }
                         >
                           <ArrowUp size={16} />
@@ -1498,30 +1512,11 @@ export function ChatWorkspace({
               </div>
             </form>
 
-            {preview && (
-              <div
-                className="chat-image-lightbox"
-                role="dialog"
-                aria-modal="true"
-                aria-label={t("chat.imagePreview")}
-                onClick={() => setPreview(null)}
-              >
-                <img
-                  src={preview.src}
-                  alt={preview.name}
-                  onClick={(event) => event.stopPropagation()}
-                />
-                <button
-                  type="button"
-                  className="chat-image-lightbox-close"
-                  aria-label={t("chat.closePreview")}
-                  title={t("chat.closePreview")}
-                  onClick={() => setPreview(null)}
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            )}
+            {preview && <ChatImageLightbox className="chat-image-lightbox" label={t("chat.imagePreview")}
+              closeLabel={t("chat.closePreview")} closeClassName="chat-image-lightbox-close" closeContent={<X size={16} />}
+              onClose={() => setPreview(null)}>
+              <img src={preview.src} alt={preview.name} />
+            </ChatImageLightbox>}
 
             {/* Rename / Delete Dialog */}
             {dialog && !selectingHistory && !historyLocked && (

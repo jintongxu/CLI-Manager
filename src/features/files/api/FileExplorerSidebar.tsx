@@ -44,7 +44,6 @@ import {
 } from "../../git/api/gitDiffWorkspaceStore";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { useTerminalStore } from "../../terminal/state";
-import { dispatchCurrentWorkSessionCreated, dispatchCurrentWorkTarget } from "../../terminal/api/currentWorkEvents";
 import { useSshHostStore } from "../../remote/api/sshHostStore";
 import { STATUS_CONFIG } from "../../git/api/GitStatusIcon";
 import { ConfirmDialog } from "../../../shared/ui/ConfirmDialog";
@@ -354,6 +353,18 @@ function InlineRenameInput({
   );
 }
 
+function FileOpenMenuItems({ entry, onOpenFile }: {
+  entry: ProjectFileEntry;
+  onOpenFile: (entry: ProjectFileEntry, mode?: "beside" | "current") => void;
+}) {
+  const { t } = useI18n();
+  if (entry.kind !== "file") return null;
+  return <>
+    <ContextMenuItem onSelect={() => onOpenFile(entry, "current")}>{t("files.menu.openCurrent")}</ContextMenuItem>
+    <ContextMenuItem onSelect={() => onOpenFile(entry, "beside")}>{t("files.menu.openBeside")}</ContextMenuItem>
+  </>;
+}
+
 function FileSelectionMenuItems({ entry, onInput, onConfirm }: {
   entry: FileOperationEntry;
   onInput: (action: InputAction) => void;
@@ -421,7 +432,7 @@ function FileNode({
   depth: number;
   getDisplayStatus: (entry: ProjectFileEntry) => FileDisplayStatus | null;
   getGitChange: (path: string) => GitFileChange | null;
-  onOpenFile: (entry: ProjectFileEntry) => void;
+  onOpenFile: (entry: ProjectFileEntry, mode?: "beside" | "current") => void;
   onOpenDiff: (change: GitFileChange) => void;
   onInput: (action: InputAction) => void;
   onConfirm: (action: ConfirmAction) => void;
@@ -589,6 +600,10 @@ function FileNode({
             onPointerMove={onFilePointerMove}
             onPointerUp={onFilePointerUp}
             onPointerCancel={onFilePointerCancel}
+            onDoubleClick={(event) => {
+              if (event.ctrlKey || event.metaKey || isTerminalFilePointerDragClickHandled(event.currentTarget)) return;
+              if (displayEntry.kind === "file") useFileExplorerStore.getState().pinFile(displayEntry.path);
+            }}
             onClick={(event) => {
               if (isTerminalFilePointerDragClickHandled(event.currentTarget)) return;
               if (event.ctrlKey || event.metaKey) {
@@ -630,6 +645,7 @@ function FileNode({
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent className="file-explorer-menu" portalContainer={menuPortalContainer}>
+          <FileOpenMenuItems entry={displayEntry} onOpenFile={onOpenFile} />
           <LiveServerFileMenuItem project={project} entry={displayEntry} />
           {isDir && (
             <>
@@ -720,7 +736,7 @@ function FileTreeRows({
   depth: number;
   getDisplayStatus: (entry: ProjectFileEntry) => FileDisplayStatus | null;
   getGitChange: (path: string) => GitFileChange | null;
-  onOpenFile: (entry: ProjectFileEntry) => void;
+  onOpenFile: (entry: ProjectFileEntry, mode?: "beside" | "current") => void;
   onOpenDiff: (change: GitFileChange) => void;
   onInput: (action: InputAction) => void;
   onConfirm: (action: ConfirmAction) => void;
@@ -1308,21 +1324,35 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
     void moveDraggedEntry(source.entries, "", project);
   }, [moveDraggedEntry, project, readOnly]);
 
-  const activateFileEditor = useCallback((targetProject: Project) => {
-    const editorSessionId = openFileEditorPane(targetProject);
-    if (targetProject.environment_type === "ssh") {
-      dispatchCurrentWorkSessionCreated(editorSessionId);
-      dispatchCurrentWorkTarget(editorSessionId);
-    }
+  const fileOpenRequestRef = useRef(0);
+  const activateFileEditor = useCallback((targetProject: Project, displayMode: "beside" | "current" = "beside") => {
+    if (isSameProjectFileContext(useFileExplorerStore.getState().project, targetProject)) openFileEditorPane(targetProject, displayMode);
   }, [openFileEditorPane]);
 
-  const requestOpenFile = (entry: ProjectFileEntry) => {
-    void openFile(entry);
-    if (project) activateFileEditor(project);
-  };
+  const requestOpenFile = useCallback((entry: ProjectFileEntry, displayMode: "beside" | "current" = "beside") => {
+    if (!project || !isSameProjectFileContext(useFileExplorerStore.getState().project, project)) return;
+    const request = ++fileOpenRequestRef.current;
+    const targetProject = project;
+    void openFile(entry, { intent: "preview" }).then(() => {
+      const current = useFileExplorerStore.getState();
+      if (request !== fileOpenRequestRef.current || !isSameProjectFileContext(current.project, targetProject)
+        || current.activeFilePath !== entry.path) return;
+      activateFileEditor(targetProject, displayMode);
+    }).catch((error) => {
+      if (request !== fileOpenRequestRef.current || !isSameProjectFileContext(useFileExplorerStore.getState().project, targetProject)) return;
+      toast.error(t("files.toast.openFileFailed"), { description: String(error) });
+    });
+  }, [activateFileEditor, openFile, project, t]);
+  useEffect(() => {
+    const unsubscribe = useFileExplorerStore.subscribe((state) => {
+      if (!isSameProjectFileContext(state.project, project)) fileOpenRequestRef.current += 1;
+    });
+    return () => { unsubscribe(); fileOpenRequestRef.current += 1; };
+  }, [project]);
 
   const requestOpenDiff = useCallback((change: GitFileChange) => {
     if (!project) return;
+    fileOpenRequestRef.current += 1;
     openDiff(createGitDiffWorkspaceContext(project), {
       repositoryId: project.environment_type === "ssh" ? "" : project.path,
       repositoryRelativePath: "",
@@ -1361,6 +1391,7 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
             data-file-tree-path={match.path}
             data-file-drop-target-path={parentPath(match.path)}
             draggable={false}
+            onDoubleClick={() => useFileExplorerStore.getState().pinFile(match.path)}
             onContextMenu={(event) => {
               event.stopPropagation();
               if (!selectedEntries.some((item) => item.path === match.path)) selectEntry(entry);
@@ -1379,8 +1410,15 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
               if (event.currentTarget.dataset.pointerDragHandled === "true") return;
               if (event.ctrlKey || event.metaKey) { event.preventDefault(); selectEntry(entry, true); return; }
               selectEntry(entry);
-              void openFileAtSearchMatch(match);
-              activateFileEditor(project);
+              const request = ++fileOpenRequestRef.current;
+              void openFileAtSearchMatch(match, { intent: "preview" }).then(() => {
+                const current = useFileExplorerStore.getState();
+                if (request === fileOpenRequestRef.current && isSameProjectFileContext(current.project, project)
+                  && current.activeFilePath === match.path) activateFileEditor(project);
+              }).catch((error) => {
+                if (request === fileOpenRequestRef.current && isSameProjectFileContext(useFileExplorerStore.getState().project, project))
+                  toast.error(t("files.toast.openFileFailed"), { description: String(error) });
+              });
             }}
           >
             <FileCode size={15} className="mt-0.5 shrink-0 text-text-muted" />
@@ -1400,6 +1438,7 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
           </button>
         </ContextMenuTrigger>
         <ContextMenuContent className="file-explorer-menu" portalContainer={menuPortalContainer}>
+          <FileOpenMenuItems entry={entry} onOpenFile={requestOpenFile} />
           <LiveServerFileMenuItem
             project={project}
             entry={{ kind: "file", name: match.name, path: match.path }}
@@ -1424,7 +1463,7 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
       </ContextMenu>
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedEntries, selectEntry, readOnly, mutationBusy, pasteIntoTarget, renamingAction?.path, cancelRename, submitRename, handleFileKeyDown, handleFilePointerDown, handleFilePointerMove, handleFilePointerUp, handleFilePointerCancel, handleFileDragStart, handleFileDrag, handleFileDragEnd, handleFileDragOver, handleFileDrop, ignoreState, getGitChange, menuPortalContainer, openFileAtSearchMatch, activateFileEditor, project, requestOpenDiff, t]);
+  }, [selectedEntries, selectEntry, readOnly, mutationBusy, pasteIntoTarget, renamingAction?.path, cancelRename, submitRename, handleFileKeyDown, handleFilePointerDown, handleFilePointerMove, handleFilePointerUp, handleFilePointerCancel, handleFileDragStart, handleFileDrag, handleFileDragEnd, handleFileDragOver, handleFileDrop, ignoreState, getGitChange, menuPortalContainer, requestOpenFile, openFileAtSearchMatch, activateFileEditor, project, requestOpenDiff, t]);
 
   const renderSearchRow = useCallback((entry: ProjectFileEntry) => {
     if (!project) return null;
@@ -1466,6 +1505,10 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
               if (event.ctrlKey || event.metaKey) { event.preventDefault(); selectEntry(entry, true); return; }
               selectEntry(entry);
               if (entry.kind === "file") requestOpenFile(entry);
+            }}
+            onDoubleClick={(event) => {
+              if (!event.ctrlKey && !event.metaKey && entry.kind === "file" && !isTerminalFilePointerDragClickHandled(event.currentTarget))
+                useFileExplorerStore.getState().pinFile(entry.path);
             }}
             onContextMenu={(event) => {
               event.stopPropagation();
@@ -1509,6 +1552,7 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent className="file-explorer-menu" portalContainer={menuPortalContainer}>
+          <FileOpenMenuItems entry={entry} onOpenFile={requestOpenFile} />
           <LiveServerFileMenuItem project={project} entry={entry} />
           <FileSelectionMenuItems entry={entry} onInput={openInput} onConfirm={setConfirmAction} />
           {!readOnly && <ContextMenuItem disabled={mutationBusy} onSelect={() => void pasteIntoTarget(getPasteTargetPath(entry))}>
@@ -1532,7 +1576,7 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
       </ContextMenu>
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedEntries, selectEntry, mutationBusy, readOnly, pasteIntoTarget, getPasteTargetPath, ignoreState, cancelRename, getDisplayStatus, getDropTargetPath, getGitChange, handleFileDragEnd, handleFileDragOver, handleFileDragStart, handleFileDrop, handleFileKeyDown, handleFilePointerCancel, handleFilePointerDown, handleFilePointerMove, handleFilePointerUp, menuPortalContainer, openFile, project, renamingAction?.path, requestOpenDiff, submitRename, t]);
+  }, [selectedEntries, selectEntry, mutationBusy, readOnly, pasteIntoTarget, getPasteTargetPath, ignoreState, cancelRename, getDisplayStatus, getDropTargetPath, getGitChange, handleFileDragEnd, handleFileDragOver, handleFileDragStart, handleFileDrop, handleFileKeyDown, handleFilePointerCancel, handleFilePointerDown, handleFilePointerMove, handleFilePointerUp, menuPortalContainer, requestOpenFile, openFile, project, renamingAction?.path, requestOpenDiff, submitRename, t]);
 
   const copyRootAiTree = useCallback(() => {
     if (!project) return;
@@ -1601,7 +1645,7 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
   }, [
     pasteIntoTarget, readOnly, loading, tree.length, hasSearchQuery, searchLoading, searchMode,
     contentSearchResults, renderContentSearchRow, visibleRows, renderSearchRow, getDisplayStatus,
-    getGitChange, requestOpenDiff, ignoreState, menuPortalContainer, handleFileKeyDown,
+    getGitChange, requestOpenFile, requestOpenDiff, ignoreState, menuPortalContainer, handleFileKeyDown,
     handleFileDragStart, handleFileDrag, handleFileDragEnd, handleFileDragOver, handleFileDrop,
     handleFilePointerCancel, handleFilePointerDown, handleFilePointerMove, handleFilePointerUp,
     renamingAction?.path, submitRename, cancelRename, t,

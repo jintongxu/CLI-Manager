@@ -51,7 +51,7 @@ test("shared menu risk groups, disabled reasons and navigation fallback execute"
  TerminalRecoveryMenuItems({session:{id:"s"}});const items=nodes.filter(n=>n.type==="item");assert.equal(items.length,5);assert.ok(items.every(n=>n.props.disabled));assert.equal(items.filter(n=>n.props.danger).length,2);
  nodes.length=0;state={};TerminalRecoveryMenuItems({session:{id:"s",kind:"file-editor"}});assert.ok(nodes.some(n=>n.props.children==="terminal.recovery.nonPty"));
  nodes.length=0;TerminalRecoveryMenuItems({session:{id:"s"},project:{environment_type:"ssh"}});assert.ok(nodes.filter(n=>n.type==="item").every(n=>n.props.disabled));
- const adapter=readFileSync(new URL(root+"components/TerminalNavigationAdapter.tsx",import.meta.url),"utf8");assert.match(adapter,/return paneBar\(pane \?\?/);assert.match(adapter,/actionSessionId=\{actionSessionId\}/);
+ const adapter=readFileSync(new URL(root+"components/TerminalNavigationAdapter.tsx",import.meta.url),"utf8");assert.match(adapter,/const pane = panes\.find/);assert.match(adapter,/id: `navigation-\$\{entry.id\}`/);assert.match(adapter,/actionSessionId=\{entry.id\}/);
 });
 test("locales match all recovery keys and describe no replay / prepared replacement semantics",()=>{
  const en=readFileSync(new URL("../src/shared/i18n/messages/terminal.en-US.ts",import.meta.url),"utf8"),zh=readFileSync(new URL("../src/shared/i18n/messages/terminal.zh-CN.ts",import.meta.url),"utf8");

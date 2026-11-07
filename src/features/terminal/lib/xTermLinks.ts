@@ -176,6 +176,8 @@ export const openTerminalRelativeFilePath = async (sessionId: string, match: Ter
       path: resolveRelativeTerminalSystemPath(context.rootPath, relativePath),
     });
     if (kind !== "file" && kind !== "directory") return;
+    const latest = getTerminalFileLinkContext(sessionId, match.path);
+    if (!latest.supportsFiles || latest.rootPath !== context.rootPath) return;
     requestTerminalFileNavigation({
       sessionId,
       path: relativePath,

@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -6,10 +7,11 @@ import vm from "node:vm";
 import ts from "typescript";
 import * as operations from "../src/features/files/lib/fileExplorerOperations.ts";
 import { isFileExplorerIgnoreCaseInsensitive } from "../src/features/files/lib/fileExplorerIgnore.ts";
-import { isSameProjectFileContext, isSameProjectFileLocation } from "../src/features/terminal/api/terminalProject.ts";
+import { loadFilePreviewModules } from "./helpers/filePreviewModules.mjs";
+const { terminalProject: { isSameProjectFileContext, isSameProjectFileLocation }, previewHelpers } = loadFilePreviewModules();
 
 const require = createRequire(import.meta.url);
-const source = readFileSync(new URL("../src/features/files/api/fileExplorerStore.ts", import.meta.url), "utf8");
+const source = process.env.FILE_STORE_BASELINE ? execFileSync("git", ["show", "HEAD:src/features/files/api/fileExplorerStore.ts"], { encoding: "utf8" }) : readFileSync(new URL("../src/features/files/api/fileExplorerStore.ts", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
 const project = (id = "one") => ({ id, name: id, path: `E:\\${id}`, environment_type: "local", remote_path: "", ssh_host_id: null });
 const entry = (path, kind = "file") => ({ path, name: path.split("/").pop(), kind, sizeBytes: 4, modifiedMs: 1 });
@@ -20,6 +22,7 @@ function harness(customInvoke) {
   let store;
   const dependencies = {
     "zustand": require("zustand"),
+    "../../terminal/api/backgroundOperationStore": { useBackgroundOperationStore: { getState: () => ({ updateProgress() {} }) } },
     "@tauri-apps/api/core": { invoke: async (command, args) => {
       calls.push({ command, args });
       if (customInvoke) {
@@ -37,6 +40,7 @@ function harness(customInvoke) {
     "../../projects/api/projectCapabilities": { projectSupportsCapability: () => true },
     "../lib/fileExplorerIgnore": { isFileExplorerIgnoreCaseInsensitive },
     "../lib/fileExplorerOperations": operations,
+    "../lib/fileEditorPreview": previewHelpers,
     "../../git/api/gitDiffWorkspaceStore": { activateProjectFileSurface() {} },
     "../../remote/api/sshRemoteFiles": {},
   };
@@ -170,7 +174,7 @@ test("SSH, overlapping operations and old-project snapshots cannot mutate", asyn
   const h = harness();
   const remote = { ...project(), environment_type: "ssh", remote_path: "/repo", ssh_host_id: "host" };
   h.store.setState({ project: remote });
-  await assert.rejects(h.store.getState().deleteEntries([entry("a")], remote), /remote_project_read_only/);
+  await assert.rejects(h.store.getState().deleteEntries([entry("a")], remote), /remote_file_context_missing/);
   h.store.setState({ project: project(), mutationBusy: true });
   await assert.rejects(h.store.getState().deleteEntries([entry("a")], project()), /file_operation_busy/);
   h.store.setState({ mutationBusy: false });
@@ -355,7 +359,8 @@ test('simultaneous panels cannot read/paste overlapping snapshots, SSH never rea
   release(); await first;
   h.store.setState({ project: { ...project(), environment_type: 'ssh' } });
   const before = h.calls.length;
-  await assert.rejects(h.store.getState().readPasteClipboard(), /remote_project_read_only/);
+  const sshClipboard = await h.store.getState().readPasteClipboard();
+  assert.equal(sshClipboard, null, 'SSH projects do not read the local clipboard');
   assert.equal(h.calls.length, before);
 });
 

@@ -25,7 +25,7 @@ test('capture-phase workspace boundary leaves shell keys to xterm, not main Pi; 
     './CommandPalette': { useCommandPaletteStore: { getState: () => ({ toggle: () => actions.push('palette') }) } },
     '../../terminal/state': { useTerminalStore: { getState: () => state } },
     '../../terminal/api/terminalCloseConfirm': { TERMINAL_TAB_CLOSE_REQUEST_EVENT: 'close-main' },
-    '../../terminal/api/currentWorkEvents': { dispatchCurrentWorkAction: action => actions.push(action) },
+    '../../terminal/api/currentWorkEvents': { dispatchCurrentWorkAction: () => assert.fail('legacy membership authority must not be called') },
     '../../terminal/api/chatPanelCommands': { dispatchChatPanelToggle: () => actions.push('chat') },
   }, { window: { addEventListener: (type, fn, capture) => { assert.equal(capture, true); listeners.set(type, fn); },
     removeEventListener() {}, dispatchEvent: event => actions.push(event) },

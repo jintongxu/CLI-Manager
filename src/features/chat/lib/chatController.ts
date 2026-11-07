@@ -1,8 +1,8 @@
-import { errorCode } from "./types";
+import { errorCode, validStageIds } from "./types";
 import { BoundedSet } from "./boundedSet";
-import type { ChatEvent, ChatTransport, Conversation, ConversationOrigin, Detail, DraftStatus, Message, ProviderOption, ReasoningEffort, UpdateInput } from "./types";
+import type { ChatEvent, ChatTransport, Conversation, ConversationOrigin, Detail, DraftStatus, ForkEditReceipt, Message, ProviderOption, ReasoningEffort, UpdateInput } from "./types";
 
-interface Run { requestId: string; messageId?: string; sequence: number; terminal: boolean; stopped: boolean; completion: Promise<void>; settle: () => void }
+interface Run { requestId: string; operationId?: string; messageId?: string; sequence: number; terminal: boolean; stopped: boolean; completion: Promise<void>; settle: () => void }
 export interface ChatSnapshot {
   ready: boolean; selected: string | null; conversations: Conversation[]; details: Record<string, Detail>;
   providers: ProviderOption[]; drafts: Record<string, string>; dirty: string[]; draftStatus: Record<string, DraftStatus>; unsaved: Record<string, ChatEvent>;
@@ -20,6 +20,7 @@ export class ChatController {
   private starting?: Promise<void>;
   private queues = new Map<string, Promise<unknown>>();
   private runs = new Map<string, Run>();
+  private forkSources = new Set<string>();
   private deleted = new BoundedSet(512);
   private deleting = new BoundedSet(512);
   private removing = new Set<string>();
@@ -38,6 +39,9 @@ export class ChatController {
   }
   report(error: unknown) { this.patch({ error: errorCode(error) }); }
   clearError() { this.patch({ error: null }); }
+  stageAttachment = (bytes: ArrayBuffer | Uint8Array) => this.api.stage(bytes);
+  releaseAssets = (stageIds: readonly string[]) => this.api.releaseAssets(stageIds);
+  readAsset = (input: import("./types").AssetReadInput) => this.api.readAsset(input);
   private editable(id: string) {
     if (this.state.suspended) throw "chat_shutting_down";
     if (this.deleted.has(id) || this.deleting.has(id)) throw "chat_not_found";
@@ -66,7 +70,7 @@ export class ChatController {
       return local && ((run && local.requestId === run.requestId) || snapshot?.messageId === local.id) ? local : message;
     });
     this.patch({
-      details: { ...this.state.details, [c.id]: { conversation: c, messages } },
+      details: { ...this.state.details, [c.id]: { conversation: c, messages, lineage: detail.lineage } },
       conversations: this.state.conversations.some(item => item.id === c.id)
         ? this.state.conversations.map(item => item.id === c.id ? c : item)
         : includeInHistory ? [c, ...this.state.conversations] : this.state.conversations,
@@ -261,9 +265,10 @@ export class ChatController {
       if (terminal && !this.deleted.has(id)) this.event(terminal.event, terminal.run);
     }
   }
-  async generate(id: string, retry = false, reasoning: ReasoningEffort = "off", images?: readonly string[]) {
+  async generate(id: string, retry = false, reasoning: ReasoningEffort = "off", stageIds: readonly string[] = []) {
     this.editable(id);
-    if (this.runs.has(id)) throw "chat_busy";
+    if (!validStageIds(stageIds)) throw "chat_invalid_input";
+    if (this.runs.has(id) || this.forkSources.has(id)) throw "chat_busy";
     if (this.state.unsaved[id]) throw "chat_storage";
     const refreshDraftBase = this.state.dirty.includes(id) && this.state.error !== null;
     let settle!: () => void;
@@ -281,12 +286,12 @@ export class ChatController {
         if (run.stopped) throw "chat_cancelled";
         const c = this.state.details[id].conversation;
         const text = retry ? null : this.state.drafts[id] ?? c.draft;
-        if (!retry && !text?.trim()) throw "chat_invalid_input";
+        if (!retry && !text?.trim() && stageIds.length === 0) throw "chat_invalid_input";
         const reasoningValue = reasoning === "off" ? null : reasoning;
         const receipt = await this.api.generate({ conversationId: id, revision: c.revision,
           requestId: run.requestId, appType: c.appType, providerId: c.providerId, model: c.model, text, retry,
           reasoning: reasoningValue,
-          images: images?.length ? [...images] : undefined },
+          stageIds: stageIds.length ? [...stageIds] : undefined },
         event => this.event(event, run));
         accepted = true;
         if (this.deleted.has(id)) return;
@@ -307,6 +312,73 @@ export class ChatController {
       throw error;
     }
   }
+  async editAndRegenerate(sourceId: string, targetMessageId: string, text: string | null,
+    reasoning: ReasoningEffort = "off", stageIds: readonly string[] = [],
+    ids: { operationId?: string; requestId?: string } = {}): Promise<ForkEditReceipt> {
+    this.editable(sourceId);
+    if (!validStageIds(stageIds)) throw "chat_invalid_input";
+    if (this.forkSources.has(sourceId)) throw "chat_busy";
+    if (this.state.unsaved[sourceId]) throw "chat_storage";
+    this.forkSources.add(sourceId);
+    try {
+      const sourceRun = this.runs.get(sourceId);
+      if (sourceRun) {
+        await this.stop(sourceId);
+        await sourceRun.completion;
+      }
+      if (this.state.unsaved[sourceId]) throw "chat_storage";
+      // This composer draft is unrelated to the historical edit and must be durable
+      // before the branch CAS base is refreshed.
+      await this.flushDraft(sourceId);
+      return await this.enqueue(sourceId, async () => {
+        const latest = await this.api.get(sourceId);
+        this.accept(latest);
+        const target = latest.messages.find(message => message.id === targetMessageId && message.role === "user");
+        if (!target || (!text?.trim() && stageIds.length === 0 && target.assets.length === 0)) throw "chat_invalid_input";
+        const operationId = ids.operationId ?? this.uuid();
+        const requestId = ids.requestId ?? this.uuid();
+        const early: ChatEvent[] = [];
+        let destinationRun: Run | undefined;
+        const receipt = await this.api.forkEdit({
+          sourceConversationId: sourceId, sourceRevision: latest.conversation.revision,
+          targetMessageId, operationId, requestId, appType: latest.conversation.appType,
+          providerId: latest.conversation.providerId, model: latest.conversation.model,
+          text, reasoning: reasoning === "off" ? null : reasoning,
+          stageIds: stageIds.length ? [...stageIds] : undefined,
+        }, event => {
+          if (destinationRun) this.event(event, destinationRun);
+          else early.push(event);
+        });
+        // The backend commits before returning the receipt. Establish destination
+        // ownership before any fallible refresh so a running child can always be
+        // stopped and its terminal persistence is observed.
+        if (!receipt.replayed) {
+          let settle!: () => void;
+          const completion = new Promise<void>(resolve => { settle = resolve; });
+          destinationRun = { requestId, operationId, messageId: receipt.answer.id, sequence: -1,
+            terminal: false, stopped: false, completion, settle };
+          if (this.runs.has(receipt.childConversationId)) throw "chat_busy";
+          this.runs.set(receipt.childConversationId, destinationRun);
+          this.patch({ running: [...this.runs.keys()] });
+          early.forEach(event => this.event(event, destinationRun!));
+        }
+        try {
+          const child = await this.api.get(receipt.childConversationId);
+          this.accept(child);
+          // Exact replay returns the original receipt; the fresh child detail is the
+          // authority and may already contain a later terminal answer.
+          if (!receipt.replayed && !child.messages.some(message => message.id === receipt.answer.id)) this.applyMessage(receipt.answer);
+        } catch (error) {
+          // The fork is already committed. Preserve run ownership and return its
+          // receipt; surface the refresh failure separately instead of inviting a retry.
+          this.report(error);
+        }
+        return receipt;
+      });
+    } finally {
+      this.forkSources.delete(sourceId);
+    }
+  }
   private applyMessage(message: Message) {
     const detail = this.state.details[message.conversationId];
     if (!detail || this.deleted.has(message.conversationId)) return;
@@ -322,12 +394,13 @@ export class ChatController {
     this.applyMessage({ ...(base ?? { id: event.messageId, conversationId: c.id, ordinal: detail.messages.length,
       role: "assistant", replyTo: null, appType: c.appType, providerId: c.providerId, model: c.model,
       createdAt: Date.now(), updatedAt: Date.now() }), requestId: event.requestId, content: event.content,
-      status: event.status, errorCode: event.errorCode, finishReason: event.finishReason });
+      status: event.status, errorCode: event.errorCode, finishReason: event.finishReason, assets: base?.assets ?? [] });
   }
   private event(event: ChatEvent, run: Run) {
     const id = event.conversationId;
     if (this.deleted.has(id) || this.runs.get(id) !== run || run.terminal
       || event.requestId !== run.requestId || event.sequence <= run.sequence
+      || (run.operationId && event.operationId !== run.operationId)
       || (run.messageId && run.messageId !== event.messageId)) return;
     if (this.deleting.has(id)) {
       // Keep the first valid terminal immutable, just as normal event admission does.
@@ -360,7 +433,14 @@ export class ChatController {
     const run = this.runs.get(id);
     if (!run) return;
     run.stopped = true;
-    await this.api.cancel(id, run.requestId);
+    try {
+      await this.api.cancel(id, run.requestId);
+    } catch (error) {
+      // A terminal event can remove the native run between the click and cancel.
+      // Cancellation is already represented locally; do not surface that benign race as a chat error.
+      if (error !== "chat_invalid_input" && error !== "chat_not_found") throw error;
+    }
+    if (this.state.error !== null) this.patch({ error: null });
   }
   async retryPersistence() {
     // Explicit action only: never reissues a model request.

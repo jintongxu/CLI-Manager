@@ -69,8 +69,11 @@ pub fn capture_region(bounds: MonitorBounds) -> Result<ScreenCapture, String> {
     let captured = start.elapsed();
     let encode_start = std::time::Instant::now();
     let image_base64 = encode_fast_screen_base64(width, height, &rgba)?;
-    log::debug!("capture timing: capture_ms={} encode_ms={}",
-        captured.as_millis(), encode_start.elapsed().as_millis());
+    log::debug!(
+        "capture timing: capture_ms={} encode_ms={}",
+        captured.as_millis(),
+        encode_start.elapsed().as_millis()
+    );
     Ok(ScreenCapture {
         width,
         height,
