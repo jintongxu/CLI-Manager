@@ -15,6 +15,7 @@ import { FileCode, Image } from "../../../shared/ui/icons";
 import { FontSizeControl, useFontSizeControlVisibility } from "../../../shared/ui/FontSizeControl";
 import { MarkdownContent } from "../../../shared/ui/MarkdownContent";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
+import type { ProjectSymbol } from "../lib/fileEditorDefinitions";
 
 const FILE_PREVIEW_FONT_SIZE_MIN = 8;
 const FILE_PREVIEW_FONT_SIZE_MAX = 32;
@@ -33,6 +34,8 @@ interface FileEditorContentProps {
   onMarkdownLinkActivate: (href: string) => void;
   markdownFragmentRequest?: { id: number; fragment: string } | null;
   onMarkdownFragmentHandled: (id: number, found: boolean) => void;
+  outlineSymbols: ProjectSymbol[];
+  onOutlineSelect: (symbol: ProjectSymbol) => void;
 }
 
 export function FileEditorContent({
@@ -49,6 +52,8 @@ export function FileEditorContent({
   onMarkdownLinkActivate,
   markdownFragmentRequest,
   onMarkdownFragmentHandled,
+  outlineSymbols,
+  onOutlineSelect,
 }: FileEditorContentProps) {
   const { t } = useI18n();
   const uiFontFamily = useSettingsStore((state) => state.uiFontFamily);
@@ -92,7 +97,7 @@ export function FileEditorContent({
 
   return (
     <div
-      className="ui-file-editor-body relative min-h-0 flex-1 overflow-hidden bg-surface"
+      className="ui-file-editor-body relative min-h-0 flex-1 overflow-hidden"
       onWheelCapture={handlePreviewWheel}
     >
       {!file && !activeDiff && (
@@ -126,7 +131,9 @@ export function FileEditorContent({
         </div>
       )}
       {file && (file.previewKind === "text" || file.previewKind === "markdown") && (
-        file.previewKind === "markdown" && previewMode === "preview" ? (
+        <div className="ui-file-editor-with-outline flex h-full min-h-0">
+        <div className="min-w-0 flex-1">
+        {file.previewKind === "markdown" && previewMode === "preview" ? (
           <div
             ref={markdownPreviewRef}
             className="ui-file-editor-markdown-preview h-full overflow-auto p-4"
@@ -156,14 +163,29 @@ export function FileEditorContent({
               overviewRulerLanes: 0,
               hideCursorInOverviewRuler: true,
               fontFamily: effectiveUiFontFamily,
-              fontSize,
+              fontSize: Math.max(fontSize, 15),
+              lineHeight: Math.max(25, Math.round(Math.max(fontSize, 15) * 1.65)),
+              letterSpacing: 0.15,
               glyphMargin: true,
               minimap: { enabled: false },
               scrollBeyondLastLine: false,
               wordWrap: "on",
             }}
           />
-        )
+        )}
+        </div>
+        {outlineSymbols.length > 0 && (
+          <aside className="ui-file-editor-outline shrink-0 overflow-y-auto border-l border-border px-2 py-2" aria-label={t("files.editor.outline")}>
+            <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">{t("files.editor.outline")}</div>
+            {outlineSymbols.map((symbol) => (
+              <button key={`${symbol.path}:${symbol.line}:${symbol.column}:${symbol.name}`} type="button" className="ui-file-editor-outline-item flex w-full items-center gap-1 rounded px-1.5 py-1 text-left text-[11px] text-text-secondary hover:bg-surface-container-high hover:text-text-primary" onClick={() => onOutlineSelect(symbol)}>
+                <span className="text-primary">{symbol.kind === "class" || symbol.kind === "interface" || symbol.kind === "enum" || symbol.kind === "record" ? "◇" : "ƒ"}</span>
+                <span className="truncate">{symbol.name}</span>
+              </button>
+            ))}
+          </aside>
+        )}
+        </div>
       )}
       {previewableText && fontSizeControlVisible && (
         <FontSizeControl

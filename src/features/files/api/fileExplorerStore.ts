@@ -119,7 +119,7 @@ interface FileSearchNavigationTarget {
   lineNumber: number;
   lineText?: string;
   columnNumber?: number;
-  source: "search" | "terminal";
+  source: "search" | "terminal" | "definition";
 }
 
 export interface ProjectFileEditorWorkspace {
@@ -173,7 +173,7 @@ interface FileExplorerStore {
   openFile: (entry: ProjectFileEntry, options?: FileOpenOptions) => Promise<void>;
   pinFile: (path: string) => void;
   openFileAtSearchMatch: (match: ProjectFileContentMatch, options?: FileOpenOptions) => Promise<void>;
-  revealPath: (path: string, options?: { lineNumber?: number; columnNumber?: number }) => Promise<boolean>;
+  revealPath: (path: string, options?: { lineNumber?: number; columnNumber?: number; source?: "terminal" | "definition" }) => Promise<boolean>;
   clearSearchNavigationTarget: () => void;
   setActiveFilePath: (path: string) => void;
   closeFile: (path: string) => void;
@@ -1552,7 +1552,7 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => {
           path: target.path,
           lineNumber: options.lineNumber,
           ...(options.columnNumber ? { columnNumber: options.columnNumber } : {}),
-          source: "terminal",
+          source: options.source ?? "terminal",
         },
       });
     }
