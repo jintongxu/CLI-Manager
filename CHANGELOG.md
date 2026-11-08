@@ -1,5 +1,9 @@
 # Changelog
 
+## TEMP — 文件查看增强
+
+- Peek 高度记忆、Outline 当前光标状态提示、Alt+Left/Alt+Right 跳转历史，以及选区发送给 Agent。
+
 ## TEMP — Monaco 定义预览
 
 - 定义 Peek 改用只读 Monaco 编辑器，支持语法高亮、行号、折叠、滚动和拖拽调整预览高度。
