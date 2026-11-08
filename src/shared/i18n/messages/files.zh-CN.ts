@@ -1,5 +1,6 @@
 export const zh = {
   "files.status.editing": "编辑",
+  "files.editor.outline": "大纲",
   "files.readOnly": "远程项目只读",
   "files.status.modified": "修改",
   "files.status.added": "新增",

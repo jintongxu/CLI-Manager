@@ -10,7 +10,7 @@ interface SearchNavigationTarget {
   lineNumber: number;
   lineText?: string;
   columnNumber?: number;
-  source: "search" | "terminal";
+  source: "search" | "terminal" | "definition";
 }
 
 interface UseFileEditorSearchNavigationOptions {
@@ -93,7 +93,7 @@ export function useFileEditorSearchNavigation({
         : { start: 1, end: Math.max(line.length + 1, 1) };
 
     clearEditorDecorations(editor, decorationIdsRef);
-    decorationIdsRef.current = editor.deltaDecorations([], [
+    decorationIdsRef.current = target.source === "definition" ? [] : editor.deltaDecorations([], [
       {
         range: { startLineNumber: lineNumber, startColumn: 1, endLineNumber: lineNumber, endColumn: Math.max(line.length + 1, 1) },
         options: { isWholeLine: true, className: "ui-file-editor-search-line-highlight" },
@@ -103,12 +103,16 @@ export function useFileEditorSearchNavigation({
         options: { inlineClassName: "ui-file-editor-search-snippet-highlight" },
       },
     ]);
-    editor.setSelection({
-      startLineNumber: lineNumber,
-      startColumn: column.start,
-      endLineNumber: lineNumber,
-      endColumn: column.end,
-    });
+    if (target.source !== "definition") {
+      editor.setSelection({
+        startLineNumber: lineNumber,
+        startColumn: column.start,
+        endLineNumber: lineNumber,
+        endColumn: column.end,
+      });
+    } else {
+      editor.setPosition({ lineNumber, column: target.columnNumber ?? 1 });
+    }
     editor.revealLineInCenter(lineNumber);
     editor.focus();
     if (target.source === "search") openFindWidget(editor, searchQuery);

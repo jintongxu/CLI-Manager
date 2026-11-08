@@ -1,5 +1,25 @@
 # Changelog
 
+## TEMP — 文件编辑器 Outline / File editor outline
+
+- 文件编辑器新增当前文件 Outline，复用 Tree-sitter 项目符号索引展示 Java/Python/Shell 的类、接口、枚举、record、方法和函数；点击条目即可定位，Outline 不覆盖 Monaco 编辑区。/ Added a current-file Outline powered by the Tree-sitter project symbol index, listing Java/Python/Shell classes, interfaces, enums, records, methods and functions; clicking an item navigates without covering the Monaco editor.
+
+## TEMP — Tree-sitter 项目级类方法跳转 / Tree-sitter project-wide symbol navigation
+
+- 文件编辑器内置 `web-tree-sitter` 与 VS Code Tree-sitter WASM grammar，按项目扫描 Java/Python/Shell 源文件建立类、接口、枚举、record、方法和函数符号索引；Monaco DefinitionProvider、F12 与 Ctrl/Cmd 点击通过现有 `revealPath()` 打开目标文件并定位。仅解析源码，不运行用户代码或语言服务器。/ The file editor bundles `web-tree-sitter` and VS Code Tree-sitter WASM grammars, scans Java/Python/Shell project files into a class/interface/enum/record/method/function index, and routes Monaco DefinitionProvider, F12 and Ctrl/Cmd-click through the existing `revealPath()` opener and locator. It parses source only and never runs user code or language servers.
+
+## TEMP — 离线类与方法跳转 / Offline class and method navigation
+
+- 文件编辑器为 Java、Python、Shell 注册 Monaco DefinitionProvider，扫描当前已打开文件标签中的类、接口、枚举、record、方法和函数声明，支持 Ctrl/Cmd 点击与 F12 跳转到定义；不启动 JDK、Node 或语言服务器，未解析未打开文件和跨项目依赖。/ The file editor registers an offline Monaco DefinitionProvider for Java, Python and Shell, indexing declarations in currently open tabs and supporting Ctrl/Cmd-click and F12 navigation to classes, interfaces, enums, records, methods and functions. No JDK, Node or language server is started; unopened files and cross-project dependencies are not resolved.
+
+## TEMP — 离线代码语义风格高亮 / Offline semantic-style code highlighting
+
+- 文件编辑器不启动 JDK、Node 或语言服务器，仅在 Monaco 内置词法链路中增强 Java、Python、Dockerfile、Shell 的类型、函数、注解、变量、指令与命令识别，并按当前 Catppuccin/Wu 语义色板渲染，适合快速查看项目代码。该能力不提供跨文件语义分析、补全、跳转或诊断。/ The file editor does not start JDK, Node or language servers. Monaco-only lexical rules now add type, function, annotation, variable, directive and command classifications for Java, Python, Dockerfile and Shell, rendered with the active Catppuccin/Wu semantic palette for code browsing. Cross-file analysis, completion, navigation and diagnostics are intentionally out of scope.
+
+## TEMP — Java 风格文件编辑器主题 / Java-style file editor theme
+
+- 文件编辑区采用参考图的深蓝紫代码画布（暗色主题），补充柔和行号、光标、括号高亮、选中态与缩进线；Java、Python、Dockerfile、Shell 词法 token 使用青绿色类型、紫色注解、橙黄色函数和黄绿色属性配色。参考截图纳入 `src/assets/design-references/java-editor-reference.png`，浅色编辑器行为保持不变。/ The dark file editor now uses a deep indigo code canvas inspired by the reference, with refined line numbers, cursor, bracket highlights, selection and guides; Java, Python, Dockerfile and Shell lexical tokens use cyan types, purple annotations, orange functions and yellow-green attributes. The reference image is kept at `src/assets/design-references/java-editor-reference.png`; light-editor behavior is unchanged.
+
 ## TEMP — SSH 文件操作边界与提交验证修复 / SSH file-operation guards and validation fixes
 
 - SSH 文件删除校验当前项目上下文及远端文件上下文；SSH 项目不再读取本机系统剪贴板。补齐终端生命周期测试对文件伴随面板、会话持久化队列和布局迁移依赖的夹具。/ SSH file deletion validates active project and remote context, and SSH projects no longer read the local OS clipboard. Terminal lifecycle test fixtures now provide the companion-focus, persistence-queue, and layout-migration dependencies.

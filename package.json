@@ -55,6 +55,7 @@
     "@tauri-apps/plugin-sql": "^2.3.2",
     "@tauri-apps/plugin-store": "^2.4.2",
     "@tauri-apps/plugin-updater": "^2.10.1",
+    "@vscode/tree-sitter-wasm": "^0.3.1",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-image": "0.10.0-beta.288",
     "@xterm/addon-search": "0.17.0-beta.288",
@@ -86,6 +87,7 @@
     "remark-math": "^6.0.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
+    "web-tree-sitter": "^0.27.2",
     "zustand": "^5.0.11"
   },
   "devDependencies": {

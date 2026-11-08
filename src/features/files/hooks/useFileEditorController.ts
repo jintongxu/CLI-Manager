@@ -3,8 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { copyAiText } from "../api/aiClipboard";
 import { formatAiAnchor, formatAiContextBlock, type AiTextSelection } from "../api/aiPathFormatter";
 import { useI18n } from "../../../shared/i18n/index";
-import type { GitFileChange } from "../../../shared/types/index";
-import { configureMonaco, configureMonacoLocale, languageFromPath } from "../../../shared/platform/monacoSetup";
+import type { GitFileChange, Project } from "../../../shared/types/index";
+import { configureMonaco, configureMonacoLocale, languageFromPath, monaco } from "../../../shared/platform/monacoSetup";
 import { findMarkdownLinkAtPosition } from "../../../shared/lib/markdownNavigation";
 import { isSameProjectFileContext } from "../../terminal/api/terminalProject";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
@@ -16,6 +16,7 @@ import { useFileEditorSearchNavigation } from "../components/useFileEditorSearch
 import { useFileEditorShortcuts } from "../components/useFileEditorShortcuts";
 import type { FileEditorPaneProps, PendingAction, MonacoEditor, MarkdownNavigationMode, PendingMarkdownNavigation } from "../types/fileEditorModel";
 import { getFileEditorTheme } from "../lib/fileEditorTheme";
+import { definitionAt, definitionAtSync, ProjectSymbolIndex, registerFileDefinitionProviders, type ProjectSymbol } from "../lib/fileEditorDefinitions";
 import { useFileEditorMarkdownNavigation } from "./useFileEditorMarkdownNavigation";
 configureMonaco();
 
@@ -28,8 +29,13 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
   const markdownNavigationRef = useRef<(href: string, mode: MarkdownNavigationMode) => void>(() => undefined);
   const markdownNavigationIdRef = useRef(0);
   const markdownFileRef = useRef<ActiveProjectFile | null>(null);
+  const definitionFilesRef = useRef<ActiveProjectFile[]>([]);
+  const definitionIndexRef = useRef(new ProjectSymbolIndex());
+  const editorProjectRef = useRef<Project | null>(null);
+  const revealPathRef = useRef<((path: string, options?: { lineNumber?: number; columnNumber?: number; source?: "terminal" | "definition" }) => Promise<boolean>) | null>(null);
   const nextMarkdownModeRef = useRef<{ path: string; mode: MarkdownNavigationMode } | null>(null);
   const [editorReadyNonce, setEditorReadyNonce] = useState(0);
+  const [outlineSymbols, setOutlineSymbols] = useState<ProjectSymbol[]>([]);
   const copyAiShortcut = useSettingsStore((s) => s.keyboardShortcuts.copyAi);
   const project = useFileExplorerStore((s) => s.project);
 
@@ -49,6 +55,7 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
   const closeFile = useFileExplorerStore((s) => s.closeFile);
   const setActiveContent = useFileExplorerStore((s) => s.setActiveContent);
   const revealPath = useFileExplorerStore((s) => s.revealPath);
+  revealPathRef.current = revealPath;
   const saveFile = useFileExplorerStore((s) => s.saveFile);
   const saveActiveFile = useFileExplorerStore((s) => s.saveActiveFile);
   const projects = useProjectStore((s) => s.projects);
@@ -92,6 +99,7 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
     () => sessionProject ? companion ? sessionProject : resolveGitDiffProject(sessionProject, latestProject) : null,
     [companion, latestProject, sessionProject],
   );
+  editorProjectRef.current = editorProject;
   const diffContext = useMemo(
     () => editorProject ? createGitDiffWorkspaceContext(editorProject) : null,
     [editorProject],
@@ -110,6 +118,7 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
   const ownsFileState = isSameProjectFileContext(project, editorProject);
   const visibleFiles = ownsFileState ? openFiles : [];
   const visibleFile = ownsFileState && !activeDiff ? activeFile : null;
+  definitionFilesRef.current = visibleFiles;
   markdownFileRef.current = visibleFile;
   const dirty = Boolean(visibleFile && visibleFile.content !== visibleFile.savedContent);
   const dirtyFiles = visibleFiles.filter((file) => file.content !== file.savedContent);
@@ -128,8 +137,48 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
     editorRef.current = editor;
     markdownMouseDisposableRef.current?.dispose();
     markdownMouseDisposableRef.current = editor.onMouseDown((event) => {
-      if (!event.event.ctrlKey || !event.event.rightButton || !event.target.position) return;
+      if (!event.target.position) return;
       const file = markdownFileRef.current;
+      if ((event.event.ctrlKey || event.event.metaKey) && event.event.leftButton) {
+        const model = editor.getModel();
+        if (model && editorProjectRef.current) {
+          const symbol = definitionAtSync(definitionIndexRef.current, model, event.target.position);
+          if (symbol) {
+            event.event.preventDefault();
+            event.event.stopPropagation();
+            void revealPathRef.current?.(symbol.path, { lineNumber: symbol.line, columnNumber: symbol.column, source: "definition" }).then((opened) => {
+              if (!opened) return;
+              const targetEditor = editorRef.current;
+              if (!targetEditor) return;
+              clearEditorDecorations(targetEditor, searchDecorationIdsRef);
+              targetEditor.setSelection({
+                startLineNumber: symbol.line,
+                startColumn: symbol.column,
+                endLineNumber: symbol.line,
+                endColumn: symbol.column,
+              });
+              targetEditor?.revealPositionInCenter({ lineNumber: symbol.line, column: symbol.column });
+            });
+            return;
+          }
+          void definitionAt(definitionIndexRef.current, model, event.target.position).then((resolved) => {
+            if (resolved) void revealPathRef.current?.(resolved.path, { lineNumber: resolved.line, columnNumber: resolved.column, source: "definition" }).then((opened) => {
+              if (!opened) return;
+              const targetEditor = editorRef.current;
+              if (!targetEditor) return;
+              clearEditorDecorations(targetEditor, searchDecorationIdsRef);
+              targetEditor.setSelection({
+                startLineNumber: resolved.line,
+                startColumn: resolved.column,
+                endLineNumber: resolved.line,
+                endColumn: resolved.column,
+              });
+              targetEditor?.revealPositionInCenter({ lineNumber: resolved.line, column: resolved.column });
+            });
+          });
+        }
+      }
+      if (!event.event.ctrlKey || !event.event.rightButton) return;
       if (file?.previewKind !== "markdown") return;
       const href = findMarkdownLinkAtPosition(
         file.content,
@@ -141,7 +190,57 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
       event.event.stopPropagation();
       markdownNavigationRef.current(href, "source");
     });
+    editor.addAction({
+      id: "cli-manager.go-to-definition",
+      label: "Go to Definition",
+      keybindings: [monaco.KeyCode.F12],
+      run: async (activeEditor) => {
+        const model = activeEditor.getModel();
+        const position = activeEditor.getPosition();
+        if (!model || !position || !editorProjectRef.current) return;
+        const symbol = await definitionAt(definitionIndexRef.current, model, position);
+        if (!symbol) return;
+        const opened = await revealPathRef.current?.(symbol.path, { lineNumber: symbol.line, columnNumber: symbol.column, source: "definition" });
+        if (!opened) return;
+        const targetEditor = editorRef.current;
+        if (!targetEditor) return;
+        clearEditorDecorations(targetEditor, searchDecorationIdsRef);
+        targetEditor.setSelection({
+          startLineNumber: symbol.line,
+          startColumn: symbol.column,
+          endLineNumber: symbol.line,
+          endColumn: symbol.column,
+        });
+        targetEditor?.revealPositionInCenter({ lineNumber: symbol.line, column: symbol.column });
+      },
+    });
     setEditorReadyNonce((value) => value + 1);
+  }, [editorProject, revealPath]);
+
+  useEffect(() => {
+    const disposables = registerFileDefinitionProviders(definitionIndexRef.current);
+    return () => disposables.forEach((disposable) => disposable.dispose());
+  }, []);
+
+  useEffect(() => {
+    if (!editorProject) return;
+    void definitionIndexRef.current.build(editorProject.path, visibleFiles);
+  }, [editorProject?.path]);
+
+  useEffect(() => definitionIndexRef.current.subscribe(() => {
+    if (visibleFile) setOutlineSymbols(definitionIndexRef.current.forPath(visibleFile.path));
+  }), [visibleFile?.path]);
+
+  useEffect(() => {
+    visibleFiles.forEach((file) => definitionIndexRef.current.replaceOpenFile(file));
+    if (visibleFile) setOutlineSymbols(definitionIndexRef.current.forPath(visibleFile.path));
+  }, [visibleFiles, visibleFile]);
+
+  const selectOutlineSymbol = useCallback((symbol: ProjectSymbol) => {
+    if (!editorRef.current) return;
+    editorRef.current.setPosition({ lineNumber: symbol.line, column: symbol.column });
+    editorRef.current.revealPositionInCenter({ lineNumber: symbol.line, column: symbol.column });
+    editorRef.current.focus();
   }, []);
 
   useEffect(() => () => markdownMouseDisposableRef.current?.dispose(), []);
@@ -350,7 +449,7 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
     copyActiveAiPath, copyActiveAiContext, save, requestClose, visibleFiles, activeFilePath,
     diffContext, diffWorkspace, setActiveFilePath, requestCloseFiles, editorProject, language,
     editorTheme, handleEditorMount, setActiveContent, handleMarkdownLinkActivate,
-    pendingMarkdownNavigation, handleMarkdownFragmentHandled, pendingAction, setPendingAction,
+    pendingMarkdownNavigation, handleMarkdownFragmentHandled, outlineSymbols, selectOutlineSymbol, pendingAction, setPendingAction,
     discardAndRun, saveAndRun, pendingSaveBusy,
   };
 }

@@ -12,7 +12,7 @@ export function FileEditorPaneView(props: FileEditorPaneViewProps) {
     copyActiveAiPath, copyActiveAiContext, save, requestClose, visibleFiles, activeFilePath,
     diffContext, diffWorkspace, setActiveFilePath, requestCloseFiles, editorProject, language,
     editorTheme, handleEditorMount, setActiveContent, handleMarkdownLinkActivate,
-    pendingMarkdownNavigation, handleMarkdownFragmentHandled, pendingAction, setPendingAction,
+    pendingMarkdownNavigation, handleMarkdownFragmentHandled, outlineSymbols, selectOutlineSymbol, pendingAction, setPendingAction,
     discardAndRun, saveAndRun, pendingSaveBusy,
   } = props;
   return (
@@ -59,6 +59,8 @@ export function FileEditorPaneView(props: FileEditorPaneViewProps) {
           ? { id: pendingMarkdownNavigation.id, fragment: pendingMarkdownNavigation.fragment }
           : null}
         onMarkdownFragmentHandled={handleMarkdownFragmentHandled}
+        outlineSymbols={outlineSymbols}
+        onOutlineSelect={selectOutlineSymbol}
       />
 
       <Dialog open={pendingAction !== null} onOpenChange={(open) => { if (!open) setPendingAction(null); }}>
