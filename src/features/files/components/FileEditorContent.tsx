@@ -36,6 +36,8 @@ interface FileEditorContentProps {
   onMarkdownFragmentHandled: (id: number, found: boolean) => void;
   outlineSymbols: ProjectSymbol[];
   onOutlineSelect: (symbol: ProjectSymbol) => void;
+  outlineOpen: boolean;
+  onOutlineOpenChange: (open: boolean) => void;
 }
 
 export function FileEditorContent({
@@ -54,6 +56,8 @@ export function FileEditorContent({
   onMarkdownFragmentHandled,
   outlineSymbols,
   onOutlineSelect,
+  outlineOpen,
+  onOutlineOpenChange,
 }: FileEditorContentProps) {
   const { t } = useI18n();
   const uiFontFamily = useSettingsStore((state) => state.uiFontFamily);
@@ -175,7 +179,12 @@ export function FileEditorContent({
         )}
         </div>
         {outlineSymbols.length > 0 && (
-          <aside className="ui-file-editor-outline shrink-0 overflow-y-auto border-l border-border px-2 py-2" aria-label={t("files.editor.outline")}>
+          <>
+          {!outlineOpen && <button type="button" className="ui-file-editor-outline-toggle" aria-label={t("files.editor.outline")} aria-pressed={false} onClick={() => onOutlineOpenChange(true)}>
+            <span aria-hidden="true">☷</span>
+          </button>}
+          {outlineOpen && <aside className="ui-file-editor-outline" aria-label={t("files.editor.outline")}>
+            <button type="button" className="ui-file-editor-outline-close" aria-label={t("common.close")} onClick={() => onOutlineOpenChange(false)}>×</button>
             <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">{t("files.editor.outline")}</div>
             {outlineSymbols.map((symbol) => (
               <button key={`${symbol.path}:${symbol.line}:${symbol.column}:${symbol.name}`} type="button" className="ui-file-editor-outline-item flex w-full items-center gap-1 rounded px-1.5 py-1 text-left text-[11px] text-text-secondary hover:bg-surface-container-high hover:text-text-primary" onClick={() => onOutlineSelect(symbol)}>
@@ -183,7 +192,8 @@ export function FileEditorContent({
                 <span className="truncate">{symbol.name}</span>
               </button>
             ))}
-          </aside>
+          </aside>}
+          </>
         )}
         </div>
       )}

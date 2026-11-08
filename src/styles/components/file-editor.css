@@ -218,14 +218,100 @@
   min-width: 0;
 }
 
+.ui-file-editor-outline-toggle {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 5;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--file-editor-border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--file-editor-surface) 96%, transparent);
+  color: var(--text-muted);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
+}
+
+.ui-file-editor-outline-toggle:hover {
+  background: var(--surface-container-high);
+  color: var(--text-primary);
+}
+
+.ui-file-editor-outline-close {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.ui-file-editor-outline-close:hover {
+  color: var(--text-primary);
+}
+
 .ui-file-editor-outline {
+  position: relative;
   width: 190px;
-  background: var(--file-editor-surface-soft);
-  border-color: var(--file-editor-border);
+  padding: 10px;
+  overflow-y: auto;
+  border-left: 1px solid color-mix(in srgb, var(--file-editor-border) 55%, transparent);
+  background: var(--file-editor-surface);
 }
 
 .ui-file-editor-outline-item {
   min-height: 26px;
+}
+
+.ui-file-editor-definition-peek {
+  position: relative;
+  flex: 0 0 auto;
+  min-height: 140px;
+  max-height: 560px;
+  border-top: 1px solid var(--file-editor-border);
+  background: var(--file-editor-surface-soft);
+}
+
+.ui-file-editor-definition-peek__resize {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 2;
+  height: 6px;
+  cursor: ns-resize;
+  background: transparent;
+}
+
+.ui-file-editor-definition-peek__resize:hover,
+.ui-file-editor-definition-peek__resize:focus-visible {
+  background: var(--primary);
+}
+
+.ui-file-editor-definition-peek__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--file-editor-border);
+  font-size: 11px;
+}
+
+.ui-file-editor-definition-peek__header button {
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  cursor: pointer;
+}
+
+.ui-file-editor-definition-peek__editor {
+  height: calc(100% - 32px);
+  min-height: 0;
 }
 
 .ui-file-editor-body,

@@ -1,5 +1,13 @@
 # Changelog
 
+## TEMP — Monaco 定义预览
+
+- 定义 Peek 改用只读 Monaco 编辑器，支持语法高亮、行号、折叠、滚动和拖拽调整预览高度。
+
+## TEMP — 定义预览
+
+- Ctrl/Cmd 点击代码定义时改为在编辑器底部打开 Peek 预览，不再立即切换当前文件；可按 Escape 关闭，或点击“在编辑器中打开”执行正式跳转。
+
 ## TEMP — 文件编辑器 Outline / File editor outline
 
 - 文件编辑器新增当前文件 Outline，复用 Tree-sitter 项目符号索引展示 Java/Python/Shell 的类、接口、枚举、record、方法和函数；点击条目即可定位，Outline 不覆盖 Monaco 编辑区。/ Added a current-file Outline powered by the Tree-sitter project symbol index, listing Java/Python/Shell classes, interfaces, enums, records, methods and functions; clicking an item navigates without covering the Monaco editor.

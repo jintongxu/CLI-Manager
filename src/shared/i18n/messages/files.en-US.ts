@@ -3,6 +3,8 @@ import type { zh } from "./files.zh-CN";
 export const en: Record<keyof typeof zh, string> = {
   "files.status.editing": "Editing",
   "files.editor.outline": "Outline",
+  "files.editor.definitionPeek": "Definition preview",
+  "files.editor.openDefinition": "Open in editor",
   "files.readOnly": "Remote project is read-only",
   "files.status.modified": "Modified",
   "files.status.added": "Added",
