@@ -15,10 +15,13 @@ function FileEditorPaneView(props: FileEditorPaneViewProps) {
     copyActiveAiPath, copyActiveAiContext, save, requestClose,
     diffContext, diffWorkspace, editorProject, language,
     editorTheme, handleEditorMount, setActiveContent, handleMarkdownLinkActivate,
-    pendingMarkdownNavigation, handleMarkdownFragmentHandled, outlineSymbols, selectOutlineSymbol, definitionPeek, setDefinitionPeek, openDefinition, pendingAction, setPendingAction,
+    pendingMarkdownNavigation, handleMarkdownFragmentHandled, outlineSymbols, outlineActiveLine, selectOutlineSymbol, definitionPeek, setDefinitionPeek, openDefinition, pendingAction, setPendingAction,
     discardAndRun, saveAndRun, pendingSaveBusy,
   } = props;
-  const [definitionPeekHeight, setDefinitionPeekHeight] = useState(280);
+  const [definitionPeekHeight, setDefinitionPeekHeight] = useState(() => {
+    const stored = Number(localStorage.getItem("cli-manager.file-editor.peek-height"));
+    return Number.isFinite(stored) ? Math.max(140, Math.min(560, stored)) : 280;
+  });
   const [outlineOpen, setOutlineOpen] = useState(false);
   const peekDragRef = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
   useEffect(() => {
@@ -65,6 +68,7 @@ function FileEditorPaneView(props: FileEditorPaneViewProps) {
           : null}
         onMarkdownFragmentHandled={handleMarkdownFragmentHandled}
         outlineSymbols={outlineSymbols}
+        outlineActiveLine={outlineActiveLine}
         onOutlineSelect={selectOutlineSymbol}
         outlineOpen={outlineOpen}
         onOutlineOpenChange={setOutlineOpen}
@@ -81,7 +85,9 @@ function FileEditorPaneView(props: FileEditorPaneViewProps) {
             onPointerMove={(event) => {
               const drag = peekDragRef.current;
               if (!drag || drag.pointerId !== event.pointerId) return;
-              setDefinitionPeekHeight(Math.max(140, Math.min(560, drag.startHeight + drag.startY - event.clientY)));
+              const nextHeight = Math.max(140, Math.min(560, drag.startHeight + drag.startY - event.clientY));
+              setDefinitionPeekHeight(nextHeight);
+              localStorage.setItem("cli-manager.file-editor.peek-height", String(nextHeight));
             }}
             onPointerUp={(event) => { if (peekDragRef.current?.pointerId === event.pointerId) { peekDragRef.current = null; event.currentTarget.releasePointerCapture(event.pointerId); } }}
             onPointerCancel={() => { peekDragRef.current = null; }}

@@ -36,6 +36,9 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
   const nextMarkdownModeRef = useRef<{ path: string; mode: MarkdownNavigationMode } | null>(null);
   const [editorReadyNonce, setEditorReadyNonce] = useState(0);
   const [outlineSymbols, setOutlineSymbols] = useState<ProjectSymbol[]>([]);
+  const [outlineActiveLine, setOutlineActiveLine] = useState<number | null>(null);
+  const navigationBackRef = useRef<Array<{ path: string; line: number; column: number }>>([]);
+  const navigationForwardRef = useRef<Array<{ path: string; line: number; column: number }>>([]);
   const [definitionPeek, setDefinitionPeek] = useState<{ symbol: ProjectSymbol; content: string } | null>(null);
   const copyAiShortcut = useSettingsStore((s) => s.keyboardShortcuts.copyAi);
   const project = useFileExplorerStore((s) => s.project);
@@ -155,6 +158,7 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
   const handleEditorMount = useCallback<OnMount>((editor) => {
     editorRef.current = editor;
     markdownMouseDisposableRef.current?.dispose();
+    editor.onDidChangeCursorPosition((event) => setOutlineActiveLine(event.position.lineNumber));
     markdownMouseDisposableRef.current = editor.onMouseDown((event) => {
       if (!event.target.position) return;
       const file = markdownFileRef.current;
@@ -435,17 +439,40 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
     }
   };
   const openDefinition = useCallback(async (symbol: ProjectSymbol) => {
+    const currentPosition = editorRef.current?.getPosition();
+    const currentPath = markdownFileRef.current?.path;
+    if (currentPosition && currentPath) navigationBackRef.current.push({ path: currentPath, line: currentPosition.lineNumber, column: currentPosition.column });
+    navigationForwardRef.current = [];
     const opened = await revealPathRef.current?.(symbol.path, { lineNumber: symbol.line, columnNumber: symbol.column, source: "definition" });
     if (!opened) return;
     setDefinitionPeek(null);
   }, []);
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (!isActive || !(event.altKey && (event.key === "ArrowLeft" || event.key === "ArrowRight"))) return;
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest(".ui-file-editor-pane")) return;
+      event.preventDefault();
+      const from = editorRef.current?.getPosition();
+      const path = markdownFileRef.current?.path;
+      const source = event.key === "ArrowLeft" ? navigationBackRef.current : navigationForwardRef.current;
+      const destination = source.pop();
+      if (!destination || !from || !path) return;
+      const opposite = event.key === "ArrowLeft" ? navigationForwardRef.current : navigationBackRef.current;
+      opposite.push({ path, line: from.lineNumber, column: from.column });
+      void revealPathRef.current?.(destination.path, { lineNumber: destination.line, columnNumber: destination.column, source: "definition" });
+    };
+    window.addEventListener("keydown", handler, true);
+    return () => window.removeEventListener("keydown", handler, true);
+  }, [isActive]);
 
   return {
     activeDiff, t, visibleFile, session, project, dirty, isNewFile, previewMode, setPreviewMode,
     copyActiveAiPath, copyActiveAiContext, save, requestClose, visibleFiles, activeFilePath,
     diffContext, diffWorkspace, setActiveFilePath, requestCloseFiles, editorProject, language,
     editorTheme, handleEditorMount, setActiveContent, handleMarkdownLinkActivate,
-    pendingMarkdownNavigation, handleMarkdownFragmentHandled, outlineSymbols, selectOutlineSymbol, definitionPeek, setDefinitionPeek, openDefinition, pendingAction, setPendingAction,
+    pendingMarkdownNavigation, handleMarkdownFragmentHandled, outlineSymbols, outlineActiveLine, selectOutlineSymbol, definitionPeek, setDefinitionPeek, openDefinition, pendingAction, setPendingAction,
     discardAndRun, saveAndRun, pendingSaveBusy,
   };
 }

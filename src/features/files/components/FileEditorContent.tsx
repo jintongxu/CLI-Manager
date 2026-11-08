@@ -36,6 +36,7 @@ interface FileEditorContentProps {
   onMarkdownFragmentHandled: (id: number, found: boolean) => void;
   outlineSymbols: ProjectSymbol[];
   onOutlineSelect: (symbol: ProjectSymbol) => void;
+  outlineActiveLine: number | null;
   outlineOpen: boolean;
   onOutlineOpenChange: (open: boolean) => void;
 }
@@ -56,6 +57,7 @@ export function FileEditorContent({
   onMarkdownFragmentHandled,
   outlineSymbols,
   onOutlineSelect,
+  outlineActiveLine,
   outlineOpen,
   onOutlineOpenChange,
 }: FileEditorContentProps) {
@@ -187,7 +189,7 @@ export function FileEditorContent({
             <button type="button" className="ui-file-editor-outline-close" aria-label={t("common.close")} onClick={() => onOutlineOpenChange(false)}>×</button>
             <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">{t("files.editor.outline")}</div>
             {outlineSymbols.map((symbol) => (
-              <button key={`${symbol.path}:${symbol.line}:${symbol.column}:${symbol.name}`} type="button" className="ui-file-editor-outline-item flex w-full items-center gap-1 rounded px-1.5 py-1 text-left text-[11px] text-text-secondary hover:bg-surface-container-high hover:text-text-primary" onClick={() => onOutlineSelect(symbol)}>
+              <button key={`${symbol.path}:${symbol.line}:${symbol.column}:${symbol.name}`} type="button" className={`ui-file-editor-outline-item flex w-full items-center gap-1 rounded px-1.5 py-1 text-left text-[11px] text-text-secondary hover:bg-surface-container-high hover:text-text-primary${outlineActiveLine !== null && symbol.line <= outlineActiveLine ? " is-before-cursor" : ""}`} onClick={() => onOutlineSelect(symbol)}>
                 <span className="text-primary">{symbol.kind === "class" || symbol.kind === "interface" || symbol.kind === "enum" || symbol.kind === "record" ? "◇" : "ƒ"}</span>
                 <span className="truncate">{symbol.name}</span>
               </button>

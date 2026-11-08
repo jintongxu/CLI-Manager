@@ -268,6 +268,10 @@
   min-height: 26px;
 }
 
+.ui-file-editor-outline-item.is-before-cursor {
+  color: var(--text-primary);
+}
+
 .ui-file-editor-definition-peek {
   position: relative;
   flex: 0 0 auto;
