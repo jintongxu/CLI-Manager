@@ -514,8 +514,8 @@ export function SshHostsSettingsPage({ searchValue, onTerminalOpened }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="ui-surface-low flex items-center justify-between rounded-2xl border border-border px-4 py-3">
-        <div className="flex items-center gap-3">
+      <div className="ui-surface-low flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-2xl border border-border px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
           {client?.available ? (
             <CheckCircle2 className="h-5 w-5 text-primary" />
           ) : (
@@ -530,7 +530,7 @@ export function SshHostsSettingsPage({ searchValue, onTerminalOpened }: Props) {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           <button
             className="ui-button-secondary flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold"
             onClick={() => void addGroup(null)}
@@ -572,7 +572,7 @@ export function SshHostsSettingsPage({ searchValue, onTerminalOpened }: Props) {
                 key={job.hostId}
                 className="space-y-2 border-t border-border pt-2 first:border-t-0 first:pt-0"
               >
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
                   <button
                     type="button"
                     className="min-w-0 text-left"
@@ -591,7 +591,7 @@ export function SshHostsSettingsPage({ searchValue, onTerminalOpened }: Props) {
                         : phase}
                     </div>
                   </button>
-                  <div className="flex items-center gap-1">
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
                     {job.error && (
                       <Button
                         type="button"
@@ -789,7 +789,7 @@ function SshHostTree({
     return (
       <div key={group.id} className="border-b border-border last:border-b-0">
         <div
-          className="flex h-11 items-center gap-2 bg-surface-low px-3"
+          className="flex min-h-11 flex-wrap items-center gap-2 bg-surface-low px-3 py-2"
           style={{ paddingLeft: 12 + depth * 18 }}
         >
           <button
@@ -810,7 +810,8 @@ function SshHostTree({
           <span className="min-w-0 flex-1 truncate text-sm font-bold text-text-primary">
             {group.name}
           </span>
-          <span className="text-xs text-text-muted">{groupHosts.length}</span>
+          <span className="shrink-0 text-xs text-text-muted">{groupHosts.length}</span>
+          <div className="ml-auto flex shrink-0 flex-wrap items-center gap-1">
           <button
             type="button"
             className="ui-icon-button text-primary"
@@ -838,6 +839,7 @@ function SshHostTree({
           >
             <Trash2 className="h-4 w-4" />
           </button>
+          </div>
         </div>
         {!isCollapsed && (
           <>
@@ -914,7 +916,7 @@ function SshHostRow({
   const { t } = useI18n();
   return (
     <div
-      className="flex items-center gap-3 border-t border-border px-4 py-2.5"
+      className="flex min-w-0 flex-wrap items-center gap-3 border-t border-border px-4 py-2.5"
       style={{ paddingLeft: 16 + depth * 18 }}
     >
       <Server className="h-4 w-4 shrink-0 text-primary" />
@@ -925,6 +927,7 @@ function SshHostRow({
             `${host.username ? `${host.username}@` : ""}${host.host}:${host.port}`}
         </div>
       </div>
+      <div className="flex shrink-0 items-center gap-1">
       <button
         type="button"
         className="ui-icon-button"
@@ -968,6 +971,7 @@ function SshHostRow({
       >
         <Trash2 className="h-4 w-4" />
       </button>
+      </div>
     </div>
   );
 }
