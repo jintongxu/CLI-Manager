@@ -1,8 +1,8 @@
-import type { BtwMessage } from "../lib/btwThreadModel";
+import { btwContentText, type BtwMessage } from "../lib/btwThreadModel";
 
 export function btwQuestions(messages: BtwMessage[]) {
   return messages.flatMap((message, index) => message.role === "user"
-    ? [{ index, snippet: message.content.replace(/\s+/g, " ").trim().slice(0, 96) }] : []);
+    ? [{ index, snippet: btwContentText(message.content).replace(/\s+/g, " ").trim().slice(0, 96) }] : []);
 }
 
 // 只写入当前会话滚动容器；禁止 scrollIntoView 带动 portal 或窗口。

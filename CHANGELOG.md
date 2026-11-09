@@ -1,5 +1,19 @@
 # Changelog
 
+## TEMP — 修复启动迁移校验失败
+
+- 修复 `migration 59 was previously applied but has been modified` 启动失败：统一 `chat_assets.sql` 为 LF，并在 `.gitattributes` 固定 Rust SQLite 迁移 SQL 的换行格式，避免正式版与开发版因 CRLF/LF checksum 漂移而要求重复重试。
+
+## TEMP — btw 侧问图片支持
+
+- btw 侧问支持 PNG/JPEG/WebP 图片选择、剪贴板粘贴、预览、移除和多模态发送；图片会随侧问历史持久化并同步到独立窗口，兼容旧文本消息。单次最多 4 张，单张最大 6 MB。
+- 修复窄侧栏下 BTW 输入区被 flex 布局压扁的问题；参考项目 ChatPanel 的成熟窄栏 composer，改为圆角输入卡片、textarea 主体、底部附件工具栏和胶囊发送按钮，保证可见高度和操作区域。
+- 修复图片侧问被统一报为 `side_question_failed`：Node sidecar 现在按 Pi SDK 1.4 契约将当前输入拆为文本与 `PromptOptions.images`，含图历史继续使用结构化内容块；初始提问、续问与重新开始均支持文字加图片及仅图片发送。请求校验分别限制文本、单图与多轮图片线载荷，避免 6 MiB 合规图片被旧 512 KiB 文本上限误拒；provider 明确失败时保留可重试状态，不把部分回答提交为成功。
+
+## TEMP — btw 侧问 UX 优化
+
+- 借鉴 pi-btw 的安全交互理念：侧问阅读器增加只读上下文能力提示；输入 `/` 显示侧问命令说明；Esc 在生成中停止、否则收起/关闭；支持 Ctrl/Cmd+Alt+W 快速关闭；历史加载增加忙碌态并防止重复请求；同步中英文文案与视觉样式。
+
 ## TEMP — 文件查看增强
 
 - Peek 高度记忆、Outline 当前光标状态提示、Alt+Left/Alt+Right 跳转历史，以及选区发送给 Agent。

@@ -1,11 +1,13 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../../../shared/i18n/index";
 import { Button } from "../../../shared/ui/button";
 import { copyTextToClipboard } from "../../../shared/platform/systemClipboard";
-import { btwThreadText, type BtwThread } from "../lib/btwThreadModel";
+import { btwContentText, btwThreadText, type BtwThread } from "../lib/btwThreadModel";
 import { BtwContextDetails } from "./BtwContextDetails";
 import { MarkdownContent } from "../../../shared/ui/MarkdownContent";
 import { activeBtwQuestion, btwQuestions, jumpToBtwQuestion } from "./btwQuestionNavigation";
+import { fileToBtwImage, readBtwImages } from "../lib/btwImageAttachments";
+import type { BtwImagePart } from "../lib/btwThreadModel";
 import "./btwThreadDialog.css";
 
 export type BtwReaderActions = Pick<import("../lib/btwThreadModel").BtwThreadModel,
@@ -18,10 +20,23 @@ export function BtwThreadReader({ model, thread }: { model: BtwReaderActions; th
   const scroller = useRef<HTMLDivElement>(null);
   const [activeQuestion, setActiveQuestion] = useState<number | null>(null);
   const [outlineOpen, setOutlineOpen] = useState(false);
+  const [showCommandHint, setShowCommandHint] = useState(false);
+  const [images, setImages] = useState<BtwImagePart[]>([]);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const questions = btwQuestions(thread.messages);
   const pending = thread.status === "pending";
   const retry = thread.status === "failed" || thread.status === "stopped";
-  return <main className="btw-reading-workspace" aria-label={thread.title}>
+  useEffect(() => setImages(thread.draftImages ?? []), [thread.id, thread.generation]);
+  return <main className="btw-reading-workspace" aria-label={thread.title}
+    onKeyDown={(event) => {
+      if (event.key === "Escape") {
+        if (pending) { event.preventDefault(); model.stop(thread.id); }
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.altKey && event.key.toLowerCase() === "w") {
+        event.preventDefault(); model.open(null);
+      }
+    }}>
       <header className="btw-reading-header" data-btw-header="true">
         <div className="flex items-center justify-between gap-3">
           <h1 className="min-w-0 truncate">{thread.title}</h1>
@@ -29,7 +44,8 @@ export function BtwThreadReader({ model, thread }: { model: BtwReaderActions; th
         </div>
         <p className="sr-only">{t("terminal.btw.dialogHint")}</p>
         <div className="btw-reading-toolbar">
-          <span>{t(thread.inherit ? "terminal.btw.modeInherited" : "terminal.btw.modeIndependent")}</span>
+          <span className="btw-mode-badge">{t(thread.inherit ? "terminal.btw.modeInherited" : "terminal.btw.modeIndependent")}</span>
+          <span className="btw-capability-badge">{t("terminal.btw.readOnlyBadge")}</span>
           <details className="btw-reading-settings" data-btw-source-details="true">
             <summary>{t("terminal.btw.contextDetails")}</summary>
             <div className="btw-reading-settings-panel">
@@ -65,10 +81,10 @@ export function BtwThreadReader({ model, thread }: { model: BtwReaderActions; th
           data-btw-question={message.role === "user" ? index : undefined} tabIndex={message.role === "user" ? -1 : undefined}>
           <div className="flex items-center justify-between"><strong>
             {t(message.role === "user" ? "terminal.btw.questionLabel" : "terminal.btw.answerLabel")}</strong>
-            <Button size="sm" variant="ghost" onClick={() => void copyTextToClipboard(message.content)}>{t("terminal.btw.copyAnswer")}</Button>
+            <Button size="sm" variant="ghost" onClick={() => void copyTextToClipboard(btwContentText(message.content))}>{t("terminal.btw.copyAnswer")}</Button>
           </div>{message.role === "assistant"
-            ? <MarkdownContent content={message.content} linkBehavior="open" className="btw-reading-markdown" />
-            : <div className="btw-reading-question">{message.content}</div>}
+            ? <MarkdownContent content={btwContentText(message.content)} linkBehavior="open" className="btw-reading-markdown" />
+            : <div className="btw-reading-question">{typeof message.content === "string" ? message.content : <>{message.content.filter(part => part.type === "text").map(part => part.text).join("\n")} {message.content.filter(part => part.type === "image").map((part, imageIndex) => <img key={imageIndex} src={`data:${part.source.media_type};base64,${part.source.data}`} alt={part.name ?? t("terminal.btw.attachedImage")} className="btw-message-image" />)}</>}</div>}
         </article>)}
         {(pending || retry) && <div className="btw-reading-turn" data-btw-answer={thread.status}>
           <span role="status">{t(`terminal.btw.${thread.status}`)}</span>
@@ -93,14 +109,21 @@ export function BtwThreadReader({ model, thread }: { model: BtwReaderActions; th
       <footer className="btw-reading-composer" data-btw-composer="true">
       <div className="btw-reading-composer-inner">
       <label className="btw-composer-input"><span className="sr-only">{t("terminal.btw.followup")}</span>
-        <textarea className="w-full resize-none text-sm leading-relaxed" rows={2} value={thread.draft}
+        {showCommandHint ? <div className="btw-command-hint" role="status">
+        <strong>{t("terminal.btw.commandHintTitle")}</strong>
+        <span>{t("terminal.btw.commandHintBody")}</span>
+      </div> : null}
+      {images.length ? <div className="btw-image-previews">{images.map((image, index) => <div key={`${image.source.data.slice(0, 12)}-${index}`} className="btw-image-preview"><img src={`data:${image.source.media_type};base64,${image.source.data}`} alt={image.name ?? t("terminal.btw.attachedImage")} /><button type="button" onClick={() => setImages((current) => current.filter((_, itemIndex) => itemIndex !== index))}>{t("terminal.btw.removeImage")}</button></div>)}</div> : null}
+      <input ref={imageInputRef} hidden type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => { const files = Array.from(event.target.files ?? []); const { accepted } = readBtwImages(files, images.length); void Promise.all(accepted.map(fileToBtwImage)).then((next) => setImages((current) => [...current, ...next])); event.currentTarget.value = ""; }} />
+      <textarea className="w-full resize-none text-sm leading-relaxed" rows={2} value={thread.draft}
           placeholder={t("terminal.btw.followup")}
           disabled={pending || retry || thread.contextLoading}
-          onChange={(event) => model.setDraft(thread.id, event.target.value)} /></label>
+          onPaste={(event) => { const files = Array.from(event.clipboardData.files); if (files.length) { event.preventDefault(); const { accepted } = readBtwImages(files, images.length); void Promise.all(accepted.map(fileToBtwImage)).then((next) => setImages((current) => [...current, ...next])); } }}
+          onChange={(event) => { model.setDraft(thread.id, event.target.value); setShowCommandHint(event.target.value.trimStart().startsWith("/")); }} /></label>
       <div className="btw-composer-actions">
         {pending ? <Button size="sm" onClick={() => model.stop(thread.id)}>{t("terminal.btw.stop")}</Button>
           : retry ? <Button size="sm" onClick={() => model.send(thread.id, true)}>{t("terminal.btw.retry")}</Button>
-            : <Button size="sm" disabled={!thread.draft.trim() || thread.contextLoading} onClick={() => model.send(thread.id)}>{t("terminal.btw.ask")}</Button>}
+            : <div className="btw-composer-actions-row"><Button size="sm" variant="ghost" onClick={() => imageInputRef.current?.click()}>{t("terminal.btw.attachImage")}</Button><Button size="sm" disabled={!thread.draft.trim() && !images.length || thread.contextLoading} onClick={() => { model.send(thread.id, false, images); setImages([]); }}>{t("terminal.btw.ask")}</Button></div>}
       </div>
       </div>
       </footer>

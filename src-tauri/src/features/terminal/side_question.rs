@@ -11,7 +11,9 @@ pub(crate) mod process;
 #[serde(rename_all = "camelCase")]
 pub struct SideQuestionMessage {
     role: String,
-    content: String,
+    /// Text remains the wire-compatible legacy form. Arrays use the shared
+    /// provider content-block protocol (text and base64 image blocks).
+    content: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -65,12 +67,16 @@ struct Progress {
     text: String,
 }
 
+const MAX_SIDE_QUESTION_TEXT_BYTES: usize = 512_000;
+const MAX_SIDE_QUESTION_WIRE_BYTES: usize = 72 * 1024 * 1024;
+const MAX_SIDE_QUESTION_IMAGE_BASE64_BYTES: usize = 8 * 1024 * 1024;
+
 fn validate_request(request: &mut SideQuestionRequest) -> Result<(), String> {
     let legacy = request.messages.is_empty() && request.prompt.is_some();
     if legacy {
         request.messages.push(SideQuestionMessage {
             role: "user".into(),
-            content: request.prompt.take().unwrap(),
+            content: serde_json::Value::String(request.prompt.take().unwrap()),
         });
         if request.request_id.is_empty() {
             request.request_id = uuid::Uuid::new_v4().to_string();
@@ -91,24 +97,58 @@ fn validate_request(request: &mut SideQuestionRequest) -> Result<(), String> {
         || request.messages.len() % 2 == 0
         || request.messages.iter().enumerate().any(|(index, message)| {
             message.role != if index % 2 == 0 { "user" } else { "assistant" }
-                || message.content.trim().is_empty()
+                || !valid_message_content(&message.content)
         })
     {
         return Err("side_question_invalid_messages".into());
     }
+    let text_bytes = request.quote.len()
+        + request.context.len()
+        + request.messages.iter().map(|message| message_text_bytes(&message.content)).sum::<usize>();
+    let wire_bytes = request.quote.len()
+        + request.context.len()
+        + request.messages.iter()
+            .map(|message| serde_json::to_vec(&message.content).map_or(usize::MAX, |value| value.len()))
+            .sum::<usize>();
     if request.context.chars().count() > 40_000
-        || request.quote.len()
-            + request.context.len()
-            + request
-                .messages
-                .iter()
-                .map(|message| message.content.len())
-                .sum::<usize>()
-            > 512_000
+        || text_bytes > MAX_SIDE_QUESTION_TEXT_BYTES
+        || wire_bytes > MAX_SIDE_QUESTION_WIRE_BYTES
     {
         return Err("side_question_request_too_large".into());
     }
     Ok(())
+}
+
+fn message_text_bytes(content: &serde_json::Value) -> usize {
+    match content {
+        serde_json::Value::String(text) => text.len(),
+        serde_json::Value::Array(parts) => parts.iter()
+            .filter_map(|part| part.get("text").and_then(serde_json::Value::as_str))
+            .map(str::len)
+            .sum(),
+        _ => usize::MAX,
+    }
+}
+
+fn valid_message_content(content: &serde_json::Value) -> bool {
+    match content {
+        serde_json::Value::String(text) => !text.trim().is_empty(),
+        serde_json::Value::Array(parts) if !parts.is_empty() => parts.iter().all(|part| {
+            let Some(kind) = part.get("type").and_then(serde_json::Value::as_str) else { return false; };
+            match kind {
+                "text" => part.get("text").and_then(serde_json::Value::as_str).is_some_and(|text| !text.trim().is_empty()),
+                "image" => {
+                    let Some(source) = part.get("source") else { return false; };
+                    source.get("type").and_then(serde_json::Value::as_str) == Some("base64")
+                        && source.get("data").and_then(serde_json::Value::as_str)
+                            .is_some_and(|data| !data.is_empty() && data.len() <= MAX_SIDE_QUESTION_IMAGE_BASE64_BYTES)
+                        && source.get("media_type").and_then(serde_json::Value::as_str).is_some_and(|mime| matches!(mime, "image/png" | "image/jpeg" | "image/webp"))
+                }
+                _ => false,
+            }
+        }),
+        _ => false,
+    }
 }
 
 /// A single isolated inference, never a terminal/PTY or a source-session mutation.
@@ -306,6 +346,8 @@ fn context_process_error(error: String) -> Result<SideQuestionContext, String> {
         "side_question_stdout" => ("start", "source_process_stdout"),
         "side_question_wait" => ("exit", "source_process_wait"),
         "side_question_failed" => ("sidecar", "source_process_failed"),
+        "side_question_provider_auth" => ("sidecar", "source_provider_auth"),
+        "side_question_provider_config" => ("sidecar", "source_provider_config"),
         "side_question_cancelled" => ("process", "source_process_cancelled"),
         _ => ("process", "source_unreadable"),
     };
@@ -359,9 +401,28 @@ mod tests {
         let mut legacy: SideQuestionRequest =
             serde_json::from_str(r#"{"prompt":"explain this"}"#).unwrap();
         validate_request(&mut legacy).unwrap();
-        assert_eq!(legacy.messages[0].content, "explain this");
+        assert_eq!(legacy.messages[0].content, serde_json::Value::String("explain this".into()));
         assert!(!legacy.request_id.is_empty());
     }
+    #[test]
+    fn accepts_provider_image_content_blocks() {
+        let mut request: SideQuestionRequest = serde_json::from_str(r#"{"requestId":"r","threadId":"t","messages":[{"role":"user","content":[{"type":"text","text":"what is this?"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AAAA"}}]}]}"#).unwrap();
+        validate_request(&mut request).unwrap();
+        let encoded = serde_json::to_value(request).unwrap();
+        assert_eq!(encoded["messages"][0]["content"][1]["type"], "image");
+
+        let image = serde_json::json!({"type":"image","source":{"type":"base64","media_type":"image/png","data":"A".repeat(700_000)}});
+        let mut follow_up = SideQuestionRequest {
+            request_id: "r".into(), thread_id: "t".into(), prompt: None, quote: String::new(), context: String::new(),
+            messages: vec![
+                SideQuestionMessage { role: "user".into(), content: serde_json::Value::Array(vec![image.clone()]) },
+                SideQuestionMessage { role: "assistant".into(), content: serde_json::Value::String("seen".into()) },
+                SideQuestionMessage { role: "user".into(), content: serde_json::Value::Array(vec![image]) },
+            ],
+        };
+        validate_request(&mut follow_up).unwrap();
+    }
+
     #[test]
     fn reject_invalid_turns_and_frontend_paths() {
         let mut request: SideQuestionRequest = serde_json::from_str(
@@ -412,7 +473,7 @@ mod tests {
         let mut request = valid();
         request.messages.push(SideQuestionMessage {
             role: "assistant".into(),
-            content: "unfinished".into(),
+            content: serde_json::Value::String("unfinished".into()),
         });
         assert_eq!(
             validate_request(&mut request).unwrap_err(),

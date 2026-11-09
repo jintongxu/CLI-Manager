@@ -10,7 +10,10 @@ export interface BtwContext {
   truncated: boolean;
   reason: string | null;
 }
-export interface BtwMessage { role: "user" | "assistant"; content: string }
+export interface BtwImagePart { type: "image"; source: { type: "base64"; media_type: "image/png" | "image/jpeg" | "image/webp"; data: string }; name?: string }
+export type BtwContent = string | Array<{ type: "text"; text: string } | BtwImagePart>;
+export interface BtwMessage { role: "user" | "assistant"; content: BtwContent }
+export const btwContentText = (content: BtwContent): string => typeof content === "string" ? content : content.filter((part): part is { type: "text"; text: string } => part.type === "text").map(part => part.text).join("\n");
 export type BtwStatus = "idle" | "pending" | "done" | "failed" | "stopped";
 export interface BtwThread {
   id: string;
@@ -22,6 +25,7 @@ export interface BtwThread {
   contextLoading: boolean;
   messages: BtwMessage[];
   draft: string;
+  draftImages?: BtwImagePart[];
   status: BtwStatus;
   answer: string;
   error: string | null;
@@ -218,8 +222,8 @@ export class BtwThreadModel {
   setQuestion = (question: string) => this.publish({ question });
   setInherit = (inherit: boolean) => this.publish({ inherit: inherit && !this.state.source.reason && !!this.state.source.sessionId });
   /** Embedded selection is owner state, independent of native-window reveal state. */
-  submitEmbedded = (): string | null => {
-    const embeddedId = this.submit();
+  submitEmbedded = (images: BtwImagePart[] = []): string | null => {
+    const embeddedId = this.submit(images);
     if (embeddedId) this.publish({ embeddedId });
     return embeddedId;
   };
@@ -258,20 +262,21 @@ export class BtwThreadModel {
     const thread = this.find(threadId);
     if (thread) this.replace(thread, { draft });
   };
-  submit = (): string | null => {
+  submit = (images: BtwImagePart[] = []): string | null => {
     const question = this.state.question.trim();
-    if (!question || (this.state.inherit && this.state.contextLoading)) return null;
+    if ((!question && !images.length) || (this.state.inherit && this.state.contextLoading)) return null;
     const thread: BtwThread = { id: id(), source: { ...this.state.source }, quote: this.state.quote, title: question,
       createdAt: Date.now(), inherit: this.state.inherit,
       context: unavailable(this.state.source.reason ?? "inherit_off"), contextLoading: this.state.inherit,
-      messages: [], draft: question, status: "idle", answer: "", error: null, generation: 0, requestId: null, contextRequestId: null };
+      messages: [], draft: question, draftImages: images.length ? images : undefined,
+      status: "idle", answer: "", error: null, generation: 0, requestId: null, contextRequestId: null };
     this.persist(thread);
     this.publish({ entries: [...this.state.entries, thread], question: "", inherit: false });
     if (!thread.inherit) this.send(thread.id);
     else this.loadContext(thread, true);
     return thread.id;
   };
-  send = (threadId: string, retry = false) => {
+  send = (threadId: string, retry = false, images: BtwImagePart[] = []) => {
     const thread = this.find(threadId);
     if (!thread || thread.requestId || thread.contextLoading) return;
     if (retry && thread.status !== "failed" && thread.status !== "stopped") return;
@@ -279,13 +284,23 @@ export class BtwThreadModel {
       if (retry) this.loadContext(thread, true);
       return;
     }
-    const question = thread.draft.trim();
-    if (!retry && (!question || thread.messages[thread.messages.length - 1]?.role === "user")) return;
-    const messages = retry ? thread.messages : [...thread.messages, { role: "user" as const, content: question }];
+    const draft = thread.draft.trim();
+    const pendingImages = retry ? [] : images.length ? images : thread.draftImages ?? [];
+    let question = draft;
+    let content: BtwContent = pendingImages.length
+      ? [...(question ? [{ type: "text" as const, text: question }] : []), ...pendingImages]
+      : question;
+    // Read legacy in-flight image drafts written before draftImages existed.
+    if (!retry && !pendingImages.length && draft.startsWith("{\"text\":")) {
+      try { const parsed = JSON.parse(draft) as { text?: string; images?: BtwImagePart[] }; question = parsed.text?.trim() ?? ""; content = [...(question ? [{ type: "text" as const, text: question }] : []), ...(parsed.images ?? [])]; } catch { content = question; }
+    }
+    if (!retry && (!question && !Array.isArray(content) || thread.messages[thread.messages.length - 1]?.role === "user")) return;
+    const messages = retry ? thread.messages : [...thread.messages, { role: "user" as const, content }];
     if (messages[messages.length - 1]?.role !== "user") return;
     const requestId = id();
     const generation = thread.generation + 1;
-    this.replace(thread, { messages, requestId, generation, draft: "", status: "pending", answer: "", error: null });
+    this.replace(thread, { messages, requestId, generation, draft: "", draftImages: undefined,
+      status: "pending", answer: "", error: null });
     const current = () => {
       const value = this.find(threadId);
       return !this.disposed && value?.requestId === requestId && value.generation === generation ? value : null;
@@ -342,8 +357,12 @@ export class BtwThreadModel {
     if (!thread) return;
     const generation = thread.generation + 1;
     const mode = inherit ?? thread.inherit;
+    const original = thread.messages.find((message) => message.role === "user")?.content;
+    const originalImages = Array.isArray(original) ? original.filter((part): part is BtwImagePart => part.type === "image") : thread.draftImages;
+    const originalText = original ? btwContentText(original) : thread.title;
     const next = this.replace(thread, { generation, requestId: null, contextRequestId: null, messages: [], answer: "", error: null,
-      draft: thread.title, status: "idle", inherit: mode, contextLoading: mode, context: unavailable(thread.source.reason ?? "inherit_off") });
+      draft: originalText, draftImages: originalImages?.length ? originalImages : undefined,
+      status: "idle", inherit: mode, contextLoading: mode, context: unavailable(thread.source.reason ?? "inherit_off") });
     this.cancel(thread.requestId);
     this.cancel(thread.contextRequestId);
     if (mode) this.loadContext(next, false);
@@ -372,5 +391,5 @@ export class BtwThreadModel {
 }
 
 export function btwThreadText(thread: BtwThread): string {
-  return thread.messages.map((message) => `${message.role}: ${message.content}`).join("\n\n");
+  return thread.messages.map((message) => `${message.role}: ${btwContentText(message.content)}`).join("\n\n");
 }

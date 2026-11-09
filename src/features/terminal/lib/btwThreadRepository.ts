@@ -20,8 +20,10 @@ function mapThread(row: Record<string, unknown>, messages: BtwMessage[] = []): B
   const context: BtwContext = { available: Boolean(row.context_snapshot), text: String(row.context_snapshot ?? ""), truncated: bool(row.context_truncated), reason: row.context_reason == null ? null : String(row.context_reason) };
   const status = String(row.status ?? "idle") as BtwStatus;
   // A pending/stopped trailing assistant row is a durable partial, not a completed turn.
-  const partial = (status === "pending" || status === "stopped" || status === "failed") && messages[messages.length - 1]?.role === "assistant"
-    ? messages[messages.length - 1]!.content : "";
+  const trailingContent = messages[messages.length - 1]?.content;
+  const partial: string = (status === "pending" || status === "stopped" || status === "failed") && messages[messages.length - 1]?.role === "assistant"
+    ? typeof trailingContent === "string" ? trailingContent : JSON.stringify(trailingContent)
+    : "";
   if (partial) messages = messages.slice(0, -1);
   return {
     id: String(row.id), pinned: bool(row.pinned), archived: bool(row.archived), createdAt: Number(row.created_at),
@@ -33,7 +35,7 @@ function mapThread(row: Record<string, unknown>, messages: BtwMessage[] = []): B
     quote: String(row.quote ?? ""), title: String(row.title ?? ""), inherit: bool(row.inherit),
     context, contextLoading: false, messages, draft: String(row.draft ?? ""),
     status: status === "pending" ? "stopped" : status,
-    answer: partial || (status === "done" ? ([...messages].reverse().find((message) => message.role === "assistant")?.content ?? "") : ""),
+    answer: partial || (status === "done" ? (() => { const content = [...messages].reverse().find((message) => message.role === "assistant")?.content; return typeof content === "string" ? content : ""; })() : ""),
     error: row.error == null ? null : String(row.error), generation: 0,
     requestId: null, contextRequestId: null,
   };
@@ -46,7 +48,14 @@ async function loadMessages(ids: string[]): Promise<Map<string, BtwMessage[]>> {
      FROM btw_messages
      WHERE thread_id IN (${slots})
      ORDER BY thread_id, ordinal`, ids);
-  for (const row of rows) { const list = result.get(String(row.thread_id)) ?? []; list.push({ role: String(row.role) as BtwMessage["role"], content: String(row.content) }); result.set(String(row.thread_id), list); }
+  for (const row of rows) {
+    const list = result.get(String(row.thread_id)) ?? [];
+    const raw = String(row.content ?? "");
+    let content: BtwMessage["content"] = raw;
+    if (raw.startsWith("[{")) { try { content = JSON.parse(raw); } catch { content = raw; } }
+    list.push({ role: String(row.role) as BtwMessage["role"], content });
+    result.set(String(row.thread_id), list);
+  }
   return result;
 }
 export async function listBtwThreads(options: BtwThreadSearchOptions = {}): Promise<BtwThread[]> {
@@ -129,13 +138,16 @@ async function updateThread(id: string, patch: BtwThreadPatch): Promise<void> {
 }
 export async function replaceBtwMessages(threadId: string, messages: readonly BtwMessage[]): Promise<void> {
   if (messages.length > 500) throw new Error("btw_messages_too_many");
-  for (const message of messages) text(message.content, BTW_LIMITS.message, "message");
+  for (const message of messages) {
+    const serialized = typeof message.content === "string" ? message.content : JSON.stringify(message.content);
+    text(serialized, BTW_LIMITS.message, "message");
+  }
   const db = await getDb();
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i];
     await db.execute(
       "INSERT INTO btw_messages(thread_id,ordinal,role,content,created_at) VALUES($1,$2,$3,$4,$5) ON CONFLICT(thread_id,ordinal) DO UPDATE SET role=excluded.role,content=excluded.content",
-      [threadId, i, message.role, message.content, Date.now()],
+      [threadId, i, message.role, typeof message.content === "string" ? message.content : JSON.stringify(message.content), Date.now()],
     );
   }
   await db.execute("DELETE FROM btw_messages WHERE thread_id=$1 AND ordinal >= $2", [threadId, messages.length]);

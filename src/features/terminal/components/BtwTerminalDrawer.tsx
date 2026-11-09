@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../../../shared/i18n/index";
 import { Button } from "../../../shared/ui/button";
-import { CircleStop, Copy, Maximize2, Minimize2, RefreshCw, X } from "../../../shared/ui/icons";
+import { CircleStop, Copy, Image, Maximize2, Minimize2, RefreshCw, X } from "../../../shared/ui/icons";
 import { copyTextToClipboard } from "../../../shared/platform/systemClipboard";
 import { SessionTranscriptContent } from "../../history/api/SessionTranscriptContent";
 import { useTerminalPreviewTheme } from "../api/useTerminalPreviewTheme";
 import { BtwContextDetails } from "./BtwContextDetails";
 import type { BtwSideQuestionController } from "../hooks/useBtwSideQuestion";
-import { btwThreadText } from "../lib/btwThreadModel";
+import { btwContentText, btwThreadText, type BtwImagePart } from "../lib/btwThreadModel";
+import { fileToBtwImage, readBtwImages } from "../lib/btwImageAttachments";
 import { btwContentChanged, btwReaderScrolled, btwResumeFollowing, btwScrollTarget } from "../lib/btwBottomFollow";
 import "./btwTerminalDrawer.css";
 import { BtwPersistenceStatus } from "./BtwPersistenceStatus";
@@ -25,6 +26,9 @@ export function BtwTerminalDrawer({ controller, onClose }: { controller: BtwSide
   const setCollapsed = (value: boolean | ((previous: boolean) => boolean)) => model.setCollapsed(typeof value === "function" ? value(collapsed) : value);
   const [unread, setUnread] = useState(false);
   const [width, setWidth] = useState(420);
+  const [showCommandHint, setShowCommandHint] = useState(false);
+  const [images, setImages] = useState<BtwImagePart[]>([]);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const resize = useRef<{ x: number; width: number } | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
@@ -32,6 +36,7 @@ export function BtwTerminalDrawer({ controller, onClose }: { controller: BtwSide
   const pending = thread?.status === "pending" || !!thread?.contextLoading;
   const retryable = thread?.status === "failed" || thread?.status === "stopped";
 
+  useEffect(() => setImages(thread?.draftImages ?? []), [thread?.id, thread?.generation]);
   // Streaming updates must not steal terminal focus.
   useEffect(() => {
     if (!thread && !collapsed) inputRef.current?.focus();
@@ -59,14 +64,17 @@ export function BtwTerminalDrawer({ controller, onClose }: { controller: BtwSide
   }, [model, collapsed, state.terminalId, thread?.id, thread?.messages, thread?.answer, thread?.error]);
 
   const submitQuestion = () => {
-    if (model.submitEmbedded()) setCollapsed(false);
+    if (model.submitEmbedded(images)) { setImages([]); setCollapsed(false); }
+  };
+  const addImages = async (files: readonly File[]) => {
+    const { accepted } = readBtwImages(files, images.length);
+    const next = await Promise.all(accepted.map(fileToBtwImage));
+    setImages((current) => [...current, ...next]);
   };
   const sendFollowUp = () => {
-    if (!thread || pending) return;
-    const question = thread.draft.trim();
-    if (!question) return;
-    model.setDraft(thread.id, question);
-    model.send(thread.id);
+    if (!thread || pending || (!thread.draft.trim() && !images.length)) return;
+    model.send(thread.id, false, images);
+    setImages([]);
   };
   const startResize = (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -76,7 +84,7 @@ export function BtwTerminalDrawer({ controller, onClose }: { controller: BtwSide
   const composerValue = thread ? thread.draft : state.question;
   const composerSet = thread ? (value: string) => model.setDraft(thread.id, value) : model.setQuestion;
   const composerSubmit = thread ? sendFollowUp : submitQuestion;
-  const composerDisabled = thread ? pending || !thread.draft.trim() : !state.question.trim() || (state.inherit && state.contextLoading);
+  const composerDisabled = thread ? pending || (!thread.draft.trim() && !images.length) : (!state.question.trim() && !images.length) || (state.inherit && state.contextLoading);
 
   return (
     <section
@@ -86,9 +94,16 @@ export function BtwTerminalDrawer({ controller, onClose }: { controller: BtwSide
       aria-label={t("terminal.btw.title")}
       style={{ ...panelStyle, width: collapsed ? 160 : width }}
       onKeyDown={(event) => {
-        if (event.key !== "Escape") return;
-        event.stopPropagation();
-        setCollapsed(true);
+        if (event.key === "Escape") {
+          event.stopPropagation();
+          if (pending && thread) model.stop(thread.id);
+          else setCollapsed(true);
+          return;
+        }
+        if ((event.ctrlKey || event.metaKey) && event.altKey && event.key.toLowerCase() === "w") {
+          event.preventDefault();
+          onClose();
+        }
       }}
     >
       <header className="btw-drawer-header">
@@ -171,9 +186,9 @@ export function BtwTerminalDrawer({ controller, onClose }: { controller: BtwSide
                 </details>
               ) : null}
               {thread.messages.map((message, index) => message.role === "user" ? (
-                <p key={`q-${index}`} className="btw-drawer-question">{message.content}</p>
+                <p key={`q-${index}`} className="btw-drawer-question">{btwContentText(message.content)}{typeof message.content !== "string" && message.content.filter(part => part.type === "image").map((part, imageIndex) => <img key={imageIndex} src={`data:${part.source.media_type};base64,${part.source.data}`} alt={part.name ?? t("terminal.btw.attachedImage")} className="btw-message-image" />)}</p>
               ) : (
-                <SessionTranscriptContent key={`a-${index}`} content={message.content} variant="terminal"
+                <SessionTranscriptContent key={`a-${index}`} content={btwContentText(message.content)} variant="terminal"
                   terminalCodeTheme={terminalCodeTheme} markdownClassName="subagent-transcript-markdown" />
               ))}
               {thread.status !== "done" && thread.answer ? (
@@ -208,22 +223,35 @@ export function BtwTerminalDrawer({ controller, onClose }: { controller: BtwSide
               if (scroller) scroller.scrollTop = btwScrollTarget(reader, scroller);
               setUnread(false);
             }}>{t("terminal.btw.newContent")}</Button> : null}
+            {showCommandHint ? <div className="btw-command-hint" role="status">
+              <strong>{t("terminal.btw.commandHintTitle")}</strong>
+              <span>{t("terminal.btw.commandHintBody")}</span>
+            </div> : null}
+            {images.length ? <div className="btw-image-previews">{images.map((image, index) => <div key={`${image.source.data.slice(0, 12)}-${index}`} className="btw-image-preview"><img src={`data:${image.source.media_type};base64,${image.source.data}`} alt={image.name ?? t("terminal.btw.attachedImage")} /><button type="button" onClick={() => setImages((current) => current.filter((_, itemIndex) => itemIndex !== index))}>{t("terminal.btw.removeImage")}</button></div>)}</div> : null}
             <textarea
               ref={inputRef}
               className="btw-drawer-input"
               aria-label={thread ? t("terminal.btw.drawerFollowUp") : t("terminal.btw.questionLabel")}
               placeholder={thread ? t("terminal.btw.drawerFollowUp") : t("terminal.btw.drawerPlaceholder")}
               value={composerValue}
-              onChange={(event) => composerSet(event.target.value)}
+              onPaste={(event) => { const files = Array.from(event.clipboardData.files); if (files.length) { event.preventDefault(); void addImages(files); } }}
+              onChange={(event) => {
+                const value = event.target.value;
+                composerSet(value);
+                setShowCommandHint(value.trimStart().startsWith("/"));
+              }}
               onKeyDown={(event) => {
                 if (event.key !== "Enter" || event.shiftKey) return;
                 event.preventDefault();
                 if (!composerDisabled) composerSubmit();
               }}
             />
-            <Button size="sm" variant="default" data-btw-drawer-action="submit" disabled={composerDisabled} onClick={composerSubmit}>
-              {t("terminal.btw.ask")}
-            </Button>
+            <div className="btw-drawer-composer-toolbar">
+              <div className="btw-drawer-attach"><input ref={imageInputRef} hidden type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => { void addImages(Array.from(event.target.files ?? [])); event.currentTarget.value = ""; }} /><Button size="sm" variant="ghost" aria-label={t("terminal.btw.attachImage")} title={t("terminal.btw.attachImage")} onClick={() => imageInputRef.current?.click()}><Image size={14} aria-hidden="true" />{t("terminal.btw.attachImage")}</Button></div>
+              <Button size="sm" variant="default" data-btw-drawer-action="submit" disabled={composerDisabled} onClick={composerSubmit}>
+                {t("terminal.btw.ask")}
+              </Button>
+            </div>
           </div>
         </>
       )}

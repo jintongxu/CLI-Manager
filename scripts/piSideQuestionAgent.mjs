@@ -17,10 +17,18 @@ for await (const line of rl) {
     });
     await pending;
     await write(result);
-  } catch {
+  } catch (error) {
     await pending.catch(() => {});
     // Never expose provider errors, raw requests, source text, paths or credentials.
-    await write({ type: "error", requestId: request?.requestId, error: "side_question_failed" });
+    // Keep a stable diagnostic class so the host can distinguish configuration
+    // failures from protocol/runtime failures without leaking provider details.
+    const message = String(error?.message ?? error ?? "");
+    const errorCode = /api.?key|unauthori[sz]ed|\b401\b|\b403\b/i.test(message)
+      ? "side_question_provider_auth"
+      : /model|provider|unsupported|vision/i.test(message)
+        ? "side_question_provider_config"
+        : "side_question_failed";
+    await write({ type: "error", requestId: request?.requestId, error: errorCode });
     process.exitCode = 1;
   }
   if (request?.type !== "ping") {

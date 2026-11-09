@@ -14,6 +14,7 @@ const load = (path) => {
 };
 const { BtwThreadModel } = load("src/features/terminal/lib/btwThreadModel.ts");
 const tick = async () => { for (let n = 0; n < 10; n++) await Promise.resolve(); };
+const image = { type: "image", source: { type: "base64", media_type: "image/png", data: "AAAA" }, name: "pixel.png" };
 
 function harness({ contextAvailable = true, autoResolve = true } = {}) {
   const requests = [], cancels = [];
@@ -65,13 +66,31 @@ test("submit returns null for an empty question so the drawer keeps its composer
   assert.equal(model.getSnapshot().entries.length, 0);
 });
 
+test("initial, follow-up and restarted image messages stay structured, including image-only turns", async () => {
+  const asks = [];
+  const model = new BtwThreadModel({ context: async () => ({}), ask: async (request) => { asks.push(request); return "answer"; },
+    cancel: async () => {}, listen: async () => () => {} });
+  model.stage("quote", { terminalId: "term", sessionId: null, reason: "no_source_session" });
+  const id = model.submitEmbedded([image]); await tick();
+  assert.equal(JSON.stringify(asks[0].messages[0].content), JSON.stringify([image]));
+  model.send(id, false, [image]); await tick();
+  assert.equal(JSON.stringify(asks[1].messages[2].content), JSON.stringify([image]));
+  assert.equal(model.getSnapshot().entries[0].draft, "");
+  model.reset(id, false);
+  const restarted = model.getSnapshot().entries[0];
+  assert.equal(restarted.draft, "");
+  assert.equal(JSON.stringify(restarted.draftImages), JSON.stringify([image]));
+  model.send(id); await tick();
+  assert.equal(JSON.stringify(asks[2].messages[0].content), JSON.stringify([image]));
+});
+
 test("drawer binds a local thread id and never triggers a standalone-window reveal", () => {
   const drawer = read("src/features/terminal/components/BtwTerminalDrawer.tsx");
   // model.open() bumps openVersion, which useBtwNativeWindow publishes as a reveal.
   assert.doesNotMatch(drawer, /model\.open\(/);
   assert.doesNotMatch(drawer, /controller\.open\(/);
   assert.match(drawer, /state\.embeddedId/);
-  assert.match(drawer, /model\.submitEmbedded\(\)/);
+  assert.match(drawer, /model\.submitEmbedded\(images\)/);
   assert.doesNotMatch(drawer, /createPortal/);
 });
 
@@ -80,11 +99,11 @@ test("drawer keeps streaming answers without stealing focus and supports follow-
   assert.match(drawer, /state\.quote/);
   assert.match(drawer, /data-btw-drawer-staged/);
   assert.match(drawer, /if \(!thread && !collapsed\) inputRef\.current\?\.focus\(\)/);
-  assert.match(drawer, /model\.setDraft\(thread\.id, question\);[\s\S]*?model\.send\(thread\.id\)/);
+  assert.match(drawer, /model\.send\(thread\.id, false, images\)/);
   assert.match(drawer, /model\.stop\(thread\.id\)/);
   assert.match(drawer, /copyTextToClipboard\(btwThreadText\(thread\)\)/);
   assert.match(drawer, /event\.key !== "Enter" \|\| event\.shiftKey/);
-  assert.match(drawer, /event\.key !== "Escape"[\s\S]*?setCollapsed\(true\)/);
+  assert.match(drawer, /event\.key === "Escape"[\s\S]*?setCollapsed\(true\)/);
   // Collapsed state must keep the thread so streaming continues off-screen.
   assert.match(drawer, /\{collapsed \? null : \(/);
 });
@@ -224,7 +243,8 @@ test("mounted pane lifecycle switches from completed thread to fresh stage and r
     if (name.endsWith("/useTerminalPreviewTheme")) return { useTerminalPreviewTheme: () => ({ tone: "dark", panelStyle: {} }) };
     if (name.endsWith("/button")) return { Button: "button" };
     if (name.endsWith("/btwBottomFollow")) return load("src/features/terminal/lib/btwBottomFollow.ts");
-    if (name.endsWith("/btwThreadModel")) return { btwThreadText: () => "text" };
+    if (name.endsWith("/btwThreadModel")) return { btwThreadText: () => "text",
+      btwContentText: (content) => typeof content === "string" ? content : "" };
     return {};
   } });
   let tree;

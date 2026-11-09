@@ -34,7 +34,16 @@
 .btw-reading-settings > summary:hover { background: var(--interactive-hover-bg); }
 .btw-reading-settings-panel { position: absolute; right: 20px; top: calc(100% - 4px); width: min(420px, calc(100% - 40px)); max-height: min(50dvh, 420px); overflow: auto; padding: 16px; background: var(--surface-container-lowest); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 12px 32px #0003; }
 .btw-reading-settings-panel > * + * { margin-top: 12px; }
-.btw-reading-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--on-surface-variant); font-size: 12px; }
+.btw-reading-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--on-surface-variant); font-size: 12px; flex-wrap: wrap; }
+.btw-mode-badge, .btw-capability-badge { display: inline-flex; align-items: center; min-height: 20px; padding: 0 7px; border: 1px solid color-mix(in srgb, var(--border) 80%, transparent); border-radius: 999px; background: var(--surface-container-low); }
+.btw-capability-badge { color: color-mix(in srgb, var(--primary) 78%, var(--on-surface)); border-color: color-mix(in srgb, var(--primary) 30%, var(--border)); }
+.btw-command-hint { display: flex; flex-direction: column; gap: 2px; margin: 0 0 6px; padding: 6px 8px; border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border)); border-radius: 7px; background: color-mix(in srgb, var(--primary) 8%, var(--surface-container-lowest)); color: var(--on-surface-variant); font-size: 11px; }
+.btw-command-hint strong { color: var(--on-surface); }
+.btw-image-previews { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+.btw-image-preview { position: relative; width: 72px; height: 72px; overflow: hidden; border: 1px solid var(--border); border-radius: 6px; }
+.btw-image-preview img { width: 100%; height: 100%; object-fit: cover; }
+.btw-image-preview button { position: absolute; inset: auto 2px 2px; font-size: 9px; background: #000b; color: white; }
+.btw-message-image { display: block; max-width: 100%; max-height: 260px; margin-top: 8px; border-radius: 6px; object-fit: contain; }
 .btw-reading-body { display: grid; grid-template-columns: minmax(0, 1fr) 248px; min-height: 0; min-width: 0; overflow: hidden; }
 .btw-reading-scroll { min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .btw-reading-content { max-width: 80ch; margin: 0 auto; padding: 20px 28px 36px; font-size: 14px; line-height: 1.8; overflow-wrap: anywhere; }
@@ -56,11 +65,16 @@
 .btw-reading-workspace button:focus-visible, .btw-reading-workspace summary:focus-visible, .btw-reading-turn:focus-visible { outline: 2px solid var(--interactive-focus-ring, var(--primary)); outline-offset: 2px; }
 .btw-outline-toggle { display: none; }
 .btw-reading-composer { display: grid; grid-template-columns: minmax(0, 1fr) 248px; border-top: 1px solid var(--border); padding: 12px 0; }
-.btw-reading-composer-inner { width: calc(100% - 56px); max-width: calc(80ch - 56px); margin: 0 auto; display: flex; align-items: flex-end; gap: 12px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-container-low); font-size: 14px; }
+.btw-reading-composer-inner { width: calc(100% - 56px); max-width: calc(80ch - 56px); margin: 0 auto; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px 7px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-container-low); font-size: 14px; }
+.btw-reading-composer-inner .btw-command-hint,
+.btw-reading-composer-inner .btw-image-previews { width: 100%; }
 .btw-reading-composer-inner:focus-within { outline: 1px solid var(--interactive-focus-ring, var(--primary)); }
-.btw-composer-input { display: block; flex: 1; min-width: 0; }
-.btw-reading-composer textarea { display: block; width: 100%; min-height: 48px; max-height: 96px; padding: 4px; border: 0; outline: 0; background: transparent; color: inherit; }
-.btw-composer-actions { flex: none; padding-bottom: 2px; }
+.btw-composer-input { display: block; min-width: 0; width: 100%; }
+.btw-reading-composer textarea { display: block; width: 100%; min-height: 48px; max-height: 96px; padding: 4px; border: 0; outline: 0; background: transparent; color: inherit; resize: none; }
+.btw-composer-actions { padding-bottom: 2px; }
+.btw-composer-actions-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; }
+.btw-composer-actions-row .ui-btn:last-child { border-radius: 999px; padding-inline: 12px; }
+.btw-reading-composer-inner:focus-within { border-color: color-mix(in srgb, var(--primary) 55%, var(--border)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 12%, transparent); }
 @media (max-width: 760px) {
   .btw-reading-workspace { width: 100%; height: 100dvh; max-height: 100dvh; }
   .btw-reading-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }

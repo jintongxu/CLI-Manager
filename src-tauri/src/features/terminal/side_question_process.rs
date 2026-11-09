@@ -256,7 +256,9 @@ fn run_command(
     command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+        // Keep stderr for diagnostics, but never forward its contents to the UI:
+        // provider errors may contain paths, prompts or other sensitive data.
+        .stderr(Stdio::piped());
     let mut child = OwnedProcess::spawn(&mut command)?;
     // Piped handles are guaranteed by the command setup above.
     let mut stdin = child.child.stdin.take().expect("configured stdin pipe");
@@ -267,6 +269,13 @@ fn run_command(
             .and_then(|_| stdin.write_all(b"\n"));
     });
     let stdout = child.child.stdout.take().expect("configured stdout pipe");
+    let stderr = child.child.stderr.take().expect("configured stderr pipe");
+    let stderr_reader = std::thread::spawn(move || {
+        let mut reader = BufReader::new(stderr);
+        let mut bytes = Vec::new();
+        let _ = reader.by_ref().take(16_385).read_to_end(&mut bytes);
+        String::from_utf8_lossy(&bytes).chars().take(4_096).collect::<String>()
+    });
     let (sender, receiver) = mpsc::sync_channel(32);
     let reader = std::thread::spawn(move || {
         let mut reader = BufReader::new(stdout);
@@ -319,7 +328,11 @@ fn run_command(
                         Some("context") if payload["type"] == "context" => final_value = Some(value),
                         Some("error") if value.get("error").and_then(|v| v.as_str()) == Some("side_question_node_required") =>
                             return Err("side_question_node_required: install Node.js >=22.19.0 and restart CLI-Manager".into()),
-                        Some("error") => return Err("side_question_failed".into()),
+                        Some("error") => return Err(match value.get("error").and_then(|v| v.as_str()) {
+                            Some("side_question_provider_auth") => "side_question_provider_auth",
+                            Some("side_question_provider_config") => "side_question_provider_config",
+                            _ => "side_question_failed",
+                        }.into()),
                         _ => return Err("side_question_protocol".into()),
                     }
                 }
@@ -346,6 +359,7 @@ fn run_command(
     })();
     // Drop receiver before joining: a full reader queue must not deadlock cleanup.
     drop(receiver);
+    let stderr_text = stderr_reader.join().unwrap_or_default();
     closing()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -356,6 +370,18 @@ fn run_command(
         });
     // An unsuccessful cleanup keeps the registration and all handles for exit retry.
     reap_closing(Instant::now() + Duration::from_secs(2))?;
+    if let Err(error) = &result {
+        let category = if stderr_text.contains("API key") || stderr_text.contains("401") || stderr_text.contains("403") {
+            "provider_auth"
+        } else if stderr_text.contains("model") || stderr_text.contains("provider") {
+            "provider_config"
+        } else if stderr_text.is_empty() {
+            "no_diagnostic"
+        } else {
+            "sidecar_runtime"
+        };
+        log::warn!("side_question ask failed stage={} code={} error={}", error, category, error);
+    }
     result
 }
 

@@ -4,6 +4,7 @@ import { Button } from "../../../shared/ui/button";
 import { Check, Pencil, Pin, X } from "../../../shared/ui/icons";
 import { copyTextToClipboard } from "../../../shared/platform/systemClipboard";
 import type { BtwSideQuestionController } from "../hooks/useBtwSideQuestion";
+import { btwContentText } from "../lib/btwThreadModel";
 import { btwThreadText } from "../lib/btwThreadModel";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../shared/ui/popover";
 import { useTerminalStore } from "../state";
@@ -21,17 +22,22 @@ export function BtwSideQuestionPanel({ controller, onOpenReader }: {
   const [allHistory, setAllHistory] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [historyOffset, setHistoryOffset] = useState(0);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const terminalId = useTerminalStore((store) => store.activeSessionId);
   useEffect(() => {
     setHistoryOffset(0);
-    if (allHistory || terminalId) void model.loadHistory(query, showArchived, allHistory ? undefined : terminalId ?? undefined);
+    if (allHistory || terminalId) {
+      setHistoryLoading(true);
+      void model.loadHistory(query, showArchived, allHistory ? undefined : terminalId ?? undefined)
+        .finally(() => setHistoryLoading(false));
+    }
   }, [model, query, showArchived, terminalId, allHistory]);
   const needle = query.trim().toLocaleLowerCase();
   const entries = state.entries.filter((entry) => (allHistory || (!!terminalId && entry.source.terminalId === terminalId))
     && (showArchived || !entry.archived)
-    && (!needle || [entry.title, entry.quote, entry.draft, entry.answer, ...entry.messages.map((message) => message.content)]
+    && (!needle || [entry.title, entry.quote, entry.draft, entry.answer, ...entry.messages.map((message) => btwContentText(message.content))]
       .some((text) => text.toLocaleLowerCase().includes(needle))))
     .sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || (b.createdAt ?? 0) - (a.createdAt ?? 0));
   return <div className="flex h-full min-h-0 flex-col gap-2 p-3 text-[12px]" data-btw-panel="true">
@@ -88,10 +94,12 @@ export function BtwSideQuestionPanel({ controller, onOpenReader }: {
           <Button size="sm" variant="ghost" onClick={() => { if (window.confirm(t("terminal.btw.confirmDelete"))) model.remove(entry.id); }}>{t("terminal.btw.delete")}</Button>
         </PopoverContent></Popover></article>);})}
     </div>
-    <Button size="sm" variant="ghost" onClick={() => {
+    <Button size="sm" variant="ghost" disabled={historyLoading} aria-busy={historyLoading} onClick={() => {
       const offset = historyOffset + 100;
       setHistoryOffset(offset);
-      void model.loadHistory(query, showArchived, allHistory ? undefined : terminalId ?? undefined, offset);
-    }}>{t("terminal.btw.loadMoreHistory")}</Button>
+      setHistoryLoading(true);
+      void model.loadHistory(query, showArchived, allHistory ? undefined : terminalId ?? undefined, offset)
+        .finally(() => setHistoryLoading(false));
+    }}>{historyLoading ? t("terminal.btw.pending") : t("terminal.btw.loadMoreHistory")}</Button>
   </div>;
 }
