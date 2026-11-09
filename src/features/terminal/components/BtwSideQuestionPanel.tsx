@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "../../../shared/i18n/index";
 import { Button } from "../../../shared/ui/button";
-import { Check, Pencil, Pin, X } from "../../../shared/ui/icons";
+import { Check, ExternalLink, Pencil, Pin, X } from "../../../shared/ui/icons";
 import { copyTextToClipboard } from "../../../shared/platform/systemClipboard";
 import type { BtwSideQuestionController } from "../hooks/useBtwSideQuestion";
 import { btwContentText } from "../lib/btwThreadModel";
@@ -10,6 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "../../../shared/ui/popo
 import { useTerminalStore } from "../state";
 import "./btwThreadDialog.css";
 import { BtwPersistenceStatus } from "./BtwPersistenceStatus";
+import { ConfirmDialog } from "../../../shared/ui/ConfirmDialog";
 
 /** History is a display projection; filtering never removes owner-model threads. */
 export function BtwSideQuestionPanel({ controller, onOpenReader }: {
@@ -25,6 +26,7 @@ export function BtwSideQuestionPanel({ controller, onOpenReader }: {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [deleteEntryId, setDeleteEntryId] = useState<string | null>(null);
   const terminalId = useTerminalStore((store) => store.activeSessionId);
   useEffect(() => {
     setHistoryOffset(0);
@@ -40,17 +42,19 @@ export function BtwSideQuestionPanel({ controller, onOpenReader }: {
     && (!needle || [entry.title, entry.quote, entry.draft, entry.answer, ...entry.messages.map((message) => btwContentText(message.content))]
       .some((text) => text.toLocaleLowerCase().includes(needle))))
     .sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || (b.createdAt ?? 0) - (a.createdAt ?? 0));
-  return <div className="flex h-full min-h-0 flex-col gap-2 p-3 text-[12px]" data-btw-panel="true">
-    <div className="flex items-center justify-between gap-2"><strong>{t("terminal.panel.btw")}</strong>
+  return <div className="btw-history-panel" data-btw-panel="true">
+    <div className="btw-history-panel-header"><div><strong className="btw-history-panel-title">{t("terminal.panel.btw")}</strong></div>
       <Button size="sm" variant="ghost" disabled={!terminalId} data-action="new-question" onClick={() => {
         controller.stageFromTerminal("", terminalId ?? undefined);
         onOpenReader();
       }}>{t("terminal.btw.newQuestion")}</Button></div>
     <BtwPersistenceStatus controller={controller} />
-    <label className="flex items-center gap-1"><input type="checkbox" checked={allHistory} onChange={(event) => setAllHistory(event.target.checked)} />{t("terminal.btw.allHistory")}</label>
-    <p className="opacity-70">{t(allHistory ? "terminal.btw.allHistoryHint" : "terminal.btw.currentTerminalHistory")}</p>
-    <div className="flex items-center gap-2"><input className="min-w-0 flex-1 rounded border px-2 py-1" aria-label={t("terminal.btw.search")} placeholder={t("terminal.btw.search")} value={query} onChange={(e) => setQuery(e.target.value)} />
-      <label className="flex shrink-0 items-center gap-1"><input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />{t("terminal.btw.showArchived")}</label></div>
+    <div className="btw-history-filters">
+      <label className="btw-history-toggle"><input type="checkbox" checked={allHistory} onChange={(event) => setAllHistory(event.target.checked)} /><span>{t("terminal.btw.allHistory")}</span></label>
+      <label className="btw-history-toggle"><input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /><span>{t("terminal.btw.showArchived")}</span></label>
+    </div>
+    <p className="btw-history-hint">{t(allHistory ? "terminal.btw.allHistoryHint" : "terminal.btw.currentTerminalHistory")}</p>
+    <div className="btw-history-search"><input aria-label={t("terminal.btw.search")} placeholder={t("terminal.btw.search")} value={query} onChange={(e) => setQuery(e.target.value)} /></div>
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto" data-btw-history="true">
       {!entries.length && <p className="opacity-70">{query ? t("terminal.btw.noResults") : t("terminal.btw.empty")}</p>}
       {entries.map((entry) => {
@@ -77,23 +81,42 @@ export function BtwSideQuestionPanel({ controller, onOpenReader }: {
             {entry.archived && <span className="btw-history-archived-badge" aria-label={t("terminal.btw.archived")}>▣</span>}
           </div>
         </div>
-        {entry.createdAt ? <time className="text-[11px] opacity-75" dateTime={new Date(entry.createdAt).toISOString()}>
-          {new Date(entry.createdAt).toLocaleString()}
-        </time> : null}
-        <span data-btw-status={entry.status}>{t(entry.contextLoading ? "terminal.btw.contextLoading" : `terminal.btw.${entry.status}`)}</span>
-        <div className="line-clamp-2 whitespace-pre-wrap opacity-80" data-btw-preview="true">{entry.answer || entry.error}</div>
-        <Popover><PopoverTrigger asChild>
+        <div className="btw-history-card-meta">
+          {entry.createdAt ? <time dateTime={new Date(entry.createdAt).toISOString()}>
+            {new Date(entry.createdAt).toLocaleString()}
+          </time> : null}
+          <span className="btw-history-status" data-btw-status={entry.status}>{t(entry.contextLoading ? "terminal.btw.contextLoading" : `terminal.btw.${entry.status}`)}</span>
+        </div>
+        <div className="btw-history-preview line-clamp-2 whitespace-pre-wrap" data-btw-preview="true">{entry.answer || entry.error}</div>
+        <div className="btw-history-card-actions">
+          <Button size="sm" variant="default" data-action="open-side-question" onClick={openEmbedded}><ExternalLink size={13} aria-hidden="true" />{t("terminal.btw.openEmbedded")}</Button>
+          <Popover><PopoverTrigger asChild>
           <Button size="sm" variant="ghost" aria-label={t("terminal.btw.more")}>{t("terminal.btw.more")}</Button>
         </PopoverTrigger><PopoverContent className="flex max-w-72 flex-col gap-1 p-2" align="end">
-          <Button size="sm" variant="ghost" data-action="open-side-question" onClick={openEmbedded}>{t("terminal.btw.openEmbedded")}</Button>
           <Button size="sm" variant="ghost" data-action="rename" onClick={() => { setRenamingId(entry.id); setRenameValue(entry.title); }}><Pencil size={13} aria-hidden="true" />{t("terminal.btw.rename")}</Button>
           <Button size="sm" variant="ghost" data-action="pin" aria-pressed={entry.pinned} onClick={() => model.pin(entry.id, !entry.pinned)}><Pin size={13} aria-hidden="true" />{t(entry.pinned ? "terminal.btw.unpin" : "terminal.btw.pin")}</Button>
           <Button size="sm" variant="ghost" onClick={() => model.archive(entry.id, !entry.archived)}>{t(entry.archived ? "terminal.btw.restore" : "terminal.btw.archive")}</Button>
           {(entry.status === "failed" || entry.status === "stopped") && <Button size="sm" variant="ghost" onClick={() => model.send(entry.id, true)}>{t("terminal.btw.retry")}</Button>}
           <Button size="sm" variant="ghost" disabled={!entry.messages.length} onClick={() => void copyTextToClipboard(btwThreadText(entry))}>{t("terminal.btw.copyThread")}</Button>
-          <Button size="sm" variant="ghost" onClick={() => { if (window.confirm(t("terminal.btw.confirmDelete"))) model.remove(entry.id); }}>{t("terminal.btw.delete")}</Button>
-        </PopoverContent></Popover></article>);})}
+          <Button size="sm" variant="ghost" onClick={() => setDeleteEntryId(entry.id)}>{t("terminal.btw.delete")}</Button>
+        </PopoverContent></Popover>
+        </div></article>);})}
     </div>
+    <ConfirmDialog
+      open={deleteEntryId !== null}
+      title={t("terminal.btw.confirmDelete")}
+      message={t("terminal.btw.confirmDeleteMessage")}
+      confirmText={t("terminal.btw.delete")}
+      cancelText={t("common.cancel")}
+      danger
+      confirmAutoFocus
+      contentClassName="btw-delete-confirm-dialog"
+      onClose={() => setDeleteEntryId(null)}
+      onConfirm={() => {
+        if (deleteEntryId) model.remove(deleteEntryId);
+        setDeleteEntryId(null);
+      }}
+    />
     <Button size="sm" variant="ghost" disabled={historyLoading} aria-busy={historyLoading} onClick={() => {
       const offset = historyOffset + 100;
       setHistoryOffset(offset);

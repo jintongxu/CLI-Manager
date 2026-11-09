@@ -195,6 +195,12 @@
 }
 .btw-command-hint strong { color: var(--on-surface); }
 .btw-composer-meta { display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; }
+.btw-context-capsule { min-width: 0; border: 1px solid color-mix(in srgb, var(--border) 38%, transparent); border-radius: 9px; background: transparent; }
+.btw-context-capsule-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; padding: 3px 6px; cursor: pointer; list-style: none; }
+.btw-context-capsule-summary::-webkit-details-marker { display: none; }
+.btw-context-capsule-label { margin-inline-end: 2px; color: var(--on-surface-variant); font-size: 10px; font-weight: 600; }
+.btw-context-capsule-panel { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 7px 6px; color: var(--on-surface-variant); }
+.btw-context-capsule[open] { border-color: color-mix(in srgb, var(--primary) 28%, var(--border)); }
 .btw-composer-chip { display: inline-flex; align-items: center; max-width: 100%; min-height: 20px; padding: 0 7px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--border) 72%, transparent); border-radius: 999px; color: var(--on-surface-variant); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .btw-composer-chip-context { border-color: color-mix(in srgb, var(--primary) 34%, transparent); background: color-mix(in srgb, var(--primary) 10%, transparent); color: var(--primary); }
 .btw-image-previews { display: flex; flex-wrap: wrap; gap: 5px; flex: 0 0 100%; }

@@ -1,18 +1,45 @@
 /* History cards share the reader's compact, high-contrast action language. */
-.btw-history-card { display: flex; flex-direction: column; gap: 7px; padding: 10px; border: 1px solid color-mix(in srgb, var(--border) 82%, transparent); border-radius: 10px; background: color-mix(in srgb, var(--surface-container-low) 70%, transparent); transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease; }
+.btw-history-panel { display: flex; height: 100%; min-height: 0; flex-direction: column; gap: 9px; padding: 14px; color: var(--on-surface); font-size: 12px; }
+.btw-history-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; padding-bottom: 3px; }
+.btw-history-panel-header > div { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.btw-history-panel-title { color: var(--on-surface); font-size: 15px; font-weight: 750; letter-spacing: -.01em; }
+.btw-history-panel-subtitle { color: var(--on-surface-variant); font-size: 10px; }
+.btw-history-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.btw-history-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 27px; padding: 0 8px; border: 1px solid color-mix(in srgb, var(--border) 62%, transparent); border-radius: 7px; color: var(--on-surface-variant); cursor: pointer; }
+.btw-history-toggle:has(input:checked) { border-color: color-mix(in srgb, var(--primary) 44%, var(--border)); background: color-mix(in srgb, var(--primary) 10%, transparent); color: var(--on-surface); }
+.btw-history-toggle input { appearance: none; width: 16px; height: 16px; flex: 0 0 auto; margin: 0; border: 1px solid color-mix(in srgb, var(--on-surface-variant) 68%, var(--border)); border-radius: 4px; background: transparent; cursor: pointer; }
+.btw-history-toggle input:checked { border-color: var(--primary); background: var(--primary); box-shadow: inset 0 0 0 3px var(--surface-container-lowest); }
+.btw-history-toggle input:focus-visible { outline: 2px solid color-mix(in srgb, var(--primary) 58%, transparent); outline-offset: 2px; }
+.btw-history-hint { margin: -2px 0 0; color: var(--on-surface-variant); font-size: 11px; line-height: 1.45; }
+.btw-history-search { display: flex; min-width: 0; }
+.btw-history-search input { width: 100%; min-width: 0; height: 34px; padding: 0 10px; border: 1px solid color-mix(in srgb, var(--border) 72%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--surface-container-lowest) 56%, transparent); color: var(--on-surface); outline: 0; }
+.btw-history-search input::placeholder { color: var(--on-surface-variant); opacity: .78; }
+.btw-history-search input:focus { border-color: color-mix(in srgb, var(--primary) 58%, var(--border)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 16%, transparent); }
+.btw-history-panel > [data-btw-history="true"] { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 8px; overflow: auto; }
+.btw-history-card { display: flex; flex-direction: column; gap: 6px; padding: 11px 12px 10px; border: 1px solid color-mix(in srgb, var(--border) 72%, transparent); border-radius: 12px; background: color-mix(in srgb, var(--surface-container-low) 54%, transparent); transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease; }
 .btw-history-card:hover, .btw-history-card:focus-within { border-color: color-mix(in srgb, var(--primary) 42%, var(--border)); background: color-mix(in srgb, var(--surface-container-low) 90%, var(--primary) 4%); }
 .btw-history-card[data-pinned="true"] { border-color: color-mix(in srgb, var(--primary) 48%, var(--border)); box-shadow: inset 3px 0 0 var(--primary); }
 .btw-history-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; min-width: 0; }
-.btw-history-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; line-height: 1.5; }
+.btw-history-title { min-width: 0; overflow: hidden; color: var(--on-surface); text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 700; line-height: 1.45; }
 .btw-history-card-badges { display: flex; flex: 0 0 auto; align-items: center; gap: 5px; }
 .btw-history-pinned-badge { display: inline-flex; align-items: center; gap: 3px; min-height: 19px; padding: 0 6px; border: 1px solid color-mix(in srgb, var(--primary) 36%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--primary) 14%, transparent); color: color-mix(in srgb, var(--primary) 86%, var(--on-surface)); font-size: 10px; font-weight: 650; white-space: nowrap; }
 .btw-history-archived-badge { color: var(--on-surface-variant); }
 .btw-history-rename { display: flex; flex: 1 1 auto; align-items: center; gap: 4px; min-width: 0; }
 .btw-history-rename input { min-width: 0; flex: 1; height: 30px; padding: 0 8px; border: 1px solid color-mix(in srgb, var(--primary) 48%, var(--border)); border-radius: 7px; background: var(--surface-container-lowest); color: inherit; outline: 0; }
 .btw-history-rename input:focus { box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 22%, transparent); }
-.btw-history-card-actions { display: flex; flex-wrap: wrap; gap: 4px; padding-top: 4px; border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
-.btw-history-card-actions .ui-btn { min-height: 28px; gap: 4px; padding-inline: 7px; border-radius: 6px; }
+.btw-history-card-meta { display: flex; align-items: center; gap: 7px; min-height: 18px; color: var(--on-surface-variant); font-size: 10px; }
+.btw-history-status { display: inline-flex; align-items: center; gap: 4px; font-weight: 650; }
+.btw-history-status::before { width: 5px; height: 5px; border-radius: 999px; background: currentColor; content: ""; }
+.btw-history-status[data-btw-status="done"] { color: var(--primary); }
+.btw-history-status[data-btw-status="pending"] { color: var(--primary); }
+.btw-history-status[data-btw-status="failed"], .btw-history-status[data-btw-status="stopped"] { color: var(--danger); }
+.btw-history-preview { min-height: 18px; color: var(--on-surface-variant); font-size: 11px; line-height: 1.5; }
+.btw-history-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-top: 7px; border-top: 1px solid color-mix(in srgb, var(--border) 46%, transparent); }
+.btw-history-card-actions .ui-btn { min-height: 29px; gap: 5px; padding-inline: 9px; border-radius: 7px; }
+.btw-history-card-actions .ui-btn[data-action="open-side-question"] { box-shadow: 0 2px 8px color-mix(in srgb, var(--primary) 18%, transparent); }
 .btw-history-card-actions .ui-btn[data-action="pin"][aria-pressed="true"] { color: var(--primary); background: color-mix(in srgb, var(--primary) 13%, transparent); }
+.btw-delete-confirm-dialog { border-color: color-mix(in srgb, var(--danger) 32%, var(--border)); box-shadow: 0 20px 60px color-mix(in srgb, var(--danger) 16%, transparent); }
+.btw-delete-confirm-dialog h2 { color: var(--danger); }
 
 /* Native-window workspace: only transcript and outline scroll. */
 .btw-reading-workspace {
@@ -39,6 +66,12 @@
 .btw-capability-badge { color: color-mix(in srgb, var(--primary) 78%, var(--on-surface)); border-color: color-mix(in srgb, var(--primary) 30%, var(--border)); }
 .btw-command-hint { display: flex; flex-direction: column; gap: 2px; margin: 0 0 6px; padding: 6px 8px; border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border)); border-radius: 7px; background: color-mix(in srgb, var(--primary) 8%, var(--surface-container-lowest)); color: var(--on-surface-variant); font-size: 11px; }
 .btw-composer-meta { display: flex; flex-wrap: wrap; gap: 5px; }
+.btw-context-capsule { min-width: 0; border: 1px solid color-mix(in srgb, var(--border) 38%, transparent); border-radius: 9px; background: transparent; }
+.btw-context-capsule-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; padding: 3px 6px; cursor: pointer; list-style: none; }
+.btw-context-capsule-summary::-webkit-details-marker { display: none; }
+.btw-context-capsule-label { margin-inline-end: 2px; color: var(--on-surface-variant); font-size: 10px; font-weight: 600; }
+.btw-context-capsule-panel { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 7px 6px; color: var(--on-surface-variant); }
+.btw-context-capsule[open] { border-color: color-mix(in srgb, var(--primary) 28%, var(--border)); }
 .btw-composer-chip { display: inline-flex; align-items: center; min-height: 20px; padding: 0 7px; border: 1px solid color-mix(in srgb, var(--border) 72%, transparent); border-radius: 999px; color: var(--on-surface-variant); font-size: 10px; }
 .btw-command-hint strong { color: var(--on-surface); }
 .btw-image-previews { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }

@@ -4,6 +4,7 @@ import { Button } from "../../../shared/ui/button";
 import { copyTextToClipboard } from "../../../shared/platform/systemClipboard";
 import { btwContentText, btwThreadText, type BtwThread } from "../lib/btwThreadModel";
 import { BtwContextDetails } from "./BtwContextDetails";
+import { BtwContextCapsule } from "./BtwContextCapsule";
 import { MarkdownContent } from "../../../shared/ui/MarkdownContent";
 import { activeBtwQuestion, btwQuestions, jumpToBtwQuestion } from "./btwQuestionNavigation";
 import { fileToBtwImage, readBtwImages } from "../lib/btwImageAttachments";
@@ -11,7 +12,7 @@ import type { BtwImagePart } from "../lib/btwThreadModel";
 import "./btwThreadDialog.css";
 
 export type BtwReaderActions = Pick<import("../lib/btwThreadModel").BtwThreadModel,
-  "open" | "setDraft" | "reset" | "send" | "stop">;
+  "open" | "setDraft" | "reset" | "send" | "stop" | "refreshContext">;
 
 /** Embeddable reading workspace: no portal, overlay or second inference model. */
 export function BtwThreadReader({ model, thread }: { model: BtwReaderActions; thread: BtwThread }) {
@@ -113,7 +114,15 @@ export function BtwThreadReader({ model, thread }: { model: BtwReaderActions; th
         <strong>{t("terminal.btw.commandHintTitle")}</strong>
         <span>{t("terminal.btw.commandHintBody")}</span>
       </div> : null}
-      {images.length > 0 && <div className="btw-composer-meta"><span className="btw-composer-chip">{images.length} {t("terminal.btw.attachedImage")}</span></div>}
+      <BtwContextCapsule
+        source={thread.source}
+        context={thread.context}
+        loading={thread.contextLoading}
+        inherited={thread.inherit}
+        quote={thread.quote}
+        imageCount={images.length}
+        onRefresh={() => { model.refreshContext(thread.id); }}
+      />
       {images.length ? <div className="btw-image-previews">{images.map((image, index) => <div key={`${image.source.data.slice(0, 12)}-${index}`} className="btw-image-preview"><img src={`data:${image.source.media_type};base64,${image.source.data}`} alt={image.name ?? t("terminal.btw.attachedImage")} /><button type="button" aria-label={t("terminal.btw.removeImage")} title={t("terminal.btw.removeImage")} onClick={() => setImages((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div>)}</div> : null}
       <input ref={imageInputRef} hidden type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => { const files = Array.from(event.target.files ?? []); const { accepted } = readBtwImages(files, images.length); void Promise.all(accepted.map(fileToBtwImage)).then((next) => setImages((current) => [...current, ...next])); event.currentTarget.value = ""; }} />
       <textarea className="w-full resize-none text-sm leading-relaxed" rows={2} value={thread.draft}

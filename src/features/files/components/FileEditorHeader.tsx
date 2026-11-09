@@ -1,6 +1,6 @@
 import { useI18n } from "../../../shared/i18n/index";
 import { Button } from "../../../shared/ui/button";
-import { Copy, FileCode, Save, X } from "../../../shared/ui/icons";
+import { Copy, FileCode, Link2, Maximize2, Minimize2, Save, X } from "../../../shared/ui/icons";
 
 interface FileEditorHeaderProps {
   title: string;
@@ -15,6 +15,9 @@ interface FileEditorHeaderProps {
   onCopyAiContext: () => void;
   onSave: () => void;
   onClose: () => void;
+  companionMode?: "beside" | "current";
+  onToggleCompanionMode?: () => void;
+  onCollapseCompanion?: () => void;
 }
 
 export function FileEditorHeader({
@@ -30,6 +33,9 @@ export function FileEditorHeader({
   onCopyAiContext,
   onSave,
   onClose,
+  companionMode,
+  onToggleCompanionMode,
+  onCollapseCompanion,
 }: FileEditorHeaderProps) {
   const { t } = useI18n();
   return (
@@ -62,12 +68,13 @@ export function FileEditorHeader({
           </button>
         </div>
       )}
-      <Button size="sm" variant="outline" disabled={!canUseFileActions} onClick={onCopyAiPath}>
-        <Copy size={13} />
+      <div className="ui-file-editor-file-actions">
+      <Button size="sm" variant="outline" className="ui-file-editor-ai-action" disabled={!canUseFileActions} title={t("files.editor.aiPathHint")} onClick={onCopyAiPath}>
+        <Link2 size={13} aria-hidden="true" />
         {t("files.editor.aiPath")}
       </Button>
-      <Button size="sm" variant="outline" disabled={!canUseFileActions} onClick={onCopyAiContext}>
-        <Copy size={13} />
+      <Button size="sm" variant="outline" className="ui-file-editor-ai-action" disabled={!canUseFileActions} title={t("files.editor.aiContextHint")} onClick={onCopyAiContext}>
+        <Copy size={13} aria-hidden="true" />
         {t("files.editor.aiContext")}
       </Button>
       <Button size="sm" variant="outline" disabled={!dirty} onClick={onSave}>
@@ -83,6 +90,13 @@ export function FileEditorHeader({
       >
         <X size={15} />
       </button>
+      </div>
+      {onToggleCompanionMode && <div className="ui-file-editor-layout-actions" role="group">
+        <button type="button" className="ui-file-editor-layout-action" aria-label={t(companionMode === "current" ? "terminal.companion.restore" : "terminal.companion.maximize")} title={t(companionMode === "current" ? "terminal.companion.restore" : "terminal.companion.maximize")} onClick={onToggleCompanionMode}>
+          {companionMode === "current" ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+        </button>
+        {onCollapseCompanion && <button type="button" className="ui-file-editor-layout-action" aria-label={t("terminal.companion.collapse")} title={t("terminal.companion.collapse")} onClick={onCollapseCompanion}><X size={14} /></button>}
+      </div>}
     </div>
   );
 }

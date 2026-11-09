@@ -6,6 +6,7 @@ import { copyTextToClipboard } from "../../../shared/platform/systemClipboard";
 import { SessionTranscriptContent } from "../../history/api/SessionTranscriptContent";
 import { useTerminalPreviewTheme } from "../api/useTerminalPreviewTheme";
 import { BtwContextDetails } from "./BtwContextDetails";
+import { BtwContextCapsule } from "./BtwContextCapsule";
 import type { BtwSideQuestionController } from "../hooks/useBtwSideQuestion";
 import { btwContentText, btwThreadText, type BtwImagePart } from "../lib/btwThreadModel";
 import { fileToBtwImage, readBtwImages } from "../lib/btwImageAttachments";
@@ -18,7 +19,7 @@ const clampWidth = (value: number) => Math.min(760, Math.max(280, Math.round(val
 /**
  * Right split with owner-model embedded selection, independent of native reveal.
  */
-export function BtwTerminalDrawer({ controller, onClose }: { controller: BtwSideQuestionController; onClose: () => void }) {
+export function BtwTerminalDrawer({ controller, onClose, onBackHistory }: { controller: BtwSideQuestionController; onClose: () => void; onBackHistory?: () => void }) {
   const { t } = useI18n();
   const { state, model } = controller;
   const { tone: terminalCodeTheme, panelStyle } = useTerminalPreviewTheme();
@@ -116,6 +117,7 @@ export function BtwTerminalDrawer({ controller, onClose }: { controller: BtwSide
           </span>
         </span>
         <div className="btw-drawer-actions">
+          {onBackHistory ? <Button size="sm" variant="ghost" data-btw-drawer-action="history" onClick={onBackHistory}>{t("terminal.btw.backToHistory")}</Button> : null}
           {pending && thread ? (
             <Button size="sm" variant="ghost" data-btw-drawer-action="stop" onClick={() => model.stop(thread.id)}>
               <CircleStop size={13} aria-hidden="true" />{t("terminal.btw.drawerStop")}
@@ -227,11 +229,15 @@ export function BtwTerminalDrawer({ controller, onClose }: { controller: BtwSide
               <strong>{t("terminal.btw.commandHintTitle")}</strong>
               <span>{t("terminal.btw.commandHintBody")}</span>
             </div> : null}
-            {(thread?.inherit || state.inherit || state.quote || images.length) ? <div className="btw-composer-meta" aria-label={t("terminal.btw.contextDetails")}>
-              {(thread?.inherit || state.inherit) && <span className="btw-composer-chip btw-composer-chip-context">✓ {t("terminal.btw.modeInherited")}</span>}
-              {state.quote && !thread && <span className="btw-composer-chip">{t("terminal.btw.drawerQuote")}</span>}
-              {images.length > 0 && <span className="btw-composer-chip">{images.length} {t("terminal.btw.attachedImage")}</span>}
-            </div> : null}
+            <BtwContextCapsule
+              source={thread?.source ?? state.source}
+              context={thread?.context ?? state.context}
+              loading={thread?.contextLoading ?? state.contextLoading}
+              inherited={thread?.inherit ?? state.inherit}
+              quote={thread?.quote ?? state.quote}
+              imageCount={images.length}
+              onRefresh={thread ? () => { model.refreshContext(thread.id); } : undefined}
+            />
             {images.length ? <div className="btw-image-previews">{images.map((image, index) => <div key={`${image.source.data.slice(0, 12)}-${index}`} className="btw-image-preview"><img src={`data:${image.source.media_type};base64,${image.source.data}`} alt={image.name ?? t("terminal.btw.attachedImage")} /><button type="button" aria-label={t("terminal.btw.removeImage")} title={t("terminal.btw.removeImage")} onClick={() => setImages((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div>)}</div> : null}
             <textarea
               ref={inputRef}

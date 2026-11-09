@@ -80,7 +80,7 @@ export function TerminalNavigationBar({
                 (session) => session.kind === "file-editor" && session.fileEditor?.projectId === project.id,
               );
               const editorSessionId = existingEditor?.id ?? openFileEditorPane(project, "current");
-              companion.show(editorSessionId, project, "current");
+              companion.show(editorSessionId, project, companion.open ? companion.mode : "current");
             }
           }}>{file.name}{dirty ? " *" : ""}</button>
           <button type="button" className="ui-terminal-file-tab__close" aria-label={t("files.editor.closeNamed", { name: file.name })} onClick={() => useFileExplorerStore.getState().closeFile(file.path)}><X size={11} /></button>

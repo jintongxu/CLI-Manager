@@ -192,13 +192,32 @@ test("inheritance is visible opt-in, unavailable sources cannot enable it, and n
     assert.equal(asks.at(-1).context, "");
   }
   model.stage("quote", { terminalId: "local", sessionId: "exact", reason: null });
-  assert.equal(model.getSnapshot().inherit, false);
-  model.setInherit(true); assert.equal(contexts, 0);
+  assert.equal(model.getSnapshot().inherit, true);
+  assert.equal(contexts, 0);
   model.setQuestion("inherited"); model.submitEmbedded(); await tick();
   assert.equal(contexts, 1); assert.equal(asks.at(-1).context, "snapshot");
   const drawer = read("src/features/terminal/components/BtwTerminalDrawer.tsx");
   assert.match(drawer, /type="checkbox" checked=\{state.inherit\}/);
   assert.match(drawer, /model\.setInherit\(event.target.checked\)/);
+  model.dispose();
+});
+
+test("side-question follow-ups reuse the captured context until an explicit refresh", async () => {
+  let contexts = 0; let asks = 0;
+  const model = new BtwThreadModel({
+    context: async () => { contexts++; return { available: true, text: `snapshot-${contexts}`, truncated: false, reason: null }; },
+    ask: async () => { asks++; return "answer"; },
+    cancel: async () => {}, listen: async () => () => {},
+  });
+  model.stage("quote", { terminalId: "local", sessionId: "exact", reason: null });
+  model.setInherit(true); model.setQuestion("first");
+  const id = model.submitEmbedded(); await tick();
+  assert.equal(contexts, 1); assert.equal(asks, 1);
+  model.setDraft(id, "follow-up"); model.send(id); await tick();
+  assert.equal(contexts, 1); assert.equal(asks, 2);
+  assert.equal(model.refreshContext(id), true); await tick();
+  assert.equal(contexts, 2); assert.equal(asks, 2);
+  assert.equal(model.getSnapshot().entries.find((thread) => thread.id === id).context.text, "snapshot-2");
   model.dispose();
 });
 
@@ -342,7 +361,7 @@ test("hidden terminal streams and completes without replacing another terminal o
     listen: async (callback) => { event = callback; return () => {}; },
     ask: (value) => { request = value; return new Promise((resolve) => { finish = resolve; }); },
   }, { list: async () => [], save: async () => {}, remove: async () => {} });
-  model.stage("A", { terminalId: "A", sessionId: "exact-A", reason: null }); model.setQuestion("ask A");
+  model.stage("A", { terminalId: "A", sessionId: "exact-A", reason: null }); model.setInherit(false); model.setQuestion("ask A");
   const id = model.submitEmbedded(); await tick(); model.setDraft(id, "A followup");
   model.stage("B", { terminalId: "B", sessionId: "exact-B", reason: null }); model.setQuestion("B initial");
   event({ requestId: request.requestId, threadId: id, text: "hidden chunk" });

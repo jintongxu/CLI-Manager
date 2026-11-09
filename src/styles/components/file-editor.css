@@ -124,6 +124,8 @@
 
 .ui-file-editor-header {
   position: relative;
+  overflow-x: auto;
+  scrollbar-width: none;
   background:
     linear-gradient(115deg, color-mix(in srgb, var(--file-editor-accent) 9%, transparent), transparent 42%),
     var(--file-editor-surface-raised);
@@ -145,6 +147,22 @@
   white-space: nowrap;
 }
 
+.ui-file-editor-ai-action { min-height: 28px; gap: 5px; padding-inline: 8px; border-color: color-mix(in srgb, var(--file-editor-accent) 28%, var(--file-editor-border)); background: color-mix(in srgb, var(--file-editor-surface-soft) 72%, transparent); color: var(--file-editor-foreground); font-size: 11px; }
+.ui-file-editor-file-actions { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; }
+.ui-file-editor-layout-actions { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 2px; margin-inline-start: 4px; padding-inline-start: 7px; border-inline-start: 1px solid var(--file-editor-border); }
+.ui-file-editor-layout-action { display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: 6px; color: var(--file-editor-muted); transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease; }
+.ui-file-editor-layout-action:hover { border-color: color-mix(in srgb, var(--file-editor-accent) 38%, var(--file-editor-border)); background: color-mix(in srgb, var(--file-editor-accent) 12%, transparent); color: var(--file-editor-foreground); }
+.ui-file-editor-layout-action:focus-visible { outline: 2px solid color-mix(in srgb, var(--file-editor-accent) 58%, transparent); outline-offset: 1px; }
+.ui-file-editor-ai-action:hover:not(:disabled) { border-color: color-mix(in srgb, var(--file-editor-accent) 58%, var(--file-editor-border)); background: color-mix(in srgb, var(--file-editor-accent) 12%, var(--file-editor-surface-soft)); }
+
+.ui-file-editor-header::-webkit-scrollbar { display: none; }
+.ui-file-editor-header > .ui-file-editor-segment,
+.ui-file-editor-header > .ui-file-editor-file-actions,
+.ui-file-editor-header > .ui-file-editor-layout-actions,
+.ui-file-editor-header > .ui-file-editor-ai-action,
+.ui-file-editor-header > .ui-btn,
+.ui-file-editor-header > .ui-icon-action { flex: 0 0 auto; white-space: nowrap; }
+.ui-file-editor-header > .ui-file-editor-segment button { flex: 0 0 auto; white-space: nowrap; }
 .ui-file-editor-header::after {
   position: absolute;
   right: 0;

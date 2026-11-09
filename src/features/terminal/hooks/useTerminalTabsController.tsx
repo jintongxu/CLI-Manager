@@ -1820,7 +1820,7 @@ export function useTerminalTabsController({
     btwPanelOpen,
     btwDrawerOpen,
     closeBtwDrawer: () => setBtwDrawerOpen(false),
-    openBtwReader: () => { closeHistory(); closeGitWorkspace(); setActiveWorkspaceTab("terminal"); setBtwDrawerOpen(true); },
+    openBtwReader: () => { closeHistory(); closeGitWorkspace(); setSidePanelOpen(false); setActiveWorkspaceTab("terminal"); setBtwDrawerOpen(true); },
     btwSideQuestion,
     renderToolbarActions,
     visibleWorkspanLayouts,

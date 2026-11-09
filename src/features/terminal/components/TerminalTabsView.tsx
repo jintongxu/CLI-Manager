@@ -465,7 +465,7 @@ export function TerminalTabsView({
           </div>
           {btwDrawerOpen ? (
             <div className="btw-terminal-split-pane" style={{ display: gitWorkspaceOpen ? "none" : "flex" }}>
-              <BtwTerminalDrawer controller={btwSideQuestion} onClose={closeBtwDrawer} />
+              <BtwTerminalDrawer controller={btwSideQuestion} onClose={closeBtwDrawer} onBackHistory={() => { closeBtwDrawer(); setSidePanelTab("btw"); setSidePanelOpen(true); }} />
             </div>
           ) : null}
           </div>

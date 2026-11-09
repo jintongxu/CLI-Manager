@@ -7,6 +7,7 @@ import { FileEditorContent } from "./FileEditorContent";
 import { FileEditorHeader } from "./FileEditorHeader";
 import type { useFileEditorController } from "../hooks/useFileEditorController";
 import { languageFromPath } from "../../../shared/platform/monacoSetup";
+import { useFileCompanionStore } from "../../terminal/api/fileCompanionState";
 type FileEditorPaneViewProps = ReturnType<typeof useFileEditorController>;
 
 function FileEditorPaneView(props: FileEditorPaneViewProps) {
@@ -18,6 +19,10 @@ function FileEditorPaneView(props: FileEditorPaneViewProps) {
     pendingMarkdownNavigation, handleMarkdownFragmentHandled, outlineSymbols, outlineActiveLine, selectOutlineSymbol, definitionPeek, setDefinitionPeek, openDefinition, pendingAction, setPendingAction,
     discardAndRun, saveAndRun, pendingSaveBusy,
   } = props;
+  const companionMode = useFileCompanionStore((state) => state.mode);
+  const companionOpen = useFileCompanionStore((state) => state.open);
+  const setCompanionMode = useFileCompanionStore((state) => state.setMode);
+  const collapseCompanion = useFileCompanionStore((state) => state.collapse);
   const [definitionPeekHeight, setDefinitionPeekHeight] = useState(() => {
     const stored = Number(localStorage.getItem("cli-manager.file-editor.peek-height"));
     return Number.isFinite(stored) ? Math.max(140, Math.min(560, stored)) : 280;
@@ -49,6 +54,9 @@ function FileEditorPaneView(props: FileEditorPaneViewProps) {
         onCopyAiContext={copyActiveAiContext}
         onSave={() => void save()}
         onClose={requestClose}
+        companionMode={companionOpen ? companionMode : undefined}
+        onToggleCompanionMode={() => setCompanionMode(companionMode === "current" ? "beside" : "current")}
+        onCollapseCompanion={collapseCompanion}
       />
       <FileEditorContent
         file={visibleFile}

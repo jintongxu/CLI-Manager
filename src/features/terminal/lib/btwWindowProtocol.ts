@@ -13,7 +13,7 @@ export interface BtwWindowSnapshot {
   lightThemePalette: LightThemePalette;
   darkThemePalette: DarkThemePalette;
 }
-export type BtwWindowAction = "draft" | "send" | "retry" | "stop" | "reset" | "close";
+export type BtwWindowAction = "draft" | "send" | "retry" | "stop" | "reset" | "refreshContext" | "close";
 export interface BtwWindowIntent {
   commandSession: number;
   commandSequence: number;
@@ -57,7 +57,7 @@ export class BtwWindowOwner {
       || !Number.isSafeInteger(intent.commandSequence) || intent.commandSequence <= 0
       || intent.commandSession < this.commandSession
       || (intent.commandSession === this.commandSession && intent.commandSequence <= this.commandSequence)) return false;
-    if (!["draft", "send", "retry", "stop", "reset", "close"].includes(intent.action)) return false;
+    if (!["draft", "send", "retry", "stop", "reset", "refreshContext", "close"].includes(intent.action)) return false;
     if ((intent.action === "draft" || intent.action === "send")
       && (typeof intent.draft !== "string" || intent.draft.length > 100_000)) return false;
     if (intent.action === "reset" && typeof intent.inherit !== "boolean") return false;
@@ -72,6 +72,7 @@ export class BtwWindowOwner {
       case "retry": this.model.send(thread.id, true); break;
       case "stop": this.model.stop(thread.id); break;
       case "reset": this.model.reset(thread.id, intent.inherit); break;
+      case "refreshContext": this.model.refreshContext(thread.id); break;
       case "close": this.model.open(null); break;
     }
     return true;

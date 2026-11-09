@@ -975,7 +975,9 @@ export const useTerminalStore = create<TerminalStore>((set, get, api) => {
       set({ sessions: existing
         ? state.sessions.map((session) => session.id === editorSessionId ? editorSession : session)
         : [...state.sessions, editorSession] });
-      useFileCompanionStore.getState().show(editorSessionId, project, mode);
+      const companion = useFileCompanionStore.getState();
+      const preserveMode = companion.open && companion.project?.id === project.id;
+      companion.show(editorSessionId, project, preserveMode ? companion.mode : mode);
       return editorSessionId;
     },
 

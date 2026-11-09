@@ -99,6 +99,7 @@ export default function BtwWindowApp() {
     send: (_id, retry) => intent(retry ? "retry" : "send", { draft: draft.current }),
     stop: () => intent("stop"),
     reset: (_id, inherit) => intent("reset", { inherit }),
+    refreshContext: (_id) => { intent("refreshContext"); return true; },
   };
   const language = snapshot?.language ?? detectPreferredLanguage();
   if (!snapshot?.thread) return <main role="status" className="p-6">

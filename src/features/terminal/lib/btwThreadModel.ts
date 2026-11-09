@@ -215,9 +215,10 @@ export class BtwThreadModel {
   stage = (quote: string, source: BtwSource) => {
     this.activateTerminal(source.terminalId);
     // Draft staging captures identity only, never transcript text. Snapshot at creation.
-    this.publish({ question: "", quote, source: { ...source }, inherit: false,
+    const inherit = !source.reason && !!source.sessionId;
+    this.publish({ question: "", quote, source: { ...source }, inherit,
       embeddedId: null, drawerOpen: true, collapsed: false, stageVersion: this.state.stageVersion + 1,
-      context: unavailable(source.reason ?? "inherit_off"), contextLoading: false });
+      context: unavailable(inherit ? "inherit_off" : source.reason ?? "no_source_session"), contextLoading: false });
   };
   setQuestion = (question: string) => this.publish({ question });
   setInherit = (inherit: boolean) => this.publish({ inherit: inherit && !this.state.source.reason && !!this.state.source.sessionId });
@@ -261,6 +262,13 @@ export class BtwThreadModel {
   setDraft = (threadId: string, draft: string) => {
     const thread = this.find(threadId);
     if (thread) this.replace(thread, { draft });
+  };
+  /** Explicitly refreshes the source snapshot without sending or changing the thread history. */
+  refreshContext = (threadId: string) => {
+    const thread = this.find(threadId);
+    if (!thread || !thread.inherit || thread.requestId || thread.contextLoading) return false;
+    this.loadContext(thread, false);
+    return true;
   };
   submit = (images: BtwImagePart[] = []): string | null => {
     const question = this.state.question.trim();

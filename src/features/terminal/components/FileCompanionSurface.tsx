@@ -93,12 +93,6 @@ export function FileCompanionSurface({ children, hasTerminal, visible, backgroun
           setFocused(false); setFileCompanionFocused(false);
         }
       }}>
-      <div className="flex h-7 shrink-0 items-center justify-end gap-2 border-b border-border px-2 text-xs">
-        <button type="button" onClick={() => companion.setMode(companion.mode === "current" ? "beside" : "current")}>
-          {t(companion.mode === "current" ? "terminal.companion.restore" : "terminal.companion.maximize")}
-        </button>
-        <button type="button" onClick={companion.collapse}>{t("terminal.companion.collapse")}</button>
-      </div>
       <div className="min-h-0 flex-1">
         {session && <Suspense fallback={null}><FileEditorPane session={session} companion
           isActive={visible && shown && focused} terminalThemeBackground={background}

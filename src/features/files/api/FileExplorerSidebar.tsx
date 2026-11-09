@@ -44,6 +44,7 @@ import {
 } from "../../git/api/gitDiffWorkspaceStore";
 import { useSettingsStore } from "../../../shared/preferences/settingsStore";
 import { useTerminalStore } from "../../terminal/state";
+import { useFileCompanionStore } from "../../terminal/api/fileCompanionState";
 import { useSshHostStore } from "../../remote/api/sshHostStore";
 import { STATUS_CONFIG } from "../../git/api/GitStatusIcon";
 import { ConfirmDialog } from "../../../shared/ui/ConfirmDialog";
@@ -1326,7 +1327,9 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
 
   const fileOpenRequestRef = useRef(0);
   const activateFileEditor = useCallback((targetProject: Project, displayMode: "beside" | "current" = "beside") => {
-    if (isSameProjectFileContext(useFileExplorerStore.getState().project, targetProject)) openFileEditorPane(targetProject, displayMode);
+    if (!isSameProjectFileContext(useFileExplorerStore.getState().project, targetProject)) return;
+    const companion = useFileCompanionStore.getState();
+    openFileEditorPane(targetProject, companion.open ? companion.mode : displayMode);
   }, [openFileEditorPane]);
 
   const requestOpenFile = useCallback((entry: ProjectFileEntry, displayMode: "beside" | "current" = "beside") => {
