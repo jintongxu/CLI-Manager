@@ -227,7 +227,12 @@ export function BtwTerminalDrawer({ controller, onClose }: { controller: BtwSide
               <strong>{t("terminal.btw.commandHintTitle")}</strong>
               <span>{t("terminal.btw.commandHintBody")}</span>
             </div> : null}
-            {images.length ? <div className="btw-image-previews">{images.map((image, index) => <div key={`${image.source.data.slice(0, 12)}-${index}`} className="btw-image-preview"><img src={`data:${image.source.media_type};base64,${image.source.data}`} alt={image.name ?? t("terminal.btw.attachedImage")} /><button type="button" onClick={() => setImages((current) => current.filter((_, itemIndex) => itemIndex !== index))}>{t("terminal.btw.removeImage")}</button></div>)}</div> : null}
+            {(thread?.inherit || state.inherit || state.quote || images.length) ? <div className="btw-composer-meta" aria-label={t("terminal.btw.contextDetails")}>
+              {(thread?.inherit || state.inherit) && <span className="btw-composer-chip btw-composer-chip-context">✓ {t("terminal.btw.modeInherited")}</span>}
+              {state.quote && !thread && <span className="btw-composer-chip">{t("terminal.btw.drawerQuote")}</span>}
+              {images.length > 0 && <span className="btw-composer-chip">{images.length} {t("terminal.btw.attachedImage")}</span>}
+            </div> : null}
+            {images.length ? <div className="btw-image-previews">{images.map((image, index) => <div key={`${image.source.data.slice(0, 12)}-${index}`} className="btw-image-preview"><img src={`data:${image.source.media_type};base64,${image.source.data}`} alt={image.name ?? t("terminal.btw.attachedImage")} /><button type="button" aria-label={t("terminal.btw.removeImage")} title={t("terminal.btw.removeImage")} onClick={() => setImages((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div>)}</div> : null}
             <textarea
               ref={inputRef}
               className="btw-drawer-input"

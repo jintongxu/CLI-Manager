@@ -88,6 +88,7 @@
 
   --animate-fade-in: fade-in var(--animate-duration-normal) var(--ease-standard);
   --animate-fade-out: fade-out var(--animate-duration-normal) var(--ease-standard);
+  --animate-popover-out: popover-out var(--animate-duration-normal) var(--ease-standard) forwards;
   --animate-slide-down: slide-down var(--animate-duration-fast) var(--ease-standard);
   --animate-scale-in: scale-in var(--animate-duration-normal) var(--ease-snappy);
   --animate-scale-out: scale-out var(--animate-duration-fast) var(--ease-standard);

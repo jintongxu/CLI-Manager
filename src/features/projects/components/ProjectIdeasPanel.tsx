@@ -95,8 +95,10 @@ export function ProjectIdeasPanel({
 
   const copyIdea = async (idea: ProjectIdea) => {
     const result = await copy(idea);
-    if (result.ok) showMessage(t("projectIdeas.toolbar.copied"));
-    else showError(t("projectIdeas.toolbar.copyFailed"));
+    if (result.ok) {
+      setOpen(false);
+      showMessage(t("projectIdeas.toolbar.copied"));
+    } else showError(t("projectIdeas.toolbar.copyFailed"));
   };
 
   const runAction = async (action: () => Promise<void>, success: string) => {

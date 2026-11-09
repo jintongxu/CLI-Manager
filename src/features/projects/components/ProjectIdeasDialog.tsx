@@ -186,9 +186,11 @@ export function ProjectIdeasDialog({
   const copySelected = async () => {
     if (!selected) return;
     const result = await copy(selected);
-    setMutationError(
-      result.ok ? null : result.error instanceof Error ? result.error.message : String(result.error),
-    );
+    if (result.ok) {
+      onClose();
+      return;
+    }
+    setMutationError(result.error instanceof Error ? result.error.message : String(result.error));
   };
 
   const requestDeleteSelected = () => {

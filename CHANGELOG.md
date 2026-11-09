@@ -4,6 +4,14 @@
 
 - 修复 `migration 59 was previously applied but has been modified` 启动失败：统一 `chat_assets.sql` 为 LF，并在 `.gitattributes` 固定 Rust SQLite 迁移 SQL 的换行格式，避免正式版与开发版因 CRLF/LF checksum 漂移而要求重复重试。
 
+## TEMP — 项目想法复制正文
+
+- 项目想法复制不再带已移除的标题；纯文本、Markdown、任务提示和项目上下文格式均只使用想法正文（上下文格式仍保留项目/Worktree 元数据）。复制成功后自动关闭项目想法弹窗或面板，复制失败时保留页面以便重试；Popover 关闭补充淡出动画，避免内容瞬间消失。
+
+## TEMP — btw 侧问体验优化
+
+- 参考项目 ChatPanel、ChatGPT/Claude 窄栏输入模式优化 BTW：输入区增加上下文/引用/图片状态胶囊，图片改为紧凑缩略图和右上角移除按钮，减少边框与占用高度。
+
 ## TEMP — btw 侧问图片支持
 
 - btw 侧问支持 PNG/JPEG/WebP 图片选择、剪贴板粘贴、预览、移除和多模态发送；图片会随侧问历史持久化并同步到独立窗口，兼容旧文本消息。单次最多 4 张，单张最大 6 MB。

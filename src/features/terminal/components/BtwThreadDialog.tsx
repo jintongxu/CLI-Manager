@@ -113,7 +113,8 @@ export function BtwThreadReader({ model, thread }: { model: BtwReaderActions; th
         <strong>{t("terminal.btw.commandHintTitle")}</strong>
         <span>{t("terminal.btw.commandHintBody")}</span>
       </div> : null}
-      {images.length ? <div className="btw-image-previews">{images.map((image, index) => <div key={`${image.source.data.slice(0, 12)}-${index}`} className="btw-image-preview"><img src={`data:${image.source.media_type};base64,${image.source.data}`} alt={image.name ?? t("terminal.btw.attachedImage")} /><button type="button" onClick={() => setImages((current) => current.filter((_, itemIndex) => itemIndex !== index))}>{t("terminal.btw.removeImage")}</button></div>)}</div> : null}
+      {images.length > 0 && <div className="btw-composer-meta"><span className="btw-composer-chip">{images.length} {t("terminal.btw.attachedImage")}</span></div>}
+      {images.length ? <div className="btw-image-previews">{images.map((image, index) => <div key={`${image.source.data.slice(0, 12)}-${index}`} className="btw-image-preview"><img src={`data:${image.source.media_type};base64,${image.source.data}`} alt={image.name ?? t("terminal.btw.attachedImage")} /><button type="button" aria-label={t("terminal.btw.removeImage")} title={t("terminal.btw.removeImage")} onClick={() => setImages((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div>)}</div> : null}
       <input ref={imageInputRef} hidden type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => { const files = Array.from(event.target.files ?? []); const { accepted } = readBtwImages(files, images.length); void Promise.all(accepted.map(fileToBtwImage)).then((next) => setImages((current) => [...current, ...next])); event.currentTarget.value = ""; }} />
       <textarea className="w-full resize-none text-sm leading-relaxed" rows={2} value={thread.draft}
           placeholder={t("terminal.btw.followup")}

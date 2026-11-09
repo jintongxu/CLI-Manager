@@ -194,12 +194,16 @@
   font-size: 11px;
 }
 .btw-command-hint strong { color: var(--on-surface); }
-.btw-image-previews { display: flex; flex-wrap: wrap; gap: 6px; flex: 0 0 100%; }
-.btw-image-preview { position: relative; width: 64px; height: 64px; overflow: hidden; border: 1px solid var(--border); border-radius: 6px; }
-.btw-image-preview img, .btw-message-image { width: 100%; max-height: 180px; object-fit: cover; border-radius: 5px; }
-.btw-image-preview button { position: absolute; inset: auto 2px 2px; font-size: 9px; background: #000b; color: white; }
+.btw-composer-meta { display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; }
+.btw-composer-chip { display: inline-flex; align-items: center; max-width: 100%; min-height: 20px; padding: 0 7px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--border) 72%, transparent); border-radius: 999px; color: var(--on-surface-variant); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.btw-composer-chip-context { border-color: color-mix(in srgb, var(--primary) 34%, transparent); background: color-mix(in srgb, var(--primary) 10%, transparent); color: var(--primary); }
+.btw-image-previews { display: flex; flex-wrap: wrap; gap: 5px; flex: 0 0 100%; }
+.btw-image-preview { position: relative; width: 48px; height: 48px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--border) 78%, transparent); border-radius: 8px; }
+.btw-image-preview img, .btw-message-image { width: 100%; height: 100%; max-height: 180px; object-fit: cover; border-radius: 7px; }
+.btw-image-preview button { position: absolute; top: 2px; right: 2px; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; padding: 0; border: 1px solid #fff8; border-radius: 999px; background: #111c; color: white; font-size: 13px; line-height: 1; }
 .btw-message-image { display: block; width: auto; max-width: 100%; margin-top: 6px; object-fit: contain; }
 .btw-drawer-composer .btw-command-hint,
+.btw-drawer-composer .btw-composer-meta,
 .btw-drawer-composer .btw-image-previews,
 .btw-drawer-composer .btw-drawer-composer-toolbar { grid-column: 1 / -1; }
 .btw-drawer-composer-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

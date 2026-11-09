@@ -21,7 +21,7 @@ const PopoverContent = forwardRef<
       sideOffset={sideOffset}
       className={cn(
         "ui-glass ui-bloom-shadow z-40 overflow-hidden rounded-xl outline-none",
-        "data-[state=open]:animate-slide-down",
+        "data-[state=open]:animate-slide-down data-[state=closed]:animate-popover-out",
         className
       )}
       {...props}

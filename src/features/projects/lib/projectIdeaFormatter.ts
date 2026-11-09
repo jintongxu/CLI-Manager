@@ -7,20 +7,20 @@ function body(idea: ProjectIdea): string {
   return idea.content.trim();
 }
 
-/** Complete, deterministic plain-text representation of an idea. */
+/** Copy the idea body only; the title is an internal list label, not user content. */
 export function formatProjectIdeaPlain(idea: ProjectIdea): string {
-  return [idea.title.trim(), body(idea)].filter(Boolean).join("\n\n");
+  return body(idea);
 }
 
 export function formatProjectIdeaMarkdown(idea: ProjectIdea, project?: Project, worktree?: WorktreeRecord): string {
   const metadata = [project && `Project: ${project.name}`, worktree && `Worktree: ${worktree.display_name || worktree.name}`, `Status: ${idea.status}`, `Priority: ${idea.priority}`].filter(Boolean);
-  return [`# ${idea.title.trim()}`, metadata.length ? metadata.join("\n") : "", body(idea)].filter(Boolean).join("\n\n");
+  return [metadata.length ? metadata.join("\n") : "", body(idea)].filter(Boolean).join("\n\n");
 }
 
-/** A self-contained task prompt suitable for pasting into an assistant. */
+/** A task prompt based on the idea body; the removed title is never reintroduced. */
 export function formatProjectIdeaPrompt(idea: ProjectIdea, project?: Project, worktree?: WorktreeRecord): string {
   const location = [project?.name && `Project: ${project.name}`, project?.path && `Path: ${project.path}`, worktree && `Worktree: ${worktree.display_name || worktree.name}`].filter(Boolean).join("\n");
-  return [`Task: ${idea.title.trim()}`, location, `Original idea:\n${body(idea)}`, "Please clarify assumptions, propose a plan, and identify the smallest safe next steps."].filter(Boolean).join("\n\n");
+  return [location, `Original idea:\n${body(idea)}`, "Please clarify assumptions, propose a plan, and identify the smallest safe next steps."].filter(Boolean).join("\n\n");
 }
 
 /** Project context without executing commands or creating/mutating a Worktree. */
