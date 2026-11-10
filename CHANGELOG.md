@@ -1,5 +1,9 @@
 # Changelog
 
+## TEMP — 修复启动迁移校验失败
+
+- 统一 migration 51 `disable_worktree_label_ordinal_allocation.sql` 为 LF 换行，避免 Windows 工作树将已执行 migration 转为 CRLF，导致每次启动提示 `migration 51 was previously applied but has been modified`；`.gitattributes` 已固定 Rust SQL migration 使用 LF。
+
 ## TEMP — 隐藏终端列表入口
 
 - 隐藏顶部“终端列表 · 数量”入口，保留单行终端标签、切换和关闭操作，减少顶部导航冗余。
