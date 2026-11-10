@@ -49,6 +49,7 @@ export interface BtwState {
   inherit: boolean;
   context: BtwContext;
   contextLoading: boolean;
+  contextRequestId: string | null;
   entries: BtwThread[];
   openId: string | null;
   openVersion: number;
@@ -79,7 +80,7 @@ export interface BtwTransport {
 const missingSource = (): BtwSource => ({ terminalId: null, sessionId: null, reason: "no_source_session" });
 const unavailable = (reason = "no_source_session"): BtwContext => ({ available: false, text: "", truncated: false, reason });
 const initial = (): BtwState => ({ persistenceError: null, terminalId: null, drawerOpen: false, collapsed: false, question: "", quote: "", source: missingSource(), inherit: false,
-  context: unavailable(), contextLoading: false, entries: [], openId: null, openVersion: 0, embeddedId: null, stageVersion: 0 });
+  context: unavailable(), contextLoading: false, contextRequestId: null, entries: [], openId: null, openVersion: 0, embeddedId: null, stageVersion: 0 });
 let serial = 0;
 const id = () => `btw-${Date.now()}-${++serial}`;
 
@@ -118,6 +119,8 @@ export class BtwThreadModel {
   private disposed = false;
   private persistenceQueue: Promise<void> = Promise.resolve();
   private pendingWrites = new Map<string, () => Promise<void>>();
+  private pendingContext: { stageVersion: number; requestId: string; sourceSessionId: string; promise: Promise<BtwContext> } | null = null;
+  private contextCache = new Map<string, { context: BtwContext; expiresAt: number }>();
   private failedWrites = new Map<string, () => Promise<void>>();
   private scheduledWrites = new Set<string>();
   private historyError: string | null = null;
@@ -214,11 +217,23 @@ export class BtwThreadModel {
   }
   stage = (quote: string, source: BtwSource) => {
     this.activateTerminal(source.terminalId);
-    // Draft staging captures identity only, never transcript text. Snapshot at creation.
     const inherit = !source.reason && !!source.sessionId;
+    this.cancel(this.pendingContext?.requestId ?? null);
+    const stageVersion = this.state.stageVersion + 1;
     this.publish({ question: "", quote, source: { ...source }, inherit,
-      embeddedId: null, drawerOpen: true, collapsed: false, stageVersion: this.state.stageVersion + 1,
-      context: unavailable(inherit ? "inherit_off" : source.reason ?? "no_source_session"), contextLoading: false });
+      embeddedId: null, drawerOpen: true, collapsed: false, stageVersion,
+      context: unavailable(inherit ? "inherit_off" : source.reason ?? "no_source_session"), contextLoading: false, contextRequestId: null });
+    if (inherit) {
+      const sourceSessionId = source.sessionId!;
+      const cached = this.contextCache.get(sourceSessionId);
+      if (cached && cached.expiresAt > Date.now()) return;
+      const requestId = id();
+      const promise = this.transport.context({ requestId, sourceSessionId });
+      this.pendingContext = { stageVersion, requestId, sourceSessionId, promise };
+      void promise.then((context) => {
+        if (context.available) this.contextCache.set(sourceSessionId, { context, expiresAt: Date.now() + 5_000 });
+      }, () => {});
+    } else this.pendingContext = null;
   };
   setQuestion = (question: string) => this.publish({ question });
   setInherit = (inherit: boolean) => this.publish({ inherit: inherit && !this.state.source.reason && !!this.state.source.sessionId });
@@ -272,16 +287,41 @@ export class BtwThreadModel {
   };
   submit = (images: BtwImagePart[] = []): string | null => {
     const question = this.state.question.trim();
-    if ((!question && !images.length) || (this.state.inherit && this.state.contextLoading)) return null;
+    if (!question && !images.length) return null;
+    const cached = this.state.inherit && this.state.source.sessionId
+      ? this.contextCache.get(this.state.source.sessionId)
+      : null;
+    const warmedContext = cached && cached.expiresAt > Date.now()
+      ? { ...cached.context }
+      : unavailable(this.state.source.reason ?? "inherit_off");
+    const pendingContext = this.state.inherit && this.pendingContext?.stageVersion === this.state.stageVersion
+      && this.pendingContext.sourceSessionId === this.state.source.sessionId
+      ? this.pendingContext.promise
+      : null;
     const thread: BtwThread = { id: id(), source: { ...this.state.source }, quote: this.state.quote, title: question,
       createdAt: Date.now(), inherit: this.state.inherit,
-      context: unavailable(this.state.source.reason ?? "inherit_off"), contextLoading: this.state.inherit,
+      context: warmedContext, contextLoading: this.state.inherit,
       messages: [], draft: question, draftImages: images.length ? images : undefined,
-      status: "idle", answer: "", error: null, generation: 0, requestId: null, contextRequestId: null };
+      status: "idle", answer: "", error: null, generation: 0, requestId: null,
+      contextRequestId: null };
     this.persist(thread);
-    this.publish({ entries: [...this.state.entries, thread], question: "", inherit: false });
+    this.publish({ entries: [...this.state.entries, thread], question: "", inherit: false, contextRequestId: null });
     if (!thread.inherit) this.send(thread.id);
-    else this.loadContext(thread, true);
+    else if (pendingContext) {
+      const contextRequestId = id();
+      this.replace(thread, { contextRequestId });
+      void pendingContext.then((context) => {
+        const current = this.find(thread.id);
+        if (!current || current.contextRequestId !== contextRequestId || current.requestId) return;
+        this.replace(current, { context, contextLoading: false, contextRequestId: null,
+          status: context.available ? "idle" : "failed", error: context.available ? null : context.reason });
+        if (context.available) this.send(thread.id);
+      }, () => {
+        const current = this.find(thread.id);
+        if (current?.contextRequestId === contextRequestId) this.replace(current,
+          { contextLoading: false, contextRequestId: null, status: "failed", error: "source_read_failed" });
+      });
+    } else this.loadContext(thread, true);
     return thread.id;
   };
   send = (threadId: string, retry = false, images: BtwImagePart[] = []) => {

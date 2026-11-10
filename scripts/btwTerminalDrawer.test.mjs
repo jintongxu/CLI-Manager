@@ -175,7 +175,7 @@ test("new staging clears embedded binding even for identical quote/source, witho
   model.dispose();
 });
 
-test("inheritance is visible opt-in, unavailable sources cannot enable it, and no transcript is fetched while staging", async () => {
+test("inheritance is visible opt-in and staging warms one reusable context request", async () => {
   let contexts = 0; const asks = [];
   const model = new BtwThreadModel({
     context: async () => { contexts++; return { available: true, text: "snapshot", truncated: false, reason: null }; },
@@ -193,7 +193,9 @@ test("inheritance is visible opt-in, unavailable sources cannot enable it, and n
   }
   model.stage("quote", { terminalId: "local", sessionId: "exact", reason: null });
   assert.equal(model.getSnapshot().inherit, true);
-  assert.equal(contexts, 0);
+  // Context acquisition starts while the composer remains usable, so submit
+  // can reuse the in-flight snapshot instead of starting a second sidecar.
+  assert.equal(contexts, 1);
   model.setQuestion("inherited"); model.submitEmbedded(); await tick();
   assert.equal(contexts, 1); assert.equal(asks.at(-1).context, "snapshot");
   const drawer = read("src/features/terminal/components/BtwTerminalDrawer.tsx");

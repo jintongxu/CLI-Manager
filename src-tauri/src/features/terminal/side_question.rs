@@ -213,8 +213,11 @@ pub async fn side_question_context(
     if request.request_id.trim().is_empty() || request.request_id.len() > 200 {
         return Err("side_question_invalid_identity".into());
     }
-    // Register before the first await (history lookup can itself outlive deletion).
-    let registration = process::Registration::new(request.request_id.clone())?;
+    // Reserve the request before the first await (history lookup can itself outlive deletion).
+    // The actual sidecar attempt gets its own registration so a transient child exit can
+    // be retried once without reusing a retired cancellation token.
+    let request_id = request.request_id.clone();
+    let registration = process::Registration::new(request_id.clone())?;
     if request.source_session_id.trim().is_empty() || request.source_session_id.len() > 200 {
         return Ok(SideQuestionContext::unavailable("source_identity_missing"));
     }
@@ -276,29 +279,44 @@ pub async fn side_question_context(
     }
     context_diagnostic("path", "source_path_local");
     let payload = serde_json::json!({ "type": "context", "sourceSessionId": request.source_session_id, "sessionPath": path });
+    // The history lookup owns the first registration. Drop it before the sidecar
+    // attempt, then retry only the known transient process-exit failure once.
+    drop(registration);
     tauri::async_runtime::spawn_blocking(move || {
-        match process::run(
-            resource_dir,
-            payload,
-            registration,
-            Duration::from_secs(15),
-            |_| {},
-        ) {
-            Ok(value) => {
-                let context =
-                    serde_json::from_value::<SideQuestionContext>(value).map_err(|_| {
+        let mut last_error = None;
+        for attempt in 0..2 {
+            let registration = process::Registration::new(format!("{}:context:{}", request_id, attempt))?;
+            match process::run(
+                resource_dir.clone(),
+                payload.clone(),
+                registration,
+                Duration::from_secs(15),
+                |_| {},
+            ) {
+                Ok(value) => {
+                    let context = serde_json::from_value::<SideQuestionContext>(value).map_err(|_| {
                         context_diagnostic("decode", "source_context_protocol");
                         "side_question_context_protocol".to_string()
                     })?;
-                if let Some(reason) = context.reason.as_deref() {
-                    context_diagnostic("snapshot", safe_snapshot_reason(reason));
-                } else if context.available {
-                    context_diagnostic("snapshot", "source_context_available");
+                    if let Some(reason) = context.reason.as_deref() {
+                        context_diagnostic("snapshot", safe_snapshot_reason(reason));
+                    } else if context.available {
+                        context_diagnostic("snapshot", "source_context_available");
+                    }
+                    return Ok(context);
                 }
-                Ok(context)
+                Err(error) if error == "side_question_exit" && attempt == 0 => {
+                    context_diagnostic("retry", "source_process_exit_retry");
+                    last_error = Some(error);
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+                Err(error) => {
+                    last_error = Some(error);
+                    break;
+                }
             }
-            Err(error) => context_process_error(error),
         }
+        context_process_error(last_error.unwrap_or_else(|| "side_question_context_failed".into()))
     })
     .await
     .map_err(|_| "side_question_join".to_string())?

@@ -3,6 +3,7 @@
 ## TEMP — 修复启动迁移校验失败
 
 - 统一 migration 51 `disable_worktree_label_ordinal_allocation.sql` 为 LF 换行，避免 Windows 工作树将已执行 migration 转为 CRLF，导致每次启动提示 `migration 51 was previously applied but has been modified`；`.gitattributes` 已固定 Rust SQL migration 使用 LF。
+- 优化 BTW 侧问首问链路：打开侧问后后台预取上下文，提问时复用进行中的请求或短期缓存，避免重复启动 sidecar；上下文读取不再禁用输入和提问按钮。修复 sidecar 有效结果被异常退出码覆盖，并在成功请求后显式清零退出码。
 
 ## TEMP — 隐藏终端列表入口
 

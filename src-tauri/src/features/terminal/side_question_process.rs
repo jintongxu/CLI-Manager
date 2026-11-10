@@ -350,7 +350,11 @@ fn run_command(
                 return Err("side_question_timeout".into());
             }
             match child.child.try_wait().map_err(|_| "side_question_wait")? {
-                Some(status) if status.success() => break,
+                // A complete, identity-checked JSON frame is authoritative. Node/SDK
+                // shutdown can still report a non-zero exit after flushing the frame
+                // (for example when providers leave a rejected handle behind), so do
+                // not discard a valid context/answer solely because teardown failed.
+                Some(status) if status.success() || final_value.is_some() => break,
                 Some(_) => return Err("side_question_exit".into()),
                 None => std::thread::sleep(Duration::from_millis(10)),
             }
