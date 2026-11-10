@@ -44,6 +44,7 @@ export function TerminalNavigationBar({
     size="sm"
     variant="ghost"
     className="ui-terminal-navigation-drawer-trigger"
+    style={{ display: "none" }}
     aria-haspopup="dialog"
     aria-expanded={drawer.open}
     title={t("terminal.navigation.drawerTitle")}

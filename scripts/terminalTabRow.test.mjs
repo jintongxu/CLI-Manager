@@ -21,9 +21,9 @@ test("real terminal tabs form a compact strip with clear inactive and active sta
   const list = css.match(/\.ui-terminal-tab-row-list \{([^}]*)\}/)?.[1] ?? "";
   const item = css.match(/\.ui-terminal-tab-row-item \{([^}]*)\}/)?.[1] ?? "";
   assert.match(list, /gap: 0;/);
-  assert.match(item, /border-radius: 5px 5px 0 0;/);
-  assert.match(item, /border: 1px solid transparent;/);
-  assert.match(item, /background: color-mix/);
+  assert.match(item, /border: 0;/);
+  assert.match(item, /border-radius: 0;/);
+  assert.match(item, /background: transparent;/);
   const active = css.match(/\.ui-terminal-tab-row-item\[data-active="true"\] \{([^}]*)\}/)?.[1] ?? "";
   assert.doesNotMatch(active, /(?:height|padding|font-size|transform):/);
   for (const theme of ["sea-salt", "tokyo-night-storm"]) {
@@ -32,8 +32,7 @@ test("real terminal tabs form a compact strip with clear inactive and active sta
     assert.match(activeTheme, /35%/);
     assert.match(activeTheme, /inset 0 1px/);
   }
-  assert.match(css, /\.ui-terminal-tab-row-item\[data-active="true"\] \{[^}]*border-color: color-mix[^}]*box-shadow: inset 0 1px/);
-  assert.match(css, /\.ui-terminal-tab-row-item::after \{[^}]*pointer-events: none/);
+  assert.match(css, /\.ui-terminal-tab-row-item\[data-active="true"\] \{[^}]*box-shadow: inset 0 -2px/);
   assert.match(css, /\.ui-terminal-tab-row-item:focus-within \.ui-terminal-tab-row-close/);
 });
 
