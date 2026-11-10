@@ -5,7 +5,7 @@
   "identifier": "com.cli-manager.app",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://127.0.0.1:1420",
+    "devUrl": "http://127.0.0.1:14320",
     "beforeBuildCommand": "node ./scripts/stage-side-question-runtime.mjs && npm run build && npm run web:build",
     "beforeBundleCommand": "node ./scripts/stage-side-question-runtime.mjs && node ./scripts/prepare-bundle-binaries.mjs",
     "frontendDist": "../dist"

@@ -6,6 +6,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { DND_SORTABLE_TRANSITION, TERMINAL_TAB_DRAG_PREFIX } from "../../workspace/api/dragInteraction";
 import { buildTerminalTabContext } from "../lib/terminalTabsModel";
 import { formatTerminalTabContext } from "../lib/currentWorkPresentation";
+import { sessionDisplayLabels } from "../../projects/lib/sidebarDisplay";
 
 import { useCurrentWorkTabScroll } from "../hooks/useCurrentWorkTabScroll";
 
@@ -31,9 +32,9 @@ function projectColorOf(entry: TerminalNavigationEntry, contextLabels: TerminalT
 }
 
 function TabItem({
-  entry, active, sortable, contextLabels, onActivate, onReorder, onClose, closeLabel,
+  entry, displayLabel, active, sortable, contextLabels, onActivate, onReorder, onClose, closeLabel,
 }: {
-  entry: TerminalNavigationEntry; active: boolean; sortable: boolean;
+  entry: TerminalNavigationEntry; displayLabel: string; active: boolean; sortable: boolean;
   contextLabels: TerminalTabRowProps["contextLabels"]; onActivate: (id: string) => void;
   onReorder?: (fromId: string, toId: string) => void;
   onClose?: (id: string) => void;
@@ -68,11 +69,12 @@ function TabItem({
         type="button"
         role="tab"
         aria-selected={active}
+        aria-label={displayLabel}
         className="ui-terminal-tab-row-main"
-        title={`${entry.session.title}\n${context}`}
+        title={`${displayLabel}\n${context}`}
         onClick={() => onActivate(entry.id)}
       >
-        <span className="ui-terminal-tab-row-title">{entry.session.title}</span>
+        <span className="ui-terminal-tab-row-title">{displayLabel}</span>
       </button>
       {onClose && <button
         type="button"
@@ -94,6 +96,7 @@ export function TerminalTabRow({
   entries, activeId, contextLabels, sortable = false, onActivate, onClose, closeLabel, trailing, ariaLabel, onReorder,
 }: TerminalTabRowProps) {
   const { t } = useI18n();
+  const sessionLabels = sessionDisplayLabels(entries.map((entry) => entry.session), t("sidebar.display.terminalType"));
   const { scrollRef, scrollState, scrollTabs } = useCurrentWorkTabScroll(true, activeId, JSON.stringify(entries.map((entry) => [entry.id, entry.session.title])));
   return (
     <nav className="ui-terminal-tab-row" aria-label={ariaLabel ?? t("terminal.navigation.label")}>
@@ -106,6 +109,7 @@ export function TerminalTabRow({
             <TabItem
               key={entry.id}
               entry={entry}
+              displayLabel={sessionLabels.get(entry.id) ?? entry.session.title}
               active={entry.id === activeId}
               sortable={sortable}
               contextLabels={contextLabels}

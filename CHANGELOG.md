@@ -1,5 +1,9 @@
 # Changelog
 
+## TEMP — 终端标签精简
+
+- 终端标签栏保持单行紧凑布局，标签正文显示可识别的短会话名称；完整项目、Worktree、路径和运行上下文通过悬浮提示查看，避免只显示无法区分的数字。非活动标签增加轻量背景、边界和悬浮高亮，活动标签使用主题色强调。
+
 ## TEMP — 修复启动迁移校验失败
 
 - 修复 `migration 59 was previously applied but has been modified` 启动失败：统一 `chat_assets.sql` 为 LF，并在 `.gitattributes` 固定 Rust SQLite 迁移 SQL 的换行格式，避免正式版与开发版因 CRLF/LF checksum 漂移而要求重复重试。
