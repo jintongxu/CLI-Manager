@@ -15,6 +15,7 @@ interface FileEditorHeaderProps {
   onCopyAiContext: () => void;
   onSave: () => void;
   onClose: () => void;
+  showCloseFileAction?: boolean;
   companionMode?: "beside" | "current";
   onToggleCompanionMode?: () => void;
   onCollapseCompanion?: () => void;
@@ -33,6 +34,7 @@ export function FileEditorHeader({
   onCopyAiContext,
   onSave,
   onClose,
+  showCloseFileAction = true,
   companionMode,
   onToggleCompanionMode,
   onCollapseCompanion,
@@ -81,7 +83,7 @@ export function FileEditorHeader({
         <Save size={13} />
         {t("common.save")}
       </Button>
-      <button
+      {showCloseFileAction && <button
         type="button"
         className="ui-icon-action"
         title={t("files.editor.close")}
@@ -89,7 +91,7 @@ export function FileEditorHeader({
         onClick={onClose}
       >
         <X size={15} />
-      </button>
+      </button>}
       </div>
       {onToggleCompanionMode && <div className="ui-file-editor-layout-actions" role="group">
         <button type="button" className="ui-file-editor-layout-action" aria-label={t(companionMode === "current" ? "terminal.companion.restore" : "terminal.companion.maximize")} title={t(companionMode === "current" ? "terminal.companion.restore" : "terminal.companion.maximize")} onClick={onToggleCompanionMode}>

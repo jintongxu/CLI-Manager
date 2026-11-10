@@ -468,7 +468,7 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
   }, [isActive]);
 
   return {
-    activeDiff, t, visibleFile, session, project, dirty, isNewFile, previewMode, setPreviewMode,
+    activeDiff, t, visibleFile, session, project, companion, dirty, isNewFile, previewMode, setPreviewMode,
     copyActiveAiPath, copyActiveAiContext, save, requestClose, visibleFiles, activeFilePath,
     diffContext, diffWorkspace, setActiveFilePath, requestCloseFiles, editorProject, language,
     editorTheme, handleEditorMount, setActiveContent, handleMarkdownLinkActivate,

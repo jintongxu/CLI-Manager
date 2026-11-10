@@ -175,9 +175,9 @@
 }
 
 .ui-file-editor-tabs {
-  gap: 2px;
-  padding-inline: 5px;
-  background-color: var(--file-editor-surface-soft);
+  gap: 0;
+  padding-inline: 0;
+  background-color: var(--terminal-theme-background, var(--file-editor-surface-soft));
   border-bottom-color: var(--file-editor-border);
   box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--file-editor-foreground, var(--terminal-theme-foreground, #f8fafc)) 3%, transparent);
 }
@@ -206,8 +206,8 @@
 
 .ui-file-editor-tab[data-active="true"] {
   border-color: color-mix(in srgb, var(--file-editor-accent) 45%, var(--file-editor-border-strong));
-  background: linear-gradient(180deg, color-mix(in srgb, var(--file-editor-accent) 22%, var(--file-editor-surface-raised)), var(--file-editor-surface-raised)) !important;
-  color: var(--terminal-theme-foreground, #f8fafc) !important;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--file-editor-accent) 22%, var(--file-editor-surface-raised)), var(--file-editor-surface-raised));
+  color: var(--terminal-theme-foreground, #f8fafc);
   box-shadow: 0 2px 10px color-mix(in srgb, var(--file-editor-accent) 12%, transparent);
 }
 

@@ -12,7 +12,7 @@ type FileEditorPaneViewProps = ReturnType<typeof useFileEditorController>;
 
 function FileEditorPaneView(props: FileEditorPaneViewProps) {
   const {
-    activeDiff, t, visibleFile, session, project, dirty, isNewFile, previewMode, setPreviewMode,
+    activeDiff, t, visibleFile, session, project, companion, dirty, isNewFile, previewMode, setPreviewMode,
     copyActiveAiPath, copyActiveAiContext, save, requestClose,
     diffContext, diffWorkspace, editorProject, language,
     editorTheme, handleEditorMount, setActiveContent, handleMarkdownLinkActivate,
@@ -54,6 +54,7 @@ function FileEditorPaneView(props: FileEditorPaneViewProps) {
         onCopyAiContext={copyActiveAiContext}
         onSave={() => void save()}
         onClose={requestClose}
+        showCloseFileAction={!companion}
         companionMode={companionOpen ? companionMode : undefined}
         onToggleCompanionMode={() => setCompanionMode(companionMode === "current" ? "beside" : "current")}
         onCollapseCompanion={collapseCompanion}

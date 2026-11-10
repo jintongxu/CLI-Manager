@@ -36,7 +36,6 @@ export function TerminalNavigationBar({
   const openFileEditorPane = useTerminalStore((state) => state.openFileEditorPane);
   const companion = useFileCompanionStore();
   const activateTerminal = (id: string) => {
-    companion.collapse();
     actions.onActivate(id);
   };
   const anchor = <Button
@@ -73,7 +72,7 @@ export function TerminalNavigationBar({
       {files.map((file) => {
         const active = companion.open && activeFilePath === file.path;
         const dirty = file.content !== file.savedContent;
-        return <div key={file.path} className="ui-terminal-file-tab" data-active={active ? "true" : "false"} title={file.path}>
+        return <div key={file.path} className="ui-terminal-file-tab ui-terminal-page-tab" data-active={active ? "true" : "false"} title={file.path}>
           <button type="button" className="ui-terminal-file-tab__label" onClick={() => {
             setActiveFilePath(file.path);
             if (project) {

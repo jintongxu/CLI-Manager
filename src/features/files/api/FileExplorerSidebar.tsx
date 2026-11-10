@@ -1336,7 +1336,7 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
     if (!project || !isSameProjectFileContext(useFileExplorerStore.getState().project, project)) return;
     const request = ++fileOpenRequestRef.current;
     const targetProject = project;
-    void openFile(entry, { intent: "preview" }).then(() => {
+    void openFile(entry, { intent: "pinned" }).then(() => {
       const current = useFileExplorerStore.getState();
       if (request !== fileOpenRequestRef.current || !isSameProjectFileContext(current.project, targetProject)
         || current.activeFilePath !== entry.path) return;
@@ -1414,7 +1414,7 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
               if (event.ctrlKey || event.metaKey) { event.preventDefault(); selectEntry(entry, true); return; }
               selectEntry(entry);
               const request = ++fileOpenRequestRef.current;
-              void openFileAtSearchMatch(match, { intent: "preview" }).then(() => {
+              void openFileAtSearchMatch(match, { intent: "pinned" }).then(() => {
                 const current = useFileExplorerStore.getState();
                 if (request === fileOpenRequestRef.current && isSameProjectFileContext(current.project, project)
                   && current.activeFilePath === match.path) activateFileEditor(project);

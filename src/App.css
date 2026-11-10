@@ -4,6 +4,7 @@
 @import "./styles/themes.css";
 @import "./styles/base.css";
 @import "./styles/components.css";
+@import "./styles/components/terminal-tab-skin.css";
 @import "./styles/workspace-layout.css";
 @import "./styles/workspace-layout-controls.css";
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## V1.5.1 — 2026-11-10
+
+- 终端与文件标签保持原有主题配色并统一圆角卡片外观；文件编辑器标签连续排列，打开文件始终创建独立固定标签，切换同一项目的终端标签时保留右侧文件编辑区，并移除并排文件面板标题栏重复的关闭文件按钮。/ Terminal and file tabs retain their original theme colors with a unified rounded-card appearance; file-editor tabs remain contiguous, opening a file always creates an independent pinned tab, switching terminals in the same project keeps the right-side file editor visible, and the duplicate close-file action is removed from the companion header.
+
+- 同步 npm、Cargo 与 Tauri 桌面版本至 1.5.1，沿用 `jintongxu/CLI-Manager` 的 GitHub Actions Windows 正式发布流程生成 NSIS EXE、MSI、便携 ZIP 与签名更新清单；不构建 macOS/Linux。/ Align npm, Cargo and Tauri desktop versions at 1.5.1 and reuse the `jintongxu/CLI-Manager` GitHub Actions Windows release pipeline for NSIS EXE, MSI, portable ZIP and signed updater metadata; macOS/Linux are not built.
+- 包含 V1.4.13 后已合入 master 的启动 migration 51 校验修复、终端标签与导航精简、BTW 侧问上下文补齐及首问预取优化；详细功能记录保留在下方对应 TEMP 条目。/ Includes the migration 51 startup-check fix, streamlined terminal tabs/navigation, restored BTW context UI and first-question context prefetching merged after V1.4.13; detailed records remain in the corresponding TEMP sections below.
+
 ## TEMP — 修复启动迁移校验失败
 
 - 统一 migration 51 `disable_worktree_label_ordinal_allocation.sql` 为 LF 换行，避免 Windows 工作树将已执行 migration 转为 CRLF，导致每次启动提示 `migration 51 was previously applied but has been modified`；`.gitattributes` 已固定 Rust SQL migration 使用 LF。

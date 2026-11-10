@@ -1544,7 +1544,7 @@ export const useFileExplorerStore = create<FileExplorerStore>((set, get) => {
     }));
 
     if (target.kind === "directory") return true;
-    await get().openFile(target);
+    await get().openFile(target, { intent: "pinned" });
     if (projectRevision !== openProjectRequestSeq || get().activeFilePath !== target.path) return false;
     if (options?.lineNumber && isSameProjectFileLocation(get().project, project) && get().activeFilePath === target.path) {
       set({

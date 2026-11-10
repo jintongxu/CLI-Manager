@@ -6,7 +6,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { DND_SORTABLE_TRANSITION, TERMINAL_TAB_DRAG_PREFIX } from "../../workspace/api/dragInteraction";
 import { buildTerminalTabContext } from "../lib/terminalTabsModel";
 import { formatTerminalTabContext } from "../lib/currentWorkPresentation";
-import { sessionDisplayLabels } from "../../projects/lib/sidebarDisplay";
+import { sessionDisplayLabels } from "../../projects/api/sidebarDisplay";
 
 import { useCurrentWorkTabScroll } from "../hooks/useCurrentWorkTabScroll";
 
@@ -56,7 +56,7 @@ function TabItem({
     <div
       ref={setNodeRef}
       style={style}
-      className="ui-terminal-tab-row-item"
+      className="ui-terminal-tab-row-item ui-terminal-page-tab"
       data-active={active ? "true" : "false"}
       data-dragging={isDragging ? "true" : "false"}
       data-drag-hidden={isDragging ? "true" : "false"}

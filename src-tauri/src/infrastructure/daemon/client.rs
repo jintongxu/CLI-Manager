@@ -675,8 +675,8 @@ fn connect_or_spawn_inner(
                     return Ok(client);
                 }
                 Err(err) => {
-                    log::warn!("daemon handshake with recorded instance failed: {err}");
-                    return Err(err);
+                    log::warn!("daemon handshake with recorded instance failed; removing stale discovery: {err}");
+                    remove_daemon_info(&info_path);
                 }
             }
         } else {

@@ -35,7 +35,7 @@ export function FileEditorTabs({
   if (files.length === 0 && diffWorkspace.tabs.length === 0) return null;
 
   return (
-    <div className="ui-file-editor-tabs flex h-8 shrink-0 items-center overflow-x-auto border-b border-border bg-surface-container-lowest px-1">
+    <div className="ui-file-editor-tabs flex h-8 shrink-0 items-center overflow-x-auto border-b border-border bg-surface-container-lowest">
       {files.map((file, index) => {
         const active = !activeDiff && file.path === activeFilePath;
         const dirty = file.content !== file.savedContent;
@@ -50,7 +50,6 @@ export function FileEditorTabs({
                 data-preview={file.isPreview ? "true" : "false"}
                 onDoubleClick={() => pinFile(file.path)}
                 data-active={active ? "true" : "false"}
-                style={active ? { background: "var(--surface-container)", color: "var(--on-surface)" } : undefined}
                 title={file.path}
               >
                 <button

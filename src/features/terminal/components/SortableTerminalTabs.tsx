@@ -133,7 +133,7 @@ export function SortableTab({
         <div
           ref={setTabNodeRef}
           style={style}
-          className={`ui-interactive ui-tab-trigger ui-terminal-tab-item flex h-7 ${tabMinWidthClass} shrink-0 cursor-pointer items-center gap-2 rounded-lg px-3 text-[12px] font-medium`}
+          className={`ui-interactive ui-tab-trigger ui-terminal-tab-item ui-terminal-page-tab flex h-7 ${tabMinWidthClass} shrink-0 cursor-pointer items-center gap-2 rounded-lg px-3 text-[12px] font-medium`}
           data-terminal-tab-id={id}
           data-worktree-identity={worktreeBadge?.identity}
           data-session-kind={sessionKind}
