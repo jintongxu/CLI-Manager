@@ -17,6 +17,10 @@ for await (const line of rl) {
     });
     await pending;
     await write(result);
+    // A provider/SDK may set process.exitCode during teardown even after the
+    // request produced a valid protocol frame. The host treats a valid frame as
+    // authoritative, so explicitly finalize successful one-shot requests cleanly.
+    process.exitCode = 0;
   } catch (error) {
     await pending.catch(() => {});
     // Never expose provider errors, raw requests, source text, paths or credentials.
@@ -33,7 +37,8 @@ for await (const line of rl) {
   }
   if (request?.type !== "ping") {
     rl.close();
-    // SDK providers can retain network handles. Output is flushed and the session disposed first.
+    // SDK providers can retain network handles. Output is flushed before the
+    // one-shot process exits, and successful frames always use a zero status.
     process.exit(process.exitCode ?? 0);
   }
 }

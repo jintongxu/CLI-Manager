@@ -85,7 +85,9 @@ export function BtwTerminalDrawer({ controller, onClose, onBackHistory }: { cont
   const composerValue = thread ? thread.draft : state.question;
   const composerSet = thread ? (value: string) => model.setDraft(thread.id, value) : model.setQuestion;
   const composerSubmit = thread ? sendFollowUp : submitQuestion;
-  const composerDisabled = thread ? pending || (!thread.draft.trim() && !images.length) : (!state.question.trim() && !images.length) || (state.inherit && state.contextLoading);
+  // Context acquisition is asynchronous and must not disable the composer.
+  // submit() keeps the draft and joins the in-flight context request.
+  const composerDisabled = thread ? pending || (!thread.draft.trim() && !images.length) : (!state.question.trim() && !images.length);
 
   return (
     <section
