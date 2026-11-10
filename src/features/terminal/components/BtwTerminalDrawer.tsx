@@ -238,7 +238,20 @@ export function BtwTerminalDrawer({ controller, onClose, onBackHistory }: { cont
               imageCount={images.length}
               onRefresh={thread ? () => { model.refreshContext(thread.id); } : undefined}
             />
-            {images.length ? <div className="btw-image-previews">{images.map((image, index) => <div key={`${image.source.data.slice(0, 12)}-${index}`} className="btw-image-preview"><img src={`data:${image.source.media_type};base64,${image.source.data}`} alt={image.name ?? t("terminal.btw.attachedImage")} /><button type="button" aria-label={t("terminal.btw.removeImage")} title={t("terminal.btw.removeImage")} onClick={() => setImages((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div>)}</div> : null}
+            {images.length ? <div className="btw-image-previews">{images.map((image, index) =>
+              <div key={`${image.source.data.slice(0, 12)}-${index}`} className="btw-image-preview">
+                <img
+                  src={`data:${image.source.media_type};base64,${image.source.data}`}
+                  alt={image.name ?? t("terminal.btw.attachedImage")}
+                />
+                <button
+                  type="button"
+                  aria-label={t("terminal.btw.removeImage")}
+                  title={t("terminal.btw.removeImage")}
+                  onClick={() => setImages((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                >×</button>
+              </div>
+            )}</div> : null}
             <textarea
               ref={inputRef}
               className="btw-drawer-input"
@@ -258,7 +271,23 @@ export function BtwTerminalDrawer({ controller, onClose, onBackHistory }: { cont
               }}
             />
             <div className="btw-drawer-composer-toolbar">
-              <div className="btw-drawer-attach"><input ref={imageInputRef} hidden type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => { void addImages(Array.from(event.target.files ?? [])); event.currentTarget.value = ""; }} /><Button size="sm" variant="ghost" aria-label={t("terminal.btw.attachImage")} title={t("terminal.btw.attachImage")} onClick={() => imageInputRef.current?.click()}><Image size={14} aria-hidden="true" />{t("terminal.btw.attachImage")}</Button></div>
+              <div className="btw-drawer-attach">
+                <input
+                  ref={imageInputRef}
+                  hidden
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  multiple
+                  onChange={(event) => { void addImages(Array.from(event.target.files ?? [])); event.currentTarget.value = ""; }}
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label={t("terminal.btw.attachImage")}
+                  title={t("terminal.btw.attachImage")}
+                  onClick={() => imageInputRef.current?.click()}
+                ><Image size={14} aria-hidden="true" />{t("terminal.btw.attachImage")}</Button>
+              </div>
               <Button size="sm" variant="default" data-btw-drawer-action="submit" disabled={composerDisabled} onClick={composerSubmit}>
                 {t("terminal.btw.ask")}
               </Button>
