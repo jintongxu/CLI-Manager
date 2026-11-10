@@ -144,8 +144,10 @@ export function TerminalCloseConfirmBubble({
   shouldIgnoreOutsideInteraction: () => boolean;
 }) {
   const { t } = useI18n();
+  // Keep the close decision visible even when the tab strip is clipped or scrolled.
+  // Anchoring to the tab can place the small bubble behind the terminal viewport.
   const anchorStyle: CSSProperties = confirm
-    ? { position: "fixed", left: confirm.x, top: confirm.y, width: 1, height: 1 }
+    ? { position: "fixed", left: "50vw", top: "50vh", width: 1, height: 1 }
     : { position: "fixed", left: 0, top: 0, width: 1, height: 1 };
 
   return (
@@ -154,8 +156,9 @@ export function TerminalCloseConfirmBubble({
         <span className="pointer-events-none" style={anchorStyle} aria-hidden="true" />
       </PopoverAnchor>
       <PopoverContent
-        align={confirm?.align ?? "end"}
-        collisionPadding={8}
+        align="center"
+        side="bottom"
+        collisionPadding={16}
         className="terminal-skin w-auto p-1.5"
         style={menuStyle}
         onOpenAutoFocus={(event) => event.preventDefault()}

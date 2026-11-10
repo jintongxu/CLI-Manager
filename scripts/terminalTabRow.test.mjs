@@ -17,13 +17,13 @@ test("real tab row renders the passed collection without quick-list or more-coun
   assert.doesNotMatch(source, /onAdd\(entry\.id\)/);
 });
 
-test("real terminal tabs form a continuous strip without gaps or outer rounding", () => {
+test("real terminal tabs form a compact strip with clear inactive and active states", () => {
   const list = css.match(/\.ui-terminal-tab-row-list \{([^}]*)\}/)?.[1] ?? "";
   const item = css.match(/\.ui-terminal-tab-row-item \{([^}]*)\}/)?.[1] ?? "";
   assert.match(list, /gap: 0;/);
-  assert.match(item, /border-radius: 0;/);
-  assert.match(item, /border: 0;/);
-  assert.match(item, /background: transparent;/);
+  assert.match(item, /border-radius: 5px 5px 0 0;/);
+  assert.match(item, /border: 1px solid transparent;/);
+  assert.match(item, /background: color-mix/);
   const active = css.match(/\.ui-terminal-tab-row-item\[data-active="true"\] \{([^}]*)\}/)?.[1] ?? "";
   assert.doesNotMatch(active, /(?:height|padding|font-size|transform):/);
   for (const theme of ["sea-salt", "tokyo-night-storm"]) {
@@ -32,7 +32,7 @@ test("real terminal tabs form a continuous strip without gaps or outer rounding"
     assert.match(activeTheme, /35%/);
     assert.match(activeTheme, /inset 0 1px/);
   }
-  assert.match(css, /\.ui-terminal-tab-row-item\[data-active="true"\] \{[^}]*border-radius: 5px 5px 0 0;[^}]*box-shadow: inset 0 1px/);
+  assert.match(css, /\.ui-terminal-tab-row-item\[data-active="true"\] \{[^}]*border-color: color-mix[^}]*box-shadow: inset 0 1px/);
   assert.match(css, /\.ui-terminal-tab-row-item::after \{[^}]*pointer-events: none/);
   assert.match(css, /\.ui-terminal-tab-row-item:focus-within \.ui-terminal-tab-row-close/);
 });
@@ -44,7 +44,8 @@ test("tab row reuses project color, context information and shared smooth scroll
   assert.match(source, /useCurrentWorkTabScroll/);
   assert.match(source, /scrollTabs\(-1\)/);
   assert.match(source, /scrollTabs\(1\)/);
-  assert.match(source, /title=\{`\$\{entry\.session\.title\}/);
+  assert.match(source, /title=\{`\$\{displayLabel\}/);
+  assert.match(source, /sessionDisplayLabels/);
 });
 
 test("tab row keeps activation and drag on the tab body without inline action buttons", () => {

@@ -1,7 +1,7 @@
 import http from "node:http";
 import { createServer } from "vite";
 
-const DEV_PORT = 1420;
+const DEV_PORT = 14320;
 const DEV_HOST = "127.0.0.1";
 const DEV_URL = `http://${DEV_HOST}:${DEV_PORT}`;
 const SERVER_PROBE_TIMEOUT_MS = 15_000;

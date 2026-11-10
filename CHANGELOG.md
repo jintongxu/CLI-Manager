@@ -1,13 +1,8 @@
 # Changelog
 
-## V1.4.13 — 2026-11-09
+## TEMP — 终端标签精简
 
-- 补入来源 worktree 漏提交的原始 `BtwContextCapsule` 组件，恢复侧问现有导入的完整性，未另行设计或替换功能；本机按锁文件同步依赖后类型检查通过。/ Restore the original BtwContextCapsule omitted from the source worktree commit, completing existing side-question imports without redesign; type checking passes after syncing local dependencies from the lockfile.
-
-- 仅格式化侧问抽屉与对话框中的 3 处 JSX 长行，编译后 JavaScript 与格式化前完全一致，不改变功能。/ Reformat three long JSX lines in the side-question drawer and dialog with identical emitted JavaScript and no behavior change.
-
-- 同步 npm、Cargo 与 Tauri 版本至 1.4.13，沿用 GitHub Actions Windows 正式发布流程生成 EXE、MSI、便携 ZIP 与签名更新文件，不构建 macOS/Linux。/ Align npm, Cargo and Tauri at 1.4.13 and reuse the Windows stable pipeline for EXE/MSI, portable ZIP and signed updater artifacts; no macOS/Linux build.
-- 包含当前 master 已合入的侧问、文件编辑器与交互优化等改动，详细记录保留在对应功能条目。/ Includes side-question, file editor and interaction improvements merged into master; detailed entries are retained below.
+- 终端标签栏保持单行紧凑布局，标签正文显示可识别的短会话名称；完整项目、Worktree、路径和运行上下文通过悬浮提示查看，避免只显示无法区分的数字。非活动标签增加轻量背景、边界和悬浮高亮，活动标签使用主题色强调。
 
 ## TEMP — 修复启动迁移校验失败
 
