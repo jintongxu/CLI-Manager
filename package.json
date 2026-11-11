@@ -11,6 +11,7 @@
     "check:architecture": "node ./scripts/architecture.mjs",
     "report:architecture": "node ./scripts/architecture.mjs --report",
     "dev": "node ./scripts/dev-server.mjs",
+    "tauri:dev": "node ./scripts/tauri-cli.mjs dev",
     "build": "tsc && vite build",
     "test:codex-proxy:e2e": "node ./scripts/codexAppServerProxy.e2e.test.mjs",
     "test:tauri-dev-proxy": "node ./scripts/tauriCliDevProxy.test.mjs",

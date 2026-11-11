@@ -10,11 +10,33 @@ use tauri::{AppHandle, Manager, Runtime};
 use uuid::Uuid;
 
 const APP_HOME_DIR_NAME: &str = ".cli-manager";
+const DEV_APP_HOME_DIR_NAME: &str = ".cli-manager-dev";
 const PORTABLE_FLAG_FILE_NAME: &str = "portable.flag";
 const PORTABLE_DATA_DIR_NAME: &str = "data";
 const DATA_ROOT_BOOTSTRAP_FILE_NAME: &str = "data-root.json";
 const DATA_ROOT_BOOTSTRAP_VERSION: u32 = 1;
 const WINDOWS_APP_IDENTIFIER: &str = "com.cli-manager.app";
+const DEV_WINDOWS_APP_IDENTIFIER: &str = "com.cli-manager.dev";
+
+fn is_dev_build() -> bool {
+    option_env!("CLI_MANAGER_BUILD_FLAVOR") == Some("dev")
+}
+
+fn app_home_dir_name() -> &'static str {
+    if is_dev_build() {
+        DEV_APP_HOME_DIR_NAME
+    } else {
+        APP_HOME_DIR_NAME
+    }
+}
+
+fn windows_app_identifier() -> &'static str {
+    if is_dev_build() {
+        DEV_WINDOWS_APP_IDENTIFIER
+    } else {
+        WINDOWS_APP_IDENTIFIER
+    }
+}
 const MACHINE_ID_FILE_NAME: &str = "machine-id";
 const DB_FILE_NAME: &str = "cli-manager.db";
 const PROVIDERS_DB_FILE_NAME: &str = "providers.db";
@@ -193,7 +215,7 @@ fn default_data_dir_for(
 ) -> PathBuf {
     match distribution {
         AppDistribution::Portable => executable_dir.join(PORTABLE_DATA_DIR_NAME),
-        AppDistribution::Standalone | AppDistribution::Aur => home_dir.join(APP_HOME_DIR_NAME),
+        AppDistribution::Standalone | AppDistribution::Aur => home_dir.join(app_home_dir_name()),
     }
 }
 
@@ -203,7 +225,7 @@ pub fn default_data_dir() -> Result<PathBuf, String> {
     if distribution == AppDistribution::Portable {
         return Ok(executable_dir()?.join(PORTABLE_DATA_DIR_NAME));
     }
-    Ok(home_dir_from_env()?.join(APP_HOME_DIR_NAME))
+    Ok(home_dir_from_env()?.join(app_home_dir_name()))
 }
 
 // 将 Windows 引导指针放在程序旁或 LOCALAPPDATA，确保它不依赖被重定向的数据根。
@@ -220,7 +242,7 @@ fn bootstrap_path_for(
         AppDistribution::Portable => Ok(Some(executable_dir.join(DATA_ROOT_BOOTSTRAP_FILE_NAME))),
         AppDistribution::Standalone => local_app_data
             .map(|root| {
-                root.join(WINDOWS_APP_IDENTIFIER)
+                root.join(windows_app_identifier())
                     .join(DATA_ROOT_BOOTSTRAP_FILE_NAME)
             })
             .map(Some)

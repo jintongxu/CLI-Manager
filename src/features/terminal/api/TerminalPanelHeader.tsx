@@ -9,6 +9,7 @@ interface TerminalPanelHeaderProps {
   subtitleTitle?: string;
   titleAccessory?: ReactNode;
   actions?: ReactNode;
+  className?: string;
   onTitleDoubleClick?: MouseEventHandler<HTMLDivElement>;
 }
 
@@ -20,11 +21,12 @@ export function TerminalPanelHeader({
   subtitleTitle,
   titleAccessory,
   actions,
+  className,
   onTitleDoubleClick,
 }: TerminalPanelHeaderProps) {
   return (
     <header
-      className="ui-terminal-panel-header flex h-9 shrink-0 items-center justify-between gap-2 border-b px-2 font-mono"
+      className={["ui-terminal-panel-header flex h-9 shrink-0 items-center justify-between gap-2 border-b px-2 font-mono", className].filter(Boolean).join(" ")}
       style={{ backgroundColor: TERM_PANEL.bg, borderColor: TERM_PANEL.border }}
     >
       <div className="flex min-w-0 items-center gap-2" onDoubleClick={onTitleDoubleClick}>

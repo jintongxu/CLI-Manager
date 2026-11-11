@@ -7,6 +7,50 @@
 - 同步 npm、Cargo 与 Tauri 桌面版本至 1.5.1，沿用 `jintongxu/CLI-Manager` 的 GitHub Actions Windows 正式发布流程生成 NSIS EXE、MSI、便携 ZIP 与签名更新清单；不构建 macOS/Linux。/ Align npm, Cargo and Tauri desktop versions at 1.5.1 and reuse the `jintongxu/CLI-Manager` GitHub Actions Windows release pipeline for NSIS EXE, MSI, portable ZIP and signed updater metadata; macOS/Linux are not built.
 - 包含 V1.4.13 后已合入 master 的启动 migration 51 校验修复、终端标签与导航精简、BTW 侧问上下文补齐及首问预取优化；详细功能记录保留在下方对应 TEMP 条目。/ Includes the migration 51 startup-check fix, streamlined terminal tabs/navigation, restored BTW context UI and first-question context prefetching merged after V1.4.13; detailed records remain in the corresponding TEMP sections below.
 
+## TEMP — 文件面板按项目独立显示
+
+- 文件面板打开状态与项目绑定：在某个项目中打开文件面板后，切换到其它项目不会自动显示该面板；每个项目仍保留自己的文件标签和编辑状态。修复伴随编辑器切换项目时错误跳过 `openProject`，确保已打开文件和未保存编辑内容正确恢复。
+
+## TEMP — 文件编辑器滚动条美化
+
+- 将代码编辑器的纵向和横向滚动条收窄为 6px 轻量样式；垂直滑块改为渐变胶囊、细边框和柔和阴影，hover 时增强亮度与宽度，减少滚动条对代码区域的视觉占用。
+
+## TEMP — 代码编辑器行号栏收窄
+
+- 收窄文件面板代码编辑器的行号栏，移除额外 glyph margin，并将行号最小字符宽度与装饰区压缩，减少编辑区被占用的空间。
+
+## TEMP — 文件编辑器标题栏布局修复
+
+- 移除文件编辑器标题栏左侧的“新增”状态徽标，避免在窄面板中挤压和遮挡文件名；文件名与操作按钮保持清晰可用。
+
+## TEMP — 文件面板窄宽度按钮布局修复
+
+- 修复非最大化窄文件面板中标题、文件名与操作按钮重叠的问题：保留文件名的有限显示空间，窄宽度下将复制/保存操作收敛为图标按钮，并保持操作按钮可点击。
+
+## TEMP — Markdown 文件默认预览
+
+- Markdown 文件从文件面板打开时默认进入预览模式；切换到源码、搜索或链接跳转等显式操作仍可按需进入源码模式。
+
+## TEMP — 文件面板右键菜单视觉优化
+
+- 优化文件面板右键菜单整体布局：统一宽度与内边距，增强圆角、边框、阴影、图标层次和 hover/focus 反馈；隐藏底部滚动条，并为菜单项增加区分度更高的主题色；不改变菜单操作。
+
+## TEMP — 开发版热更新启动
+
+- 新增 `npm run tauri:dev` 开发启动命令：连接 Vite 开发服务器，支持前端热更新，并使用独立开发版 Tauri/WebView2/数据目录。
+
+## TEMP — 文件面板新建操作布局优化
+
+- 优化文件面板右键菜单中的“新建文件/新建文件夹”操作：增加更清晰的分组层次、主题色图标、圆角高亮和 hover/focus 反馈；创建逻辑不变。
+
+## TEMP — 开发版与正式版运行隔离
+
+- 开发版使用独立的 Tauri 标识、数据目录和数据根引导文件，可与正式版同时运行；正式版继续使用原有数据目录，不迁移或覆盖现有数据。
+
+## TEMP — 修复终端标签关闭
+
+- 修复点击终端标签叉号后标签仍留在顶部导航的问题：隐藏会话继续保留用于侧栏恢复，但不再重新出现在可见终端标签栏。
+
 ## TEMP — 修复启动迁移校验失败
 
 - 统一 migration 51 `disable_worktree_label_ordinal_allocation.sql` 为 LF 换行，避免 Windows 工作树将已执行 migration 转为 CRLF，导致每次启动提示 `migration 51 was previously applied but has been modified`；`.gitattributes` 已固定 Rust SQL migration 使用 LF。

@@ -16,6 +16,7 @@ export function localBuildOptions(args, env = process.env) {
       stdio: "inherit",
       env: {
         ...env,
+        CLI_MANAGER_BUILD_FLAVOR: "dev",
         CARGO_TARGET_DIR: path.resolve(repoRoot, env.CARGO_TARGET_DIR || "src-tauri/target", "local"),
         CARGO_PROFILE_RELEASE_LTO: "off",
         CARGO_PROFILE_RELEASE_OPT_LEVEL: "2",

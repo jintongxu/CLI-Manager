@@ -12,7 +12,7 @@ type FileEditorPaneViewProps = ReturnType<typeof useFileEditorController>;
 
 function FileEditorPaneView(props: FileEditorPaneViewProps) {
   const {
-    activeDiff, t, visibleFile, session, project, companion, dirty, isNewFile, previewMode, setPreviewMode,
+    activeDiff, t, visibleFile, session, project, companion, dirty, previewMode, setPreviewMode,
     copyActiveAiPath, copyActiveAiContext, save, requestClose,
     diffContext, diffWorkspace, editorProject, language,
     editorTheme, handleEditorMount, setActiveContent, handleMarkdownLinkActivate,
@@ -45,7 +45,6 @@ function FileEditorPaneView(props: FileEditorPaneViewProps) {
           : visibleFile?.name ?? session.fileEditor?.projectName ?? project?.name ?? t("files.editor.titleFallback")}
         path={activeDiff?.sourcePath ?? visibleFile?.path ?? session.fileEditor?.projectPath ?? project?.path ?? t("files.editor.noFile")}
         dirty={dirty}
-        isNewFile={isNewFile}
         showMarkdownModes={visibleFile?.previewKind === "markdown"}
         previewMode={previewMode}
         canUseFileActions={Boolean(visibleFile)}

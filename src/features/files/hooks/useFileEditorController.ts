@@ -253,13 +253,16 @@ export function useFileEditorController({ session, isActive, terminalThemeBackgr
   });
 
   useEffect(() => {
-    if (companion || !isActive || !editorProject || isSameProjectFileContext(useFileExplorerStore.getState().project, editorProject)) return;
+    if (!isActive || !editorProject || isSameProjectFileContext(useFileExplorerStore.getState().project, editorProject)) return;
     void openProject(editorProject);
-  }, [companion, editorProject, isActive, openProject]);
+  }, [editorProject, isActive, openProject]);
 
   useEffect(() => {
     const requestedMode = nextMarkdownModeRef.current;
-    setPreviewMode(requestedMode && requestedMode.path === visibleFile?.path ? requestedMode.mode : "source");
+    const isMarkdownFile = visibleFile?.previewKind === "markdown";
+    setPreviewMode(requestedMode && requestedMode.path === visibleFile?.path
+      ? requestedMode.mode
+      : isMarkdownFile ? "preview" : "source");
     if (requestedMode?.path === visibleFile?.path) nextMarkdownModeRef.current = null;
     setPendingMarkdownNavigation((pending) => {
       if (!pending || pending.path === visibleFile?.path) return pending;

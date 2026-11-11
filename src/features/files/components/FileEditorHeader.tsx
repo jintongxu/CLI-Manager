@@ -6,7 +6,6 @@ interface FileEditorHeaderProps {
   title: string;
   path: string;
   dirty: boolean;
-  isNewFile: boolean;
   showMarkdownModes: boolean;
   previewMode: "source" | "preview";
   canUseFileActions: boolean;
@@ -25,7 +24,6 @@ export function FileEditorHeader({
   title,
   path,
   dirty,
-  isNewFile,
   showMarkdownModes,
   previewMode,
   canUseFileActions,
@@ -46,7 +44,6 @@ export function FileEditorHeader({
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           <div className="truncate text-xs font-semibold text-on-surface">{title}{dirty ? " *" : ""}</div>
-          {isNewFile && <span className="ui-file-editor-new-badge">{t("files.status.added")}</span>}
         </div>
         <div className="truncate text-[10px] text-text-muted">{path}</div>
       </div>

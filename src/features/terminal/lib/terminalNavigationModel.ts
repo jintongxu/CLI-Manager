@@ -75,7 +75,9 @@ export function buildTerminalNavigationModel(input: TerminalNavigationInput, mem
   const seen = new Set<string>();
   const scopeEntries: TerminalNavigationEntry[] = [];
   for (const session of input.sessions) {
-    if (seen.has(session.id) || !isOperableNavigationSession(session, input.sessionStatuses[session.id])) continue;
+    // Closing a regular terminal tab hides its PTY for fast reopen from the sidebar;
+    // hidden sessions must not be reintroduced into the visible top navigation.
+    if (session.tabHidden || seen.has(session.id) || !isOperableNavigationSession(session, input.sessionStatuses[session.id])) continue;
     if (!sessionMatchesTerminalScope(session, input.scope, input.sessions, input.projects, projectById, input.worktrees, groupIds)) continue;
     seen.add(session.id);
     const worktree = findWorktreeForSession(session, input.sessions, input.worktrees);

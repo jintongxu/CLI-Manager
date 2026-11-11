@@ -190,9 +190,10 @@ function devSpawnEnv(argsToRun) {
 
   return {
     ...process.env,
+    CLI_MANAGER_BUILD_FLAVOR: "dev",
     WEBVIEW2_USER_DATA_FOLDER:
       process.env.WEBVIEW2_USER_DATA_FOLDER ??
-      path.join(process.env.LOCALAPPDATA, "com.cli-manager.app", "EBWebView-dev"),
+      path.join(process.env.LOCALAPPDATA, "com.cli-manager.dev", "EBWebView-dev"),
   };
 }
 

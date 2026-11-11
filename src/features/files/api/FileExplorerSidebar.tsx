@@ -650,10 +650,10 @@ function FileNode({
           <LiveServerFileMenuItem project={project} entry={displayEntry} />
           {isDir && (
             <>
-              <ContextMenuItem disabled={busy} onSelect={() => onInput({ kind: "create-file", parentPath: displayEntry.path })}>
+              <ContextMenuItem className="file-explorer-create-menu-item" disabled={busy} onSelect={() => onInput({ kind: "create-file", parentPath: displayEntry.path })}>
                 <File size={13} /> {t("files.menu.newFile")}
               </ContextMenuItem>
-              <ContextMenuItem disabled={busy} onSelect={() => onInput({ kind: "create-dir", parentPath: displayEntry.path })}>
+              <ContextMenuItem className="file-explorer-create-menu-item" disabled={busy} onSelect={() => onInput({ kind: "create-dir", parentPath: displayEntry.path })}>
                 <FolderPlus size={13} /> {t("files.menu.newFolder")}
               </ContextMenuItem>
               {isManuallyIgnored ? (
@@ -1675,6 +1675,28 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
   const hasHeaderExtras = searchControlsVisible || readOnly || Boolean(clipboard) || selectedEntries.length > 0 || mutationBusy;
   const headerActions = (
     <>
+      {!readOnly && <span className="ui-file-create-actions" role="group" aria-label={`${t("files.menu.newFile")} / ${t("files.menu.newFolder")}`}>
+        <button
+          type="button"
+          className="ui-file-tooltip ui-icon-action ui-file-create-action"
+          data-tooltip={t("files.menu.newFile")}
+          aria-label={t("files.menu.newFile")}
+          disabled={mutationBusy}
+          onClick={() => openInput({ kind: "create-file", parentPath: "" })}
+        >
+          <File size={13} />
+        </button>
+        <button
+          type="button"
+          className="ui-file-tooltip ui-icon-action ui-file-create-action"
+          data-tooltip={t("files.menu.newFolder")}
+          aria-label={t("files.menu.newFolder")}
+          disabled={mutationBusy}
+          onClick={() => openInput({ kind: "create-dir", parentPath: "" })}
+        >
+          <FolderPlus size={13} />
+        </button>
+      </span>}
       <button
         className="ui-file-tooltip ui-icon-action"
         data-tooltip={searchToggleLabel}
@@ -1809,6 +1831,7 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
             subtitle={displayPathName}
             onTitleDoubleClick={readOnly ? undefined : openProjectRootFolder}
             actions={headerActions}
+            className="ui-file-panel-header"
           />
           {hasHeaderExtras && <div className="shrink-0 border-b border-border px-2 py-2">{headerExtras}</div>}
         </>
@@ -1842,10 +1865,10 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent className="file-explorer-menu" portalContainer={menuPortalContainer}>
-          <ContextMenuItem disabled={mutationBusy} onSelect={() => openInput({ kind: "create-file", parentPath: "" })}>
+          <ContextMenuItem className="file-explorer-create-menu-item" disabled={mutationBusy} onSelect={() => openInput({ kind: "create-file", parentPath: "" })}>
             <File size={13} /> {t("files.menu.newFile")}
           </ContextMenuItem>
-          <ContextMenuItem disabled={mutationBusy} onSelect={() => openInput({ kind: "create-dir", parentPath: "" })}>
+          <ContextMenuItem className="file-explorer-create-menu-item" disabled={mutationBusy} onSelect={() => openInput({ kind: "create-dir", parentPath: "" })}>
             <FolderPlus size={13} /> {t("files.menu.newFolder")}
           </ContextMenuItem>
           <ContextMenuItem disabled={mutationBusy} onSelect={() => void pasteIntoTarget("")}>
@@ -1864,10 +1887,15 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
       </ContextMenu>
 
       <Dialog open={inputAction !== null} onOpenChange={(open) => { if (!open) setInputAction(null); }}>
-        <DialogContent className="max-w-[360px]">
-          <DialogTitle>{inputAction?.kind === "create-dir" ? t("files.dialog.newFolder") : t("files.dialog.newFile")}</DialogTitle>
+        <DialogContent className="file-create-dialog max-w-[420px]">
+          <div className="file-create-dialog__heading">
+            <span className="file-create-dialog__icon" aria-hidden="true">
+              {inputAction?.kind === "create-dir" ? <FolderPlus size={17} /> : <File size={17} />}
+            </span>
+            <DialogTitle>{inputAction?.kind === "create-dir" ? t("files.dialog.newFolder") : t("files.dialog.newFile")}</DialogTitle>
+          </div>
           <input
-            className="ui-focus-ring mt-3 rounded-md border border-border bg-surface-container-lowest px-3 py-2 text-sm text-on-surface outline-none"
+            className="file-create-dialog__input ui-focus-ring rounded-lg border border-border bg-surface-container-lowest px-3 py-2.5 text-sm text-on-surface outline-none"
             value={inputValue}
             autoFocus
             onChange={(event) => setInputValue(event.currentTarget.value)}
@@ -1876,7 +1904,7 @@ export function FileExplorerSidebar({ mode = "sidebar", onClosePanel, onBackToPr
               if (event.key === "Escape") setInputAction(null);
             }}
           />
-          <DialogFooter>
+          <DialogFooter className="file-create-dialog__footer">
             <Button variant="outline" onClick={() => setInputAction(null)}>{t("common.cancel")}</Button>
             <Button disabled={mutationBusy} onClick={() => void submitInput(false)}>{t("common.confirm")}</Button>
           </DialogFooter>

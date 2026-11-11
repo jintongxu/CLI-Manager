@@ -11,6 +11,7 @@ interface Options {
   rejectUnsupportedCapability: (project: Project | null, capability: "files" | "history" | "statistics" | "git") => boolean;
   setSidePanelTab: (tab: TerminalSidePanelTab) => void;
   syncFilePanelProject: (project: Project) => Promise<boolean>;
+  setFilesPanelProjectKey: (key: string) => void;
 }
 
 export function useTerminalSidePanelTabChange({
@@ -22,6 +23,7 @@ export function useTerminalSidePanelTabChange({
   rejectUnsupportedCapability,
   setSidePanelTab,
   syncFilePanelProject,
+  setFilesPanelProjectKey,
 }: Options) {
   return useCallback((tab: TerminalSidePanelTab) => {
     const project = panelSession?.projectId ? projectById.get(panelSession.projectId) ?? null : null;
@@ -36,7 +38,10 @@ export function useTerminalSidePanelTabChange({
       if (!filePanelProject) return;
       if (rejectUnsupportedCapability(filePanelProject, "files")) return;
       void syncFilePanelProject(filePanelProject).then((allowed) => {
-        if (allowed) setSidePanelTab("files");
+        if (allowed) {
+          setFilesPanelProjectKey(filePanelProject.id);
+          setSidePanelTab("files");
+        }
       });
       return;
     }
@@ -44,5 +49,5 @@ export function useTerminalSidePanelTabChange({
     if (tab === "replay" && rejectUnsupportedCapability(project, "history")) return;
     if (tab === "btw") onBtwOpen?.();
     setSidePanelTab(tab);
-  }, [onBtwOpen, ensureStatsPanelAllowed, filePanelProject, panelSession, projectById, rejectUnsupportedCapability, setSidePanelTab, syncFilePanelProject]);
+  }, [onBtwOpen, ensureStatsPanelAllowed, filePanelProject, panelSession, projectById, rejectUnsupportedCapability, setFilesPanelProjectKey, setSidePanelTab, syncFilePanelProject]);
 }

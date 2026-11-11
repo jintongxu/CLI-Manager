@@ -1,4 +1,3 @@
-import { useFileCompanionStore } from "../api/fileCompanionState";
 import { terminalRecoveryBindings } from "./terminalRecoveryBindings";
 import { resolveTerminalCreationContext, withoutTerminalTitle } from "../api/terminalCreationContext";
 import { buildAgentTaskNotifications } from "../lib/terminalTaskPresentation";
@@ -234,7 +233,8 @@ export function useTerminalTabsController({
   const [statsOpen, setStatsOpen] = useState(false);
   const [gitOpen, setGitOpen] = useState(false);
   const [replayOpen, setReplayOpen] = useState(false);
-  const [filesOpen, setFilesOpen] = useState(false);
+  const [, setFilesOpen] = useState(false);
+  const [filesOpenProjectKeys, setFilesOpenProjectKeys] = useState<Set<string>>(new Set());
   const [systemResourcesOpen, setSystemResourcesOpen] = useState(false);
   const [providersOpen, setProvidersOpen] = useState(false);
   const [btwPanelOpen, setBtwPanelOpen] = useState(false);
@@ -353,11 +353,10 @@ export function useTerminalTabsController({
     [activeSession, sessions, worktrees]
   );
   const filePanelProject = useTerminalFilePanelProject(activeSession, sessions, projects, projectById, worktrees, sshHosts);
-  // Main-context changes park file buffers through the existing file store, never by closing the editor.
+  // Project changes switch the file workspace in place. Do not collapse the companion:
+  // editor tabs and visibility are restored from the target project's workspace state.
   useEffect(() => {
-    const companion = useFileCompanionStore.getState();
-    if (!companion.open || !filePanelProject || isSameProjectFileContext(companion.project, filePanelProject)) return;
-    companion.collapse();
+    if (!filePanelProject) return;
     if (!isSameProjectFileContext(useFileExplorerStore.getState().project, filePanelProject)) {
       void openFileProject(filePanelProject);
     }
@@ -490,7 +489,13 @@ export function useTerminalTabsController({
   const statsPanelActive = sidePanelMerged ? sidePanelOpen && sidePanelTab === "stats" : statsOpen;
   const replayPanelActive = sidePanelMerged ? sidePanelOpen && sidePanelTab === "replay" : replayOpen;
   const gitPanelActive = sidePanelMerged ? sidePanelOpen && sidePanelTab === "git" : gitOpen;
-  const filesPanelActive = sidePanelMerged ? sidePanelOpen && sidePanelTab === "files" : filesOpen;
+  // Project identity is stable across terminal/worktree context enrichment; paths are not.
+  const currentFilePanelProjectKey = filePanelProject?.id ?? null;
+  const filesOpenForCurrentProject = Boolean(currentFilePanelProjectKey && filesOpenProjectKeys.has(currentFilePanelProjectKey));
+  const filesPanelProjectMatches = Boolean(currentFilePanelProjectKey && filesOpenProjectKeys.has(currentFilePanelProjectKey));
+  const filesPanelActive = filesPanelProjectMatches && (sidePanelMerged
+    ? sidePanelOpen && sidePanelTab === "files"
+    : filesOpenForCurrentProject);
   const providersPanelActive = sidePanelMerged ? sidePanelOpen && sidePanelTab === "providers" : providersOpen;
   const systemResourcesPanelActive = sidePanelMerged
     ? sidePanelOpen && sidePanelTab === "systemResources"
@@ -1136,8 +1141,10 @@ export function useTerminalTabsController({
       if (sidePanelTab === "files") setSidePanelOpen(false);
       return;
     }
+    const key = currentFilePanelProjectKey;
+    if (key) setFilesOpenProjectKeys((current) => { const next = new Set(current); next.delete(key); return next; });
     setFilesOpen(false);
-  }, [sidePanelMerged, sidePanelTab]);
+  }, [currentFilePanelProjectKey, sidePanelMerged, sidePanelTab]);
   const openFilesPanelForProject = useCallback(async (project: Project): Promise<boolean> => {
     const allowed = await syncFilePanelProject(project);
     if (!allowed) return false;
@@ -1146,6 +1153,8 @@ export function useTerminalTabsController({
       closeHistory();
       setActiveWorkspaceTab("terminal");
     }
+    const projectKey = project.id;
+    setFilesOpenProjectKeys((current) => new Set(current).add(projectKey));
     if (sidePanelMerged) {
       setSidePanelTab("files");
       setSidePanelOpen(true);
@@ -1192,6 +1201,7 @@ export function useTerminalTabsController({
     rejectUnsupportedCapability,
     setSidePanelTab,
     syncFilePanelProject,
+    setFilesPanelProjectKey: (key) => setFilesOpenProjectKeys((current) => new Set(current).add(key)),
   });
 
   // 响应式约束：非合并模式下两个面板各占固定宽度，窗口过窄时会挤压终端。
@@ -1200,7 +1210,7 @@ export function useTerminalTabsController({
     if (sidePanelMerged) return;
     const enforce = () => {
       if (!terminalSidePanelSingleOpen && window.innerWidth >= 1100) return;
-      const openPanels = [statsOpen, gitOpen, replayOpen, filesOpen, providersOpen, systemResourcesOpen].filter(Boolean).length;
+      const openPanels = [statsOpen, gitOpen, replayOpen, filesOpenForCurrentProject, providersOpen, systemResourcesOpen].filter(Boolean).length;
       if (openPanels <= 1) return;
       if (statsOpen) {
         setGitOpen(false);
@@ -1240,9 +1250,14 @@ export function useTerminalTabsController({
     enforce();
     window.addEventListener("resize", enforce);
     return () => window.removeEventListener("resize", enforce);
-  }, [filesOpen, gitOpen, providersOpen, replayOpen, sidePanelMerged, statsOpen, systemResourcesOpen, terminalSidePanelSingleOpen]);
+  }, [filesOpenForCurrentProject, gitOpen, providersOpen, replayOpen, sidePanelMerged, statsOpen, systemResourcesOpen, terminalSidePanelSingleOpen]);
 
   useEffect(() => {
+    if (sidePanelMerged && sidePanelTab === "files") {
+      const shouldOpen = Boolean(currentFilePanelProjectKey && filesOpenProjectKeys.has(currentFilePanelProjectKey));
+      if (sidePanelOpen !== shouldOpen) setSidePanelOpen(shouldOpen);
+      if (!shouldOpen) return;
+    }
     if (!filesPanelActive) return;
     if (!filePanelProject) {
       closeFilesPanel();
@@ -1251,6 +1266,10 @@ export function useTerminalTabsController({
     void syncFilePanelProject(filePanelProject);
   }, [
     closeFilesPanel,
+    filesPanelProjectMatches,
+    sidePanelMerged,
+    sidePanelOpen,
+    sidePanelTab,
     filePanelProject?.id,
     filePanelProject?.path,
     filePanelProject?.environment_type,
@@ -1814,7 +1833,7 @@ export function useTerminalTabsController({
     gitOpen,
     panelGitSupported,
     replayOpen,
-    filesOpen,
+    filesOpen: filesOpenForCurrentProject,
     systemResourcesOpen,
     providersOpen,
     btwPanelOpen,

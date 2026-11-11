@@ -38,9 +38,9 @@ export function FileCompanionSurface({ children, hasTerminal, visible, backgroun
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
-  useEffect(() => {
-    if (!sameContext && companion.open) companion.collapse();
-  }, [sameContext, companion.open, companion.collapse]);
+  // Project/session switches can briefly make the file-store context lag behind
+  // the companion context. Keep the companion open so the target workspace can
+  // restore its own editor tabs instead of collapsing the surface on a transient mismatch.
   useEffect(() => {
     if (!shown || !visible) { setFocused(false); setFileCompanionFocused(false); }
   }, [shown, visible]);
