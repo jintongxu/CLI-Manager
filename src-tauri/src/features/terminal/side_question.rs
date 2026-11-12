@@ -231,8 +231,8 @@ pub async fn side_question_context(
         None,
         None,
         Some(request.source_session_id.clone()),
-        None,
-        None,
+        Some(1),
+        Some(0),
     )
     .await
     {
@@ -294,10 +294,11 @@ pub async fn side_question_context(
                 |_| {},
             ) {
                 Ok(value) => {
-                    let context = serde_json::from_value::<SideQuestionContext>(value).map_err(|_| {
-                        context_diagnostic("decode", "source_context_protocol");
-                        "side_question_context_protocol".to_string()
-                    })?;
+                    let context =
+                        serde_json::from_value::<SideQuestionContext>(value).map_err(|_| {
+                            context_diagnostic("decode", "source_context_protocol");
+                            "side_question_context_protocol".to_string()
+                        })?;
                     if let Some(reason) = context.reason.as_deref() {
                         context_diagnostic("snapshot", safe_snapshot_reason(reason));
                     } else if context.available {
@@ -419,7 +420,10 @@ mod tests {
         let mut legacy: SideQuestionRequest =
             serde_json::from_str(r#"{"prompt":"explain this"}"#).unwrap();
         validate_request(&mut legacy).unwrap();
-        assert_eq!(legacy.messages[0].content, serde_json::Value::String("explain this".into()));
+        assert_eq!(
+            legacy.messages[0].content,
+            serde_json::Value::String("explain this".into())
+        );
         assert!(!legacy.request_id.is_empty());
     }
     #[test]
@@ -431,11 +435,24 @@ mod tests {
 
         let image = serde_json::json!({"type":"image","source":{"type":"base64","media_type":"image/png","data":"A".repeat(700_000)}});
         let mut follow_up = SideQuestionRequest {
-            request_id: "r".into(), thread_id: "t".into(), prompt: None, quote: String::new(), context: String::new(),
+            request_id: "r".into(),
+            thread_id: "t".into(),
+            prompt: None,
+            quote: String::new(),
+            context: String::new(),
             messages: vec![
-                SideQuestionMessage { role: "user".into(), content: serde_json::Value::Array(vec![image.clone()]) },
-                SideQuestionMessage { role: "assistant".into(), content: serde_json::Value::String("seen".into()) },
-                SideQuestionMessage { role: "user".into(), content: serde_json::Value::Array(vec![image]) },
+                SideQuestionMessage {
+                    role: "user".into(),
+                    content: serde_json::Value::Array(vec![image.clone()]),
+                },
+                SideQuestionMessage {
+                    role: "assistant".into(),
+                    content: serde_json::Value::String("seen".into()),
+                },
+                SideQuestionMessage {
+                    role: "user".into(),
+                    content: serde_json::Value::Array(vec![image]),
+                },
             ],
         };
         validate_request(&mut follow_up).unwrap();

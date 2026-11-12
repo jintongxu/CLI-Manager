@@ -226,6 +226,50 @@
 }
 
 /* Main Chat Column */
+.chat-alert {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px auto 0;
+  width: min(calc(100% - 32px), 920px);
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger, #f87171) 32%, var(--border));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--danger, #f87171) 10%, var(--surface-container-lowest));
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.chat-alert::before {
+  content: "!";
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--danger, #f87171) 24%, transparent);
+  color: var(--danger, #f87171);
+  font-weight: 700;
+}
+
+.chat-alert button {
+  margin-left: auto;
+  padding: 4px 9px;
+  border: 1px solid color-mix(in srgb, var(--primary) 36%, var(--border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: var(--primary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.chat-alert button:hover {
+  background: color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
 .chat-main {
   position: relative;
   display: flex;
@@ -263,13 +307,14 @@
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 10px 24px 10px 48px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-primary);
+  padding: 10px clamp(16px, 3vw, 42px) 10px 48px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, var(--primary) 10%);
+  background: color-mix(in srgb, var(--surface-container-low) 72%, var(--bg-primary));
   position: sticky;
   top: 0;
   z-index: 10;
   min-height: 52px;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--primary) 6%, transparent);
 }
 
 .chat-titlebar-left {
@@ -413,7 +458,16 @@
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  padding: 24px 20px;
+  padding: 28px clamp(16px, 4vw, 56px) 34px;
+  background:
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--primary) 5%, transparent), transparent 42%),
+    var(--bg-primary);
+  scroll-behavior: smooth;
+}
+
+.chat-messages > .chat-message {
+  width: min(100%, 920px);
+  margin-inline: auto;
 }
 .chat-outline-rail {
   position: absolute;
@@ -615,19 +669,27 @@
 /* User turn */
 .chat-message-user {
   align-items: flex-end;
-  align-self: flex-end;
-  max-width: 85%;
-  margin-left: auto;
+  align-self: center;
+  width: min(100%, 920px) !important;
+  max-width: 100% !important;
+  margin-inline: auto;
+  padding-inline: 0;
+}
+
+.chat-message-user > .chat-user-bubble {
+  max-width: min(78%, 720px);
 }
 .chat-message-user header {
   justify-content: flex-end;
   padding-right: 2px;
 }
 .chat-user-bubble {
-  padding: 10px 16px;
-  border-radius: 18px 18px 6px 18px;
-  background: color-mix(in srgb, var(--primary) 9%, var(--surface-container-high));
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--text-primary);
+  box-shadow: none;
 }
 .chat-user-text {
   white-space: pre-wrap;
@@ -639,13 +701,22 @@
 /* Assistant prose stays centered and bounded; user turns can reach the pane edge. */
 .chat-message-assistant {
   align-self: center;
-  width: min(100%, 960px);
+  width: min(100%, 920px);
   max-width: 100%;
-  padding: 12px 0;
+  padding: 14px 0;
+}
+
+.chat-message-assistant .chat-message-body {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 /* 对话轮次呼吸感：对齐 ChatGPT/Claude 的 ~24px 轮次间距。 */
 .chat-message + .chat-message {
-  margin-top: 22px;
+  margin-top: 16px;
 }
 .chat-message header {
   margin-bottom: 8px;
@@ -711,14 +782,20 @@
   font-size: 15px;
   line-height: 1.68;
 }
+
+.chat-message-assistant .chat-message-actions {
+  margin-top: 8px;
+}
 /* 代码块按内容自适应：短命令不撑满整行（长代码仍占满并横向滚动）。 */
 .chat-message-assistant .ui-markdown-code-block {
   width: fit-content;
   min-width: min(100%, 380px);
   max-width: 100%;
-  border: none;
+  margin-block: 12px;
+  border: 1px solid color-mix(in srgb, var(--primary) 12%, var(--border));
   border-radius: 10px;
-  background-color: color-mix(in srgb, var(--bg-primary) 82%, var(--text-primary));
+  background: color-mix(in srgb, var(--surface-container-high) 72%, var(--bg-primary));
+  box-shadow: 0 8px 20px color-mix(in srgb, #000 12%, transparent);
 }
 .chat-message-assistant .ui-markdown-code-header {
   letter-spacing: 0.4px;
@@ -749,8 +826,8 @@
 
 /* Card Composer */
 .chat-composer-container {
-  width: min(calc(100% - 32px), 960px);
-  margin: 8px auto 16px;
+  width: min(calc(100% - 32px), 920px);
+  margin: 10px auto 18px;
 }
 
 .chat-composer-card {

@@ -270,11 +270,19 @@ fn run_command(
     });
     let stdout = child.child.stdout.take().expect("configured stdout pipe");
     let stderr = child.child.stderr.take().expect("configured stderr pipe");
+    let stderr_text = Arc::new(Mutex::new(String::new()));
+    let stderr_text_writer = Arc::clone(&stderr_text);
     let stderr_reader = std::thread::spawn(move || {
         let mut reader = BufReader::new(stderr);
         let mut bytes = Vec::new();
         let _ = reader.by_ref().take(16_385).read_to_end(&mut bytes);
-        String::from_utf8_lossy(&bytes).chars().take(4_096).collect::<String>()
+        let captured = String::from_utf8_lossy(&bytes)
+            .chars()
+            .take(4_096)
+            .collect::<String>();
+        if let Ok(mut target) = stderr_text_writer.lock() {
+            *target = captured;
+        }
     });
     let (sender, receiver) = mpsc::sync_channel(32);
     let reader = std::thread::spawn(move || {
@@ -335,6 +343,9 @@ fn run_command(
                         }.into()),
                         _ => return Err("side_question_protocol".into()),
                     }
+                    if final_value.is_some() {
+                        break;
+                    }
                 }
                 Ok(Err(error)) => return Err(error.into()),
                 Err(mpsc::RecvTimeoutError::Timeout) => continue,
@@ -343,6 +354,9 @@ fn run_command(
         }
         // EOF can precede process exit. Polling remains cancellable until it is reaped.
         loop {
+            if final_value.is_some() {
+                break;
+            }
             if registration.is_cancelled() {
                 return Err("side_question_cancelled".into());
             }
@@ -363,19 +377,27 @@ fn run_command(
     })();
     // Drop receiver before joining: a full reader queue must not deadlock cleanup.
     drop(receiver);
-    let stderr_text = stderr_reader.join().unwrap_or_default();
     closing()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .push(Closing {
             owned: child,
-            readers: vec![writer, reader],
+            readers: vec![writer, reader, stderr_reader],
             _registration: registration,
         });
-    // An unsuccessful cleanup keeps the registration and all handles for exit retry.
+    // Stop/reap the child before joining pipe readers. A child may keep stderr open
+    // after emitting its final protocol frame; joining first would bypass the timeout
+    // and leave the IPC future pending forever.
     reap_closing(Instant::now() + Duration::from_secs(2))?;
+    let stderr_text = stderr_text
+        .lock()
+        .map(|text| text.clone())
+        .unwrap_or_default();
     if let Err(error) = &result {
-        let category = if stderr_text.contains("API key") || stderr_text.contains("401") || stderr_text.contains("403") {
+        let category = if stderr_text.contains("API key")
+            || stderr_text.contains("401")
+            || stderr_text.contains("403")
+        {
             "provider_auth"
         } else if stderr_text.contains("model") || stderr_text.contains("provider") {
             "provider_config"
@@ -384,7 +406,12 @@ fn run_command(
         } else {
             "sidecar_runtime"
         };
-        log::warn!("side_question ask failed stage={} code={} error={}", error, category, error);
+        log::warn!(
+            "side_question ask failed stage={} code={} error={}",
+            error,
+            category,
+            error
+        );
     }
     result
 }
@@ -532,6 +559,22 @@ mod tests {
         assert_eq!(progress, ["first", "first second"]);
         assert_eq!(result["answer"], "first second");
         assert!(Registration::new("stream-test".into()).is_err());
+    }
+    #[test]
+    fn context_frame_is_reaped_before_stderr_eof() {
+        let result = run_command(
+            serde_json::json!({"type": "context"}),
+            Registration::new("context-stderr-open-test".into()).unwrap(),
+            Duration::from_secs(5),
+            |_| {},
+            mock_command(r#"
+                console.log(JSON.stringify({type:'context',available:false,text:'',truncated:false,reason:'source_text_unavailable'}));
+                setInterval(() => {}, 1000);
+            "#),
+        )
+        .unwrap();
+        assert_eq!(result["type"], "context");
+        assert!(Registration::new("context-stderr-open-test".into()).is_err());
     }
     #[test]
     fn mock_child_timeout_and_cancel_release_owned_process() {

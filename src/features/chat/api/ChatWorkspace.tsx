@@ -906,6 +906,8 @@ export function ChatWorkspace({
                 act(() => (state.ready ? controller.retryPersistence() : controller.start()));
                 break;
               case "switch_model":
+                setModelMenuOpen(true);
+                requestAnimationFrame(() => modelMenuRef.current?.querySelector<HTMLElement>(".chat-model-pill")?.focus());
                 break;
               case "wait":
                 controller.clearError();

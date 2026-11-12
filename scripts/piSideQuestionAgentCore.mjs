@@ -71,7 +71,12 @@ export async function ask(request, sdk, emit) {
   const manager = sdk.SessionManager.inMemory();
   // Keep configured model selection/transport, but never persist side-question settings
   // or launch background cache warming, compaction or automatic retry inference.
-  const configured = sdk.SettingsManager.create(process.cwd(), undefined, { projectTrusted: false }).getSettings();
+  // The packaged app starts with the install directory as cwd, while `tauri dev`
+  // starts from the checkout. Using cwd made provider/settings discovery differ
+  // between release and development builds and could terminate the sidecar before
+  // it emitted a protocol frame. Resolve global SDK settings from the user profile.
+  const settingsRoot = process.env.USERPROFILE || process.env.HOME || process.cwd();
+  const configured = sdk.SettingsManager.create(settingsRoot, undefined, { projectTrusted: false }).getSettings();
   const settingsManager = sdk.SettingsManager.inMemory({ ...configured,
     cacheWarming: "off", compaction: { ...configured.compaction, enabled: false },
     retry: { ...configured.retry, enabled: false, provider: { ...configured.retry?.provider, maxRetries: 0 } },

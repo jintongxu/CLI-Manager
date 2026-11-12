@@ -11,6 +11,34 @@
 
 - 文件面板打开状态与项目绑定：在某个项目中打开文件面板后，切换到其它项目不会自动显示该面板；每个项目仍保留自己的文件标签和编辑状态。修复伴随编辑器切换项目时错误跳过 `openProject`，确保已打开文件和未保存编辑内容正确恢复。
 
+## TEMP — BTW 正式版供应商配置修复
+
+- 修复 BTW 侧问在正式版中因 Node 子进程工作目录不同，无法发现用户供应商配置并退出的问题；runtime 现在从用户 profile 读取 SDK 设置，与开发版保持一致。
+
+## TEMP — BTW 上下文读取链路修复
+
+- 修复 BTW 获取当前 Pi 会话快照时卡在“正在获取当前分支快照”的根因：精确历史查询现在带 `limit=1/offset=0`，避免误触发全量历史刷新；sidecar 返回完整 context 帧后立即进入子进程回收，避免等待 stdout/stderr EOF 导致请求超时。/ Fixed the BTW source-context hang by using the indexed exact-session query path (`limit=1/offset=0`) instead of an unnecessary full history refresh, and by reaping the sidecar immediately after its complete context frame rather than waiting indefinitely for pipe EOF.
+
+## TEMP — 对话消息无边框布局
+
+- 移除提问和回答外层卡片的边框、背景、圆角和阴影，保留统一的左右位置、内容宽度和间距，让对话回到轻量阅读流布局。
+
+## TEMP — 对话提问与回答位置优化
+
+- 统一提问和回答的阅读列位置：回答保持左侧阅读起点，提问气泡靠右对齐并与输入框内容列保持一致；消息外层不再因气泡自适应宽度而漂移。
+
+## TEMP — 对话标题与内容区布局优化
+
+- 进一步优化对话页标题栏、消息阅读区和输入区：标题栏采用更轻的层次背景，内容列宽和左右留白更协调，消息与输入框保持统一对齐。
+
+## TEMP — 对话供应商缺失提示优化
+
+- 供应商不存在时，错误提示增加清晰的警告样式，并可直接打开模型切换菜单，方便选择可用供应商和模型。
+
+## TEMP — 对话页面布局优化
+
+- 优化对话消息区与输入区布局：统一阅读宽度、增加内容呼吸感，重新调整用户消息气泡、助手内容、代码块和输入框的层次与间距，减少大面积空旷和视觉割裂。
+
 ## TEMP — 文件编辑器滚动条美化
 
 - 将代码编辑器的纵向和横向滚动条收窄为 6px 轻量样式；垂直滑块改为渐变胶囊、细边框和柔和阴影，hover 时增强亮度与宽度，减少滚动条对代码区域的视觉占用。
