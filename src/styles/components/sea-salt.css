@@ -293,10 +293,11 @@
    Preserve tab drag/close/scroll geometry and project/status data. */
 
 [data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-navigation,
+[data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-navigation-row--tabs,
 [data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row,
 [data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-list,
 [data-theme="light"][data-light-palette="sea-salt"] .ui-workspan-context-row {
-  background: var(--sea-salt-bar);
+  background: color-mix(in srgb, var(--sea-salt-bar) 88%, var(--sea-salt-surface) 12%);
   color: var(--sea-salt-muted);
   --terminal-tab-accent: var(--sea-salt-solid);
 }
@@ -305,9 +306,9 @@
 [data-theme="light"][data-light-palette="sea-salt"] .ui-workspan-context-button,
 [data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-navigation .ui-btn,
 [data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-navigation-empty {
-  background: var(--sea-salt-bar);
+  background: transparent;
   color: var(--sea-salt-muted);
-  border-color: var(--sea-salt-border);
+  border-color: transparent;
   box-shadow: none;
 }
 
@@ -315,17 +316,17 @@
 [data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-item:focus-within,
 [data-theme="light"][data-light-palette="sea-salt"] .ui-workspan-context-button:hover,
 [data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-navigation .ui-btn:hover:not(:disabled) {
-  background: var(--sea-salt-hover);
+  background: color-mix(in srgb, var(--sea-salt-text) 3%, transparent);
   color: var(--sea-salt-text);
-  border-color: var(--sea-salt-solid);
+  border-color: transparent;
 }
 
 [data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-item[data-active="true"],
 [data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-item[data-active="true"]:hover {
-  background: color-mix(in srgb, var(--sea-salt-raised) 35%, var(--sea-salt-bar));
-  color: var(--sea-salt-solid);
-  border-color: var(--sea-salt-border);
-  box-shadow: inset 0 1px 0 var(--sea-salt-solid);
+  background: color-mix(in srgb, var(--sea-salt-text) 5%, transparent);
+  color: color-mix(in srgb, var(--sea-salt-text) 92%, transparent);
+  border-color: transparent;
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--sea-salt-solid) 55%, transparent);
 }
 
 [data-theme="light"][data-light-palette="sea-salt"] .ui-terminal-tab-row-main,

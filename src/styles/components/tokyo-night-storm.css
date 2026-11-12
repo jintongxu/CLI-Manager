@@ -291,10 +291,11 @@
    Preserve tab drag/close/scroll geometry and project/status data. */
 
 [data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-navigation,
+[data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-navigation-row--tabs,
 [data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-row,
 [data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-row-list,
 [data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-workspan-context-row {
-  background: var(--storm-bar);
+  background: color-mix(in srgb, var(--storm-bar) 88%, var(--storm-surface) 12%);
   color: var(--storm-muted);
   --terminal-tab-accent: var(--storm-solid);
 }
@@ -303,26 +304,26 @@
 [data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-workspan-context-button,
 [data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-navigation .ui-btn,
 [data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-navigation-empty {
-  background: var(--storm-bar);
+  background: transparent;
   color: var(--storm-muted);
-  border-color: var(--storm-border);
+  border-color: transparent;
   box-shadow: none;
 }
 
 [data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-row-item:hover,
 [data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-workspan-context-button:hover,
 [data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-navigation .ui-btn:hover:not(:disabled):not([data-disabled]):not([aria-disabled="true"]) {
-  background: var(--storm-hover);
+  background: color-mix(in srgb, var(--storm-text) 3%, transparent);
   color: var(--storm-text);
   border-color: transparent;
 }
 
 [data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-row-item[data-active="true"],
 [data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-row-item[data-active="true"]:hover {
-  background: color-mix(in srgb, var(--storm-selected) 35%, var(--storm-bar));
-  color: var(--storm-text);
+  background: color-mix(in srgb, var(--storm-text) 5%, transparent);
+  color: color-mix(in srgb, var(--storm-text) 92%, transparent);
   border-color: transparent;
-  box-shadow: inset 0 1px 0 var(--storm-solid);
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--storm-solid) 55%, transparent);
 }
 
 [data-theme="dark"][data-dark-palette="tokyo-night-storm"] .ui-terminal-tab-row-main,

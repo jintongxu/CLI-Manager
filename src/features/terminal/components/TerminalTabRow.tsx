@@ -82,7 +82,7 @@ function TabItem({
         aria-label={closeLabel?.(entry.session.title) ?? entry.session.title}
         title={closeLabel?.(entry.session.title)}
         onClick={(event) => { event.stopPropagation(); onClose(entry.id); }}
-      >×</button>}
+      ><span aria-hidden="true">×</span></button>}
     </div>
   );
 }
