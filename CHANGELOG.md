@@ -1,5 +1,10 @@
 # Changelog
 
+## V1.5.2 — 2026-11-12
+
+- 终端与文件标签继续沿用 V1.5.1 的统一视觉，并补齐文件面板按项目独立显示、BTW 当前会话上下文读取链路和对话消息无边框布局等已合入优化。/ Retains the unified terminal and file-tab visuals from V1.5.1 and includes the merged per-project file panel state, restored BTW current-session context flow, and borderless conversation layout improvements.
+- 同步 npm、Cargo 与 Tauri 桌面版本至 1.5.2，通过 `jintongxu/CLI-Manager` 既有 GitHub Actions Windows 签名发布流程生成 NSIS EXE、MSI、便携 ZIP 与自动更新清单；不构建 macOS/Linux。/ Aligns npm, Cargo and Tauri desktop versions at 1.5.2 and uses the existing signed Windows GitHub Actions pipeline in `jintongxu/CLI-Manager` to produce NSIS EXE, MSI, portable ZIP and updater metadata; macOS/Linux are not built.
+
 ## V1.5.1 — 2026-11-10
 
 - 终端与文件标签保持原有主题配色并统一圆角卡片外观；文件编辑器标签连续排列，打开文件始终创建独立固定标签，切换同一项目的终端标签时保留右侧文件编辑区，并移除并排文件面板标题栏重复的关闭文件按钮。/ Terminal and file tabs retain their original theme colors with a unified rounded-card appearance; file-editor tabs remain contiguous, opening a file always creates an independent pinned tab, switching terminals in the same project keeps the right-side file editor visible, and the duplicate close-file action is removed from the companion header.
